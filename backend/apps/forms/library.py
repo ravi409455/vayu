@@ -9,6 +9,7 @@ from django.db.models import Max
 from apps.accounts import audit
 from apps.core.errors import CodedError
 
+from .access import validate_access
 from .fieldtypes import ConfigError, validate_config
 from .models import (
     KEY_RE,
@@ -24,9 +25,9 @@ from .models import (
 from .rules import rule_syntax_issues
 
 FIELD_KEYS = {"key", "label", "helper_text", "type", "config", "required", "required_if",
-              "show_if", "visible"}
+              "show_if", "visible", "access"}
 CONTENT = ("label", "helper_text", "config")  # owned by the library once linked
-OVERRIDES = ("required", "required_if", "show_if", "visible")  # per-form, kept on update
+OVERRIDES = ("required", "required_if", "show_if", "visible", "access")  # per-form, kept on update
 
 
 def bad(code: str, message: str, status: int = 400) -> CodedError:
@@ -58,6 +59,10 @@ def validate_field_definition(d: Any, *, expect_key: str | None = None) -> dict:
         issues = rule_syntax_issues(rule, name) if rule is not None else []
         if issues:
             raise bad("INVALID_RULE", "; ".join(f"{i.path}: {i.message}" for i in issues))
+    try:
+        validate_access(d.get("access", {}))
+    except ValueError as e:
+        raise bad("INVALID_ACCESS", str(e)) from e
     for flag in ("required", "visible"):
         if flag in d and not isinstance(d[flag], bool):
             raise bad("INVALID_DEFINITION", f"{flag} must be true or false.")
@@ -163,7 +168,7 @@ def _field_attrs(d: dict) -> dict:
     return {"label": d["label"], "helper_text": d.get("helper_text", ""), "type": d["type"],
             "config": d.get("config", {}), "required": d.get("required", False),
             "required_if": d.get("required_if"), "show_if": d.get("show_if"),
-            "visible": d.get("visible", True)}
+            "visible": d.get("visible", True), "access": d.get("access", {})}
 
 
 def _usable(item: LibraryItem, kind: str) -> None:
@@ -287,7 +292,8 @@ def save_to_library(actor, obj: Field | Section, *, key: str | None, name: str |
         definition: dict[str, Any] = {"key": obj.key, "label": obj.label, "type": obj.type,
                                       "helper_text": obj.helper_text, "config": obj.config,
                                       "required": obj.required, "required_if": obj.required_if,
-                                      "show_if": obj.show_if, "visible": obj.visible}
+                                      "show_if": obj.show_if, "visible": obj.visible,
+                                      "access": obj.access}
         item = create_item(actor, kind=LibraryKind.FIELD, key=key or obj.key, name=name,
                            definition=definition)
     else:
@@ -298,7 +304,8 @@ def save_to_library(actor, obj: Field | Section, *, key: str | None, name: str |
                       "fields": [{"key": f.key, "label": f.label, "type": f.type,
                                   "helper_text": f.helper_text, "config": f.config,
                                   "required": f.required, "required_if": f.required_if,
-                                  "show_if": f.show_if, "visible": f.visible} for f in fields]}
+                                  "show_if": f.show_if, "visible": f.visible,
+                                  "access": f.access} for f in fields]}
         item = create_item(actor, kind=LibraryKind.SECTION, key=key or "", name=name,
                            definition=definition)
     obj.library_item, obj.library_revision = item, item.revision

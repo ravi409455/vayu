@@ -26,8 +26,8 @@ def item_label(list_key: str, item_key: str) -> str | None:
 
 
 @transaction.atomic
-def create_form(actor, *, key: str, kind: str, name: str) -> Form:
-    form = Form.objects.create(key=key, kind=kind, name=name)
+def create_form(actor, *, key: str, kind: str, name: str, inspection_type: str = "") -> Form:
+    form = Form.objects.create(key=key, kind=kind, name=name, inspection_type=inspection_type)
     version = FormVersion.objects.create(form=form, number=1)
     page = Page.objects.create(version=version, title="Page 1", order=0)
     section = Section.objects.create(version=version, page=page, title="Section 1", order=0)

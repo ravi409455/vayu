@@ -38,12 +38,19 @@ class Form(models.Model):
     kind = models.CharField(max_length=16, choices=FormKind.choices)
     name = models.CharField(max_length=150)
     is_active = models.BooleanField(default=True)
+    inspection_type = models.CharField(max_length=64, blank=True)  # inspection_type list item key
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
-        constraints = [models.UniqueConstraint(
-            fields=["kind"], condition=Q(is_active=True, kind__in=["booking", "ops"]),
-            name="one_active_booking_and_ops_form")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["kind"], condition=Q(is_active=True, kind__in=["booking", "ops"]),
+                name="one_active_booking_and_ops_form"),
+            models.UniqueConstraint(
+                fields=["inspection_type"],
+                condition=Q(is_active=True, kind="inspection") & ~Q(inspection_type=""),
+                name="one_active_form_per_inspection_type"),
+        ]
 
 
 class VersionStatus(models.TextChoices):
@@ -147,6 +154,7 @@ class Page(DraftOnly):
     order = models.IntegerField(default=0)
     visible = models.BooleanField(default=True)
     show_if = models.JSONField(null=True, blank=True)
+    access = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ["order", "id"]
@@ -162,6 +170,7 @@ class Section(DraftOnly):
     order = models.IntegerField(default=0)
     visible = models.BooleanField(default=True)
     show_if = models.JSONField(null=True, blank=True)
+    access = models.JSONField(default=dict, blank=True)
     library_item = models.ForeignKey(LibraryItem, null=True, blank=True, on_delete=models.PROTECT,
                                      related_name="linked_sections")
     library_revision = models.PositiveIntegerField(null=True, blank=True)
@@ -227,6 +236,7 @@ class Field(DraftOnly):
     visible = models.BooleanField(default=True)
     order = models.IntegerField(default=0)
     is_system = models.BooleanField(default=False)
+    access = models.JSONField(default=dict, blank=True)
     library_item = models.ForeignKey(LibraryItem, null=True, blank=True, on_delete=models.PROTECT,
                                      related_name="linked_fields")
     library_revision = models.PositiveIntegerField(null=True, blank=True)

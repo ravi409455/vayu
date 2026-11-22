@@ -95,7 +95,8 @@ class FormViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
         s = self.get_serializer(data=request.data)
         s.is_valid(raise_exception=True)
         d = s.validated_data
-        form = services.create_form(request.user, key=d["key"], kind=d["kind"], name=d["name"])
+        form = services.create_form(request.user, key=d["key"], kind=d["kind"], name=d["name"],
+                                    inspection_type=d.get("inspection_type", ""))
         return Response(self.get_serializer(form).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"])

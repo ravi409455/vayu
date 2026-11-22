@@ -3,6 +3,7 @@ from rest_framework import serializers
 from apps.core.errors import CodedError
 
 from . import library
+from .access import validate_access
 from .fieldtypes import ConfigError, validate_config
 from .models import (
     LIST_KEY_RE,
@@ -63,6 +64,14 @@ def _check_rules(attrs: dict, *names: str) -> None:
                                                            for i in issues), 400)
 
 
+def _check_access(attrs: dict) -> None:
+    if "access" in attrs:
+        try:
+            validate_access(attrs["access"])
+        except ValueError as e:
+            raise CodedError("INVALID_ACCESS", str(e), 400) from e
+
+
 def _version_ref(v: FormVersion | None):
     return {"id": v.id, "number": v.number} if v else None
 
@@ -73,7 +82,8 @@ class FormSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Form
-        fields = ["id", "key", "kind", "name", "is_active", "draft_version", "published_version"]
+        fields = ["id", "key", "kind", "name", "is_active", "inspection_type", "draft_version",
+                  "published_version"]
         read_only_fields = ["kind"]
 
     def get_fields(self):
@@ -90,6 +100,20 @@ class FormSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         kind = attrs.get("kind") or (self.instance and self.instance.kind)
         active = attrs.get("is_active", self.instance.is_active if self.instance else True)
+        itype = attrs.get("inspection_type", self.instance.inspection_type if self.instance else "")
+        if itype:
+            if kind != FormKind.INSPECTION:
+                raise serializers.ValidationError("Only inspection forms have an inspection type.")
+            item = MasterListItem.objects.filter(list__key="inspection_type", key=itype,
+                                                 archived=False).exists()
+            if not item:
+                raise serializers.ValidationError(f"'{itype}' is not an inspection type.")
+            clash = Form.objects.filter(kind=FormKind.INSPECTION, is_active=True,
+                                        inspection_type=itype)
+            if self.instance:
+                clash = clash.exclude(pk=self.instance.pk)
+            if active and clash.exists():
+                raise serializers.ValidationError(f"Another active form already handles '{itype}'.")
         if kind in (FormKind.BOOKING, FormKind.OPS) and active:
             others = Form.objects.filter(kind=kind, is_active=True)
             if self.instance:
@@ -124,7 +148,8 @@ class FieldSerializer(serializers.ModelSerializer):
     class Meta:
         model = Field
         fields = ["id", "section", "key", "label", "helper_text", "type", "config", "required",
-                  "required_if", "show_if", "visible", "order", "is_system", "library", "locked"]
+                  "required_if", "show_if", "visible", "order", "is_system", "access", "library",
+                  "locked"]
         read_only_fields = ["is_system"]
         extra_kwargs = {"section": {"required": False}}
 
@@ -157,6 +182,7 @@ class FieldSerializer(serializers.ModelSerializer):
                           "visible")):
             raise CodedError("SYSTEM_FIELD", "System fields can only be relabelled or moved.", 400)
         _check_rules(attrs, "show_if", "required_if")
+        _check_access(attrs)
         if inst is None or "config" in attrs:
             type_ = attrs.get("type", inst.type if inst else None)
             config = attrs.get("config", inst.config if inst else {})
@@ -176,8 +202,8 @@ class SectionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Section
-        fields = ["id", "page", "title", "order", "visible", "show_if", "fields", "library",
-                  "locked"]
+        fields = ["id", "page", "title", "order", "visible", "show_if", "access", "fields",
+                  "library", "locked"]
         extra_kwargs = {"page": {"required": False}}
 
     def get_library(self, obj):
@@ -193,6 +219,7 @@ class SectionSerializer(serializers.ModelSerializer):
             raise CodedError("LINKED_LOCKED", "This section's content comes from the library.",
                              409)
         _check_rules(attrs, "show_if")
+        _check_access(attrs)
         return attrs
 
     def validate_page(self, page):
@@ -206,10 +233,11 @@ class PageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Page
-        fields = ["id", "title", "order", "visible", "show_if", "sections"]
+        fields = ["id", "title", "order", "visible", "show_if", "access", "sections"]
 
     def validate(self, attrs):
         _check_rules(attrs, "show_if")
+        _check_access(attrs)
         return attrs
 
 
