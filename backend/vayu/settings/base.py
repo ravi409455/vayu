@@ -40,8 +40,8 @@ MIDDLEWARE = [
 ]
 X_FRAME_OPTIONS = "DENY"
 
-ROOT_URLCONF = "inspex.urls"
-WSGI_APPLICATION = "inspex.wsgi.application"
+ROOT_URLCONF = "vayu.urls"
+WSGI_APPLICATION = "vayu.wsgi.application"
 
 DATABASES = {
     "default": {

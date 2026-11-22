@@ -3,12 +3,12 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: inspex
-      POSTGRES_PASSWORD: inspex
-      POSTGRES_DB: inspex
+      POSTGRES_USER: vayu
+      POSTGRES_PASSWORD: vayu
+      POSTGRES_DB: vayu
     ports: ["5432:5432"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U inspex"]
+      test: ["CMD-SHELL", "pg_isready -U vayu"]
       interval: 3s
       retries: 20
   redis:

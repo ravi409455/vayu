@@ -2,5 +2,5 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "inspex.settings.prod")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "vayu.settings.prod")
 application = get_wsgi_application()

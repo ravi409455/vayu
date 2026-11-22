@@ -1,5 +1,5 @@
 [project]
-name = "inspex-backend"
+name = "vayu-backend"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -28,7 +28,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "inspex.settings.test"
+DJANGO_SETTINGS_MODULE = "vayu.settings.test"
 python_files = ["test_*.py"]
 addopts = "-ra --strict-markers"
 
@@ -48,8 +48,8 @@ check_untyped_defs = true
 ignore_missing_imports = true
 
 [tool.django-stubs]
-django_settings_module = "inspex.settings.test"
+django_settings_module = "vayu.settings.test"
 
 [tool.coverage.run]
-source = ["apps", "inspex"]
+source = ["apps", "vayu"]
 omit = ["*/migrations/*", "*/tests/*"]

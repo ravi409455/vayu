@@ -1,4 +1,4 @@
-# Inspex — Car CID Inspection Platform: v1 Requirements
+# Vayu — Car CID Inspection Platform: v1 Requirements
 
 Decided across three grill sessions plus a spec review on 2026-11-22. This is a brand-new system: nothing is migrated from Clappia.
 Reference report: `SA37926PDI.pdf` (PDI, 35 pp). Clappia (garuda) was reviewed read-only as a domain reference.

@@ -8,4 +8,4 @@ COPY . .
 RUN chown -R app /app
 USER app
 EXPOSE 8000
-CMD ["gunicorn", "inspex.wsgi", "-b", "0.0.0.0:8000", "-w", "4", "--access-logfile", "-"]
+CMD ["gunicorn", "vayu.wsgi", "-b", "0.0.0.0:8000", "-w", "4", "--access-logfile", "-"]

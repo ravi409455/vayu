@@ -95,7 +95,7 @@
 **Type:** Greenfield monorepo (Python + TypeScript + Kotlin). **Needs `git init` + a GitHub remote in Phase 1.**
 ```
 backend/
-  inspex/              settings, urls, celery
+  vayu/              settings, urls, celery
   apps/accounts        users, roles, devices, lockout, config audit log
   apps/forms           master lists, forms, versions, pages, sections, fields, library, rules adapter, promotion
   apps/bookings        bookings, stages, submissions, access policy, search, dashboards/CSV, sync endpoints
@@ -110,7 +110,7 @@ shared/rule-vectors/   JSON test cases run by all three rule adapters
 infra/                 docker-compose.{prod,staging}.yml, Caddyfile
 loadtest/              Locust scenarios (run on staging, not CI)
 ```
-**Entry points:** `backend/manage.py`, `celery -A inspex worker -Q default,pdf`, `web/src/main.tsx`, `android/app/.../MainActivity.kt`
+**Entry points:** `backend/manage.py`, `celery -A vayu worker -Q default,pdf`, `web/src/main.tsx`, `android/app/.../MainActivity.kt`
 **Test layout:**
 - Backend: `backend/apps/<app>/tests/` (pytest-django, factory_boy, hypothesis where noted, freezegun, responses, minio in Docker).
 - Web: `web/src/**/*.test.ts(x)` (Vitest + Testing Library + MSW) only for logic-heavy components, plus `web/e2e/*.spec.ts` (Playwright).

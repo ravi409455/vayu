@@ -7,7 +7,7 @@ BACKEND = Path(__file__).resolve().parents[3]
 BASE_ENV = {
     "PATH": os.environ["PATH"], "DJANGO_SECRET_KEY": "x" * 50, "DB_NAME": "n", "DB_USER": "u",
     "DB_PASSWORD": "p", "DB_HOST": "h", "REDIS_URL": "redis://h/0",
-    "DJANGO_SETTINGS_MODULE": "inspex.settings.prod",
+    "DJANGO_SETTINGS_MODULE": "vayu.settings.prod",
 }
 
 

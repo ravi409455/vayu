@@ -1,9 +1,9 @@
 import os
 
 os.environ.setdefault("DJANGO_SECRET_KEY", "test-secret-key-not-for-prod-0123456789")
-os.environ.setdefault("DB_NAME", "inspex")
-os.environ.setdefault("DB_USER", "inspex")
-os.environ.setdefault("DB_PASSWORD", "inspex")
+os.environ.setdefault("DB_NAME", "vayu")
+os.environ.setdefault("DB_USER", "vayu")
+os.environ.setdefault("DB_PASSWORD", "vayu")
 os.environ.setdefault("DB_HOST", "localhost")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 

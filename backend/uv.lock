@@ -260,7 +260,7 @@ wheels = [
 ]
 
 [[package]]
-name = "inspex-backend"
+name = "vayu-backend"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
