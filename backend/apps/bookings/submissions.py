@@ -5,13 +5,13 @@ from django.db.models import Q
 from django.utils import timezone
 
 from apps.core import events
-from apps.forms.access import levels_for
+from apps.forms.access import STAGES, levels_for
 from apps.forms.models import Form, FormKind, FormVersion, VersionStatus
 from apps.forms.rules import validate_answers
 from apps.forms.serializers import VersionTreeSerializer
 
 from .models import Booking, Inspection
-from .services import _changed, _lock, active_item, err, sync_columns, today
+from .services import _changed, _lock, active_item, booking_form_version, err, sync_columns, today
 
 
 def latest_published(form) -> FormVersion | None:
@@ -218,3 +218,27 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
             Booking.objects.filter(pk=b.pk).update(chassis_no=chassis)
         events.emit("inspection.updated", booking=str(b.id), inspection=str(insp.id), keys=keys)
     return insp
+
+
+BOOKING_SEARCH = {"booking_id": "booking_id", "customer_name": "customer_name",
+                  "car_make_model": "car_make_model", "customer_phone": "customer_phone"}
+
+
+def searchable_stages(role: str) -> dict[str, list[str]]:
+    """{column: stages} where the role may see that field. A search only matches a column on
+    bookings at those stages, so it can never confirm a value the role may not see."""
+    columns = [*BOOKING_SEARCH, "chassis_no"]
+    if role == "admin":
+        return {c: list(STAGES) for c in columns}
+    try:
+        booking_version = booking_form_version()
+    except Exception:  # noqa: BLE001 - no booking form yet means no bookings either
+        return {}
+    by_stage = {s: levels_for(booking_version, role, s) for s in STAGES}
+    out = {c: [s for s in STAGES if by_stage[s].get(key) != "hidden"]
+           for c, key in BOOKING_SEARCH.items()}
+    versions = [v for f in Form.objects.filter(kind=FormKind.INSPECTION, is_active=True)
+                if (v := latest_published(f))]
+    chassis = {s: [levels_for(v, role, s).get("chassis_no") for v in versions] for s in STAGES}
+    out["chassis_no"] = [s for s in STAGES if "hidden" not in chassis[s]]
+    return out

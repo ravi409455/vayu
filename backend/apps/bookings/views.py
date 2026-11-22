@@ -59,11 +59,13 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
                     raise ValidationError({param: "Use YYYY-MM-DD."}) from e
         term = (p.get("search") or "").strip()
         if term:
-            q = (Q(booking_id__icontains=term) | Q(customer_name__icontains=term)
-                 | Q(car_make_model__icontains=term) | Q(chassis_no__icontains=term))
+            stages = submissions.searchable_stages(getattr(self.request.user, "role", ""))
+            q = Q(pk__in=[])
+            for column in ("booking_id", "customer_name", "car_make_model", "chassis_no"):
+                q |= Q(**{f"{column}__icontains": term}, stage__in=stages.get(column, []))
             digits = re.sub(r"\D", "", term)
             if len(digits) >= 4:
-                q |= Q(customer_phone__contains=digits)
+                q |= Q(customer_phone__contains=digits, stage__in=stages.get("customer_phone", []))
             qs = qs.filter(q)
         return qs
 

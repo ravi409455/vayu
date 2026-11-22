@@ -17,6 +17,11 @@ DIMENSIONS = {"type": "inspection_type", "city": "city", "expert": "assigned_exp
               "stage": "stage", "lead_owner": "answers__lead_owner"}
 
 
+def csv_safe(value: str) -> str:
+    """Stop spreadsheets from running a cell that starts like a formula."""
+    return "'" + value if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
+
+
 def period_label(d: date, group: str) -> str:
     if group == "day":
         return d.isoformat()
@@ -61,6 +66,6 @@ class DashboardVolume(APIView):
             response["Content-Disposition"] = 'attachment; filename="volume.csv"'
             writer = csv.DictWriter(response, fieldnames=["period", "key", "count"])
             writer.writeheader()
-            writer.writerows(rows)
+            writer.writerows({**r, "key": csv_safe(r["key"])} for r in rows)
             return response
         return Response({"rows": rows})

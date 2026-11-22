@@ -155,3 +155,60 @@ def test_date_to_bounds_dashboards_and_bad_booking_filters_are_400(many):
         {"period": "2026-10", "key": "pdi", "count": 1}]
     assert many.ops.get("/api/v1/bookings?date_from=bad").status_code == 400
     assert many.ops.get("/api/v1/bookings?date_to=2026-13-01").status_code == 400
+
+
+# ---------------------------------------------------------------- review fixes: no search oracle, safe CSV
+
+def _hide_phone_from_ops(env):
+    from apps.forms.models import Form
+
+    form = Form.objects.get(kind="booking")
+    d = env.admin.post(f"/api/v1/forms/{form.id}/drafts").json()["id"]
+    t = env.admin.get(f"/api/v1/form-versions/{d}").json()
+    phone = [f for p in t["pages"] for s in p["sections"] for f in s["fields"]
+             if f["key"] == "customer_phone"][0]
+    env.admin.patch(f"/api/v1/fields/{phone['id']}", {"access": {"ops": {"completed": "hidden"}}},
+                    format="json")
+    rv = env.admin.get(f"/api/v1/form-versions/{d}").json()["row_version"]
+    assert env.admin.post(f"/api/v1/form-versions/{d}/publish", {"row_version": rv},
+                          format="json").status_code == 200
+
+
+def test_a_role_cannot_search_a_column_at_stages_where_it_may_not_see_it(many):
+    from apps.bookings.models import Booking
+
+    assert ids(many.ops, "search=500002") == ["VI20002"]
+    _hide_phone_from_ops(many)                        # phone hidden from ops once completed
+    Booking.objects.filter(booking_id="VI20002").update(stage="completed")
+    assert ids(many.ops, "search=500002") == []         # no confirming a hidden value
+    assert ids(many.ops, "search=9876500002") == []
+    assert ids(many.admin, "search=500002") == ["VI20002"]
+    assert ids(many.ops, "search=500001") == ["SA10001"]          # visible stages still work
+    assert ids(many.ops, "search=VI200") == ["VI20002"]         # other columns unaffected
+
+
+def test_chassis_search_follows_the_same_rule(ienv, booking):  # noqa: F811
+    assign(ienv, booking)
+    start(ienv.expert, booking)
+    submit(ienv.expert, booking)                      # booking is now 'submitted'
+    assert ids(ienv.ops, "search=273129") == ["SA37926"]
+    from apps.forms.models import Field
+
+    Field.objects.filter(key="chassis_no").update(access={"ops": {"submitted": "hidden"}})
+    assert ids(ienv.ops, "search=273129") == []
+    assert ids(ienv.admin, "search=273129") == ["SA37926"]
+
+
+def test_search_with_no_booking_form_finds_nothing_for_non_admins(db, api_as):
+    from apps.accounts.models import Role
+
+    ops, _ = api_as(Role.OPS)
+    assert ops.get("/api/v1/bookings?search=x").json()["results"] == []
+
+
+def test_csv_cells_that_look_like_formulas_are_neutralised():
+    from apps.bookings.dashboards import csv_safe
+
+    assert csv_safe("=SUM(A1)") == "'=SUM(A1)" and csv_safe("+1") == "'+1"
+    assert csv_safe("-2") == "'-2" and csv_safe("@x") == "'@x" and csv_safe("\tx") == "'\tx"
+    assert csv_safe("delhi") == "delhi" and csv_safe("") == ""
