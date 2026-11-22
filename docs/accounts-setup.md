@@ -38,6 +38,13 @@ look for the closest one.
 3. Project settings → **Service accounts → Generate new private key**. This JSON lets the backend
    send pushes. It is a secret: server env only, never in git.
 
+Where the two files go:
+
+| File | What it is | Where it lives |
+|---|---|---|
+| `google-services.json` | App config for Android (not a secret) | `android/app/google-services.json`, committed |
+| service-account JSON (`...-firebase-adminsdk-....json`) | **Secret** key that can send pushes as you | `~/vayu-keys/firebase-service-account.json`; its path goes in `FIREBASE_CREDENTIALS_FILE` in `backend/.env.local`. On the server, a file outside the repo, mounted into the api container read-only. Never in git (`.gitignore` blocks the usual names). |
+
 ## Android signing key (Phase 15)
 **Not needed until Phase 15.** Create it once, and back it up before first use. **If it's lost,
 installed apps can never be updated.**

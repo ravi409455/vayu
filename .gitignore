@@ -17,3 +17,7 @@ android/build/
 .gradle/
 .idea/
 .DS_Store
+# Firebase/Google service-account keys are secrets (google-services.json is NOT)
+*-firebase-adminsdk-*.json
+firebase-service-account*.json
+service-account*.json
