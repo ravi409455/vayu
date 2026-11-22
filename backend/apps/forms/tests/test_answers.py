@@ -90,12 +90,12 @@ def test_short_text_strips_limits_and_matches_pattern():
 
 
 def test_catastrophic_regex_times_out_instead_of_hanging():
-    evil = f("short_text", pattern="(a+)+$", max_length=500)
+    evil = f("short_text", pattern="(a|a)+$", max_length=500)  # (a+)+ is defused by `regex`
     bad(evil, "a" * 40 + "!", "PATTERN_TIMEOUT")
 
 
 def test_long_text():
-    ok(f("long_text", max_length=10), "line1\nline2", "line1\nline2")
+    ok(f("long_text", max_length=10), "  l1\nl2", "  l1\nl2")  # newlines/indent kept
     bad(f("long_text", max_length=10), "x" * 11, "TOO_LONG")
 
 

@@ -1,5 +1,8 @@
 from rest_framework import serializers
 
+from apps.core.errors import CodedError
+
+from .fieldtypes import ConfigError, validate_config
 from .models import (
     LIST_KEY_RE,
     Field,
@@ -102,6 +105,21 @@ class FieldSerializer(serializers.ModelSerializer):
         if self.instance is not None and section.version_id != self.instance.version_id:
             raise serializers.ValidationError("Fields can only move within the same version.")
         return section
+
+    def validate(self, attrs):
+        inst = self.instance
+        if inst is not None and inst.is_system and any(
+                k in attrs and attrs[k] != getattr(inst, k)
+                for k in ("key", "type", "config", "required", "required_if", "show_if",
+                          "visible")):
+            raise CodedError("SYSTEM_FIELD", "System fields can only be relabelled or moved.", 400)
+        if inst is None or "config" in attrs:
+            type_ = attrs.get("type", inst.type if inst else None)
+            try:
+                validate_config(type_, attrs.get("config", inst.config if inst else {}))
+            except ConfigError as e:
+                raise CodedError("INVALID_CONFIG", str(e), 400) from e
+        return attrs
 
 
 class SectionSerializer(serializers.ModelSerializer):

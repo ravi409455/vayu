@@ -39,8 +39,9 @@ INVALID = [
                                    {"key": "ok", "label": "Dup"}]}),  # duplicate keys
     ("single_choice", {"options": [{"key": "Bad Key", "label": "x"}]}),
     ("single_choice", {"options": [{"key": "ok", "label": ""}]}),
-    ("single_choice", {"options": [{"key": "x", "label": "x", "severity": "major"}]}),  # sev w/o defect
-    ("single_choice", {"options": [{"key": "x", "label": "x", "is_defect": True}]}),     # defect w/o sev
+    # severity without defect, then defect without severity
+    ("single_choice", {"options": [{"key": "x", "label": "x", "severity": "major"}]}),
+    ("single_choice", {"options": [{"key": "x", "label": "x", "is_defect": True}]}),
     ("single_choice", {"options": [{"key": "x", "label": "x", "is_defect": True,
                                     "severity": "fatal"}]}),
     ("single_choice", {"options": OPTS, "display": "carousel"}),
