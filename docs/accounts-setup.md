@@ -39,14 +39,21 @@ look for the closest one.
    send pushes. It is a secret: server env only, never in git.
 
 ## Android signing key (Phase 15)
-Create once, and back it up before first use. **If it's lost, installed apps can never be
-updated.**
+**Not needed until Phase 15.** Create it once, and back it up before first use. **If it's lost,
+installed apps can never be updated.**
+
+`keytool` comes with a Java JDK, which this Mac doesn't have yet. Either install Android Studio
+(needed from Phase 13 anyway; it bundles a JDK) or run `brew install openjdk@17`. Then create
+the key **outside the repo**:
 ```bash
+mkdir -p ~/vayu-keys && cd ~/vayu-keys
 keytool -genkeypair -v -keystore vayu-release.jks -alias vayu \
   -keyalg RSA -keysize 2048 -validity 10000
 ```
-Store the file and its passwords in the company password manager plus two offline copies. It must
-never enter the repo.
+With Homebrew's JDK, `keytool` may not be on your PATH; run
+`/opt/homebrew/opt/openjdk@17/bin/keytool` instead. Store the file and its passwords in the
+company password manager plus two offline copies. It must never enter the repo (`*.jks` is
+git-ignored as a safety net).
 
 ## Sentry (at deploy)
 1. sentry.io → sign up (free Developer plan) → create an organization.
