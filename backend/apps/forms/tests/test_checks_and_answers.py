@@ -1,8 +1,8 @@
 """Cross-field checks (CRUD) and full server-side validation of a submission's answers."""
 import pytest
 
-from apps.forms.rules import validate_answers
 from apps.forms.models import FormVersion
+from apps.forms.rules import validate_answers
 
 from .conftest import publish
 
@@ -127,3 +127,22 @@ def test_answers_to_system_filled_fields_are_rejected(form_v, add_field, admin):
     _, errors = validate_answers(version, {"inspection": {"chassis_no": "X", "kc": True}},
                                  today="2026-10-14")
     assert errors == {"kc": "SYSTEM_FILLED"}
+
+
+def test_empty_answers_are_skipped_not_errors(form_v, add_field, admin):
+    version = build(form_v, add_field, admin)
+    cleaned, errors = validate_answers(version, {"inspection": {
+        "chassis_no": "X", "door": "ok", "odo": "", "mfg": "  "}}, today="2026-10-14")
+    assert errors == {} and "odo" not in cleaned and "mfg" not in cleaned
+
+
+def test_runtime_oscillation_is_caught_not_looped_forever():
+    from apps.forms.rules import FormSpec, evaluate_form
+
+    spec = FormSpec.from_dict({"form": "inspection", "containers": [
+        {"id": "p", "kind": "page"}, {"id": "s", "kind": "section", "parent": "p"}], "fields": [
+        {"key": "aa", "type": "short_text", "section": "s", "show_if": {"!": [V("inspection.bb")]}},
+        {"key": "bb", "type": "short_text", "section": "s", "show_if": {"!": [V("inspection.aa")]}},
+    ]})
+    with pytest.raises(RuntimeError, match="cycle"):
+        evaluate_form(spec, {"inspection": {"aa": "x", "bb": "y"}}, "2026-10-14")

@@ -20,6 +20,15 @@ cd backend && uv sync
 DJANGO_SETTINGS_MODULE=vayu.settings.test uv run pytest
 ```
 
+## Web: run the tests
+
+```bash
+cd web && npm ci && npm test
+```
+
+Rule logic is shared by backend, web and (later) Android: `shared/rule-vectors/` holds the
+cases all three must pass; `shared/rule-vectors/SCHEMA.md` defines the semantics.
+
 Secrets never go in git: use `.env.*` files (git-ignored) and see `.env.example`.
 Third-party accounts: `docs/accounts-setup.md`.
 

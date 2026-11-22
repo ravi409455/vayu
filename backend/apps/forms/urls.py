@@ -16,5 +16,8 @@ urlpatterns = [
     path("sections/<int:pk>", views.SectionDetail.as_view()),
     path("sections/<int:pk>/fields", views.FieldCreate.as_view()),
     path("fields/<int:pk>", views.FieldDetail.as_view()),
+    path("form-versions/<int:pk>/checks", views.CheckCreate.as_view()),
+    path("checks/<int:pk>", views.CheckDetail.as_view()),
+    path("form-versions/<int:pk>/validate", views.ValidateVersion.as_view()),
     *router.urls,
 ]

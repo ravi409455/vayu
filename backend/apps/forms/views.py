@@ -8,8 +8,19 @@ from apps.accounts import audit
 from apps.accounts.permissions import AnyReadAdminWrite, IsAdmin, OpsReadAdminWrite
 
 from . import services
-from .models import Field, Form, FormVersion, MasterList, MasterListItem, Page, Section
+from .models import (
+    Field,
+    Form,
+    FormVersion,
+    MasterList,
+    MasterListItem,
+    Page,
+    Section,
+    VersionCheck,
+)
+from .rules import validate_version
 from .serializers import (
+    CheckSerializer,
     FieldSerializer,
     FormSerializer,
     MasterListItemSerializer,
@@ -145,3 +156,28 @@ class FieldDetail(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = FieldSerializer
     permission_classes = [OpsReadAdminWrite]
     http_method_names = ["get", "patch", "delete", "head", "options"]
+
+
+class CheckCreate(generics.CreateAPIView):
+    serializer_class = CheckSerializer
+    permission_classes = [IsAdmin]
+
+    def perform_create(self, serializer):
+        version = get_object_or_404(FormVersion, pk=self.kwargs["pk"])
+        serializer.save(version=version)
+
+
+class CheckDetail(generics.RetrieveUpdateDestroyAPIView):
+    queryset = VersionCheck.objects.all()
+    serializer_class = CheckSerializer
+    permission_classes = [OpsReadAdminWrite]
+    http_method_names = ["get", "patch", "delete", "head", "options"]
+
+
+class ValidateVersion(generics.GenericAPIView):
+    queryset = FormVersion.objects.select_related("form")
+    permission_classes = [IsAdmin]
+
+    def post(self, request, pk):
+        issues = validate_version(self.get_object())
+        return Response({"issues": [i.__dict__ for i in issues]})

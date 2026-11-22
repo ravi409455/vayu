@@ -223,3 +223,15 @@ class Field(DraftOnly):
                              "field instead.", 400)
         if old["is_system"] and any(old[a] != getattr(self, a) for a in SYSTEM_PROTECTED):
             raise CodedError("SYSTEM_FIELD", "System fields can only be relabelled or moved.", 400)
+
+
+class VersionCheck(DraftOnly):
+    """Cross-field check: when `rule` is falsy, each field in `fields` gets `message`."""
+
+    rule = models.JSONField()
+    message = models.CharField(max_length=300)
+    fields = models.JSONField(default=list)  # own-form field keys
+    order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ["order", "id"]

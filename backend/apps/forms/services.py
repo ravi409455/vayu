@@ -4,7 +4,16 @@ from django.db.models import Max
 from apps.accounts import audit
 from apps.core.errors import CodedError
 
-from .models import Field, Form, FormVersion, MasterListItem, Page, Section, VersionStatus
+from .models import (
+    Field,
+    Form,
+    FormVersion,
+    MasterListItem,
+    Page,
+    Section,
+    VersionCheck,
+    VersionStatus,
+)
 from .system_fields import SYSTEM_FIELDS
 
 
@@ -48,6 +57,9 @@ def create_draft(actor, form: Form) -> FormVersion:
             for field in Field.objects.filter(section_id=old_section_id):
                 field.pk, field.version, field.section = None, draft, section
                 field.save()
+    for check in VersionCheck.objects.filter(version=source):
+        check.pk, check.version = None, draft
+        check.save()
     audit.record(actor, "form.draft_create", "form", form.id,
                  f"Created draft v{number} of {form.key} from v{source.number}")
     return draft

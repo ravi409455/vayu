@@ -57,9 +57,9 @@ def form_v(make_form, tree):
 
 def test_bad_rule_syntax_rejected_at_save(form_v, add_field, admin):
     v, s = form_v
-    r = add_field(s, "b", show_if={"missing": ["inspection.a"]})
+    r = add_field(s, "fb", show_if={"missing": ["inspection.fa"]})
     assert r.status_code == 400 and r.json()["code"] == "INVALID_RULE"
-    f = add_field(s, "c").json()
+    f = add_field(s, "fc").json()
     r = admin.patch(f"/api/v1/fields/{f['id']}", {"required_if": {"nope": [1]}}, format="json")
     assert r.status_code == 400 and r.json()["code"] == "INVALID_RULE"
 
@@ -72,20 +72,20 @@ def validate(admin, v):
 
 def test_clean_version_has_no_issues(form_v, add_field, admin):
     v, s = form_v
-    add_field(s, "a")
-    add_field(s, "b", show_if={"==": [V("inspection.a"), "x"]})
+    add_field(s, "fa")
+    add_field(s, "fb", show_if={"==": [V("inspection.fa"), "x"]})
     assert validate(admin, v) == set()
 
 
 def test_unknown_field_references(form_v, add_field, admin):
     v, s = form_v
-    add_field(s, "b", show_if={"==": [V("inspection.nope"), "x"]})
-    add_field(s, "c", required_if={"==": [V("booking.fuel_type"), "cng"]})  # no booking form
-    add_field(s, "d", show_if={"==": [V("a"), 1]})  # unqualified
+    add_field(s, "fb", show_if={"==": [V("inspection.nope"), "x"]})
+    add_field(s, "fc", required_if={"==": [V("booking.fuel_type"), "cng"]})  # no booking form
+    add_field(s, "fd", show_if={"==": [V("a"), 1]})  # unqualified
     issues = validate(admin, v)
-    assert ("fields.b.show_if", "UNKNOWN_FIELD") in issues
-    assert ("fields.c.required_if", "UNKNOWN_FIELD") in issues
-    assert ("fields.d.show_if", "UNKNOWN_FIELD") in issues
+    assert ("fields.fb.show_if", "UNKNOWN_FIELD") in issues
+    assert ("fields.fc.required_if", "UNKNOWN_FIELD") in issues
+    assert ("fields.fd.show_if", "UNKNOWN_FIELD") in issues
 
 
 def test_cross_form_reference_to_existing_booking_field(make_form, form_v, add_field, admin, tree):
@@ -102,25 +102,25 @@ def test_rules_may_not_read_system_filled_fields(form_v, add_field, admin):
     v, s = form_v
     add_field(s, "kc", type="derived",
               config={"rule": {"!!": [V("_defects")]}, "true_label": "Y", "false_label": "N"})
-    add_field(s, "b", show_if={"==": [V("inspection.kc"), True]})
-    assert ("fields.b.show_if", "SYSTEM_FIELD_IN_RULE") in validate(admin, v)
+    add_field(s, "fb", show_if={"==": [V("inspection.kc"), True]})
+    assert ("fields.fb.show_if", "SYSTEM_FIELD_IN_RULE") in validate(admin, v)
 
 
 @pytest.mark.parametrize("a_rule,b_rule", [
-    ({"==": [V("inspection.b"), 1]}, {"==": [V("inspection.a"), 1]}),   # a <-> b
-    ({"==": [V("inspection.a"), 1]}, None),                             # a -> a
+    ({"==": [V("inspection.fb"), 1]}, {"==": [V("inspection.fa"), 1]}),   # a <-> b
+    ({"==": [V("inspection.fa"), 1]}, None),                             # a -> a
 ])
 def test_visibility_cycles_detected(form_v, add_field, admin, a_rule, b_rule):
     v, s = form_v
-    add_field(s, "a", show_if=a_rule)
-    add_field(s, "b", show_if=b_rule)
+    add_field(s, "fa", show_if=a_rule)
+    add_field(s, "fb", show_if=b_rule)
     assert any(code == "CYCLE" for _, code in validate(admin, v))
 
 
 def test_section_rule_reading_its_own_field_is_a_cycle(form_v, add_field, admin, tree):
     v, s = form_v
-    add_field(s, "a")
-    admin.patch(f"/api/v1/sections/{s}", {"show_if": {"==": [V("inspection.a"), 1]}},
+    add_field(s, "fa")
+    admin.patch(f"/api/v1/sections/{s}", {"show_if": {"==": [V("inspection.fa"), 1]}},
                 format="json")
     assert any(code == "CYCLE" for _, code in validate(admin, v))
 
@@ -136,9 +136,9 @@ def test_defect_choice_shown_by_defects_is_a_cycle(form_v, add_field, admin):
 def test_validate_reports_config_problems_too(form_v, add_field, admin):
     MasterList.objects.create(key="city", name="City")
     v, s = form_v
-    add_field(s, "c", type="master_list", config={"list": "city"})
+    add_field(s, "fc", type="master_list", config={"list": "city"})
     MasterList.objects.filter(key="city").delete()  # list removed after the field was added
-    assert ("fields.c.config", "INVALID_CONFIG") in validate(admin, v)
+    assert ("fields.fc.config", "INVALID_CONFIG") in validate(admin, v)
 
 
 def test_derived_rule_is_checked(form_v, add_field, admin):
@@ -154,3 +154,32 @@ def test_only_admin_can_validate(api_as, form_v):
     v, _ = form_v
     ops, _ = api_as(Role.OPS)
     assert ops.post(f"/api/v1/form-versions/{v}/validate").status_code == 403
+
+
+def test_rules_using_defects_today_loops_and_lists_are_clean(form_v, add_field, admin):
+    v, s = form_v
+    opts = [{"key": "dent", "label": "Dent", "is_defect": True, "severity": "minor"}]
+    add_field(s, "door", type="single_choice", config={"options": opts})
+    add_field(s, "mfg", type="date")
+    add_field(s, "kc", type="derived", config={
+        "rule": {"some": [V("_defects"), {"in": [V(""), ["inspection.door"]]}]},
+        "true_label": "Found", "false_label": "Not Found"})
+    add_field(s, "why", type="long_text", show_if={"in": [V("inspection.door"), ["dent"]]})
+    admin.post(f"/api/v1/form-versions/{v}/checks",
+               {"rule": {"<=": [V("inspection.mfg"), V("_today")]}, "message": "No future",
+                "fields": ["mfg"]}, format="json")
+    assert validate(admin, v) == set()
+
+
+def test_booking_form_rules_reference_their_own_fields(make_form, add_field, admin, tree):
+    from django.core.management import call_command
+
+    call_command("seed_master_lists")  # booking system fields point at these lists
+    booking = make_form(key="booking", kind="booking")
+    v = booking["draft_version"]["id"]
+    s = tree(v)["pages"][0]["sections"][0]["id"]
+    add_field(s, "obd_amount", type="currency",
+              show_if={"==": [V("booking.inspection_type"), "used_car"]})
+    assert validate(admin, v) == set()
+    add_field(s, "bad_ref", show_if={"==": [V("inspection.door"), "x"]})  # no inspection scope
+    assert ("fields.bad_ref.show_if", "UNKNOWN_FIELD") in validate(admin, v)

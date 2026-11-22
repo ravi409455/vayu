@@ -13,8 +13,10 @@ from .models import (
     MasterListItem,
     Page,
     Section,
+    VersionCheck,
     VersionStatus,
 )
+from .rules import rule_syntax_issues
 
 
 def _list_key(value: str) -> str:
@@ -48,6 +50,15 @@ class MasterListItemSerializer(serializers.ModelSerializer):
         if self.instance is None and list_obj and list_obj.items.filter(key=value).exists():
             raise serializers.ValidationError("This key already exists in the list.")
         return value
+
+
+def _check_rules(attrs: dict, *names: str) -> None:
+    for name in names:
+        if name in attrs:
+            issues = rule_syntax_issues(attrs[name], name)
+            if issues:
+                raise CodedError("INVALID_RULE", "; ".join(f"{i.path}: {i.message}"
+                                                           for i in issues), 400)
 
 
 def _version_ref(v: FormVersion | None):
@@ -113,12 +124,16 @@ class FieldSerializer(serializers.ModelSerializer):
                 for k in ("key", "type", "config", "required", "required_if", "show_if",
                           "visible")):
             raise CodedError("SYSTEM_FIELD", "System fields can only be relabelled or moved.", 400)
+        _check_rules(attrs, "show_if", "required_if")
         if inst is None or "config" in attrs:
             type_ = attrs.get("type", inst.type if inst else None)
+            config = attrs.get("config", inst.config if inst else {})
             try:
-                validate_config(type_, attrs.get("config", inst.config if inst else {}))
+                validate_config(type_, config)
             except ConfigError as e:
                 raise CodedError("INVALID_CONFIG", str(e), 400) from e
+            if type_ == "derived":
+                _check_rules({"config.rule": config["rule"]}, "config.rule")
         return attrs
 
 
@@ -129,6 +144,10 @@ class SectionSerializer(serializers.ModelSerializer):
         model = Section
         fields = ["id", "page", "title", "order", "visible", "show_if", "fields"]
         extra_kwargs = {"page": {"required": False}}
+
+    def validate(self, attrs):
+        _check_rules(attrs, "show_if")
+        return attrs
 
     def validate_page(self, page):
         if self.instance is not None and page.version_id != self.instance.version_id:
@@ -143,13 +162,40 @@ class PageSerializer(serializers.ModelSerializer):
         model = Page
         fields = ["id", "title", "order", "visible", "show_if", "sections"]
 
+    def validate(self, attrs):
+        _check_rules(attrs, "show_if")
+        return attrs
+
+
+class CheckSerializer(serializers.ModelSerializer):
+    message = serializers.CharField(allow_blank=True, max_length=300)
+
+    class Meta:
+        model = VersionCheck
+        fields = ["id", "rule", "message", "fields", "order"]
+
+    def validate(self, attrs):
+        if "message" in attrs and not attrs["message"].strip():
+            raise CodedError("INVALID_CHECK", "A check needs a message.", 400)
+        if "fields" in attrs and (not isinstance(attrs["fields"], list) or not attrs["fields"]
+                                  or not all(isinstance(k, str) for k in attrs["fields"])):
+            raise CodedError("INVALID_CHECK", "A check needs at least one field key.", 400)
+        _check_rules(attrs, "rule")
+        return attrs
+
 
 class VersionTreeSerializer(serializers.ModelSerializer):
     pages = serializers.SerializerMethodField()
 
     class Meta:
         model = FormVersion
-        fields = ["id", "form", "number", "status", "published_at", "row_version", "pages"]
+        fields = ["id", "form", "number", "status", "published_at", "row_version", "pages",
+                  "checks"]
+
+    checks = serializers.SerializerMethodField()
+
+    def get_checks(self, obj):
+        return CheckSerializer(VersionCheck.objects.filter(version=obj), many=True).data
 
     def get_pages(self, obj):
         pages = Page.objects.filter(version=obj).prefetch_related("sections__fields")
