@@ -36,7 +36,9 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+X_FRAME_OPTIONS = "DENY"
 
 ROOT_URLCONF = "inspex.urls"
 WSGI_APPLICATION = "inspex.wsgi.application"
@@ -60,9 +62,11 @@ USE_TZ = True
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "apps.accounts.authentication.DeviceJWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 50,
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
         "apps.accounts.permissions.PasswordChangeNotRequired",
@@ -77,6 +81,11 @@ SIMPLE_JWT = {
 LOCKOUT_MAX_FAILURES = 5
 LOCKOUT_MINUTES = 15
 PASSWORD_MIN_LENGTH = 8
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+     "OPTIONS": {"min_length": PASSWORD_MIN_LENGTH}},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+]
 WEB_SESSION_IDLE_SECONDS = 60 * 60 * 8
 SESSION_COOKIE_AGE = WEB_SESSION_IDLE_SECONDS
 SESSION_SAVE_EVERY_REQUEST = True

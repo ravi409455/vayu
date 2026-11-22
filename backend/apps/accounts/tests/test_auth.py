@@ -144,3 +144,13 @@ def test_mobile_session_survives_long_offline_via_refresh(make_user, login):
         assert client.get("/api/v1/auth/me").status_code == 401
         r = APIClient().post("/api/v1/auth/refresh", {"refresh": tokens["refresh"]}, format="json")
         assert r.status_code == 200 and r.json()["access"]
+
+
+@pytest.mark.parametrize("path", ["/api/v1/users", "/api/v1/audit-logs"])
+def test_forced_change_applies_to_views_with_their_own_permissions(make_user, login, path):
+    """Regression: views that override permission_classes must not bypass the rule."""
+    make_user(Role.ADMIN, username="boss", must_change_password=True)
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {login(client, 'boss').json()['access']}")
+    r = client.get(path)
+    assert r.status_code == 403 and r.json()["code"] == "PASSWORD_CHANGE_REQUIRED"

@@ -6,6 +6,10 @@ from .base import SENTRY_DSN, env
 # Staging uses the same module with different environment variables.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = False  # TLS is terminated by Caddy
+# Only Caddy publishes ports (see compose); gunicorn is reachable only on the internal network,
+# so X-Forwarded-Proto can only come from Caddy, which overwrites it.
+SECURE_HSTS_SECONDS = 31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 CSRF_TRUSTED_ORIGINS = [o for o in env("CSRF_TRUSTED_ORIGINS", "").split(",") if o]

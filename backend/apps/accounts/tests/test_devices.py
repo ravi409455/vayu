@@ -73,3 +73,15 @@ def test_expert_cannot_force_sign_out(api_as, make_user):
     client, _ = api_as(Role.EXPERT)
     target = make_user(Role.EXPERT)
     assert client.post(f"/api/v1/users/{target.id}/sign-out-devices").status_code == 403
+
+
+def test_mobile_logout_revokes_only_that_device(make_user, login):
+    user = make_user(username="asha")
+    tokens = login(APIClient(), "asha").json()
+    assert bearer(tokens["access"]).post("/api/v1/auth/logout").status_code == 204
+    assert Device.objects.get(user=user).revoked_at is not None
+
+
+def test_garbage_refresh_token_is_a_plain_401():
+    r = APIClient().post("/api/v1/auth/refresh", {"refresh": "not.a.token"}, format="json")
+    assert r.status_code == 401

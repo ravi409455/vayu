@@ -1,6 +1,6 @@
 import os
 
-os.environ.setdefault("DJANGO_SECRET_KEY", "test-secret-key-not-for-prod")
+os.environ.setdefault("DJANGO_SECRET_KEY", "test-secret-key-not-for-prod-0123456789")
 os.environ.setdefault("DB_NAME", "inspex")
 os.environ.setdefault("DB_USER", "inspex")
 os.environ.setdefault("DB_PASSWORD", "inspex")

@@ -54,7 +54,11 @@ def test_list_newest_first_with_filters_and_pagination(api_as, make_user):
     body = client.get("/api/v1/audit-logs").json()
     assert [r["summary"] for r in body["results"]] == ["c", "b", "a"]
     assert body["count"] == 3
-    assert [r["summary"] for r in client.get(f"/api/v1/audit-logs?actor={admin.id}").json()["results"]] == ["c", "a"]
-    assert [r["summary"] for r in client.get("/api/v1/audit-logs?action=user.create").json()["results"]] == ["c", "b"]
+
+    def summaries(query):
+        return [r["summary"] for r in client.get(f"/api/v1/audit-logs?{query}").json()["results"]]
+
+    assert summaries(f"actor={admin.id}") == ["c", "a"]
+    assert summaries("action=user.create") == ["c", "b"]
     ranged = client.get("/api/v1/audit-logs?from=2026-01-15&to=2026-02-15").json()["results"]
     assert [r["summary"] for r in ranged] == ["b"]

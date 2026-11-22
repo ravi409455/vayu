@@ -108,3 +108,27 @@ def test_user_mutations_are_audited(api_as, make_user):
     actions = list(AuditLog.objects.filter(actor=me).values_list("action", flat=True))
     assert {"user.create", "user.reset_password", "user.deactivate"} <= set(actions)
     assert PASSWORD not in str(list(AuditLog.objects.values_list("summary", flat=True)))
+
+
+def test_reactivate_and_edit_are_audited(api_as, make_user):
+    admin, _ = api_as(Role.ADMIN)
+    target = make_user(username="asha", is_active=False)
+    admin.patch(f"/api/v1/users/{target.id}", {"is_active": True}, format="json")
+    admin.patch(f"/api/v1/users/{target.id}", {"name": "Asha K", "role": "ops"}, format="json")
+    actions = set(AuditLog.objects.values_list("action", flat=True))
+    assert {"user.activate", "user.update"} <= actions
+    target.refresh_from_db()
+    assert target.name == "Asha K" and target.role == "ops"
+
+
+def test_password_cannot_be_changed_through_user_patch(api_as, make_user, login):
+    admin, _ = api_as(Role.ADMIN)
+    target = make_user(username="asha")
+    admin.patch(f"/api/v1/users/{target.id}", {"password": "Hacked-pass-1"}, format="json")
+    assert login(APIClient(), "asha", password="Hacked-pass-1").status_code == 401
+
+
+def test_common_passwords_are_rejected(api_as):
+    admin, _ = api_as(Role.ADMIN)
+    r = admin.post("/api/v1/users", {**NEW, "password": "password123"}, format="json")
+    assert r.status_code == 400

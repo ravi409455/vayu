@@ -30,6 +30,7 @@ class HealthView(APIView):
         except Exception:  # noqa: BLE001
             status["redis"] = "down"
         healthy = all(v == "ok" for v in status.values())
-        logger.info("health check", extra={"healthy": healthy})
-        return Response({"status": "ok" if healthy else "degraded", **status},
+        # Dependency detail goes to the logs only; the public body stays bare.
+        logger.info("health check", extra={"healthy": healthy, **status})
+        return Response({"status": "ok" if healthy else "degraded"},
                         status=200 if healthy else 503)
