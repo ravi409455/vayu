@@ -44,7 +44,7 @@ def form_for_role(version: FormVersion, role: str, stage: str) -> dict:
     """The version tree an expert fills in: hidden fields removed, each field tagged with the
     caller's access level."""
     levels = levels_for(version, role, stage)
-    tree = VersionTreeSerializer(version).data
+    tree: dict = dict(VersionTreeSerializer(version).data)
     pages = []
     for page in tree["pages"]:
         sections = []
@@ -55,7 +55,10 @@ def form_for_role(version: FormVersion, role: str, stage: str) -> dict:
                 sections.append({**section, "fields": fields})
         if sections:
             pages.append({**page, "sections": sections})
-    return {**tree, "pages": pages}
+    tree = {**tree, "pages": pages}
+    if role == "expert":
+        tree.pop("rating_config", None)     # experts must not learn how ratings are computed
+    return tree
 
 
 def _alert(b: Booking, code: str, detail: str) -> None:
@@ -110,6 +113,9 @@ def _clean_both(b: Booking, version: FormVersion, answers: dict):
         cleaned_o, e2 = validate_answers(
             ov, {"ops": ans_o, "booking": b.answers, "inspection": cleaned_i}, today())
         errors = {**errors, **e2}
+    from apps.media.services import reference_errors
+
+    errors = {**errors, **reference_errors(b, [(version, cleaned_i), (ov, cleaned_o)])}
     if errors:
         raise err("INVALID_ANSWERS", "Some answers are invalid.", errors=errors)
     return cleaned_i, cleaned_o, ov
@@ -162,6 +168,10 @@ def submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id=No
     scoring.recompute(insp)
     _advance(actor, b, insp)
     events.emit("inspection.submitted", booking=str(b.id), inspection=str(insp.id))
+    from apps.media.services import check_completion
+
+    check_completion(b.id)       # nothing left to wait for -> Completed right away
+    b.refresh_from_db()
     return b, insp
 
 

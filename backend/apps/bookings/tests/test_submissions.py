@@ -167,7 +167,8 @@ def test_submit_marks_submitted_and_is_idempotent(started):
     sid = str(uuid.uuid4())
     r = submit(ienv.expert, booking, client_submission_uuid=sid)
     assert r.status_code == 200
-    assert r.json()["booking"]["stage"] == "submitted" and r.json()["inspection"]["status"] == "submitted"
+    assert r.json()["booking"]["stage"] == "completed"   # no media to wait for
+    assert r.json()["inspection"]["status"] == "submitted"
     assert r.json()["server_time"]
     again = submit(ienv.expert, booking, client_submission_uuid=sid)
     assert again.status_code == 200
@@ -207,7 +208,7 @@ def test_reassigned_to_b_who_has_not_started_a_wins_and_b_is_withdrawn(started):
     r = submit(ienv.expert, booking)
     assert r.status_code == 200
     b = Booking.objects.get(pk=booking["id"])
-    assert b.stage == "submitted" and b.assigned_expert_id == ienv.expert_user.id
+    assert b.stage == "completed" and b.assigned_expert_id == ienv.expert_user.id
     assert b.conflict == "TWO_EXPERTS" and b.withdrawn_expert_id == b_user.id
 
 
@@ -240,7 +241,7 @@ def test_a_force_released_draft_arriving_late_is_accepted_and_flagged(started):
     r = submit(ienv.expert, booking)
     assert r.status_code == 200
     b = Booking.objects.get(pk=booking["id"])
-    assert b.stage == "submitted" and b.conflict == "RELEASED_DRAFT_ARRIVED"
+    assert b.stage == "completed" and b.conflict == "RELEASED_DRAFT_ARRIVED"
     assert b.released_draft_expected is False
 
 

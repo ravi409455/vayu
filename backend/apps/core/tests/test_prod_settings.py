@@ -6,7 +6,8 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parents[3]
 BASE_ENV = {
     "PATH": os.environ["PATH"], "DJANGO_SECRET_KEY": "x" * 50, "DB_NAME": "n", "DB_USER": "u",
-    "DB_PASSWORD": "p", "DB_HOST": "h", "REDIS_URL": "redis://h/0",
+    "DB_PASSWORD": "p", "DB_HOST": "h", "REDIS_URL": "redis://h/0", "S3_BUCKET": "b",
+    "S3_ACCESS_KEY_ID": "k", "S3_SECRET_ACCESS_KEY": "s",
     "DJANGO_SETTINGS_MODULE": "vayu.settings.prod",
 }
 
@@ -34,3 +35,11 @@ def test_coded_error_payload_keeps_json_types():
     e = CodedError("X", "msg", 409, row_version=3, items=[1, {"a": 2}])
     assert e.detail == {"code": "X", "detail": "msg", "row_version": 3, "items": [1, {"a": 2}]}
     assert e.status_code == 409
+
+
+def test_prod_requires_storage_settings():
+    env = {k: v for k, v in BASE_ENV.items() if k != "S3_BUCKET"}
+    r = subprocess.run([sys.executable, "-c", "import django; django.setup()"], cwd=BACKEND,
+                       env={**env, "SENTRY_DSN": "https://k@o0.ingest.sentry.io/1"},
+                       capture_output=True, text=True)
+    assert r.returncode != 0 and "S3_BUCKET" in r.stderr

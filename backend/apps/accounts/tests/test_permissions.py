@@ -316,7 +316,7 @@ def test_ops_without_users_manage_cannot_manage_users(api_as, make_user):
 # ------------------------------------------------------ every endpoint declares its permission
 
 PUBLIC_OR_AUTHENTICATED_ONLY = {"HealthView", "LoginView", "DeviceCheckedRefreshView", "MeView",
-                                "LogoutView", "ChangePasswordView"}
+                                "LogoutView", "ChangePasswordView", "ZipDownload"}
 
 
 def _all_views():
@@ -381,3 +381,19 @@ def test_scope_is_loaded_once_per_request(make_user, django_assert_num_queries):
         scope_for(ops, "forms.view", request)
         scope_for(ops, "bookings.view", request)
         scope_for(ops, "bookings.delete", request)
+
+
+def test_perm_any_needs_one_of_the_permissions(api_as):
+    from django.test import RequestFactory
+
+    from apps.accounts.permissions import perm_any
+
+    expert, user = api_as(Role.EXPERT)
+    request = RequestFactory().get("/")
+    request.user = user
+    assert perm_any("bookings.delete", "submissions.fill")().has_permission(request, None)
+    assert not perm_any("bookings.delete", "forms.edit")().has_permission(request, None)
+    from django.contrib.auth.models import AnonymousUser
+
+    request.user = AnonymousUser()
+    assert not perm_any("submissions.fill")().has_permission(request, None)

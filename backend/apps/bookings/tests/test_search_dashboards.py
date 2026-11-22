@@ -190,11 +190,11 @@ def test_a_role_cannot_search_a_column_at_stages_where_it_may_not_see_it(many):
 def test_chassis_search_follows_the_same_rule(ienv, booking):  # noqa: F811
     assign(ienv, booking)
     start(ienv.expert, booking)
-    submit(ienv.expert, booking)                      # booking is now 'submitted'
+    submit(ienv.expert, booking)                      # no media: booking goes straight to 'completed'
     assert ids(ienv.ops, "search=273129") == ["SA37926"]
     from apps.forms.models import Field
 
-    Field.objects.filter(key="chassis_no").update(access={"ops": {"submitted": "hidden"}})
+    Field.objects.filter(key="chassis_no").update(access={"ops": {"completed": "hidden"}})
     assert ids(ienv.ops, "search=273129") == []
     assert ids(ienv.admin, "search=273129") == ["SA37926"]
 

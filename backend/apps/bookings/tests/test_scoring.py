@@ -251,3 +251,29 @@ def test_a_critical_defect_in_an_unrated_section_still_caps_the_overall(senv):
     assert s["ratings"]["engine"]["value"] == 5 and s["ratings"]["exterior"]["value"] == 5
     assert s["overall"]["average"] == 5.0 and s["overall"]["word"] == "average"
     assert s["defects"] == ["inspection.seat"]
+
+
+# ---------------------------------------------------------------- review fixes: no leaks past field access
+
+def test_experts_do_not_receive_the_scoring_rules_in_their_form(senv):
+    b = create(senv.ops, booking_id="SC10").json()
+    assign(senv, b)
+    form = start(senv.expert, b).json()["form"]
+    assert "rating_config" not in form
+
+
+def test_scores_hide_key_checks_and_rating_fields_the_role_may_not_see(senv):
+    from apps.forms.models import Field
+
+    _, insp = run(senv, {"door": "dent"})
+    Field.objects.filter(version=insp.form_version, key="dents_found").update(
+        access={"ops": {s: "hidden" for s in ("submitted", "completed", "draft", "assigned",
+                                              "in_progress", "cancelled")}})
+    Field.objects.filter(version=insp.form_version, key="engine_rating").update(
+        access={"ops": {s: "hidden" for s in ("submitted", "completed", "draft", "assigned",
+                                              "in_progress", "cancelled")}})
+    seen = senv.ops.get(f"/api/v1/inspections/{insp.id}").json()["scores"]
+    assert "dents_found" not in seen["derived"] and "engine_rating" not in seen["fields"]
+    assert "exterior_rating" in seen["fields"]
+    assert senv.admin.get(f"/api/v1/inspections/{insp.id}").json()["scores"]["derived"]
+    assert "dents_found" in senv.admin.get(f"/api/v1/inspections/{insp.id}").json()["scores"]["derived"]

@@ -28,6 +28,8 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.forms",
     "apps.bookings",
+    "apps.scoring",
+    "apps.media",
 ]
 
 MIDDLEWARE = [
@@ -78,6 +80,22 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=60),
 }
+
+# Object storage (Cloudflare R2 in production, any S3 API in dev). Browsers and phones upload
+# straight to it with pre-signed URLs; the API only signs and verifies.
+S3_BUCKET = env("S3_BUCKET")
+S3_ENDPOINT_URL = env("S3_ENDPOINT_URL", "")
+S3_ACCESS_KEY_ID = env("S3_ACCESS_KEY_ID")
+S3_SECRET_ACCESS_KEY = env("S3_SECRET_ACCESS_KEY")
+S3_REGION = env("S3_REGION", "auto")
+MEDIA_PART_SIZE = 8 * 1024 * 1024
+MEDIA_URL_TTL = 3600           # pre-signed URL lifetime, seconds
+ZIP_LINK_DAYS = 7
+STUCK_UPLOAD_HOURS = int(env("STUCK_UPLOAD_HOURS", "6"))
+
+CELERY_BROKER_URL = REDIS_URL
+CELERY_TASK_ALWAYS_EAGER = False
+CELERY_TASK_DEFAULT_QUEUE = "default"
 
 # Android: apps older than this cannot start new jobs (they can still finish one in progress)
 MIN_APP_VERSION = int(env("MIN_APP_VERSION", "0"))

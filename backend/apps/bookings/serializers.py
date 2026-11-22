@@ -64,6 +64,8 @@ class InspectionSerializer(serializers.ModelSerializer):
             if role == "expert":                       # experts never see ratings or Key Checks
                 data.pop("scores", None)
                 data.pop("overrides", None)
+            if "scores" in data and role != "admin":
+                self._hide_scores(data["scores"], instance, role, stage)
             ov = ops_version()
             for part, version in (("inspection", instance.form_version), ("ops", ov)):
                 if part not in data["answers"]:
@@ -74,3 +76,16 @@ class InspectionSerializer(serializers.ModelSerializer):
                 elif role != "admin":   # no form to say what is visible: fail closed
                     del data["answers"][part]
         return data
+
+    @staticmethod
+    def _hide_scores(scores: dict, instance, role: str, stage: str) -> None:
+        """Key Checks and rating fields follow the same field access as answers."""
+        levels = levels_for(instance.form_version, role, stage)
+
+        def shown(key: str) -> bool:
+            return levels.get(key, "hidden") != "hidden"
+
+        for group in ("derived", "fields"):
+            scores[group] = {k: v for k, v in scores.get(group, {}).items() if shown(k)}
+        scores["defects"] = [d for d in scores.get("defects", [])
+                             if shown(d.split(".", 1)[-1])]

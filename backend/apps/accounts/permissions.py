@@ -71,3 +71,18 @@ def perm(read: str | None, write: str | tuple[str, ...] | None = None):
             return all(scope_for(request.user, k, request) for k in required)
 
     return _Perm
+
+
+def perm_any(*keys: str):
+    """Permission class: the caller needs at least one of these permissions."""
+
+    class _PermAny(BasePermission):
+        perm_keys = keys
+
+        def has_permission(self, request, view):
+            if not request.user.is_authenticated:
+                return False
+            enforce_password_change(request, view)
+            return any(scope_for(request.user, k, request) for k in keys)
+
+    return _PermAny

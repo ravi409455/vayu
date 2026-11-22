@@ -161,7 +161,7 @@ def test_published_version_is_immutable_via_the_api(admin, form_v):
     assert r.status_code == 409 and r.json()["code"] == "VERSION_PUBLISHED"
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db(transaction=True, serialized_rollback=True)
 def test_concurrent_publish_exactly_one_wins(admin, make_form, tree):
     form = make_form()
     v = form["draft_version"]["id"]
@@ -192,7 +192,7 @@ def test_concurrent_publish_exactly_one_wins(admin, make_form, tree):
     assert FormVersion.objects.get(pk=v).status == "published"
 
 
-@pytest.mark.django_db(transaction=True)
+@pytest.mark.django_db(transaction=True, serialized_rollback=True)
 def test_edits_cannot_slip_into_a_version_while_it_is_being_published(make_form, tree):
     """Regression: an edit that read 'draft' just before a publish committed used to land in the
     published version. Draft writes now take the version's row lock first."""
