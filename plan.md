@@ -602,3 +602,6 @@ Do not implement these under any circumstance, even if they seem like natural ex
 
 ### 2026-11-22 — Configurable permissions (requirement change, built before Phase 4)
 Replaces "three fixed roles" with an Admin-editable role x permission matrix (REQUIREMENTS §2). Roles stay Expert/Ops/Admin. ~35 per-action permissions, `own`/`all` scope on bookings, submissions, payments and reports, Admin role locked, `roles.manage` ungrantable, Admin-only management of Admin users. Every API view must declare the permission it needs (enforced by a test that scans the URL conf), and every later phase uses the same `perm()` class. Defaults: Ops cannot edit templates or delete bookings/submissions; Ops keeps force-release and device sign-out (agreed earlier; **one toggle if you want it off**).
+
+### 2026-11-22 — Phase 4 notes
+- **Events carry values on purpose** (`booking.updated` has old->new, including customer fields; Booking ID edits need it). Nothing logs or sends them yet. **Phase 9 must**: log delivery metadata only (never payloads), include personal fields only when an integration has "full data" enabled, and apply the receiving integration's field scope. (Security review finding, accepted with this condition.)

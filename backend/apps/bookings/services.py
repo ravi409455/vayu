@@ -7,6 +7,7 @@ from apps.accounts import audit
 from apps.accounts.models import Role, User
 from apps.core import events
 from apps.core.errors import CodedError
+from apps.forms.access import levels_for
 from apps.forms.fieldtypes import AnswerError, clean_answer
 from apps.forms.models import Field, Form, FormKind, FormVersion, MasterListItem, VersionStatus
 from apps.forms.rules import validate_answers
@@ -102,8 +103,15 @@ def edit(actor, b: Booking, new_answers: dict, row_version: int) -> Booking:
     forbidden = [k for k in new_answers if k in ACTION_ONLY]
     if forbidden:
         raise err("USE_ACTION", f"{', '.join(forbidden)} change through their own actions.")
+    version = booking_form_version()
+    levels = levels_for(version, actor.role, b.stage)
+    default = "edit" if actor.role == "admin" else "view"
+    locked = sorted(k for k, v in new_answers.items()
+                    if v != b.answers.get(k) and levels.get(k, default) != "edit")
+    if locked:  # checked before validation: re-sent unchanged values are fine
+        raise err("FIELD_ACCESS", "You cannot change these fields at this stage.", 403, keys=locked)
     merged = {**b.answers, **new_answers}
-    cleaned = clean(booking_form_version(), merged)
+    cleaned = clean(version, merged)
     changes = {k: [b.answers.get(k), cleaned.get(k)] for k in set(cleaned) | set(b.answers)
                if b.answers.get(k) != cleaned.get(k)}
     if "booking_id" in changes:

@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.forms.access import levels_for, visible_answers
+
 from .models import Booking, RescheduleLog
 
 
@@ -22,3 +24,20 @@ class BookingSerializer(serializers.ModelSerializer):
                   "answers", "row_version", "started_at", "cancel_reason", "released_by",
                   "released_draft_expected", "last_edited_by", "last_edited_at", "reschedules",
                   "created_at"]
+
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        if request is not None:
+            cache = self.context.setdefault("_levels", {})
+            role = request.user.role
+            if "version" not in cache:
+                from .services import booking_form_version
+
+                cache["version"] = booking_form_version()
+            key = (role, instance.stage)
+            if key not in cache:
+                cache[key] = levels_for(cache["version"], role, instance.stage)
+            data["answers"] = visible_answers(cache[key], data["answers"], role)
+        return data
