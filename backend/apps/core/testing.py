@@ -1,3 +1,4 @@
+"""Shared pytest fixtures, imported by the root conftest.py."""
 import pytest
 from rest_framework.test import APIClient
 

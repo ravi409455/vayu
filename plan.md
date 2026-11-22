@@ -77,11 +77,11 @@
 - Kotlin + Compose + Room + WorkManager + CameraX.
 - Cloudflare R2 (S3 multipart pre-signed URLs, CORS for the web app origin); FCM.
 - DigitalOcean Bangalore 4/8 VPS + staging VPS, Docker Compose + Caddy.
-- **Rules = JsonLogic** with existing libraries (`json-logic-qubit` in Python, `json-logic-js` in TypeScript, `json-logic-java` on Android). Custom operations registered in each, about 30 lines per language:
-  - `any_defect(keys)`
-  - `count_defect(keys)`
-  - cross-form `var` paths like `booking.fuel_type`
-  - Proven by the official JsonLogic tests plus `shared/rule-vectors/*.json`.
+- **Rules = JsonLogic** with existing libraries: `jsonlogic-rs` 0.5.0 (Python, Rust core; 276/278 official tests, the 2 misses are rules nested in literal arrays, which the builder never emits), `json-logic-js` 2.0.5 (TS, 278/278), `json-logic-java` 1.1.0 (Android, verified in Phase 13). **No custom operations:**
+  - "any defect" / "count defects" are standard `some` / `filter`+`reduce` over a precomputed `_defects` list.
+  - Cross-form references are dotted `var` paths (`booking.fuel_type`).
+  - Each platform's own adapter code only handles hidden-field and required logic.
+  - Proven by `shared/rule-vectors/*.json` (amendment 2026-11-22, measured).
 - Optimistic concurrency via an integer `row_version`.
 
 **Open Questions:** none blocking.

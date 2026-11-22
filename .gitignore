@@ -21,3 +21,6 @@ android/build/
 *-firebase-adminsdk-*.json
 firebase-service-account*.json
 service-account*.json
+# Firebase/GCP service-account keys are secrets (google-services.json for Android is not)
+*-firebase-adminsdk-*.json
+*service-account*.json

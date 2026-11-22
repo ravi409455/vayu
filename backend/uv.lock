@@ -260,58 +260,18 @@ wheels = [
 ]
 
 [[package]]
-name = "vayu-backend"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "django" },
-    { name = "djangorestframework" },
-    { name = "djangorestframework-simplejwt" },
-    { name = "gunicorn" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "python-json-logger" },
-    { name = "redis" },
-    { name = "sentry-sdk" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "django-stubs", extra = ["compatible-mypy"] },
-    { name = "djangorestframework-stubs", extra = ["compatible-mypy"] },
-    { name = "factory-boy" },
-    { name = "freezegun" },
-    { name = "hypothesis" },
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pytest-django" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "django", specifier = "~=5.2" },
-    { name = "djangorestframework", specifier = "~=3.16" },
-    { name = "djangorestframework-simplejwt", specifier = "~=5.5" },
-    { name = "gunicorn", specifier = ">=27.0.1" },
-    { name = "psycopg", extras = ["binary"], specifier = "~=3.2" },
-    { name = "python-json-logger", specifier = "~=3.2" },
-    { name = "redis", specifier = "~=5.2" },
-    { name = "sentry-sdk", specifier = "~=2.20" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "django-stubs", extras = ["compatible-mypy"], specifier = "~=5.1" },
-    { name = "djangorestframework-stubs", extras = ["compatible-mypy"], specifier = "~=3.15" },
-    { name = "factory-boy", specifier = "~=3.3" },
-    { name = "freezegun", specifier = "~=1.5" },
-    { name = "hypothesis", specifier = "~=6.120" },
-    { name = "mypy", specifier = "~=1.14" },
-    { name = "pytest", specifier = "~=8.3" },
-    { name = "pytest-cov", specifier = "~=6.0" },
-    { name = "pytest-django", specifier = "~=4.10" },
-    { name = "ruff", specifier = "~=0.9" },
+name = "jsonlogic-rs"
+version = "0.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f1/7c/dba902fd169d5a74a8809b3a7ce62c810e681ebb06d8140c1cb8fdbdc273/jsonlogic_rs-0.5.0.tar.gz", hash = "sha256:3580dbd96cce027319dda51a93a7da414aec97cdd5f655e4184bebe3127d111c", size = 35830, upload-time = "2024-12-13T19:09:23.039Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1a/96/a2d014267ecabcf9c7ce8ea77542de79b32aba45ec25d6e075c9c81779f8/jsonlogic_rs-0.5.0-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:38d447d769bf9b9402967116662e7d224e85ba89b0525350c60ac18a13387efa", size = 604864, upload-time = "2024-12-13T19:10:23.67Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/76/5bb638c2cc8358649c57f94d93a79bbf68ba1be7f2289c9820973b8c462b/jsonlogic_rs-0.5.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:f9997a53d238adc5dc72aeea1f146b35aa8345d4e7904f52430e67be3f73c5f6", size = 313146, upload-time = "2024-12-13T19:10:25.46Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/3e/2e8930a37744eccf636bcf2744b1e4ef557d6278d7585bf61ff0efab58f9/jsonlogic_rs-0.5.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:6d97a3bd2470fbab17e111f750e20fe344226f60f94e01383f374d7dafb11d43", size = 297392, upload-time = "2024-12-13T19:10:28.32Z" },
+    { url = "https://files.pythonhosted.org/packages/4d/7c/6b8e74e157a0227e6dc9a53f9730cbfa81056afad14d0e757a8cb132f917/jsonlogic_rs-0.5.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:3697e4535d1f484406373407f7a65d0f93690c2e261ebdab85998c300879680e", size = 326224, upload-time = "2024-12-13T19:10:30.031Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/d8/86c63a497006ba6e02dd069162f3be70164bb93797464d6231be2a899ea0/jsonlogic_rs-0.5.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:910f602726241fa2da917467a6ad05c115e215b5b80adba94929bc2f10281c11", size = 338597, upload-time = "2024-12-13T19:10:31.291Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/b2/d58c62aa1223f994e782c23dd7be85f6b1ad9c3731f798b8389c6b997cc3/jsonlogic_rs-0.5.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:b49e3ab5a8cce9f7d89f26fff096c2bbafd73d35ef1bda24ba6bdf44ab94f0e0", size = 372123, upload-time = "2024-12-13T19:10:32.552Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/bb/2e4dfa0f7315acfc098ed7fd1fe9bb949212d33818485f360d939075d7cb/jsonlogic_rs-0.5.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:b9f329a1ec42e73f9d601c692f3243431863aeb7550149b67dc71b676b6c74ed", size = 400168, upload-time = "2024-12-13T19:10:33.747Z" },
 ]
 
 [[package]]
@@ -527,6 +487,30 @@ wheels = [
 ]
 
 [[package]]
+name = "regex"
+version = "2026.11.19"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b8/17/ef8c46a9e7cf2304968eb260f594bbd4220fab6281e64c090cdd85884511/regex-2026.11.19.tar.gz", hash = "sha256:2826a006b68acfd3ed5074433caafe21d7f9d026eb82cb856724a4a893a70915", size = 420762, upload-time = "2026-11-18T18:26:51.363Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/33/57/62e6dc69e09ff7207109ef97e206baf424eb361422e09165de8ca9d4c012/regex-2026.11.19-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:395da01592430da38686958f84fe861553730d95f9481a1bd06839fb38907ff6", size = 499431, upload-time = "2026-11-18T18:24:16.066Z" },
+    { url = "https://files.pythonhosted.org/packages/c2/6d/33172c17d2bfa417723d3e158dbdcba5bd0eb717d322bdfb228d13b5caa2/regex-2026.11.19-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:3fd7532a0ae36ab65d2354874588f5572145d933c26240cd24e8dd1c29e9257e", size = 297593, upload-time = "2026-11-18T18:24:17.822Z" },
+    { url = "https://files.pythonhosted.org/packages/51/d2/45aedbbf94e0cee3d64ff2a170dc89cfe52edaecab4f88645c996bfff589/regex-2026.11.19-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:7ecca76778a2889d59a978ddb78864ea55b70238ed60245bccada4f01578cbbd", size = 295031, upload-time = "2026-11-18T18:24:19.177Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/00/f64e7800250255805defb8b91ef9f308c98c83cac16712bd9f471034f386/regex-2026.11.19-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:70a2ad913b9a22342f8f66aa8d1cd484b4f1cf54ea360a15c5ccb17d35b06afd", size = 806489, upload-time = "2026-11-18T18:24:20.68Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/9f/0c6007d0218d6a77b16a861616f8008a4d52b1c69a9171157d12f00cacbf/regex-2026.11.19-cp312-cp312-manylinux2014_ppc64le.manylinux_2_17_ppc64le.manylinux_2_28_ppc64le.whl", hash = "sha256:3426c1361091af5bd57bc33611fd1502f4f2b58bd0f8845e61b091c58bf8ff76", size = 879330, upload-time = "2026-11-18T18:24:22.411Z" },
+    { url = "https://files.pythonhosted.org/packages/49/b3/12df317b39965328ade9f0df317da7e47b3b5a833bfe23720e3f022f477b/regex-2026.11.19-cp312-cp312-manylinux2014_s390x.manylinux_2_17_s390x.manylinux_2_28_s390x.whl", hash = "sha256:241364a88c9dac3268527703c370447ecccbe40d942eb9b10e90f2c7da1c9c6b", size = 920173, upload-time = "2026-11-18T18:24:24.432Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/58/5557577840d70b06274882c880085eb83209e2009d89f8fe5c35b3c57acd/regex-2026.11.19-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:8a966a5afe94ed9fb06deeecd9e3e51c3a5ab7d920e13f8128338e3fcdfed2b0", size = 809234, upload-time = "2026-11-18T18:24:25.822Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/50/ff3a1613e8f39375c659fb8baeaeceb3247e2258d79afbed4638b88fa066/regex-2026.11.19-cp312-cp312-manylinux_2_31_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:d0ca93ba97c904a183477d00c7f639e54be790d27b79c1320ae46e7743ea48dd", size = 784960, upload-time = "2026-11-18T18:24:27.385Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/bf/d5c1188b66189bd71c5849fbf2ac4131b3d17a14439ccf0ed0b94966ca7e/regex-2026.11.19-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:af31ab7e26cda857d55d0576256f7bb914c8a91952a98cffb5394de0b4a56800", size = 795700, upload-time = "2026-11-18T18:24:29.354Z" },
+    { url = "https://files.pythonhosted.org/packages/59/41/ed15fe2282d199a4e5fec48b229c8072dbec48ec2188e09236169a24be80/regex-2026.11.19-cp312-cp312-musllinux_1_2_ppc64le.whl", hash = "sha256:d6c8a5e83707a6a6fa3fc7b6faaea13fd07b7a10448a8247da530e4d8b1010f5", size = 869633, upload-time = "2026-11-18T18:24:31.083Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/61/b054878a2a1b1f3eacff79bb1e85ae89f8b2810d1ccb9743ab6bacfdb4db/regex-2026.11.19-cp312-cp312-musllinux_1_2_riscv64.whl", hash = "sha256:964f15d53c7f3afbcecf22e293c0564b40f433681de092801165113cbf88cfa6", size = 773068, upload-time = "2026-11-18T18:24:32.719Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/49/c53daeee4c13c58c24841e090e18ee9142edbedced8165127af78fa0b7f6/regex-2026.11.19-cp312-cp312-musllinux_1_2_s390x.whl", hash = "sha256:b1b1998bd95f561f7bd055ef363216896e3de759dac7247822693d54a929f8bc", size = 863319, upload-time = "2026-11-18T18:24:34.42Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/6c/fa81a08099f11d8c2c5c46548b89f3ea09397a8b3fc19361dbe936c9fa98/regex-2026.11.19-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:83f5e9612ca1bccf0b26c91e9156ebc1559488e759884daddd1d89eaba099825", size = 797286, upload-time = "2026-11-18T18:24:35.841Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/cc/2f6b02511d096b3de8a1f2ceb0d7ae912f3b0639ff71373251c65abf182c/regex-2026.11.19-cp312-cp312-win32.whl", hash = "sha256:0745dc7150e820bb0978b2c7df8750b1b59483d5dddad416b63f73c50f4918e1", size = 270385, upload-time = "2026-11-18T18:24:37.455Z" },
+    { url = "https://files.pythonhosted.org/packages/77/2d/8f5b2641845be2e5990763702ddc3c454f2bad9fc67592b253406d1650bb/regex-2026.11.19-cp312-cp312-win_amd64.whl", hash = "sha256:6b379ac8a3d0f21f2490e3b6264bb82e0bf572c0c14c44d6f12b8e4e3fa37117", size = 281496, upload-time = "2026-11-18T18:24:38.777Z" },
+    { url = "https://files.pythonhosted.org/packages/75/b0/9407b9aa8a555b22cb0971e0a440182597e345e526ede542ca1a62dca245/regex-2026.11.19-cp312-cp312-win_arm64.whl", hash = "sha256:97a0ecaf54b58ad8d6a547e9d727547eb8f6da8a93207846faf64afc9e3c6e6e", size = 280865, upload-time = "2026-11-18T18:24:40.609Z" },
+]
+
+[[package]]
 name = "ruff"
 version = "0.17.6"
 source = { registry = "https://pypi.org/simple" }
@@ -616,4 +600,63 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e3/05/b17359e1cefb4f909b5e40b1b90a496d987258916dbbf88e842c729f510e/urllib3-2.8.0.tar.gz", hash = "sha256:63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63", size = 458972, upload-time = "2026-09-15T19:29:36.253Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl", hash = "sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3", size = 135717, upload-time = "2026-09-15T19:29:34.577Z" },
+]
+
+[[package]]
+name = "vayu-backend"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "django" },
+    { name = "djangorestframework" },
+    { name = "djangorestframework-simplejwt" },
+    { name = "gunicorn" },
+    { name = "jsonlogic-rs" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "python-json-logger" },
+    { name = "redis" },
+    { name = "regex" },
+    { name = "sentry-sdk" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "django-stubs", extra = ["compatible-mypy"] },
+    { name = "djangorestframework-stubs", extra = ["compatible-mypy"] },
+    { name = "factory-boy" },
+    { name = "freezegun" },
+    { name = "hypothesis" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-django" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "django", specifier = "~=5.2" },
+    { name = "djangorestframework", specifier = "~=3.16" },
+    { name = "djangorestframework-simplejwt", specifier = "~=5.5" },
+    { name = "gunicorn", specifier = ">=27.0.1" },
+    { name = "jsonlogic-rs", specifier = "==0.5.0" },
+    { name = "psycopg", extras = ["binary"], specifier = "~=3.2" },
+    { name = "python-json-logger", specifier = "~=3.2" },
+    { name = "redis", specifier = "~=5.2" },
+    { name = "regex", specifier = ">=2026.11.19" },
+    { name = "sentry-sdk", specifier = "~=2.20" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "django-stubs", extras = ["compatible-mypy"], specifier = "~=5.1" },
+    { name = "djangorestframework-stubs", extras = ["compatible-mypy"], specifier = "~=3.15" },
+    { name = "factory-boy", specifier = "~=3.3" },
+    { name = "freezegun", specifier = "~=1.5" },
+    { name = "hypothesis", specifier = "~=6.120" },
+    { name = "mypy", specifier = "~=1.14" },
+    { name = "pytest", specifier = "~=8.3" },
+    { name = "pytest-cov", specifier = "~=6.0" },
+    { name = "pytest-django", specifier = "~=4.10" },
+    { name = "ruff", specifier = "~=0.9" },
 ]
