@@ -7,9 +7,10 @@ from .conftest import publish
 
 pytestmark = pytest.mark.django_db
 
-DEPTH = {"key": "tyre_depth", "label": "Tyre depth", "type": "number", "helper_text": "Use gauge",
-         "config": {"unit": "mm", "min": 0, "max": 20, "decimals": 1}}
-TYRES = {"title": "Tyres", "fields": [
+DEPTH: dict = {
+    "key": "tyre_depth", "label": "Tyre depth", "type": "number", "helper_text": "Use gauge",
+    "config": {"unit": "mm", "min": 0, "max": 20, "decimals": 1}}
+TYRES: dict = {"title": "Tyres", "fields": [
     {"key": "depth_fl", "label": "Front left depth", "type": "number",
      "config": {"unit": "mm", "min": 0, "max": 20, "decimals": 1}, "required": True},
     {"key": "depth_fr", "label": "Front right depth", "type": "number",
@@ -17,7 +18,7 @@ TYRES = {"title": "Tyres", "fields": [
 ]}
 
 
-def lib_field(admin, definition=DEPTH):
+def lib_field(admin, definition: dict = DEPTH):
     r = admin.post("/api/v1/library", {"kind": "field", "key": definition["key"],
                                        "definition": definition}, format="json")
     assert r.status_code == 201, r.json()
@@ -259,10 +260,11 @@ def test_edit_bumps_revision_and_noop_does_not(admin):
 
 def test_key_and_type_are_immutable_in_the_library(admin):
     item = lib_field(admin)
-    for change in ({"key": "other"}, {"type": "short_text", "config": {}}):
+    for change, code in (({"key": "other"}, "KEY_IMMUTABLE"),
+                         ({"type": "short_text", "config": {}}, "TYPE_IMMUTABLE")):
         r = admin.patch(f"/api/v1/library/{item['id']}",
                         {"definition": {**item["definition"], **change}}, format="json")
-        assert r.status_code == 400
+        assert r.status_code == 400 and r.json()["code"] == code
     sec = lib_section(admin)
     changed = {**TYRES, "fields": [{**TYRES["fields"][0], "type": "short_text", "config": {}},
                                    TYRES["fields"][1]]}
@@ -510,3 +512,63 @@ def test_library_actions_are_audited(admin, draft, tree):
     actions = set(AuditLog.objects.values_list("action", flat=True))
     assert {"library.create", "library.update", "library.archive", "form.link_library",
             "form.accept_library_update", "form.unlink_library"} <= actions
+
+
+# ---------------------------------------------------------------- remaining edge cases
+
+def test_derived_fields_can_live_in_the_library(admin):
+    d: dict = {"key": "dents_found", "label": "Dents found", "type": "derived", "config": {
+        "rule": {"some": [{"var": "_defects"}, {"in": [{"var": ""}, ["inspection.door"]]}]},
+        "true_label": "Found", "false_label": "Not Found"}}
+    lib_field(admin, d)
+    bad_rule = {**d, "key": "dents_two", "config": {**d["config"], "rule": {"missing": ["x"]}}}
+    r = admin.post("/api/v1/library", {"kind": "field", "key": "dents_two",
+                                       "definition": bad_rule}, format="json")
+    assert r.status_code == 400 and r.json()["code"] == "INVALID_RULE"
+
+
+@pytest.mark.parametrize("patch", [{"required": "yes"}, {"visible": 1}, {"helper_text": 5}])
+def test_flag_and_text_types_are_checked(admin, patch):
+    r = admin.post("/api/v1/library", {"kind": "field", "key": "tyre_depth",
+                                       "definition": {**DEPTH, **patch}}, format="json")
+    assert r.status_code == 400 and r.json()["code"] == "INVALID_DEFINITION"
+
+
+def test_section_level_rule_and_key_are_validated(admin):
+    r = admin.post("/api/v1/library", {"kind": "section", "key": "tyres", "definition": {
+        **TYRES, "show_if": {"missing": ["x"]}}}, format="json")
+    assert r.status_code == 400 and r.json()["code"] == "INVALID_RULE"
+    r = admin.post("/api/v1/library", {"kind": "section", "key": "Bad Key", "definition": TYRES},
+                   format="json")
+    assert r.status_code == 400 and r.json()["code"] == "INVALID_KEY"
+
+
+def test_unknown_kind_is_rejected(admin):
+    r = admin.post("/api/v1/library", {"kind": "page", "key": "x_y", "definition": {}},
+                   format="json")
+    assert r.status_code == 400 and r.json()["code"] == "INVALID_DEFINITION"
+
+
+def test_rename_item_without_touching_the_definition(admin):
+    item = lib_field(admin)
+    r = admin.patch(f"/api/v1/library/{item['id']}", {"name": "Tread"}, format="json").json()
+    assert r["name"] == "Tread" and r["revision"] == 1
+
+
+def test_unlink_requires_a_link_and_system_fields_cannot_be_saved(admin, draft, tree, add_field):
+    _, _, s = draft
+    plain = add_field(s, "plain_one").json()
+    r = admin.post(f"/api/v1/fields/{plain['id']}/unlink")
+    assert r.status_code == 400 and r.json()["code"] == "NOT_LINKED"
+    system = [f for f in tree(draft[0])["pages"][0]["sections"][0]["fields"]
+              if f["key"] == "chassis_no"][0]
+    r = admin.post(f"/api/v1/fields/{system['id']}/save-to-library", {}, format="json")
+    assert r.status_code == 400 and r.json()["code"] == "SYSTEM_FIELD"
+
+
+def test_section_with_a_valid_show_if_is_accepted(admin, draft, tree):
+    v, page, _ = draft
+    rule = {"==": [{"var": "inspection.chassis_no"}, "x"]}
+    item = lib_section(admin, key="conditional", definition={**TYRES, "show_if": rule})
+    add_linked_section(admin, page, item)
+    assert section_of(tree(v), "Tyres")["show_if"] == rule

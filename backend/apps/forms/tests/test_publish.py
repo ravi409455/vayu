@@ -183,7 +183,9 @@ def test_concurrent_publish_exactly_one_wins(admin, make_form, tree):
             connection.close()
 
     threads = [threading.Thread(target=go) for _ in range(2)]
-    [t.start() for t in threads]
-    [t.join(timeout=20) for t in threads]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=20)
     assert sorted(results) == [200, 409]
     assert FormVersion.objects.get(pk=v).status == "published"

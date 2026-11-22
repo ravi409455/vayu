@@ -1,7 +1,7 @@
 import re
 
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 
 from apps.core.errors import CodedError
@@ -68,6 +68,28 @@ class FormVersion(models.Model):
         ]
 
 
+class LibraryKind(models.TextChoices):
+    FIELD = "field"
+    SECTION = "section"
+
+
+class LibraryItem(models.Model):
+    """A reusable field or section. Forms link to it (copying its content at that revision) and
+    pull later edits only when an admin accepts them."""
+
+    kind = models.CharField(max_length=10, choices=LibraryKind.choices)
+    key = models.CharField(max_length=64)
+    name = models.CharField(max_length=200)
+    definition = models.JSONField()
+    revision = models.PositiveIntegerField(default=1)
+    archived = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["kind", "key"], name="library_key_per_kind")]
+        ordering = ["kind", "key"]
+
+
 def ensure_draft(version_id: int) -> None:
     status = FormVersion.objects.filter(pk=version_id).values_list("status", flat=True).first()
     if status == VersionStatus.PUBLISHED:
@@ -85,10 +107,17 @@ class DraftOnly(models.Model):
     def save(self, *args, **kwargs):
         ensure_draft(self.version_id)
         super().save(*args, **kwargs)
+        self._bump_row_version()
 
     def delete(self, *args, **kwargs):
         ensure_draft(self.version_id)
-        return super().delete(*args, **kwargs)
+        result = super().delete(*args, **kwargs)
+        self._bump_row_version()
+        return result
+
+    def _bump_row_version(self) -> None:
+        """Every draft change moves row_version, so a publish can prove it saw the latest."""
+        FormVersion.objects.filter(pk=self.version_id).update(row_version=F("row_version") + 1)
 
 
 class Page(DraftOnly):
@@ -113,6 +142,9 @@ class Section(DraftOnly):
     order = models.IntegerField(default=0)
     visible = models.BooleanField(default=True)
     show_if = models.JSONField(null=True, blank=True)
+    library_item = models.ForeignKey(LibraryItem, null=True, blank=True, on_delete=models.PROTECT,
+                                     related_name="linked_sections")
+    library_revision = models.PositiveIntegerField(null=True, blank=True)
 
     class Meta:
         ordering = ["order", "id"]
@@ -177,6 +209,9 @@ class Field(DraftOnly):
     visible = models.BooleanField(default=True)
     order = models.IntegerField(default=0)
     is_system = models.BooleanField(default=False)
+    library_item = models.ForeignKey(LibraryItem, null=True, blank=True, on_delete=models.PROTECT,
+                                     related_name="linked_fields")
+    library_revision = models.PositiveIntegerField(null=True, blank=True)
 
     class Meta:
         ordering = ["order", "id"]

@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from apps.core.errors import CodedError
 
+from . import library
 from .fieldtypes import ConfigError, validate_config
 from .models import (
     LIST_KEY_RE,
@@ -9,6 +10,7 @@ from .models import (
     Form,
     FormKind,
     FormVersion,
+    LibraryItem,
     MasterList,
     MasterListItem,
     Page,
@@ -104,21 +106,51 @@ class FormSerializer(serializers.ModelSerializer):
                             .order_by("-number").first())
 
 
+def _library_info(obj, context) -> dict | None:
+    item = obj.library_item
+    if item is None:
+        return None
+    draft = context.get("draft")
+    if draft is None:
+        draft = obj.version.status == VersionStatus.DRAFT
+    return {"item": item.id, "revision": obj.library_revision,
+            "update_available": bool(draft and item.revision > (obj.library_revision or 0))}
+
+
 class FieldSerializer(serializers.ModelSerializer):
+    library = serializers.SerializerMethodField()
+    locked = serializers.SerializerMethodField()
+
     class Meta:
         model = Field
         fields = ["id", "section", "key", "label", "helper_text", "type", "config", "required",
-                  "required_if", "show_if", "visible", "order", "is_system"]
+                  "required_if", "show_if", "visible", "order", "is_system", "library", "locked"]
         read_only_fields = ["is_system"]
         extra_kwargs = {"section": {"required": False}}
 
+    def get_library(self, obj):
+        return _library_info(obj, self.context)
+
+    def get_locked(self, obj):
+        return library.locked(obj)
+
     def validate_section(self, section):
-        if self.instance is not None and section.version_id != self.instance.version_id:
+        inst = self.instance
+        if inst is not None and section.version_id != inst.version_id:
             raise serializers.ValidationError("Fields can only move within the same version.")
+        if inst is not None and section.pk != inst.section_id and (
+                section.library_item_id or inst.section.library_item_id):
+            raise CodedError("LINKED_LOCKED", "Fields cannot move into or out of a section "
+                             "linked to the library.", 409)
         return section
 
     def validate(self, attrs):
         inst = self.instance
+        if inst is not None and library.locked(inst) and any(
+                k in attrs and attrs[k] != getattr(inst, k)
+                for k in ("label", "helper_text", "config", "type")):
+            raise CodedError("LINKED_LOCKED", "This field's content comes from the library; "
+                             "unlink it or edit the library item.", 409)
         if inst is not None and inst.is_system and any(
                 k in attrs and attrs[k] != getattr(inst, k)
                 for k in ("key", "type", "config", "required", "required_if", "show_if",
@@ -139,13 +171,27 @@ class FieldSerializer(serializers.ModelSerializer):
 
 class SectionSerializer(serializers.ModelSerializer):
     fields = FieldSerializer(many=True, read_only=True)  # type: ignore[assignment]
+    library = serializers.SerializerMethodField()
+    locked = serializers.SerializerMethodField()
 
     class Meta:
         model = Section
-        fields = ["id", "page", "title", "order", "visible", "show_if", "fields"]
+        fields = ["id", "page", "title", "order", "visible", "show_if", "fields", "library",
+                  "locked"]
         extra_kwargs = {"page": {"required": False}}
 
+    def get_library(self, obj):
+        return _library_info(obj, self.context)
+
+    def get_locked(self, obj):
+        return obj.library_item_id is not None
+
     def validate(self, attrs):
+        inst = self.instance
+        if inst is not None and inst.library_item_id and "title" in attrs \
+                and attrs["title"] != inst.title:
+            raise CodedError("LINKED_LOCKED", "This section's content comes from the library.",
+                             409)
         _check_rules(attrs, "show_if")
         return attrs
 
@@ -198,5 +244,24 @@ class VersionTreeSerializer(serializers.ModelSerializer):
         return CheckSerializer(VersionCheck.objects.filter(version=obj), many=True).data
 
     def get_pages(self, obj):
-        pages = Page.objects.filter(version=obj).prefetch_related("sections__fields")
-        return PageSerializer(pages, many=True).data
+        pages = Page.objects.filter(version=obj).prefetch_related(
+            "sections__library_item", "sections__fields__library_item",
+            "sections__fields__section")
+        return PageSerializer(pages, many=True,
+                              context={"draft": obj.status == VersionStatus.DRAFT}).data
+
+
+class LibraryItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LibraryItem
+        fields = ["id", "kind", "key", "name", "definition", "revision", "archived"]
+
+
+class LibraryItemDetailSerializer(LibraryItemSerializer):
+    usages = serializers.SerializerMethodField()
+
+    class Meta(LibraryItemSerializer.Meta):
+        fields = [*LibraryItemSerializer.Meta.fields, "usages"]
+
+    def get_usages(self, obj):
+        return library.usages(obj)

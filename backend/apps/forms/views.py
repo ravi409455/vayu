@@ -1,28 +1,32 @@
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.shortcuts import get_object_or_404
-from rest_framework import generics, mixins, status, viewsets
+from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts import audit
 from apps.accounts.permissions import AnyReadAdminWrite, IsAdmin, OpsReadAdminWrite
 
-from . import services
+from . import library, services
 from .models import (
     Field,
     Form,
     FormVersion,
+    LibraryItem,
     MasterList,
     MasterListItem,
     Page,
     Section,
     VersionCheck,
+    ensure_draft,
 )
 from .rules import validate_version
 from .serializers import (
     CheckSerializer,
     FieldSerializer,
     FormSerializer,
+    LibraryItemDetailSerializer,
+    LibraryItemSerializer,
     MasterListItemSerializer,
     MasterListSerializer,
     PageSerializer,
@@ -147,15 +151,22 @@ class FieldCreate(generics.CreateAPIView):
 
     def perform_create(self, serializer):
         section = get_object_or_404(Section, pk=self.kwargs["pk"])
+        ensure_draft(section.version_id)
+        library.ensure_not_locked(section)
         order = serializer.validated_data.get("order", _next_order(section.fields.all()))
         serializer.save(section=section, version_id=section.version_id, order=order)
 
 
 class FieldDetail(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Field.objects.select_related("section")
+    queryset = Field.objects.select_related("section", "library_item")
     serializer_class = FieldSerializer
     permission_classes = [OpsReadAdminWrite]
     http_method_names = ["get", "patch", "delete", "head", "options"]
+
+    def perform_destroy(self, instance):
+        ensure_draft(instance.version_id)
+        library.ensure_not_locked(instance.section)  # fields of a linked section stay put
+        instance.delete()
 
 
 class CheckCreate(generics.CreateAPIView):
@@ -181,3 +192,145 @@ class ValidateVersion(generics.GenericAPIView):
     def post(self, request, pk):
         issues = validate_version(self.get_object())
         return Response({"issues": [i.__dict__ for i in issues]})
+
+
+class LibraryViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
+                     mixins.UpdateModelMixin, mixins.DestroyModelMixin, viewsets.GenericViewSet):
+    permission_classes = [OpsReadAdminWrite]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_serializer_class(self):
+        return LibraryItemDetailSerializer if self.action == "retrieve" else LibraryItemSerializer
+
+    def get_queryset(self):
+        p = self.request.query_params
+        qs = LibraryItem.objects.order_by("kind", "key")
+        if not p.get("include_archived"):
+            qs = qs.filter(archived=False)
+        if p.get("kind"):
+            qs = qs.filter(kind=p["kind"])
+        if p.get("q"):
+            qs = qs.filter(Q(key__icontains=p["q"]) | Q(name__icontains=p["q"]))
+        return qs if self.action == "list" else LibraryItem.objects.all()
+
+    def create(self, request, *args, **kwargs):
+        d = request.data
+        item = library.create_item(request.user, kind=d.get("kind"), key=d.get("key", ""),
+                                   name=d.get("name"), definition=d.get("definition"))
+        return Response(LibraryItemSerializer(item).data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        d = request.data
+        item = library.update_item(request.user, self.get_object(), definition=d.get("definition"),
+                                   archived=d.get("archived"), name=d.get("name"))
+        return Response(LibraryItemSerializer(item).data)
+
+    def destroy(self, request, *args, **kwargs):
+        library.delete_item(request.user, self.get_object())
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class _FromLibraryBody(serializers.Serializer):
+    library_item = serializers.IntegerField()
+    link = serializers.BooleanField(default=True)
+
+
+class FieldFromLibrary(generics.GenericAPIView):
+    permission_classes = [IsAdmin]
+    serializer_class = _FromLibraryBody
+
+    def post(self, request, pk):
+        body = _FromLibraryBody(data=request.data)
+        body.is_valid(raise_exception=True)
+        section = get_object_or_404(Section, pk=pk)
+        item = get_object_or_404(LibraryItem, pk=body.validated_data["library_item"])
+        field = library.add_field(request.user, section, item, body.validated_data["link"])
+        return Response(FieldSerializer(field).data, status=status.HTTP_201_CREATED)
+
+
+class SectionFromLibrary(generics.GenericAPIView):
+    permission_classes = [IsAdmin]
+    serializer_class = _FromLibraryBody
+
+    def post(self, request, pk):
+        body = _FromLibraryBody(data=request.data)
+        body.is_valid(raise_exception=True)
+        page = get_object_or_404(Page, pk=pk)
+        item = get_object_or_404(LibraryItem, pk=body.validated_data["library_item"])
+        section = library.add_section(request.user, page, item, body.validated_data["link"])
+        return Response(SectionSerializer(section).data, status=status.HTTP_201_CREATED)
+
+
+class _LinkAction(generics.GenericAPIView):
+    """accept-update / unlink / save-to-library on a field or a section."""
+
+    permission_classes = [IsAdmin]
+    serializer_class = serializers.Serializer
+    model: type[Field] | type[Section] = Field
+    result: type[serializers.ModelSerializer] = FieldSerializer
+
+    def obj(self, pk):
+        return get_object_or_404(self.model.objects.select_related("library_item"), pk=pk)
+
+
+class _OnField(_LinkAction):
+    model, result = Field, FieldSerializer
+
+
+class _OnSection(_LinkAction):
+    model, result = Section, SectionSerializer
+
+
+def _accept(self, request, pk):
+    return Response(self.result(library.accept_update(request.user, self.obj(pk))).data)
+
+
+def _unlink(self, request, pk):
+    return Response(self.result(library.unlink(request.user, self.obj(pk))).data)
+
+
+def _save(self, request, pk):
+    item = library.save_to_library(request.user, self.obj(pk), key=request.data.get("key"),
+                                   name=request.data.get("name"))
+    return Response(LibraryItemSerializer(item).data, status=status.HTTP_201_CREATED)
+
+
+class FieldAcceptUpdate(_OnField):
+    post = _accept
+
+
+class SectionAcceptUpdate(_OnSection):
+    post = _accept
+
+
+class FieldUnlink(_OnField):
+    post = _unlink
+
+
+class SectionUnlink(_OnSection):
+    post = _unlink
+
+
+class FieldSaveToLibrary(_OnField):
+    post = _save
+
+
+class SectionSaveToLibrary(_OnSection):
+    post = _save
+
+
+class _PublishBody(serializers.Serializer):
+    row_version = serializers.IntegerField()
+
+
+class PublishVersion(generics.GenericAPIView):
+    permission_classes = [IsAdmin]
+    serializer_class = _PublishBody
+
+    def post(self, request, pk):
+        body = _PublishBody(data=request.data)
+        body.is_valid(raise_exception=True)
+        v = services.publish_version(request.user, pk, body.validated_data["row_version"])
+        return Response({"id": v.id, "number": v.number, "status": v.status,
+                         "published_at": v.published_at, "row_version": v.row_version,
+                         "warnings": []})  # PDF-template warnings arrive with Phase 7

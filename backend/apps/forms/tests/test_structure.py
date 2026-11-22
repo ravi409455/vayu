@@ -236,3 +236,12 @@ def test_draft_cannot_be_created_without_a_published_version(make_form, admin):
     form = make_form()
     r = admin.post(f"/api/v1/forms/{form['id']}/drafts")
     assert r.status_code == 409 and r.json()["code"] == "DRAFT_EXISTS"
+
+
+def test_draft_needs_something_to_copy(make_form, admin):
+    from apps.forms.models import FormVersion
+
+    form = make_form()
+    FormVersion.objects.filter(form_id=form["id"]).delete()
+    r = admin.post(f"/api/v1/forms/{form['id']}/drafts")
+    assert r.status_code == 409 and r.json()["code"] == "NOTHING_TO_COPY"

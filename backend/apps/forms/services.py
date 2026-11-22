@@ -1,5 +1,7 @@
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import F, Max
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from apps.accounts import audit
 from apps.core.errors import CodedError
@@ -63,3 +65,46 @@ def create_draft(actor, form: Form) -> FormVersion:
     audit.record(actor, "form.draft_create", "form", form.id,
                  f"Created draft v{number} of {form.key} from v{source.number}")
     return draft
+
+
+def system_field_issues(version: FormVersion) -> list:
+    from .rules import Issue
+
+    present = {f.key: f for f in Field.objects.filter(version=version, is_system=True)}
+    issues = []
+    for spec in SYSTEM_FIELDS[version.form.kind]:
+        f = present.get(spec["key"])
+        if f is None:
+            issues.append(Issue(f"system_fields.{spec['key']}", "MISSING_SYSTEM_FIELD",
+                                f"System field '{spec['key']}' is missing."))
+        elif not f.visible:
+            issues.append(Issue(f"fields.{f.key}.visible", "SYSTEM_FIELD_HIDDEN",
+                                f"System field '{f.key}' must stay visible."))
+    return issues
+
+
+def publish_version(actor, version_id: int, row_version: int) -> FormVersion:
+    """Freeze a draft. `row_version` must be the one the admin last saw, so nobody publishes a
+    draft that changed under them. The row lock makes concurrent publishes safe."""
+    from .rules import validate_version
+
+    with transaction.atomic():
+        version = get_object_or_404(
+            FormVersion.objects.select_for_update().select_related("form"), pk=version_id)
+        if version.status == VersionStatus.PUBLISHED:
+            raise CodedError("VERSION_PUBLISHED", "This version is already published.", 409)
+        if row_version != version.row_version:
+            raise CodedError("STALE_DRAFT", "The draft changed since you opened it; reload.",
+                             409, row_version=version.row_version)
+        issues = validate_version(version) + system_field_issues(version)
+        if issues:
+            raise CodedError("PUBLISH_BLOCKED", "Fix these problems before publishing.", 400,
+                             issues=[i.__dict__ for i in issues])
+        version.status = VersionStatus.PUBLISHED
+        version.published_at = timezone.now()
+        version.row_version = F("row_version") + 1
+        version.save(update_fields=["status", "published_at", "row_version"])
+        version.refresh_from_db()
+        audit.record(actor, "form.publish", "form_version", version.id,
+                     f"Published {version.form.key} v{version.number}")
+    return version
