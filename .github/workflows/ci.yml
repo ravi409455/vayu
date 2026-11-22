@@ -27,6 +27,7 @@ jobs:
         run: |
           uv run pytest -q apps/forms --cov=apps.forms.rules --cov-branch --cov-fail-under=100
           uv run pytest -q apps/bookings apps/forms/tests/test_access_model.py --cov=apps.bookings --cov=apps.forms.access --cov-branch --cov-fail-under=100
+          uv run pytest -q apps/scoring apps/bookings/tests/test_scoring.py --cov=apps.scoring --cov-branch --cov-fail-under=100
           uv run pytest -q apps/accounts --cov=apps.accounts.permissions --cov=apps.accounts.roles --cov-branch --cov-fail-under=100
   web:
     runs-on: ubuntu-latest

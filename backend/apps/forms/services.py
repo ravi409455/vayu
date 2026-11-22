@@ -47,7 +47,8 @@ def create_draft(actor, form: Form) -> FormVersion:
     if source is None:
         raise CodedError("NOTHING_TO_COPY", "This form has no published version yet.", 409)
     number = (form.versions.aggregate(n=Max("number"))["n"] or 0) + 1
-    draft = FormVersion.objects.create(form=form, number=number)
+    draft = FormVersion.objects.create(form=form, number=number,
+                                       rating_config=source.rating_config)
     for page in Page.objects.filter(version=source):
         old_page_id = page.id
         page.pk, page.version = None, draft

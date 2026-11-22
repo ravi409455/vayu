@@ -9,6 +9,7 @@ from apps.forms.access import STAGES, levels_for
 from apps.forms.models import Form, FormKind, FormVersion, VersionStatus
 from apps.forms.rules import validate_answers
 from apps.forms.serializers import VersionTreeSerializer
+from apps.scoring import service as scoring
 
 from .models import Booking, Inspection
 from .services import _changed, _lock, active_item, booking_form_version, err, sync_columns, today
@@ -158,6 +159,7 @@ def submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id=No
     insp.status, insp.submitted_at = "submitted", timezone.now()
     insp.client_submission_uuid = submission_uuid
     insp.save()
+    scoring.recompute(insp)
     _advance(actor, b, insp)
     events.emit("inspection.submitted", booking=str(b.id), inspection=str(insp.id))
     return b, insp
@@ -213,6 +215,7 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
         insp.last_change = {"by": actor.username, "at": insp.last_edited_at.isoformat(),
                             "keys": keys}
         insp.save()
+        scoring.recompute(insp)
         chassis = new["inspection"].get("chassis_no")
         if chassis is not None and b.chassis_no != chassis:
             Booking.objects.filter(pk=b.pk).update(chassis_no=chassis)
@@ -235,10 +238,34 @@ def searchable_stages(role: str) -> dict[str, list[str]]:
     except Exception:  # noqa: BLE001 - no booking form yet means no bookings either
         return {}
     by_stage = {s: levels_for(booking_version, role, s) for s in STAGES}
-    out = {c: [s for s in STAGES if by_stage[s].get(key) != "hidden"]
+    out = {c: [s for s in STAGES if by_stage[s].get(key, "hidden") != "hidden"]  # fail closed
            for c, key in BOOKING_SEARCH.items()}
     versions = [v for f in Form.objects.filter(kind=FormKind.INSPECTION, is_active=True)
                 if (v := latest_published(f))]
-    chassis = {s: [levels_for(v, role, s).get("chassis_no") for v in versions] for s in STAGES}
+    chassis = {s: [levels_for(v, role, s).get("chassis_no", "hidden") for v in versions]
+               or ["hidden"] for s in STAGES}                    # no form to say: closed
     out["chassis_no"] = [s for s in STAGES if "hidden" not in chassis[s]]
     return out
+
+
+@transaction.atomic
+def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Inspection:
+    insp = Inspection.objects.select_for_update().get(pk=insp.pk)
+    if row_version != insp.row_version:
+        raise err("STALE_INSPECTION", "Someone changed this inspection since you opened it.", 409,
+                  changed_by=insp.last_change.get("by"), changed_at=insp.last_change.get("at"),
+                  changed_keys=insp.last_change.get("keys", []), row_version=insp.row_version)
+    try:
+        scoring.validate_overrides(insp.form_version, body)
+    except ValueError as e:
+        raise err("INVALID_OVERRIDES", str(e)) from e
+    insp.overrides = scoring.apply_overrides(insp.overrides, body)
+    insp.row_version += 1
+    insp.last_edited_by, insp.last_edited_at = actor, timezone.now()
+    insp.last_change = {"by": actor.username, "at": insp.last_edited_at.isoformat(),
+                        "keys": ["overrides"]}
+    insp.save()
+    scoring.recompute(insp)
+    events.emit("inspection.updated", booking=str(insp.booking_id), inspection=str(insp.id),
+                keys=["overrides"])
+    return insp

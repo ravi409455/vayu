@@ -66,6 +66,7 @@ class FormVersion(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     published_at = models.DateTimeField(null=True, blank=True)
     row_version = models.PositiveIntegerField(default=0)
+    rating_config = models.JSONField(default=dict, blank=True)  # see apps/scoring/engine.py
 
     class Meta:
         constraints = [

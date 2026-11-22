@@ -6,7 +6,7 @@ import pytest
 from apps.bookings.models import Inspection
 
 from .conftest import create
-from .test_submissions import assign, publish_form, start, submit
+from .test_submissions import assign, publish_form, start
 
 pytestmark = pytest.mark.django_db
 V = lambda k: {"var": k}  # noqa: E731
@@ -36,9 +36,12 @@ def senv(env):
                                                           "config": cfg, **kw}, format="json")
         assert r.status_code == 201, r.json()
 
-    eng, ext = section("Engine"), section("Exterior")
-    add(eng, "eng_oil"); add(eng, "eng_noise")
-    add(ext, "door"); add(ext, "bonnet", show_if={"==": [V("inspection.door"), "dent"]})
+    eng, ext, interior = section("Engine"), section("Exterior"), section("Interior")
+    add(interior, "seat")  # a section that feeds no rating category
+    add(eng, "eng_oil")
+    add(eng, "eng_noise")
+    add(ext, "door")
+    add(ext, "bonnet", show_if={"==": [V("inspection.door"), "dent"]})
     add(ext, "paint")
     add(ext, "engine_rating", "rating", config={"category": "engine"})
     add(ext, "exterior_rating", "rating", config={"category": "exterior"})
@@ -171,7 +174,7 @@ def test_ops_override_ratings_overall_and_key_checks(senv):
     assert s["fields"]["exterior_rating"] == 2
     assert s["derived"]["dents_found"] is False
     assert s["overall"]["word"] == "good" and s["overall"]["overridden"] is True
-    assert s["overall"]["suggested_word"] == "average"   # avg of 5 and 2 is 3.5... capped? no: 3.5
+    assert s["overall"]["suggested_word"] == "excellent"   # from the suggested values, 5 and 4
     assert insp.overrides == {"ratings": {"exterior": 2}, "derived": {"dents_found": False},
                               "overall": "good"}
 
@@ -240,3 +243,11 @@ def test_override_permission_can_be_revoked_from_ops(senv):
     perms = {k: v for k, v in DEFAULTS["ops"].items() if k != "ratings.override"}
     senv.admin.put("/api/v1/roles/ops/permissions", {"permissions": perms}, format="json")
     assert override(senv.ops, insp, {"overall": "good"}).status_code == 403
+
+
+def test_a_critical_defect_in_an_unrated_section_still_caps_the_overall(senv):
+    _, insp = run(senv, {"eng_oil": "ok", "door": "ok", "seat": "broken"})
+    s = scores(insp)
+    assert s["ratings"]["engine"]["value"] == 5 and s["ratings"]["exterior"]["value"] == 5
+    assert s["overall"]["average"] == 5.0 and s["overall"]["word"] == "average"
+    assert s["defects"] == ["inspection.seat"]

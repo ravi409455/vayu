@@ -75,6 +75,8 @@ class Inspection(models.Model):
                                      related_name="+")  # frozen at start
     status = models.CharField(max_length=10, default="draft")  # draft | submitted
     answers = models.JSONField(default=dict)    # {"inspection": {...}, "ops": {...}} (cleaned)
+    scores = models.JSONField(default=dict)     # computed: Key Checks, ratings, overall
+    overrides = models.JSONField(default=dict)  # Ops overrides: ratings, derived, overall
     row_version = models.PositiveIntegerField(default=0)
     last_change = models.JSONField(default=dict)
     last_edited_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,

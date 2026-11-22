@@ -50,8 +50,9 @@ class InspectionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Inspection
-        fields = ["id", "booking", "expert", "status", "answers", "row_version", "form_version",
-                  "submitted_at", "last_edited_by", "last_edited_at", "created_at"]
+        fields = ["id", "booking", "expert", "status", "answers", "scores", "overrides",
+                  "row_version", "form_version", "submitted_at", "last_edited_by",
+                  "last_edited_at", "created_at"]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -60,6 +61,9 @@ class InspectionSerializer(serializers.ModelSerializer):
             from .submissions import ops_version
 
             role, stage = request.user.role, instance.booking.stage
+            if role == "expert":                       # experts never see ratings or Key Checks
+                data.pop("scores", None)
+                data.pop("overrides", None)
             ov = ops_version()
             for part, version in (("inspection", instance.form_version), ("ops", ov)):
                 if part not in data["answers"]:

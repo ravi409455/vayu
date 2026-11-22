@@ -30,6 +30,8 @@ def v2(env):
     add("flag", type="derived", config={"rule": {"!!": [{"var": "_defects"}]},
                                         "true_label": "Y", "false_label": "N"})
     add("grade", type="rating", config={"category": "engine"})
+    admin.patch(f"/api/v1/form-versions/{d}/rating-config", {"config": {"categories": [
+        {"key": "engine", "label": "E", "sections": ["Section 1"]}]}}, format="json")
     rv = admin.get(f"/api/v1/form-versions/{d}").json()["row_version"]
     assert admin.post(f"/api/v1/form-versions/{d}/publish", {"row_version": rv},
                       format="json").status_code == 200

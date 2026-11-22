@@ -42,6 +42,8 @@ def ienv(env):
         required_if={"==": [{"var": "inspection.door"}, "dent"]})
     add("odometer", "number", config={"min": 0})
     add("grade", "rating", config={"category": "engine"})
+    admin.patch(f"/api/v1/form-versions/{v}/rating-config", {"config": {"categories": [
+        {"key": "engine", "label": "Engine", "sections": ["Section 1"]}]}}, format="json")
     publish_form(admin, form["id"])
     env.form_id = form["id"]
     return env
@@ -391,6 +393,10 @@ def test_the_experts_form_drops_sections_and_pages_with_nothing_to_show(ienv, bo
     s2 = admin.post(f"/api/v1/pages/{pg2['id']}/sections", {"title": "S"}, format="json").json()
     admin.post(f"/api/v1/sections/{s2['id']}/fields", {"key": "rating_three", "label": "R",
                "type": "rating", "config": {"category": "tyres"}}, format="json")
+    admin.patch(f"/api/v1/form-versions/{d}/rating-config", {"config": {"categories": [
+        {"key": "engine", "label": "E", "sections": ["Section 1"]},
+        {"key": "ac", "label": "A", "sections": ["Ratings"]},
+        {"key": "tyres", "label": "T", "sections": ["S"]}]}}, format="json")
     publish_form(admin, ienv.form_id)
     assign(ienv, booking)
     form = start(ienv.expert, booking).json()["form"]

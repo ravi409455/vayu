@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Max, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, mixins, serializers, status, viewsets
@@ -6,6 +7,7 @@ from rest_framework.response import Response
 
 from apps.accounts import audit
 from apps.accounts.permissions import perm
+from apps.core.errors import CodedError
 
 from . import library, services
 from .models import (
@@ -19,6 +21,7 @@ from .models import (
     Section,
     VersionCheck,
     ensure_draft,
+    lock_draft,
 )
 from .rules import validate_version
 from .serializers import (
@@ -340,3 +343,28 @@ class PublishVersion(generics.GenericAPIView):
         return Response({"id": v.id, "number": v.number, "status": v.status,
                          "published_at": v.published_at, "row_version": v.row_version,
                          "warnings": []})  # PDF-template warnings arrive with Phase 7
+
+
+class RatingConfigView(generics.GenericAPIView):
+    permission_classes = [perm("forms.view", "forms.edit")]
+    serializer_class = serializers.Serializer
+
+    def patch(self, request, pk):
+        from apps.scoring.engine import validate_config
+
+        config = request.data.get("config")
+        if config is None:
+            raise serializers.ValidationError({"config": "This field is required."})
+        try:
+            validate_config(config)
+        except ValueError as e:
+            raise CodedError("INVALID_RATING_CONFIG", str(e), 400) from e
+        with transaction.atomic():
+            lock_draft(pk)
+            version = get_object_or_404(FormVersion, pk=pk)
+            version.rating_config = config
+            version.row_version += 1
+            version.save(update_fields=["rating_config", "row_version"])
+        audit.record(request.user, "form.rating_config", "form_version", pk,
+                     "Updated rating config")
+        return Response({"rating_config": config, "row_version": version.row_version})

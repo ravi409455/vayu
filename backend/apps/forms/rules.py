@@ -390,6 +390,9 @@ def validate_version(version) -> list[Issue]:
                 issues.append(Issue(f"checks.{c.id}.fields", "UNKNOWN_FIELD",
                                     f"'{k}' is not a field of this form."))
     issues.extend(_cycle_issues(version, own))
+    from apps.scoring.service import config_issues
+
+    issues.extend(Issue(*i) for i in config_issues(version))
     return issues
 
 

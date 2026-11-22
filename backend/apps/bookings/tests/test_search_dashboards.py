@@ -212,3 +212,11 @@ def test_csv_cells_that_look_like_formulas_are_neutralised():
     assert csv_safe("=SUM(A1)") == "'=SUM(A1)" and csv_safe("+1") == "'+1"
     assert csv_safe("-2") == "'-2" and csv_safe("@x") == "'@x" and csv_safe("\tx") == "'\tx"
     assert csv_safe("delhi") == "delhi" and csv_safe("") == ""
+
+
+def test_chassis_is_unsearchable_for_non_admins_when_no_inspection_form_describes_it(many):
+    from apps.bookings.models import Booking
+
+    Booking.objects.filter(booking_id="SA10001").update(chassis_no="MA3SECRETCHASSIS1")
+    assert ids(many.admin, "search=SECRETCHASSIS") == ["SA10001"]
+    assert ids(many.ops, "search=SECRETCHASSIS") == []       # no active inspection form here

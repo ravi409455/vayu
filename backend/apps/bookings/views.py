@@ -3,6 +3,7 @@ import uuid
 from datetime import date
 
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import generics, mixins, status, viewsets
@@ -177,4 +178,18 @@ class InspectionDetail(generics.RetrieveUpdateAPIView):
         insp = submissions.edit_inspection(request.user, self.get_object(),
                                            request.data.get("answers") or {},
                                            request.data["row_version"])
+        return Response(InspectionSerializer(insp, context=self.get_serializer_context()).data)
+
+
+class InspectionOverrides(generics.GenericAPIView):
+    permission_classes = [perm("ratings.override")]
+    serializer_class = InspectionSerializer
+    http_method_names = ["patch", "head", "options"]
+
+    def patch(self, request, pk):
+        if "row_version" not in request.data:
+            raise ValidationError({"row_version": "This field is required."})
+        insp = get_object_or_404(Inspection, pk=pk)
+        body = {k: v for k, v in request.data.items() if k != "row_version"}
+        insp = submissions.set_overrides(request.user, insp, body, request.data["row_version"])
         return Response(InspectionSerializer(insp, context=self.get_serializer_context()).data)
