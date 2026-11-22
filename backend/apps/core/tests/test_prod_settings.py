@@ -26,3 +26,11 @@ def test_prod_refuses_to_start_without_sentry_dsn():
 def test_prod_starts_with_dsn_and_enables_hsts():
     r = load_prod(SENTRY_DSN="https://k@o0.ingest.sentry.io/1")
     assert r.returncode == 0, r.stderr
+
+
+def test_coded_error_payload_keeps_json_types():
+    from apps.core.errors import CodedError
+
+    e = CodedError("X", "msg", 409, row_version=3, items=[1, {"a": 2}])
+    assert e.detail == {"code": "X", "detail": "msg", "row_version": 3, "items": [1, {"a": 2}]}
+    assert e.status_code == 409

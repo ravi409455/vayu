@@ -26,6 +26,7 @@ jobs:
       - name: critical areas need 100% branch coverage
         run: |
           uv run pytest -q apps/forms --cov=apps.forms.rules --cov-branch --cov-fail-under=100
+          uv run pytest -q apps/bookings --cov=apps.bookings --cov-branch --cov-fail-under=100
           uv run pytest -q apps/accounts --cov=apps.accounts.permissions --cov=apps.accounts.roles --cov-branch --cov-fail-under=100
   web:
     runs-on: ubuntu-latest

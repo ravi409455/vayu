@@ -29,8 +29,9 @@ def test_invalid_access(value):
 
 
 def test_resolve_most_specific_layer_wins_and_falls_through():
-    field, section, page = {"expert": {"draft": "hidden"}}, {"expert": {"draft": "view",
-                                                                       "assigned": "view"}}, {}
+    field: dict = {"expert": {"draft": "hidden"}}
+    section: dict = {"expert": {"draft": "view", "assigned": "view"}}
+    page: dict = {}
     assert resolve("expert", "draft", field, section, page) == "hidden"
     assert resolve("expert", "assigned", field, section, page) == "view"   # falls to section
     assert resolve("expert", "submitted", field, section, page) is None    # nothing defined
@@ -44,7 +45,7 @@ def section(make_form, tree):
 
 def test_access_is_stored_on_pages_sections_and_fields(admin, make_form, tree, add_field):
     v = make_form()["draft_version"]["id"]
-    t = tree(v)
+    t: dict = tree(v)
     page, sec = t["pages"][0], t["pages"][0]["sections"][0]
     assert admin.patch(f"/api/v1/pages/{page['id']}", {"access": GOOD}, format="json").status_code == 200
     assert admin.patch(f"/api/v1/sections/{sec['id']}", {"access": GOOD}, format="json").status_code == 200
