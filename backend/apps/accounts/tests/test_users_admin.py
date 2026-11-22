@@ -131,3 +131,44 @@ def test_common_passwords_are_rejected(api_as):
     admin, _ = api_as(Role.ADMIN)
     r = admin.post("/api/v1/users", {**NEW, "password": "password123"}, format="json")
     assert r.status_code == 400
+
+
+def test_username_cannot_be_changed(api_as, make_user):
+    """Regression: a case-variant username used to slip past validation and hit a DB 500."""
+    admin, _ = api_as(Role.ADMIN)
+    make_user(username="asha")
+    target = make_user(username="ravi")
+    for new in ("ASHA", "asha", "brand_new"):
+        r = admin.patch(f"/api/v1/users/{target.id}", {"username": new}, format="json")
+        assert r.status_code == 400 and "username" in r.json()
+    target.refresh_from_db()
+    assert target.username == "ravi"
+    # resending the unchanged username (a full-form save from the UI) is fine
+    assert admin.patch(f"/api/v1/users/{target.id}", {"username": "ravi", "name": "R"},
+                       format="json").status_code == 200
+
+
+def test_the_last_active_admin_cannot_be_demoted_or_deactivated(api_as, make_user):
+    admin, me = api_as(Role.ADMIN)
+    r = admin.patch(f"/api/v1/users/{me.id}", {"role": "ops"}, format="json")
+    assert r.status_code == 400 and r.json()["code"] == "LAST_ADMIN"
+    other = make_user(Role.ADMIN, username="boss2")
+    # with a second admin, demoting the other one is fine...
+    r = admin.patch(f"/api/v1/users/{other.id}", {"role": "ops"}, format="json")
+    assert r.status_code == 200
+    # ...but then I am the last one again
+    other.refresh_from_db()
+    assert other.role == "ops"
+    r = admin.patch(f"/api/v1/users/{me.id}", {"role": "expert"}, format="json")
+    assert r.status_code == 400 and r.json()["code"] == "LAST_ADMIN"
+
+
+def test_deactivating_the_only_other_admin_is_allowed_but_not_the_last_one(api_as, make_user):
+    admin, me = api_as(Role.ADMIN)
+    other = make_user(Role.ADMIN, username="boss2")
+    assert admin.patch(f"/api/v1/users/{other.id}", {"is_active": False},
+                       format="json").status_code == 200
+    solo = make_user(Role.ADMIN, username="boss3", is_active=False)
+    # an inactive admin does not count as a remaining admin
+    assert admin.patch(f"/api/v1/users/{me.id}", {"role": "ops"}, format="json").status_code == 400
+    assert solo.role == "admin"

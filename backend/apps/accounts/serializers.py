@@ -15,7 +15,10 @@ class UserSerializer(serializers.ModelSerializer):
 
     def validate_username(self, value):
         value = value.strip()
-        if self.instance is None and User.objects.filter(username__iexact=value).exists():
+        if self.instance is not None:
+            if value != self.instance.username:  # also blocks case-variant clashes (DB 500)
+                raise serializers.ValidationError("Usernames cannot be changed.")
+        elif User.objects.filter(username__iexact=value).exists():
             raise serializers.ValidationError("Username already taken.")
         return value
 

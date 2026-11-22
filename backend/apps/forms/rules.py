@@ -10,11 +10,13 @@ import jsonlogic_rs
 from .fieldtypes import AnswerError, ConfigError, clean_answer, is_empty, validate_config
 
 FORMS = ("booking", "ops", "inspection")
+# Deliberately small. Everything form logic needs (conditions, "is empty", defect counts) fits in
+# these. Arithmetic other than "+" (used to count inside reduce), string and min/max operators are
+# banned: the Python and JS libraries disagree on null handling there, and no form needs them.
 ALLOWED_OPS = {"var", "==", "!=", "===", "!==", "<", "<=", ">", ">=", "!", "!!", "and", "or", "if",
-               "in", "some", "all", "none", "filter", "map", "reduce", "+", "-", "*", "/", "%",
-               "min", "max", "cat", "substr"}
-BANNED_OPS = {"missing", "missing_some"}  # python and JS libraries disagree on null handling
-ITERATING_OPS = {"some", "all", "none", "filter", "map", "reduce"}
+               "in", "some", "all", "none", "filter", "reduce", "+"}
+BANNED_OPS = {"missing", "missing_some", "-", "*", "/", "%", "min", "max", "cat", "substr", "map"}
+ITERATING_OPS = {"some", "all", "none", "filter", "reduce"}
 CHOICE_TYPES = {"single_choice", "multi_choice"}
 SYSTEM_FILLED = {"derived", "rating"}
 SPECIAL_VARS = {"_today", "_defects"}
@@ -23,11 +25,21 @@ SPECIAL_VARS = {"_today", "_defects"}
 # ------------------------------------------------------------------ evaluation
 
 def evaluate(rule: Any, data: Any) -> Any:
-    return jsonlogic_rs.apply(rule, data)
+    """Never raises: a rule that cannot apply to the data (wrong types, nulls) yields null, the
+    same as the TypeScript adapter. (jsonlogic-rs raises ValueError where json-logic-js returns a
+    value; found by differential fuzzing.)"""
+    try:
+        return jsonlogic_rs.apply(rule, data)
+    except Exception:  # noqa: BLE001
+        return None
+    except BaseException as e:  # a Rust panic must not take the worker down
+        if type(e).__name__ == "PanicException":
+            return None
+        raise
 
 
 def truthy(rule: Any, data: dict) -> bool:
-    return True if rule is None else bool(jsonlogic_rs.apply({"!!": [rule]}, data))
+    return True if rule is None else bool(evaluate({"!!": [rule]}, data))
 
 
 @dataclass
@@ -207,6 +219,7 @@ class Issue:
     path: str
     code: str
     message: str
+    ref: str = ""  # for reference problems: the qualified name, e.g. booking.fuel_type
 
 
 def rule_syntax_issues(rule: Any, path: str) -> list[Issue]:
@@ -220,8 +233,9 @@ def rule_syntax_issues(rule: Any, path: str) -> list[Issue]:
             return
         op, args = next(iter(node.items()))
         if op in BANNED_OPS:
-            out.append(Issue(p, "BANNED_OPERATOR", f"'{op}' is not supported; use "
-                             "{\"!\": [{\"var\": ...}]} to test for empty."))
+            hint = (" Use {\"!\": [{\"var\": ...}]} to test for empty."
+                    if op.startswith("missing") else "")
+            out.append(Issue(p, "BANNED_OPERATOR", f"'{op}' is not supported in rules.{hint}"))
             return
         if op not in ALLOWED_OPS:
             out.append(Issue(p, "UNKNOWN_OPERATOR", f"Unknown operator '{op}'."))
@@ -301,10 +315,11 @@ def _reference_issues(rule: Any, path: str, known: dict) -> list[Issue]:
         ftype = known.get(form, {}).get(key)
         if ftype is None:
             issues.append(Issue(path, "UNKNOWN_FIELD", f"'{name}' is not a known field "
-                                "(use form.key, e.g. inspection.door or booking.city)."))
+                                "(use form.key, e.g. inspection.door or booking.city).", ref=name))
         elif ftype in SYSTEM_FILLED:
             issues.append(Issue(path, "SYSTEM_FIELD_IN_RULE",
-                                f"'{name}' is filled by the system and cannot drive rules."))
+                                f"'{name}' is filled by the system and cannot drive rules.",
+                                ref=name))
     return issues
 
 
@@ -376,3 +391,24 @@ def validate_version(version) -> list[Issue]:
                                     f"'{k}' is not a field of this form."))
     issues.extend(_cycle_issues(version, own))
     return issues
+
+
+def dependent_issues(version) -> list[Issue]:
+    """Publishing a booking/ops form must not break rules of the live versions of other forms that
+    read its fields (e.g. an inspection rule on booking.fuel_type). Returns those breakages."""
+    from .models import Form, FormVersion, VersionStatus
+
+    kind = version.form.kind
+    out: list[Issue] = []
+    for form in Form.objects.filter(is_active=True).exclude(kind=kind):
+        live = FormVersion.objects.filter(form=form, status=VersionStatus.PUBLISHED) \
+            .order_by("-number").first()
+        if live is None:
+            continue
+        for issue in validate_version(live):
+            if issue.code in ("UNKNOWN_FIELD", "SYSTEM_FIELD_IN_RULE") \
+                    and issue.ref.startswith(kind + "."):
+                out.append(Issue(f"forms.{form.key}.{issue.path}", issue.code,
+                                 f"Form '{form.key}' (live v{live.number}) uses {issue.ref}, "
+                                 "which this version would remove or change.", ref=issue.ref))
+    return out

@@ -9,6 +9,7 @@ from apps.forms.rules import FormSpec, evaluate, evaluate_form
 VECTORS = Path(__file__).resolve().parents[4] / "shared" / "rule-vectors"
 EVAL = json.loads((VECTORS / "eval_vectors.json").read_text())
 FORM = json.loads((VECTORS / "form_vectors.json").read_text())
+ROBUST = json.loads((VECTORS / "robust_vectors.json").read_text())
 
 
 def same(a, b):
@@ -21,6 +22,11 @@ def same(a, b):
 
 @pytest.mark.parametrize("case", EVAL, ids=[c["name"] for c in EVAL])
 def test_eval_vector(case):
+    assert same(evaluate(case["rule"], case["data"]), case["expected"])
+
+
+@pytest.mark.parametrize("case", ROBUST, ids=[c["name"] for c in ROBUST])
+def test_robust_vector(case):
     assert same(evaluate(case["rule"], case["data"]), case["expected"])
 
 
@@ -39,4 +45,4 @@ def test_form_vector(case):
 
 
 def test_vector_files_are_substantial():
-    assert len(EVAL) >= 60 and len(FORM) >= 60
+    assert len(EVAL) >= 50 and len(FORM) >= 60 and len(ROBUST) >= 1000

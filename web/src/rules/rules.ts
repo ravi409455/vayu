@@ -36,14 +36,23 @@ export type Result = {
 
 const CHOICE = new Set(["single_choice", "multi_choice"]);
 
+/**
+ * Never throws: a rule that cannot apply to the data yields null (same as the Python adapter).
+ * NaN and Infinity (e.g. "+" on non-numbers) also become null.
+ */
 export function evaluate(rule: unknown, data: unknown): unknown {
-  const v = jsonLogic.apply(rule as jsonLogic.RulesLogic, data);
-  return v === undefined ? null : v;
+  try {
+    const v = jsonLogic.apply(rule as jsonLogic.RulesLogic, data);
+    if (v === undefined || (typeof v === "number" && !Number.isFinite(v))) return null;
+    return v;
+  } catch {
+    return null;
+  }
 }
 
 export function truthy(rule: unknown, data: unknown): boolean {
   if (rule === null || rule === undefined) return true;
-  return Boolean(jsonLogic.apply({ "!!": [rule] } as jsonLogic.RulesLogic, data));
+  return Boolean(evaluate({ "!!": [rule] }, data));
 }
 
 export function isEmpty(v: unknown): boolean {

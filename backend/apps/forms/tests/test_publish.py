@@ -1,5 +1,6 @@
 """Publishing a draft: validation, row-version guard, audit, immutability."""
 import threading
+import time
 
 import pytest
 from django.db import connection
@@ -189,3 +190,132 @@ def test_concurrent_publish_exactly_one_wins(admin, make_form, tree):
         t.join(timeout=20)
     assert sorted(results) == [200, 409]
     assert FormVersion.objects.get(pk=v).status == "published"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_edits_cannot_slip_into_a_version_while_it_is_being_published(make_form, tree):
+    """Regression: an edit that read 'draft' just before a publish committed used to land in the
+    published version. Draft writes now take the version's row lock first."""
+    from apps.forms.models import Section
+
+    form = make_form()
+    v = form["draft_version"]["id"]
+    section = Section.objects.filter(version_id=v).first()
+    locked = threading.Event()
+    outcome: dict = {}
+
+    def publisher():
+        try:
+            from django.db import transaction
+
+            with transaction.atomic():
+                FormVersion.objects.select_for_update().get(pk=v)
+                locked.set()
+                time.sleep(0.6)  # the editor arrives while the publish is still open
+                FormVersion.objects.filter(pk=v).update(status="published")
+        finally:
+            connection.close()
+
+    def editor():
+        try:
+            locked.wait(5)
+            try:
+                Field(version_id=v, section=section, key="late_one", label="L",
+                      type="short_text").save()
+                outcome["result"] = "saved"
+            except Exception as e:  # noqa: BLE001
+                outcome["result"] = e.detail["code"] if hasattr(e, "detail") else repr(e)
+        finally:
+            connection.close()
+
+    threads = [threading.Thread(target=publisher), threading.Thread(target=editor)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=20)
+    assert outcome["result"] == "VERSION_PUBLISHED"
+    assert not Field.objects.filter(version_id=v, key="late_one").exists()
+
+
+def test_failed_field_save_leaves_no_reserved_key_behind(make_form, tree):
+    from django.db import IntegrityError
+
+    from apps.forms.models import FieldKey, Section
+
+    form = make_form()
+    v = form["draft_version"]["id"]
+    section = Section.objects.filter(version_id=v).first()
+    bad = Field(version_id=v, section=section, key="ghost_key", label=None, type="short_text")  # type: ignore[misc]
+    with pytest.raises(IntegrityError):  # label is NOT NULL
+        bad.save()
+    assert not FieldKey.objects.filter(form_id=form["id"], key="ghost_key").exists()
+
+
+def test_booking_publish_is_blocked_when_it_would_break_a_published_inspection_rule(
+        admin, make_form, tree, add_field):
+    from django.core.management import call_command
+
+    call_command("seed_master_lists")
+    booking = make_form(key="booking", kind="booking")
+    bv = booking["draft_version"]["id"]
+    bs = tree(bv)["pages"][0]["sections"][0]["id"]
+    add_field(bs, "fuel_type", type="single_choice",
+              config={"options": [{"key": "cng", "label": "CNG"}]})
+    assert publish_api(admin, bv).status_code == 200
+
+    insp = make_form(key="pdi")
+    iv = insp["draft_version"]["id"]
+    is_ = tree(iv)["pages"][0]["sections"][0]["id"]
+    add_field(is_, "hydro_test", type="date", show_if={"==": [V("booking.fuel_type"), "cng"]})
+    assert publish_api(admin, iv).status_code == 200
+
+    b2 = admin.post(f"/api/v1/forms/{booking['id']}/drafts").json()["id"]
+    fuel = [f for p in tree(b2)["pages"] for s in p["sections"] for f in s["fields"]
+            if f["key"] == "fuel_type"][0]
+    assert admin.delete(f"/api/v1/fields/{fuel['id']}").status_code == 204
+    r = publish_api(admin, b2)
+    assert r.status_code == 400 and r.json()["code"] == "PUBLISH_BLOCKED"
+    issue = [i for i in r.json()["issues"] if i["code"] == "UNKNOWN_FIELD"][0]
+    assert issue["path"].startswith("forms.pdi.") and "booking.fuel_type" in issue["message"]
+    assert FormVersion.objects.get(pk=b2).status == "draft"
+
+
+def test_booking_publish_passes_when_dependents_still_resolve(admin, make_form, tree, add_field):
+    from django.core.management import call_command
+
+    call_command("seed_master_lists")
+    booking = make_form(key="booking", kind="booking")
+    bv = booking["draft_version"]["id"]
+    bs = tree(bv)["pages"][0]["sections"][0]["id"]
+    add_field(bs, "fuel_type", type="single_choice",
+              config={"options": [{"key": "cng", "label": "CNG"}]})
+    publish_api(admin, bv)
+    insp = make_form(key="pdi")
+    iv = insp["draft_version"]["id"]
+    add_field(tree(iv)["pages"][0]["sections"][0]["id"], "hydro_test", type="date",
+              show_if={"==": [V("booking.fuel_type"), "cng"]})
+    publish_api(admin, iv)
+    b2 = admin.post(f"/api/v1/forms/{booking['id']}/drafts").json()["id"]
+    assert publish_api(admin, b2).status_code == 200
+
+
+def test_dependents_check_ignores_forms_without_a_live_version_and_unrelated_problems(
+        admin, make_form, tree, add_field):
+    from django.core.management import call_command
+
+    call_command("seed_master_lists")
+    booking = make_form(key="booking", kind="booking")
+    bv = booking["draft_version"]["id"]
+    publish_api(admin, bv)
+    # a form that was never published has no live version to protect
+    make_form(key="draft_only")
+    # a live form with a problem of its own (unknown *inspection* field) must not block booking
+    insp = make_form(key="pdi")
+    iv = insp["draft_version"]["id"]
+    s = tree(iv)["pages"][0]["sections"][0]["id"]
+    add_field(s, "later_one")
+    Field.objects.filter(version_id=iv, key="later_one").update(
+        show_if={"==": [V("inspection.ghost"), 1]})  # unknown *inspection* field: its own problem
+    FormVersion.objects.filter(pk=iv).update(status="published")
+    b2 = admin.post(f"/api/v1/forms/{booking['id']}/drafts").json()["id"]
+    assert publish_api(admin, b2).status_code == 200

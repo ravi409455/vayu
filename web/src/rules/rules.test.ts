@@ -24,9 +24,16 @@ type FormCase = {
 
 const EVAL: EvalCase[] = load("eval_vectors.json");
 const FORM: FormCase[] = load("form_vectors.json");
+const ROBUST: EvalCase[] = load("robust_vectors.json");
 
 describe("eval vectors", () => {
   it.each(EVAL.map((c) => [c.name, c] as const))("%s", (_, c) => {
+    expect(evaluate(c.rule, c.data)).toEqual(c.expected);
+  });
+});
+
+describe("robust vectors", () => {
+  it.each(ROBUST.map((c) => [c.name, c] as const))("%s", (_, c) => {
     expect(evaluate(c.rule, c.data)).toEqual(c.expected);
   });
 });
@@ -43,6 +50,7 @@ describe("form vectors", () => {
 });
 
 it("vector files are substantial", () => {
-  expect(EVAL.length).toBeGreaterThanOrEqual(60);
+  expect(EVAL.length).toBeGreaterThanOrEqual(50);
+  expect(ROBUST.length).toBeGreaterThanOrEqual(1000);
   expect(FORM.length).toBeGreaterThanOrEqual(60);
 });

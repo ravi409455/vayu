@@ -86,7 +86,7 @@ def system_field_issues(version: FormVersion) -> list:
 def publish_version(actor, version_id: int, row_version: int) -> FormVersion:
     """Freeze a draft. `row_version` must be the one the admin last saw, so nobody publishes a
     draft that changed under them. The row lock makes concurrent publishes safe."""
-    from .rules import validate_version
+    from .rules import dependent_issues, validate_version
 
     with transaction.atomic():
         version = get_object_or_404(
@@ -97,6 +97,7 @@ def publish_version(actor, version_id: int, row_version: int) -> FormVersion:
             raise CodedError("STALE_DRAFT", "The draft changed since you opened it; reload.",
                              409, row_version=version.row_version)
         issues = validate_version(version) + system_field_issues(version)
+        issues += dependent_issues(version)
         if issues:
             raise CodedError("PUBLISH_BLOCKED", "Fix these problems before publishing.", 400,
                              issues=[i.__dict__ for i in issues])

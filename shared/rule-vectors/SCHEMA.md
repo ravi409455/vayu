@@ -5,15 +5,28 @@ Rules are [JsonLogic](https://jsonlogic.com). Every platform must pass every cas
 - `eval_vectors.json`: raw JsonLogic behaviour we rely on. Each case is `{name, rule, data, expected}`.
   Expected values come from the reference implementation (`json-logic-js`) and are kept only where
   `jsonlogic-rs` (Python) agrees.
+- `robust_vectors.json`: allowed operators x awkward values (null, wrong types, empty lists).
+  Generated: reference is `json-logic-js`; kept only where `jsonlogic-rs` (errors -> null) agrees.
 - `form_vectors.json`: Vayu's own form logic on top of JsonLogic (below).
 
 ## Allowed operators
-`var`, `==`, `!=`, `===`, `!==`, `<`, `<=`, `>`, `>=`, `!`, `!!`, `and`, `or`, `if`, `in`, `some`, `all`,
-`none`, `filter`, `map`, `reduce`, `+`, `-`, `*`, `/`, `%`, `min`, `max`, `cat`, `substr`.
+`var`, `==`, `!=`, `===`, `!==`, `<`, `<=`, `>`, `>=`, `!`, `!!`, `and`, `or`, `if`, `in`, `some`,
+`all`, `none`, `filter`, `reduce`, `+` (`+` exists to count inside `reduce`).
 
-**Banned** (the libraries disagree): `missing` and `missing_some` (null handling differs; use
-`{"!": [{"var": ...}]}` for "is empty"), and `and`/`or` with no arguments. Literal arrays inside rules
-may only contain plain values (strings, numbers, booleans, null), never nested rules.
+**Banned** (validator rejects them): `missing`, `missing_some`, `-`, `*`, `/`, `%`, `min`, `max`,
+`cat`, `substr`, `map`. The libraries disagree on null handling there and no form needs them. Use
+`{"!": [{"var": ...}]}` for "is empty". `and`/`or` need at least one argument. Literal arrays inside
+rules may only contain plain values (strings, numbers, booleans, null), never nested rules.
+
+**Evaluation never fails.** A rule that cannot apply to the data (wrong types, nulls) evaluates to
+`null`, which is falsy, on every platform. Non-finite numbers (NaN, Infinity) also become `null`. (jsonlogic-rs raises where json-logic-js returns a
+value; each adapter catches and returns null.)
+
+**Unsupported combinations** (result unspecified, but never an error): ordering comparisons
+(`<`, `<=`, `>`, `>=`) on booleans; `in`, `+` and the iterating operators applied to values of
+the wrong type (e.g. `some` over a string, `+` on a date). 42 such cases are known to differ in
+truthiness between libraries. The form builder must only offer operators that make sense for a
+field's type (numbers/dates/text for ordering; lists for `in`/iteration).
 
 ## Data a rule sees
 ```json

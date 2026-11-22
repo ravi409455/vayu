@@ -1,6 +1,7 @@
 from django.contrib.auth import login as django_login
 from django.contrib.auth import logout as django_logout
 from django.contrib.auth import update_session_auth_hash
+from django.db import transaction
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -11,9 +12,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from apps.core.errors import CodedError
+
 from . import audit, services
 from .authentication import DeviceCheckedRefreshSerializer
-from .models import AuditLog, Device, User
+from .models import AuditLog, Device, Role, User
 from .permissions import IsAdmin, IsOpsOrAdmin
 from .serializers import (
     AuditLogSerializer,
@@ -107,12 +110,18 @@ class UserViewSet(viewsets.ModelViewSet):
         audit.record(self.request.user, "user.create", "user", user.id,
                      f"Created user {user.username} ({user.role})")
 
+    @transaction.atomic
     def perform_update(self, serializer):
         user = serializer.instance
         was_active = user.is_active
         new_active = serializer.validated_data.get("is_active", was_active)
+        new_role = serializer.validated_data.get("role", user.role)
         if user.pk == self.request.user.pk and not new_active:
             raise ValidationError({"is_active": "You cannot deactivate yourself."})
+        if user.role == Role.ADMIN and was_active and (new_role != Role.ADMIN or not new_active):
+            admins = list(User.objects.select_for_update().filter(role=Role.ADMIN, is_active=True))
+            if not [a for a in admins if a.pk != user.pk]:
+                raise CodedError("LAST_ADMIN", "There must always be one active admin.", 400)
         user = serializer.save()
         if was_active and not user.is_active:
             services.revoke_devices(user)

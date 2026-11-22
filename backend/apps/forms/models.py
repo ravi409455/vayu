@@ -1,6 +1,6 @@
 import re
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
@@ -91,13 +91,25 @@ class LibraryItem(models.Model):
 
 
 def ensure_draft(version_id: int) -> None:
+    """Fast pre-check for views. DraftOnly below is the authoritative (locking) guard."""
     status = FormVersion.objects.filter(pk=version_id).values_list("status", flat=True).first()
     if status == VersionStatus.PUBLISHED:
         raise CodedError("VERSION_PUBLISHED", "Published versions cannot be changed.", 409)
 
 
+def lock_draft(version_id: int) -> None:
+    """Lock the version row and require it to be a draft. Publishing takes the same lock, so an
+    edit either finishes before a publish starts or fails with VERSION_PUBLISHED."""
+    status = (FormVersion.objects.select_for_update().filter(pk=version_id)
+              .values_list("status", flat=True).first())
+    if status == VersionStatus.PUBLISHED:
+        raise CodedError("VERSION_PUBLISHED", "Published versions cannot be changed.", 409)
+
+
 class DraftOnly(models.Model):
-    """Pages, sections, fields and checks may only change while their version is a draft."""
+    """Pages, sections, fields and checks may only change while their version is a draft.
+    Subclasses add checks in _before_save/_before_delete; they run inside the lock, in the same
+    transaction as the write, so a rejected write leaves nothing behind."""
 
     version = models.ForeignKey(FormVersion, on_delete=models.CASCADE, related_name="+")
 
@@ -105,15 +117,25 @@ class DraftOnly(models.Model):
         abstract = True
 
     def save(self, *args, **kwargs):
-        ensure_draft(self.version_id)
-        super().save(*args, **kwargs)
-        self._bump_row_version()
+        with transaction.atomic():
+            lock_draft(self.version_id)
+            self._before_save()
+            super().save(*args, **kwargs)
+            self._bump_row_version()
 
     def delete(self, *args, **kwargs):
-        ensure_draft(self.version_id)
-        result = super().delete(*args, **kwargs)
-        self._bump_row_version()
-        return result
+        with transaction.atomic():
+            lock_draft(self.version_id)
+            self._before_delete()
+            result = super().delete(*args, **kwargs)
+            self._bump_row_version()
+            return result
+
+    def _before_save(self) -> None:
+        pass
+
+    def _before_delete(self) -> None:
+        pass
 
     def _bump_row_version(self) -> None:
         """Every draft change moves row_version, so a publish can prove it saw the latest."""
@@ -129,11 +151,9 @@ class Page(DraftOnly):
     class Meta:
         ordering = ["order", "id"]
 
-    def delete(self, *args, **kwargs):
-        ensure_draft(self.version_id)
+    def _before_delete(self):
         if Field.objects.filter(section__page=self, is_system=True).exists():
             raise CodedError("SYSTEM_FIELD", "This page holds system fields; move them first.", 400)
-        return super().delete(*args, **kwargs)
 
 
 class Section(DraftOnly):
@@ -149,12 +169,10 @@ class Section(DraftOnly):
     class Meta:
         ordering = ["order", "id"]
 
-    def delete(self, *args, **kwargs):
-        ensure_draft(self.version_id)
+    def _before_delete(self):
         if self.fields.filter(is_system=True).exists():
             raise CodedError("SYSTEM_FIELD", "This section holds system fields; move them first.",
                              400)
-        return super().delete(*args, **kwargs)
 
 
 class FieldType(models.TextChoices):
@@ -217,21 +235,17 @@ class Field(DraftOnly):
         ordering = ["order", "id"]
         constraints = [models.UniqueConstraint(fields=["version", "key"], name="key_per_version")]
 
-    def save(self, *args, **kwargs):
-        ensure_draft(self.version_id)
+    def _before_save(self):
         if self.section.version_id != self.version_id:
             raise CodedError("WRONG_VERSION", "Section belongs to another form version.", 400)
         if self.pk is None:
             self._check_new_key()
         else:
             self._check_immutable()
-        super().save(*args, **kwargs)
 
-    def delete(self, *args, **kwargs):
-        ensure_draft(self.version_id)
+    def _before_delete(self):
         if self.is_system:
             raise CodedError("SYSTEM_FIELD", "System fields cannot be removed.", 400)
-        return super().delete(*args, **kwargs)
 
     def _check_new_key(self):
         if not KEY_RE.fullmatch(self.key or ""):
