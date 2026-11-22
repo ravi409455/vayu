@@ -2,13 +2,16 @@ from django.urls import path
 from rest_framework.routers import SimpleRouter
 
 from .views import (
-                    AuditLogViewSet,
-                    ChangePasswordView,
-                    DeviceCheckedRefreshView,
-                    LoginView,
-                    LogoutView,
-                    MeView,
-                    UserViewSet,
+    AuditLogViewSet,
+    ChangePasswordView,
+    DeviceCheckedRefreshView,
+    LoginView,
+    LogoutView,
+    MeView,
+    PermissionCatalogView,
+    RolePermissionsView,
+    RolesView,
+    UserViewSet,
 )
 
 router = SimpleRouter(trailing_slash=False)
@@ -21,5 +24,8 @@ urlpatterns = [
     path("auth/logout", LogoutView.as_view()),
     path("auth/me", MeView.as_view()),
     path("auth/change-password", ChangePasswordView.as_view()),
+    path("permissions", PermissionCatalogView.as_view()),
+    path("roles", RolesView.as_view()),
+    path("roles/<str:role>/permissions", RolePermissionsView.as_view()),
     *router.urls,
 ]

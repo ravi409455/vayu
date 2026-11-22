@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts import audit
-from apps.accounts.permissions import AnyReadAdminWrite, IsAdmin, OpsReadAdminWrite
+from apps.accounts.permissions import perm
 
 from . import library, services
 from .models import (
@@ -44,7 +44,7 @@ class MasterListViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                         viewsets.GenericViewSet):
     queryset = MasterList.objects.order_by("key")
     serializer_class = MasterListSerializer
-    permission_classes = [AnyReadAdminWrite]
+    permission_classes = [perm(None, "master_lists.manage")]
     lookup_field = "key"
     http_method_names = ["get", "post", "patch", "head", "options"]
 
@@ -75,7 +75,7 @@ class MasterListViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 class MasterListItemViewSet(mixins.UpdateModelMixin, viewsets.GenericViewSet):
     queryset = MasterListItem.objects.select_related("list")
     serializer_class = MasterListItemSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [perm(None, "master_lists.manage")]
     http_method_names = ["patch", "head", "options"]
 
     def perform_update(self, serializer):
@@ -88,7 +88,7 @@ class FormViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
                   mixins.UpdateModelMixin, viewsets.GenericViewSet):
     queryset = Form.objects.order_by("kind", "key")
     serializer_class = FormSerializer
-    permission_classes = [OpsReadAdminWrite]
+    permission_classes = [perm("forms.view", "forms.edit")]
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def create(self, request, *args, **kwargs):
@@ -107,12 +107,12 @@ class FormViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
 class VersionDetail(generics.RetrieveAPIView):
     queryset = FormVersion.objects.all()
     serializer_class = VersionTreeSerializer
-    permission_classes = [OpsReadAdminWrite]
+    permission_classes = [perm("forms.view")]
 
 
 class PageCreate(generics.CreateAPIView):
     serializer_class = PageSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [perm("forms.edit")]
 
     def perform_create(self, serializer):
         version = get_object_or_404(FormVersion, pk=self.kwargs["pk"])
@@ -124,13 +124,13 @@ class PageCreate(generics.CreateAPIView):
 class PageDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Page.objects.all()
     serializer_class = PageSerializer
-    permission_classes = [OpsReadAdminWrite]
+    permission_classes = [perm("forms.view", "forms.edit")]
     http_method_names = ["get", "patch", "delete", "head", "options"]
 
 
 class SectionCreate(generics.CreateAPIView):
     serializer_class = SectionSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [perm("forms.edit")]
 
     def perform_create(self, serializer):
         page = get_object_or_404(Page, pk=self.kwargs["pk"])
@@ -141,13 +141,13 @@ class SectionCreate(generics.CreateAPIView):
 class SectionDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Section.objects.all()
     serializer_class = SectionSerializer
-    permission_classes = [OpsReadAdminWrite]
+    permission_classes = [perm("forms.view", "forms.edit")]
     http_method_names = ["get", "patch", "delete", "head", "options"]
 
 
 class FieldCreate(generics.CreateAPIView):
     serializer_class = FieldSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [perm("forms.edit")]
 
     def perform_create(self, serializer):
         section = get_object_or_404(Section, pk=self.kwargs["pk"])
@@ -160,7 +160,7 @@ class FieldCreate(generics.CreateAPIView):
 class FieldDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Field.objects.select_related("section", "library_item")
     serializer_class = FieldSerializer
-    permission_classes = [OpsReadAdminWrite]
+    permission_classes = [perm("forms.view", "forms.edit")]
     http_method_names = ["get", "patch", "delete", "head", "options"]
 
     def perform_destroy(self, instance):
@@ -171,7 +171,7 @@ class FieldDetail(generics.RetrieveUpdateDestroyAPIView):
 
 class CheckCreate(generics.CreateAPIView):
     serializer_class = CheckSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [perm("forms.edit")]
 
     def perform_create(self, serializer):
         version = get_object_or_404(FormVersion, pk=self.kwargs["pk"])
@@ -181,13 +181,13 @@ class CheckCreate(generics.CreateAPIView):
 class CheckDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = VersionCheck.objects.all()
     serializer_class = CheckSerializer
-    permission_classes = [OpsReadAdminWrite]
+    permission_classes = [perm("forms.view", "forms.edit")]
     http_method_names = ["get", "patch", "delete", "head", "options"]
 
 
 class ValidateVersion(generics.GenericAPIView):
     queryset = FormVersion.objects.select_related("form")
-    permission_classes = [IsAdmin]
+    permission_classes = [perm("forms.edit")]
 
     def post(self, request, pk):
         issues = validate_version(self.get_object())
@@ -196,7 +196,7 @@ class ValidateVersion(generics.GenericAPIView):
 
 class LibraryViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
                      mixins.UpdateModelMixin, mixins.DestroyModelMixin, viewsets.GenericViewSet):
-    permission_classes = [OpsReadAdminWrite]
+    permission_classes = [perm("library.view", "library.edit")]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_serializer_class(self):
@@ -236,7 +236,7 @@ class _FromLibraryBody(serializers.Serializer):
 
 
 class FieldFromLibrary(generics.GenericAPIView):
-    permission_classes = [IsAdmin]
+    permission_classes = [perm("forms.edit")]
     serializer_class = _FromLibraryBody
 
     def post(self, request, pk):
@@ -249,7 +249,7 @@ class FieldFromLibrary(generics.GenericAPIView):
 
 
 class SectionFromLibrary(generics.GenericAPIView):
-    permission_classes = [IsAdmin]
+    permission_classes = [perm("forms.edit")]
     serializer_class = _FromLibraryBody
 
     def post(self, request, pk):
@@ -264,7 +264,7 @@ class SectionFromLibrary(generics.GenericAPIView):
 class _LinkAction(generics.GenericAPIView):
     """accept-update / unlink / save-to-library on a field or a section."""
 
-    permission_classes = [IsAdmin]
+    permission_classes = [perm("forms.edit")]
     serializer_class = serializers.Serializer
     model: type[Field] | type[Section] = Field
     result: type[serializers.ModelSerializer] = FieldSerializer
@@ -295,6 +295,9 @@ def _save(self, request, pk):
     return Response(LibraryItemSerializer(item).data, status=status.HTTP_201_CREATED)
 
 
+SAVE_PERMS = [perm("forms.edit", ("forms.edit", "library.edit"))]
+
+
 class FieldAcceptUpdate(_OnField):
     post = _accept
 
@@ -312,10 +315,12 @@ class SectionUnlink(_OnSection):
 
 
 class FieldSaveToLibrary(_OnField):
+    permission_classes = SAVE_PERMS
     post = _save
 
 
 class SectionSaveToLibrary(_OnSection):
+    permission_classes = SAVE_PERMS
     post = _save
 
 
@@ -324,7 +329,7 @@ class _PublishBody(serializers.Serializer):
 
 
 class PublishVersion(generics.GenericAPIView):
-    permission_classes = [IsAdmin]
+    permission_classes = [perm("forms.publish")]
     serializer_class = _PublishBody
 
     def post(self, request, pk):

@@ -5,7 +5,6 @@ from rest_framework.test import APIClient
 from apps.accounts.catalog import CATALOG, DEFAULTS, KEYS
 from apps.accounts.models import AuditLog, Role, RolePermission
 from apps.accounts.permissions import scope_for
-from apps.core.testing import PASSWORD
 
 pytestmark = pytest.mark.django_db
 
@@ -45,7 +44,7 @@ def test_catalog_is_consistent():
 
 
 def test_migration_seeded_exactly_the_defaults():
-    seeded = {}
+    seeded: dict = {}
     for row in RolePermission.objects.all():
         seeded.setdefault(row.role, {})[row.permission] = row.scope
     assert seeded == {r: dict(g) for r, g in DEFAULTS.items()}
@@ -308,12 +307,13 @@ def test_ops_without_users_manage_cannot_manage_users(api_as, make_user):
     ops, _ = api_as(Role.OPS)
     target = make_user(Role.EXPERT)
     assert ops.post("/api/v1/users", NEW, format="json").status_code == 403
-    assert ops.patch(f"/api/v1/users/{target.id}", {"name": "X"}, format="json").status_code == 403
+    r = ops.patch(f"/api/v1/users/{target.id}", {"name": "X"}, format="json")
+    assert r.status_code == 403
     assert ops.get("/api/v1/users").status_code == 200  # users.view
     assert ops.post(f"/api/v1/users/{target.id}/sign-out-devices").status_code == 200
 
 
-# ---------------------------------------------------------------- every endpoint declares its permission
+# ------------------------------------------------------ every endpoint declares its permission
 
 PUBLIC_OR_AUTHENTICATED_ONLY = {"HealthView", "LoginView", "DeviceCheckedRefreshView", "MeView",
                                 "LogoutView", "ChangePasswordView"}
@@ -358,3 +358,26 @@ def test_every_view_declares_catalog_permissions_or_is_explicitly_exempt():
 
 def test_the_exempt_list_is_current():
     assert PUBLIC_OR_AUTHENTICATED_ONLY <= set(_all_views())
+
+
+def test_perm_needs_at_least_one_permission():
+    from apps.accounts.permissions import perm
+
+    with pytest.raises(ValueError):
+        perm(None)
+
+
+def test_anonymous_requests_are_rejected_before_any_permission_check():
+    for path in ("/api/v1/forms", "/api/v1/roles", "/api/v1/users", "/api/v1/audit-logs"):
+        assert APIClient().get(path).status_code == 401
+
+
+def test_scope_is_loaded_once_per_request(make_user, django_assert_num_queries):
+    from django.test import RequestFactory
+
+    ops = make_user(Role.OPS)
+    request = RequestFactory().get("/")
+    with django_assert_num_queries(1):
+        scope_for(ops, "forms.view", request)
+        scope_for(ops, "bookings.view", request)
+        scope_for(ops, "bookings.delete", request)

@@ -24,7 +24,9 @@ jobs:
         env: {DJANGO_SETTINGS_MODULE: vayu.settings.test}
       - run: uv run pytest --cov --cov-fail-under=85
       - name: critical areas need 100% branch coverage
-        run: uv run pytest -q apps/forms --cov=apps.forms.rules --cov-branch --cov-fail-under=100
+        run: |
+          uv run pytest -q apps/forms --cov=apps.forms.rules --cov-branch --cov-fail-under=100
+          uv run pytest -q apps/accounts --cov=apps.accounts.permissions --cov=apps.accounts.roles --cov-branch --cov-fail-under=100
   web:
     runs-on: ubuntu-latest
     defaults: {run: {working-directory: web}}

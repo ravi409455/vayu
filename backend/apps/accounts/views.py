@@ -14,10 +14,11 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.core.errors import CodedError
 
-from . import audit, services
+from . import audit, roles, services
 from .authentication import DeviceCheckedRefreshSerializer
+from .catalog import CATALOG
 from .models import AuditLog, Device, Role, User
-from .permissions import IsAdmin, IsOpsOrAdmin
+from .permissions import grants_for, perm
 from .serializers import (
     AuditLogSerializer,
     ChangePasswordSerializer,
@@ -54,7 +55,8 @@ class MeView(APIView):
     allow_password_change_pending = True
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        return Response({**UserSerializer(request.user).data,
+                         "permissions": grants_for(request.user.role)})
 
 
 class LogoutView(APIView):
@@ -89,9 +91,16 @@ class ChangePasswordView(APIView):
         return Response({"detail": "Password changed."})
 
 
+def _admin_only(request, *roles) -> None:
+    """Only an Admin may create, change, reset or sign out an Admin user (no escalation)."""
+    if request.user.role != Role.ADMIN and Role.ADMIN in roles:
+        raise CodedError("ADMIN_ONLY", "Only an Admin can manage Admin users.", 403)
+
+
 class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]  # users are never deleted
+    declared_permissions = ("users.view", "users.manage", "users.sign_out_devices")
 
     def get_queryset(self):
         qs = User.objects.order_by("username")
@@ -100,12 +109,13 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
-            return [IsOpsOrAdmin()]
+            return [perm("users.view")()]
         if self.action == "sign_out_devices":
-            return [IsOpsOrAdmin()]
-        return [IsAdmin()]
+            return [perm("users.sign_out_devices")()]
+        return [perm("users.manage")()]
 
     def perform_create(self, serializer):
+        _admin_only(self.request, serializer.validated_data["role"])
         user = serializer.save()
         audit.record(self.request.user, "user.create", "user", user.id,
                      f"Created user {user.username} ({user.role})")
@@ -116,6 +126,7 @@ class UserViewSet(viewsets.ModelViewSet):
         was_active = user.is_active
         new_active = serializer.validated_data.get("is_active", was_active)
         new_role = serializer.validated_data.get("role", user.role)
+        _admin_only(self.request, user.role, new_role)
         if user.pk == self.request.user.pk and not new_active:
             raise ValidationError({"is_active": "You cannot deactivate yourself."})
         if user.role == Role.ADMIN and was_active and (new_role != Role.ADMIN or not new_active):
@@ -137,6 +148,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="reset-password")
     def reset_password(self, request, pk=None):
         user = self.get_object()
+        _admin_only(request, user.role)
         s = PasswordSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         services.validate_new_password(s.validated_data["password"], user.username)
@@ -153,6 +165,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="sign-out-devices")
     def sign_out_devices(self, request, pk=None):
         user = self.get_object()
+        _admin_only(request, user.role)
         count = services.revoke_devices(user)
         audit.record(request.user, "user.sign_out_devices", "user", user.id,
                      f"Signed out {count} device(s) of {user.username}")
@@ -162,7 +175,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = AuditLogSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [perm("audit.view")]
 
     def get_queryset(self):
         p = self.request.query_params
@@ -176,3 +189,28 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
         if p.get("to"):
             qs = qs.filter(created_at__date__lte=p["to"])
         return qs
+
+
+class PermissionCatalogView(APIView):
+    permission_classes = [perm("roles.manage")]
+
+    def get(self, request):
+        return Response([{"key": p.key, "group": p.group, "label": p.label, "scoped": p.scoped,
+                          "grantable": p.grantable} for p in CATALOG])
+
+
+class RolesView(APIView):
+    permission_classes = [perm("roles.manage")]
+
+    def get(self, request):
+        return Response(roles.list_roles())
+
+
+class RolePermissionsView(APIView):
+    permission_classes = [perm("roles.manage")]
+
+    def put(self, request, role):
+        if "permissions" not in request.data:
+            raise ValidationError({"permissions": "This field is required."})
+        return Response(roles.set_role_permissions(request.user, role,
+                                                   request.data["permissions"]))

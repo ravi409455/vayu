@@ -53,6 +53,19 @@ class Device(models.Model):
     revoked_at = models.DateTimeField(null=True, blank=True)
 
 
+class RolePermission(models.Model):
+    """One grant: this role may do this action, for its own items or for all. The Admin role is
+    never stored (it always has everything); see apps/accounts/catalog.py for the catalog."""
+
+    role = models.CharField(max_length=10, choices=Role.choices)
+    permission = models.CharField(max_length=64)
+    scope = models.CharField(max_length=3, choices=[("all", "all"), ("own", "own")])
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["role", "permission"],
+                                               name="one_grant_per_role_permission")]
+
+
 class AppendOnlyQuerySet(models.QuerySet):
     def update(self, **kwargs):
         raise RuntimeError("AuditLog is append-only")
