@@ -580,3 +580,22 @@ Do not implement these under any circumstance, even if they seem like natural ex
 - A custom rule engine (use JsonLogic + custom ops)
 - Seed code for inspection forms (built in the builder and promoted)
 - v1.1 items: form-version diff + rollback, Android Ops/Admin screens, polished PDF designer UX
+
+
+---
+
+## Plan Amendments
+
+### 2026-11-22 — Phase 1–3 senior review (all fixed unless marked OPEN)
+- **Rules (changed):** the operator set is now minimal (`var == != === !== < <= > >= ! !! and or if in some all none filter reduce +`). Arithmetic other than `+`, `min/max/cat/substr/map` and `missing*` are banned by the validator. Evaluation is total on every platform (errors, NaN and Infinity become `null`). `shared/rule-vectors` gained `robust_vectors.json` (1,357 cases: allowed operators x null/mixed values). 42 type-misuse combinations still differ between libraries and are documented as unsupported in `SCHEMA.md`.
+  **Phase 10 builder must only offer operators valid for a field's type** (ordering only on numbers/dates/text; `in`/iteration only on lists).
+- **Draft writes lock the version row** (publish takes the same lock), closing a race where an edit could land inside a version while it was being published. Failed saves no longer leave reserved keys behind.
+- **Booking/ops publish is blocked** if it would remove a field that a live form's rule reads.
+- **Users:** usernames are immutable (a case-variant PATCH caused a DB 500); the last active admin cannot be demoted or deactivated.
+- **Infra:** `.dockerignore` added (the host venv was part of the image build context), CI builds the image and checks it runs non-root, dev Postgres/Redis bind to 127.0.0.1.
+- **OPEN, Phase 4 must start with these additive migrations** (found while reviewing: nothing in Phases 2–3 stores them):
+  1. **Role × stage access** (F6): `access` JSON on Page, Section and Field (`{role: {stage: hidden|view|edit}}`), added to the library definition's per-form overrides, copied into drafts (already automatic) and into the Phase 8 promotion bundle. Defaults when absent need a decision at Phase 4 start (proposal: Admin edit-all; Ops edit-all except system-filled; Expert edit only the Check-in/Wrap-up/Inspection forms while `in_progress`).
+  2. **Booking type → inspection form**: `Form.inspection_type` (an `inspection_type` master-list item key), unique among active inspection forms. Booking creation resolves the form from it.
+  3. **Expert read path**: experts cannot read `/forms` or `/form-versions` (Ops/Admin only, by design). The expert job payload (Phase 4 start/sync, Phase 12 web) must deliver the pinned version tree already filtered by the access matrix.
+  4. `validate_answers` evaluates other forms' answers as given: Phase 4 must pass the **stored, cleaned** booking/ops answers, never raw client input.
+- **Accepted (unchanged):** login distinguishes unknown / disabled / locked users and lockout can be triggered against any username (no IP throttling: out of scope); `jsonlogic-rs` is a single-maintainer library (last release Dec 2024), mitigated by the shared vectors and by pinning the version.

@@ -1,0 +1,14 @@
+# Keep the build context small and never let host artefacts overwrite the image's own venv.
+.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.env
+.env.*
+!.env.example
+tests/
+**/tests/

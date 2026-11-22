@@ -6,11 +6,11 @@ services:
       POSTGRES_USER: vayu
       POSTGRES_PASSWORD: vayu
       POSTGRES_DB: vayu
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]  # never expose the dev DB to the network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U vayu"]
       interval: 3s
       retries: 20
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    ports: ["127.0.0.1:6379:6379"]
