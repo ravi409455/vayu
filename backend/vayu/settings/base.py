@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "apps.bookings",
     "apps.scoring",
     "apps.media",
+    "apps.reports",
 ]
 
 MIDDLEWARE = [
@@ -91,6 +92,9 @@ S3_REGION = env("S3_REGION", "auto")
 MEDIA_PART_SIZE = 8 * 1024 * 1024
 MEDIA_URL_TTL = 3600           # pre-signed URL lifetime, seconds
 ZIP_LINK_DAYS = 7
+PDF_RETRY_DELAY = 15           # seconds between render attempts
+VERIFY_BASE_URL = env("VERIFY_BASE_URL", "https://verify.carcid.in")
+CELERY_TASK_ROUTES = {"apps.reports.tasks.render_report": {"queue": "pdf"}}
 STUCK_UPLOAD_HOURS = int(env("STUCK_UPLOAD_HOURS", "6"))
 
 CELERY_BROKER_URL = REDIS_URL

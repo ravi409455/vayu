@@ -277,3 +277,12 @@ def test_scores_hide_key_checks_and_rating_fields_the_role_may_not_see(senv):
     assert "exterior_rating" in seen["fields"]
     assert senv.admin.get(f"/api/v1/inspections/{insp.id}").json()["scores"]["derived"]
     assert "dents_found" in senv.admin.get(f"/api/v1/inspections/{insp.id}").json()["scores"]["derived"]
+
+
+def test_only_experts_lose_the_rating_config_from_the_form_payload(senv):
+    from apps.bookings import submissions
+    from apps.forms.models import FormVersion
+
+    version = FormVersion.objects.get(pk=senv.version_id)
+    assert "rating_config" in submissions.form_for_role(version, "ops", "submitted")
+    assert "rating_config" not in submissions.form_for_role(version, "expert", "in_progress")

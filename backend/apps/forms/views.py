@@ -342,7 +342,7 @@ class PublishVersion(generics.GenericAPIView):
         v = services.publish_version(request.user, pk, body.validated_data["row_version"])
         return Response({"id": v.id, "number": v.number, "status": v.status,
                          "published_at": v.published_at, "row_version": v.row_version,
-                         "warnings": []})  # PDF-template warnings arrive with Phase 7
+                         "warnings": pdf_warnings(v)})
 
 
 class RatingConfigView(generics.GenericAPIView):
@@ -368,3 +368,9 @@ class RatingConfigView(generics.GenericAPIView):
         audit.record(request.user, "form.rating_config", "form_version", pk,
                      "Updated rating config")
         return Response({"rating_config": config, "row_version": version.row_version})
+
+
+def pdf_warnings(version) -> list:
+    from apps.reports.service import warnings
+
+    return warnings(version)
