@@ -23,7 +23,7 @@
 - Ops web: job board, problem queue, search, dashboards.
 - Config audit log; APK distribution and self-update.
 
-**Scope Out:** Service History, Expense Manager, Leave, customer messaging, payout computation, calendar, Hindi, Clappia migration, repeating blocks, photo annotation and damage diagram, test mode in production, custom roles, trash/soft delete, uptime alerts. **v1.1:** form-version diff + rollback, Android Ops/Admin screens, polished PDF designer UX.
+**Scope Out:** Service History, Expense Manager, Leave, customer messaging, payout computation, calendar, Hindi, Clappia migration, repeating blocks, photo annotation and damage diagram, test mode in production, custom roles and per-user permission exceptions, trash/soft delete, uptime alerts. **v1.1:** form-version diff + rollback, Android Ops/Admin screens, polished PDF designer UX.
 
 **Functional Requirements:**
 | ID | Description | Pri | Acceptance Criteria |
@@ -573,7 +573,7 @@ Do not implement these under any circumstance, even if they seem like natural ex
 - Repeating blocks / "add another" groups (payments use 2 fixed slots)
 - Photo annotation, car damage diagram
 - Test mode in production
-- Custom roles, city/team scoping
+- Custom roles, per-user permission exceptions, city/team scoping
 - Trash / soft delete / data history (simple overwrite; latest PDF only)
 - Uptime alerting, rate limiting
 - Customer-facing video/gallery links
@@ -599,3 +599,6 @@ Do not implement these under any circumstance, even if they seem like natural ex
   3. **Expert read path**: experts cannot read `/forms` or `/form-versions` (Ops/Admin only, by design). The expert job payload (Phase 4 start/sync, Phase 12 web) must deliver the pinned version tree already filtered by the access matrix.
   4. `validate_answers` evaluates other forms' answers as given: Phase 4 must pass the **stored, cleaned** booking/ops answers, never raw client input.
 - **Accepted (unchanged):** login distinguishes unknown / disabled / locked users and lockout can be triggered against any username (no IP throttling: out of scope); `jsonlogic-rs` is a single-maintainer library (last release Dec 2024), mitigated by the shared vectors and by pinning the version.
+
+### 2026-11-22 — Configurable permissions (requirement change, built before Phase 4)
+Replaces "three fixed roles" with an Admin-editable role x permission matrix (REQUIREMENTS §2). Roles stay Expert/Ops/Admin. ~35 per-action permissions, `own`/`all` scope on bookings, submissions, payments and reports, Admin role locked, `roles.manage` ungrantable, Admin-only management of Admin users. Every API view must declare the permission it needs (enforced by a test that scans the URL conf), and every later phase uses the same `perm()` class. Defaults: Ops cannot edit templates or delete bookings/submissions; Ops keeps force-release and device sign-out (agreed earlier; **one toggle if you want it off**).

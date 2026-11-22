@@ -15,7 +15,12 @@ Reference report: `SA37926PDI.pdf` (PDI, 35 pp). Clappia (garuda) was reviewed r
 - **v1.1:** form-version diff and rollback, Ops/Admin screens on Android, polished PDF designer UX.
 
 ## 2. Roles, users, security
-- **Three fixed roles:** Expert, Ops, Admin.
+- **Three roles:** Expert, Ops, Admin. No custom roles and no per-user exceptions: one role per user.
+- **Permissions are configurable per role.** The Admin edits what Expert and Ops may do in a role-by-permission matrix (web, Admin only; audited). The **Admin role is locked to full access** (so nobody can lock everyone out), and `roles.manage` can't be granted to another role.
+  - **One permission per action** (~35), e.g. `bookings.delete`, `submissions.edit`, `forms.publish`, `pdf_templates.edit`, `payments.verify`, `ratings.override`. Permissions on bookings, submissions, payments and reports are **scoped**: `own` (assigned to me) or `all`.
+  - Only an Admin can create, change, reset or sign out an Admin user, whatever other permissions someone holds (no privilege escalation).
+  - This is separate from **field-level access** (hidden/view/edit per role per stage, set in the form builder).
+  - **Defaults.** Expert: own bookings/submissions, fill own inspections, record own payments. **Ops: daily operations only**: create/edit/assign/reschedule/cancel bookings, view and edit submission data and media, verify payments, override ratings and Key Checks, regenerate/view reports, dashboards, force-release and sign out devices; read-only view of forms and library. **Ops cannot** change any template (forms, library, PDF templates, master lists), cannot delete bookings or submissions, and cannot manage users, integrations, API keys or permissions. Admin: everything.
 - **Users have:** name, email (stored, not used for sending), username, password, role, user ID, active/inactive (deactivate, never delete).
 - **Surfaces:** Android (v1: expert screens only) and web (all roles). Form builder, PDF designer, master lists, users, integrations and API keys are **web-only**.
 - **Field access:** per role **per stage** (hidden / view / edit), set in the form builder.
