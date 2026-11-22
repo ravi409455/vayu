@@ -39,3 +39,17 @@ class IsAdmin(RolePermission):
 
 class IsOpsOrAdmin(RolePermission):
     roles = (Role.OPS, Role.ADMIN)
+
+
+class OpsReadAdminWrite(RolePermission):
+    def has_permission(self, request, view):
+        self.roles = ((Role.OPS, Role.ADMIN) if request.method in ("GET", "HEAD", "OPTIONS")
+                      else (Role.ADMIN,))
+        return super().has_permission(request, view)
+
+
+class AnyReadAdminWrite(RolePermission):
+    def has_permission(self, request, view):
+        self.roles = (tuple(Role) if request.method in ("GET", "HEAD", "OPTIONS")
+                      else (Role.ADMIN,))
+        return super().has_permission(request, view)

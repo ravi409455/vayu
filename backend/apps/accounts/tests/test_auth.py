@@ -3,7 +3,6 @@ from freezegun import freeze_time
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Device, Role
-
 from apps.core.testing import PASSWORD
 
 pytestmark = pytest.mark.django_db

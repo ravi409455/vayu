@@ -2,7 +2,6 @@ import pytest
 from rest_framework.test import APIClient
 
 from apps.accounts.models import AuditLog, Device, Role, User
-
 from apps.core.testing import PASSWORD
 
 pytestmark = pytest.mark.django_db

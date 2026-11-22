@@ -214,3 +214,25 @@ def test_form_creation_and_draft_creation_are_audited(make_form, admin, tree):
     actions = set(AuditLog.objects.values_list("action", flat=True))
     assert {"form.create", "form.draft_create"} <= actions
     assert FormVersion.objects.filter(form_id=form["id"]).count() == 2
+
+
+def test_page_or_section_holding_system_fields_cannot_be_deleted(make_form, admin, tree):
+    t = tree(make_form(key="booking", kind="booking")["draft_version"]["id"])
+    r = admin.delete(f"/api/v1/sections/{first_section(t)['id']}")
+    assert r.status_code == 400 and r.json()["code"] == "SYSTEM_FIELD"
+    r = admin.delete(f"/api/v1/pages/{t['pages'][0]['id']}")
+    assert r.status_code == 400 and r.json()["code"] == "SYSTEM_FIELD"
+
+
+def test_empty_sections_and_pages_can_be_deleted_in_draft(make_form, admin, tree):
+    v = make_form()["draft_version"]["id"]
+    p = admin.post(f"/api/v1/form-versions/{v}/pages", {"title": "Extra"}, format="json").json()
+    s = admin.post(f"/api/v1/pages/{p['id']}/sections", {"title": "S"}, format="json").json()
+    assert admin.delete(f"/api/v1/sections/{s['id']}").status_code == 204
+    assert admin.delete(f"/api/v1/pages/{p['id']}").status_code == 204
+
+
+def test_draft_cannot_be_created_without_a_published_version(make_form, admin):
+    form = make_form()
+    r = admin.post(f"/api/v1/forms/{form['id']}/drafts")
+    assert r.status_code == 409 and r.json()["code"] == "DRAFT_EXISTS"
