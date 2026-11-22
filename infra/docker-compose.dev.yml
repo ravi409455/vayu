@@ -1,0 +1,16 @@
+# Local dev/test services. Prod + staging compose files come with the deploy task.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: inspex
+      POSTGRES_PASSWORD: inspex
+      POSTGRES_DB: inspex
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inspex"]
+      interval: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]

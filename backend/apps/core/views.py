@@ -1,0 +1,35 @@
+import logging
+
+import redis
+from django.conf import settings
+from django.db import connection
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+logger = logging.getLogger(__name__)
+
+
+def redis_client() -> redis.Redis:
+    return redis.Redis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
+
+
+class HealthView(APIView):
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        status = {"db": "ok", "redis": "ok"}
+        try:
+            with connection.cursor() as cur:
+                cur.execute("SELECT 1")
+        except Exception:  # noqa: BLE001 - any failure means unhealthy
+            status["db"] = "down"
+        try:
+            redis_client().ping()
+        except Exception:  # noqa: BLE001
+            status["redis"] = "down"
+        healthy = all(v == "ok" for v in status.values())
+        logger.info("health check", extra={"healthy": healthy})
+        return Response({"status": "ok" if healthy else "degraded", **status},
+                        status=200 if healthy else 503)

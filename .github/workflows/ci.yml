@@ -1,0 +1,25 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: {POSTGRES_USER: inspex, POSTGRES_PASSWORD: inspex, POSTGRES_DB: inspex}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U inspex" --health-interval 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    defaults: {run: {working-directory: backend}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run mypy apps inspex
+      - run: uv run python manage.py makemigrations --check --dry-run
+        env: {DJANGO_SETTINGS_MODULE: inspex.settings.test}
+      - run: uv run pytest --cov --cov-fail-under=85
