@@ -110,7 +110,9 @@ def test_volume_by_city_expert_stage_and_lead_owner(many):
         {"period": "2026-11", "key": "delhi", "count": 1}]
     b = many.ops.get("/api/v1/bookings?search=SA100").json()["results"][0]
     assign(many, b)
-    by_expert = {r["key"]: r["count"] for r in volume(many.ops, "group=month&by=expert")}
+    by_expert: dict = {}
+    for r in volume(many.ops, "group=month&by=expert"):
+        by_expert[r["key"]] = by_expert.get(r["key"], 0) + r["count"]
     assert by_expert == {str(many.expert_user.id): 1, "": 3}
     assert {r["key"] for r in volume(many.ops, "group=month&by=stage")} == {"draft", "assigned"}
     assert volume(many.ops, "group=month&by=lead_owner")[0]["count"] >= 1
@@ -145,3 +147,11 @@ def test_dashboards_need_permissions_and_csv_needs_export(many):
     assert many.ops.get("/api/v1/dashboards/volume?group=day&by=type").status_code == 200
     r = many.ops.get("/api/v1/dashboards/volume?group=day&by=type&export=csv")
     assert r.status_code == 403
+
+
+def test_date_to_bounds_dashboards_and_bad_booking_filters_are_400(many):
+    assert volume(many.ops, "group=month&by=type&date_to=2026-10-15") == [
+        {"period": "2026-10", "key": "ev", "count": 1},
+        {"period": "2026-10", "key": "pdi", "count": 1}]
+    assert many.ops.get("/api/v1/bookings?date_from=bad").status_code == 400
+    assert many.ops.get("/api/v1/bookings?date_to=2026-13-01").status_code == 400

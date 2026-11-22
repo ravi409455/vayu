@@ -22,6 +22,7 @@ class Booking(models.Model):
     customer_phone = models.CharField(max_length=20, blank=True)
     city = models.CharField(max_length=64, blank=True)
     car_make_model = models.CharField(max_length=64, blank=True)
+    chassis_no = models.CharField(max_length=64, blank=True)  # from the submitted inspection
     inspection_date = models.DateField(null=True, blank=True)
     row_version = models.PositiveIntegerField(default=0)
     last_change = models.JSONField(default=dict)   # {"by": username, "at": iso, "keys": [...]}

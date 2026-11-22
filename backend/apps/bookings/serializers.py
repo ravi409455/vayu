@@ -62,7 +62,11 @@ class InspectionSerializer(serializers.ModelSerializer):
             role, stage = request.user.role, instance.booking.stage
             ov = ops_version()
             for part, version in (("inspection", instance.form_version), ("ops", ov)):
-                if version is not None and part in data["answers"]:
+                if part not in data["answers"]:
+                    continue
+                if version is not None:
                     data["answers"][part] = visible_answers(
                         levels_for(version, role, stage), data["answers"][part], role)
+                elif role != "admin":   # no form to say what is visible: fail closed
+                    del data["answers"][part]
         return data

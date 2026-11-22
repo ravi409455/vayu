@@ -11,7 +11,7 @@ from apps.forms.rules import validate_answers
 from apps.forms.serializers import VersionTreeSerializer
 
 from .models import Booking, Inspection
-from .services import _changed, _lock, err, sync_columns, today
+from .services import _changed, _lock, active_item, err, sync_columns, today
 
 
 def latest_published(form) -> FormVersion | None:
@@ -66,6 +66,8 @@ def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, ap
     b = _lock(b)
     existing = Inspection.objects.filter(client_start_uuid=client_uuid).first()
     if existing is not None:
+        if existing.booking_id != b.id or existing.expert_id != actor.pk:
+            raise err("UUID_CONFLICT", "That request ID belongs to another request.", 409)
         return b, existing
     if app_version is not None and app_version < settings.MIN_APP_VERSION:
         raise err("APP_TOO_OLD", "Update the app to start new jobs.", 426)
@@ -76,8 +78,11 @@ def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, ap
     if b.stage != "assigned":
         raise err("INVALID_STAGE", f"A {b.stage} job cannot be started.", 409)
     changes = {"stage": ["assigned", "in_progress"]}
-    if inspection_type and inspection_type != b.inspection_type:
+    if inspection_type is not None and inspection_type != b.inspection_type:
         # the expert physically started this type offline: it wins over Ops' later change
+        if not isinstance(inspection_type, str) or not active_item("inspection_type",
+                                                                    inspection_type):
+            raise err("INVALID_TYPE", "Unknown inspection type.")
         changes["inspection_type"] = [b.inspection_type, inspection_type]
         _alert(b, "TYPE_CHANGE_REJECTED",
                f"Type change to {b.inspection_type} rejected: expert started {inspection_type}")
@@ -128,12 +133,18 @@ def submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id=No
     b = _lock(b)
     done = Inspection.objects.filter(client_submission_uuid=submission_uuid).first()
     if done is not None:
+        if done.booking_id != b.id or done.expert_id != actor.pk:
+            raise err("UUID_CONFLICT", "That request ID belongs to another request.", 409)
         return b, done
     insp = b.inspections.filter(expert=actor, status="draft").first()
     if insp is None:
-        version = FormVersion.objects.filter(pk=form_version_id, status=VersionStatus.PUBLISHED,
-                                             form__kind=FormKind.INSPECTION).first() \
-            if form_version_id else None
+        # an offline start that never reached us: the phone names its pinned version, but it must
+        # belong to the form that handles this booking's type (no shopping for a weaker form)
+        form = Form.objects.filter(kind=FormKind.INSPECTION, is_active=True,
+                                   inspection_type=b.inspection_type).first()
+        version = (FormVersion.objects.filter(pk=form_version_id, form=form,
+                                              status=VersionStatus.PUBLISHED).first()
+                   if form_version_id and form else None)
         if version is None:
             raise err("NOT_STARTED", "Start the inspection first.", 409)
         insp = Inspection.objects.create(booking=b, expert=actor, form_version=version)
@@ -173,6 +184,7 @@ def _advance(actor, b: Booking, insp: Inspection) -> None:
         b.released_draft_expected = False
         changes = {"stage": [b.stage, "submitted"]}
         b.stage = "submitted"
+    b.chassis_no = (insp.answers.get("inspection") or {}).get("chassis_no", "")
     _changed(actor, b, changes or {"inspection": [None, str(insp.id)]})
 
 
@@ -201,5 +213,8 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
         insp.last_change = {"by": actor.username, "at": insp.last_edited_at.isoformat(),
                             "keys": keys}
         insp.save()
+        chassis = new["inspection"].get("chassis_no")
+        if chassis is not None and b.chassis_no != chassis:
+            Booking.objects.filter(pk=b.pk).update(chassis_no=chassis)
         events.emit("inspection.updated", booking=str(b.id), inspection=str(insp.id), keys=keys)
     return insp

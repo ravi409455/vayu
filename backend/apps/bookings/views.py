@@ -1,5 +1,8 @@
+import re
 import uuid
+from datetime import date
 
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import generics, mixins, status, viewsets
@@ -39,6 +42,29 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         scoped = ("bookings.view", "bookings.edit", "submissions.fill", "submissions.view")
         if key in scoped and scope_for(self.request.user, key, self.request) == "own":
             qs = qs.filter(submissions.own_filter(self.request.user)).distinct()
+        return self._filtered(qs) if self.action == "list" else qs
+
+    def _filtered(self, qs):
+        p = self.request.query_params
+        for param, column in (("stage", "stage"), ("type", "inspection_type"), ("city", "city"),
+                              ("expert", "assigned_expert_id")):
+            if p.get(param):
+                qs = qs.filter(**{column: p[param]})
+        for param, lookup in (("date_from", "inspection_date__gte"),
+                              ("date_to", "inspection_date__lte")):
+            if p.get(param):
+                try:
+                    qs = qs.filter(**{lookup: date.fromisoformat(p[param])})
+                except ValueError as e:
+                    raise ValidationError({param: "Use YYYY-MM-DD."}) from e
+        term = (p.get("search") or "").strip()
+        if term:
+            q = (Q(booking_id__icontains=term) | Q(customer_name__icontains=term)
+                 | Q(car_make_model__icontains=term) | Q(chassis_no__icontains=term))
+            digits = re.sub(r"\D", "", term)
+            if len(digits) >= 4:
+                q |= Q(customer_phone__contains=digits)
+            qs = qs.filter(q)
         return qs
 
     def create(self, request, *args, **kwargs):

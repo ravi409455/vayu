@@ -457,3 +457,69 @@ def test_a_late_second_submission_on_a_finished_booking_is_stored_without_moving
     r = submit(ienv.expert, booking)
     assert r.status_code == 200
     assert Booking.objects.get(pk=booking["id"]).stage == "completed"
+
+
+# ---------------------------------------------------------------- security review fixes
+
+def test_start_rejects_an_unknown_inspection_type(ienv, booking):
+    assign(ienv, booking)
+    for bad in ("nope", 5, ""):
+        r = start(ienv.expert, booking, inspection_type=bad) if bad != "" else None
+        if r is not None:
+            assert r.status_code == 400 and r.json()["code"] == "INVALID_TYPE"
+    assert Booking.objects.get(pk=booking["id"]).stage == "assigned"
+
+
+def test_submit_cannot_pick_another_forms_version(ienv, booking):
+    admin = ienv.admin
+    other = admin.post("/api/v1/forms", {"key": "ev", "kind": "inspection", "name": "EV",
+                                         "inspection_type": "ev"}, format="json").json()
+    publish_form(admin, other["id"])
+    ev_version = admin.get(f"/api/v1/forms/{other['id']}").json()["published_version"]["id"]
+    assign(ienv, booking)
+    r = submit(ienv.expert, booking, form_version=ev_version)  # a PDI booking, EV form chosen
+    assert r.status_code == 409 and r.json()["code"] == "NOT_STARTED"
+    assert Inspection.objects.count() == 0
+
+
+def test_idempotency_keys_are_scoped_to_the_booking_and_expert(ienv, booking):
+    assign(ienv, booking)
+    cid = str(uuid.uuid4())
+    assert start(ienv.expert, booking, client_uuid=cid).status_code == 200
+    other_booking = create(ienv.ops, booking_id="SA55").json()
+    other = ienv.make_user("expert", username="e7")
+    ienv.ops.post(f"/api/v1/bookings/{other_booking['id']}/assign", {"expert": other.id},
+                  format="json")
+    from rest_framework.test import APIClient
+
+    c = APIClient()
+    c.force_authenticate(user=other)
+    r = start(c, other_booking, client_uuid=cid)     # someone else's UUID must not echo their data
+    assert r.status_code == 409 and r.json()["code"] == "UUID_CONFLICT"
+    submit(ienv.expert, booking, client_submission_uuid=(sid := str(uuid.uuid4())))
+    s = submit(c, other_booking, client_submission_uuid=sid)
+    assert s.status_code == 409 and s.json()["code"] == "UUID_CONFLICT"
+
+
+def test_an_ops_part_with_no_ops_form_is_hidden_from_non_admins(started):
+    ienv, booking, _ = started
+    submit(ienv.expert, booking)
+    insp = Inspection.objects.get(status="submitted")
+    insp.answers = {**insp.answers, "ops": {"pay_mode": "upi"}}   # stored, but no ops form exists
+    insp.save()
+    url = f"/api/v1/inspections/{insp.id}"
+    assert "ops" not in ienv.ops.get(url).json()["answers"]
+    assert ienv.admin.get(url).json()["answers"]["ops"] == {"pay_mode": "upi"}
+
+
+def test_correcting_the_chassis_number_updates_search(started):
+    ienv, booking, _ = started
+    submit(ienv.expert, booking)
+    insp = Inspection.objects.get(status="submitted")
+    r = ienv.ops.patch(f"/api/v1/inspections/{insp.id}",
+                       {"answers": {"inspection": {"chassis_no": "MA3FIXED000000001"}},
+                        "row_version": 0}, format="json")
+    assert r.status_code == 200
+    assert Booking.objects.get(pk=booking["id"]).chassis_no == "MA3FIXED000000001"
+    found = ienv.ops.get("/api/v1/bookings?search=FIXED0000").json()["results"]
+    assert [b["booking_id"] for b in found] == ["SA37926"]
