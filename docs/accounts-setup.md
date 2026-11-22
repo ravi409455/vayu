@@ -62,11 +62,83 @@ With Homebrew's JDK, `keytool` may not be on your PATH; run
 company password manager plus two offline copies. It must never enter the repo (`*.jks` is
 git-ignored as a safety net).
 
-## Sentry (at deploy)
-1. sentry.io → sign up (free Developer plan) → create an organization.
-2. Create three projects: **Django** `vayu-server`, **React** `vayu-web`, **Android** `vayu-android`.
-3. For each: Settings → Projects → **Client Keys (DSN)**. The DSN goes in `SENTRY_DSN`
-   (server env). The server refuses to start in production without it.
+## Sentry (needed at deploy; the web and Android DSNs are used in Phases 10 and 15)
+Sentry catches crashes and errors in the server, the web app and the Android app, and shows the
+stack trace and what the user did. Screens change; look for the closest label.
+
+### 1. Create the account
+1. Go to **sentry.io** → **Get Started** and sign up with the **company email** (or GitHub).
+2. **Choose the data region** when asked (US or EU). It **cannot be changed later**. Sentry has no
+   India region, so we keep personal data out of events (see step 5). EU is the safer choice for
+   customer data.
+3. Create the **organization**: name `Car CID` (the slug becomes part of URLs, e.g. `car-cid`).
+4. Plan: stay on the free **Developer** plan. It is **limited to one user**, so only one person
+   can log in. A paid Team plan is needed to add more people; don't upgrade until you need it.
+   Check **Settings → Subscription** for the current error quota.
+5. If you're asked to enable tracing, session replay or profiling, you can say no; we only need
+   **errors**.
+
+### 2. Create three projects
+**Projects → Create Project**, one each. For every project choose the platform first, then the
+name, and set the team to the default. Choose **"Alert me on every new issue"** when asked.
+| Platform to pick | Project name | Used by |
+|---|---|---|
+| **Django** | `vayu-server` | backend |
+| **React** | `vayu-web` | web app (Phase 10) |
+| **Android** | `vayu-android` | Android app (Phase 15) |
+
+Sentry shows a setup page with sample code. **You don't need to follow it**; we add the SDK in
+our code. Just copy the DSN from it.
+
+### 3. Copy each project's DSN
+The DSN is a URL like `https://<key>@o123456.ingest.sentry.io/456789`. To find it later:
+**Settings → Projects → (project) → Client Keys (DSN)**, then copy the **DSN** value.
+- `vayu-server` DSN → `SENTRY_DSN` in the server env files `.env.staging` and `.env.prod` (see
+  `.env.example`). The server **refuses to start in production without it**.
+- `vayu-web` DSN → used in the web build (Phase 10).
+- `vayu-android` DSN → used in the Android build (Phase 15).
+
+A DSN only lets someone *send* events to your project. It is not a password, but treat it as
+configuration and keep it out of chat. Leave `SENTRY_DSN` empty in local development so test
+runs never create noise.
+
+### 4. Separate staging from production
+Don't create extra projects for staging. Both servers use the **same project and DSN**, with a
+different environment tag in each env file:
+```
+SENTRY_ENVIRONMENT=staging      # in .env.staging
+SENTRY_ENVIRONMENT=production   # in .env.prod
+```
+The Sentry SDK reads this variable by itself. In Sentry, use the **environment filter** at the top
+of the Issues page to look at one at a time.
+
+### 5. Keep personal data out of events
+Customer names, phone numbers and number plates must not leak into error reports. Our code
+already sets `send_default_pii=False`. Also check in Sentry:
+**Settings → Security & Privacy**: turn **Data Scrubber** on, **Use Default Scrubbers** on, and
+**Prevent Storing of IP Addresses** on.
+
+### 6. Make it tell you about errors
+1. **Alerts → Create Alert → Issues** (per project).
+2. Condition: **A new issue is created**. Environment: **production**.
+3. Action: **Send a notification to** yourself (email). If the project already has the default
+   "high priority issues" alert, keep it.
+4. Optional later: **Settings → Integrations → Slack** to post alerts to a channel.
+
+### 7. Check it works (after the server is deployed, or locally once)
+With the `vayu-server` DSN in `SENTRY_DSN`:
+```bash
+cd backend
+SENTRY_DSN='<paste-dsn>' DJANGO_SETTINGS_MODULE=vayu.settings.test \
+  uv run python manage.py shell -c "import sentry_sdk; sentry_sdk.capture_message('vayu test'); sentry_sdk.flush()"
+```
+The message `vayu test` should appear in **Issues** within a minute. Then remove the DSN from your
+shell and don't leave it in `.env.local`.
+
+### 8. Keep the free quota safe
+Developer-plan limits drop events once the monthly quota is used; they don't bill you. If one
+noisy bug floods the quota, set a cap: **Settings → Projects → (project) → Client Keys → Configure
+→ Rate Limit**.
 
 ## DNS (at deploy)
 At wherever carcid.in is registered, add `A` records pointing to the DigitalOcean droplets:
