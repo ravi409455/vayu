@@ -22,3 +22,11 @@ DJANGO_SETTINGS_MODULE=vayu.settings.test uv run pytest
 
 Secrets never go in git: use `.env.*` files (git-ignored) and see `.env.example`.
 Third-party accounts: `docs/accounts-setup.md`.
+
+## Local secrets
+Copy `.env.example` to `backend/.env.local` (git-ignored) and fill it in. Run backend commands
+with that file loaded:
+
+```bash
+cd backend && uv run --env-file .env.local python manage.py runserver
+```
