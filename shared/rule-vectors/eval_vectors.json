@@ -1,0 +1,1045 @@
+[
+ {
+  "name": "date strings compare (earlier)",
+  "rule": {
+   "<=": [
+    "2026-01-05",
+    "2026-10-14"
+   ]
+  },
+  "data": {},
+  "expected": true
+ },
+ {
+  "name": "date strings compare (later)",
+  "rule": {
+   "<=": [
+    "2026-12-05",
+    "2026-10-14"
+   ]
+  },
+  "data": {},
+  "expected": false
+ },
+ {
+  "name": "string vs string is lexicographic",
+  "rule": {
+   "<": [
+    "10",
+    "9"
+   ]
+  },
+  "data": {},
+  "expected": true
+ },
+ {
+  "name": "number vs numeric string coerces",
+  "rule": {
+   "<": [
+    10,
+    "9"
+   ]
+  },
+  "data": {},
+  "expected": false
+ },
+ {
+  "name": "null compared to a date is false",
+  "rule": {
+   "<=": [
+    null,
+    "2026-10-14"
+   ]
+  },
+  "data": {},
+  "expected": false
+ },
+ {
+  "name": "between (3-arg <)",
+  "rule": {
+   "<": [
+    1,
+    {
+     "var": "x"
+    },
+    3
+   ]
+  },
+  "data": {
+   "x": 2
+  },
+  "expected": true
+ },
+ {
+  "name": "between exclusive edge",
+  "rule": {
+   "<": [
+    1,
+    {
+     "var": "x"
+    },
+    3
+   ]
+  },
+  "data": {
+   "x": 3
+  },
+  "expected": false
+ },
+ {
+  "name": "between inclusive (<=)",
+  "rule": {
+   "<=": [
+    1,
+    {
+     "var": "x"
+    },
+    3
+   ]
+  },
+  "data": {
+   "x": 3
+  },
+  "expected": true
+ },
+ {
+  "name": "> and >=",
+  "rule": {
+   "and": [
+    {
+     ">": [
+      5,
+      3
+     ]
+    },
+    {
+     ">=": [
+      3,
+      3
+     ]
+    }
+   ]
+  },
+  "data": {},
+  "expected": true
+ },
+ {
+  "name": "loose equality null null",
+  "rule": {
+   "==": [
+    null,
+    null
+   ]
+  },
+  "data": {},
+  "expected": true
+ },
+ {
+  "name": "loose equality 0 false",
+  "rule": {
+   "==": [
+    0,
+    false
+   ]
+  },
+  "data": {},
+  "expected": true
+ },
+ {
+  "name": "loose equality 1 '1'",
+  "rule": {
+   "==": [
+    1,
+    "1"
+   ]
+  },
+  "data": {},
+  "expected": true
+ },
+ {
+  "name": "strict equality 0 false",
+  "rule": {
+   "===": [
+    0,
+    false
+   ]
+  },
+  "data": {},
+  "expected": false
+ },
+ {
+  "name": "strict inequality",
+  "rule": {
+   "!==": [
+    1,
+    "1"
+   ]
+  },
+  "data": {},
+  "expected": true
+ },
+ {
+  "name": "loose inequality",
+  "rule": {
+   "!=": [
+    "a",
+    "b"
+   ]
+  },
+  "data": {},
+  "expected": true
+ },
+ {
+  "name": "truthy empty array is false",
+  "rule": {
+   "!!": [
+    []
+   ]
+  },
+  "data": {},
+  "expected": false
+ },
+ {
+  "name": "truthy empty string is false",
+  "rule": {
+   "!!": [
+    ""
+   ]
+  },
+  "data": {},
+  "expected": false
+ },
+ {
+  "name": "truthy '0' string is true",
+  "rule": {
+   "!!": [
+    "0"
+   ]
+  },
+  "data": {},
+  "expected": true
+ },
+ {
+  "name": "truthy 0 is false",
+  "rule": {
+   "!!": [
+    0
+   ]
+  },
+  "data": {},
+  "expected": false
+ },
+ {
+  "name": "truthy var empty list",
+  "rule": {
+   "!!": [
+    {
+     "var": "x"
+    }
+   ]
+  },
+  "data": {
+   "x": []
+  },
+  "expected": false
+ },
+ {
+  "name": "truthy var object",
+  "rule": {
+   "!!": [
+    {
+     "var": "x"
+    }
+   ]
+  },
+  "data": {
+   "x": {
+    "a": 1
+   }
+  },
+  "expected": true
+ },
+ {
+  "name": "truthy var null",
+  "rule": {
+   "!!": [
+    {
+     "var": "x"
+    }
+   ]
+  },
+  "data": {
+   "x": null
+  },
+  "expected": false
+ },
+ {
+  "name": "not null is true",
+  "rule": {
+   "!": [
+    {
+     "var": "x"
+    }
+   ]
+  },
+  "data": {
+   "x": null
+  },
+  "expected": true
+ },
+ {
+  "name": "not non-empty string",
+  "rule": {
+   "!": [
+    "a"
+   ]
+  },
+  "data": {},
+  "expected": false
+ },
+ {
+  "name": "var dotted path",
+  "rule": {
+   "var": "booking.fuel_type"
+  },
+  "data": {
+   "booking": {
+    "fuel_type": "cng"
+   }
+  },
+  "expected": "cng"
+ },
+ {
+  "name": "var through null parent",
+  "rule": {
+   "var": "a.b"
+  },
+  "data": {
+   "a": null
+  },
+  "expected": null
+ },
+ {
+  "name": "var missing path",
+  "rule": {
+   "var": "a.b"
+  },
+  "data": {},
+  "expected": null
+ },
+ {
+  "name": "var with default",
+  "rule": {
+   "var": [
+    "a.b",
+    "none"
+   ]
+  },
+  "data": {},
+  "expected": "none"
+ },
+ {
+  "name": "var array index",
+  "rule": {
+   "var": "list.1"
+  },
+  "data": {
+   "list": [
+    "x",
+    "y"
+   ]
+  },
+  "expected": "y"
+ },
+ {
+  "name": "var whole data",
+  "rule": {
+   "var": ""
+  },
+  "data": 7,
+  "expected": 7
+ },
+ {
+  "name": "in array hit",
+  "rule": {
+   "in": [
+    "cng",
+    {
+     "var": "f"
+    }
+   ]
+  },
+  "data": {
+   "f": [
+    "petrol",
+    "cng"
+   ]
+  },
+  "expected": true
+ },
+ {
+  "name": "in array miss",
+  "rule": {
+   "in": [
+    "ev",
+    {
+     "var": "f"
+    }
+   ]
+  },
+  "data": {
+   "f": [
+    "petrol",
+    "cng"
+   ]
+  },
+  "expected": false
+ },
+ {
+  "name": "in null array",
+  "rule": {
+   "in": [
+    "cng",
+    {
+     "var": "f"
+    }
+   ]
+  },
+  "data": {
+   "f": null
+  },
+  "expected": false
+ },
+ {
+  "name": "in substring",
+  "rule": {
+   "in": [
+    "Spa",
+    "Spain"
+   ]
+  },
+  "data": {},
+  "expected": true
+ },
+ {
+  "name": "in literal key list",
+  "rule": {
+   "in": [
+    {
+     "var": "k"
+    },
+    [
+     "a",
+     "b"
+    ]
+   ]
+  },
+  "data": {
+   "k": "b"
+  },
+  "expected": true
+ },
+ {
+  "name": "if two branches",
+  "rule": {
+   "if": [
+    {
+     "var": "x"
+    },
+    "yes",
+    "no"
+   ]
+  },
+  "data": {
+   "x": true
+  },
+  "expected": "yes"
+ },
+ {
+  "name": "if string 'false' is truthy",
+  "rule": {
+   "if": [
+    {
+     "var": "x"
+    },
+    "yes",
+    "no"
+   ]
+  },
+  "data": {
+   "x": "false"
+  },
+  "expected": "yes"
+ },
+ {
+  "name": "if else-if chain",
+  "rule": {
+   "if": [
+    false,
+    "a",
+    {
+     "var": "x"
+    },
+    "b",
+    "c"
+   ]
+  },
+  "data": {
+   "x": 1
+  },
+  "expected": "b"
+ },
+ {
+  "name": "if else-if falls through",
+  "rule": {
+   "if": [
+    false,
+    "a",
+    {
+     "var": "x"
+    },
+    "b",
+    "c"
+   ]
+  },
+  "data": {
+   "x": 0
+  },
+  "expected": "c"
+ },
+ {
+  "name": "and returns last truthy",
+  "rule": {
+   "and": [
+    1,
+    "x"
+   ]
+  },
+  "data": {},
+  "expected": "x"
+ },
+ {
+  "name": "and short-circuits to first falsy",
+  "rule": {
+   "and": [
+    1,
+    0,
+    "x"
+   ]
+  },
+  "data": {},
+  "expected": 0
+ },
+ {
+  "name": "or returns first truthy",
+  "rule": {
+   "or": [
+    0,
+    "",
+    {
+     "var": "x"
+    }
+   ]
+  },
+  "data": {
+   "x": "y"
+  },
+  "expected": "y"
+ },
+ {
+  "name": "or all falsy returns last",
+  "rule": {
+   "or": [
+    0,
+    ""
+   ]
+  },
+  "data": {},
+  "expected": ""
+ },
+ {
+  "name": "some over null",
+  "rule": {
+   "some": [
+    {
+     "var": "d"
+    },
+    {
+     "in": [
+      {
+       "var": ""
+      },
+      [
+       "a",
+       "b"
+      ]
+     ]
+    }
+   ]
+  },
+  "data": {
+   "d": null
+  },
+  "expected": false
+ },
+ {
+  "name": "some over empty",
+  "rule": {
+   "some": [
+    {
+     "var": "d"
+    },
+    {
+     "in": [
+      {
+       "var": ""
+      },
+      [
+       "a",
+       "b"
+      ]
+     ]
+    }
+   ]
+  },
+  "data": {
+   "d": []
+  },
+  "expected": false
+ },
+ {
+  "name": "some hit",
+  "rule": {
+   "some": [
+    {
+     "var": "d"
+    },
+    {
+     "in": [
+      {
+       "var": ""
+      },
+      [
+       "a",
+       "b"
+      ]
+     ]
+    }
+   ]
+  },
+  "data": {
+   "d": [
+    "x",
+    "b"
+   ]
+  },
+  "expected": true
+ },
+ {
+  "name": "all over empty is false",
+  "rule": {
+   "all": [
+    {
+     "var": "d"
+    },
+    {
+     ">": [
+      {
+       "var": ""
+      },
+      0
+     ]
+    }
+   ]
+  },
+  "data": {
+   "d": []
+  },
+  "expected": false
+ },
+ {
+  "name": "all true",
+  "rule": {
+   "all": [
+    {
+     "var": "d"
+    },
+    {
+     ">": [
+      {
+       "var": ""
+      },
+      0
+     ]
+    }
+   ]
+  },
+  "data": {
+   "d": [
+    1,
+    2
+   ]
+  },
+  "expected": true
+ },
+ {
+  "name": "none true",
+  "rule": {
+   "none": [
+    {
+     "var": "d"
+    },
+    {
+     ">": [
+      {
+       "var": ""
+      },
+      5
+     ]
+    }
+   ]
+  },
+  "data": {
+   "d": [
+    1,
+    2
+   ]
+  },
+  "expected": true
+ },
+ {
+  "name": "filter",
+  "rule": {
+   "filter": [
+    {
+     "var": "d"
+    },
+    {
+     "in": [
+      {
+       "var": ""
+      },
+      [
+       "a",
+       "b"
+      ]
+     ]
+    }
+   ]
+  },
+  "data": {
+   "d": [
+    "a",
+    "x",
+    "b"
+   ]
+  },
+  "expected": [
+   "a",
+   "b"
+  ]
+ },
+ {
+  "name": "map",
+  "rule": {
+   "map": [
+    {
+     "var": "d"
+    },
+    {
+     "*": [
+      {
+       "var": ""
+      },
+      2
+     ]
+    }
+   ]
+  },
+  "data": {
+   "d": [
+    1,
+    2
+   ]
+  },
+  "expected": [
+   2,
+   4
+  ]
+ },
+ {
+  "name": "count via reduce",
+  "rule": {
+   "reduce": [
+    {
+     "filter": [
+      {
+       "var": "d"
+      },
+      {
+       "in": [
+        {
+         "var": ""
+        },
+        [
+         "a",
+         "b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "+": [
+      {
+       "var": "accumulator"
+      },
+      1
+     ]
+    },
+    0
+   ]
+  },
+  "data": {
+   "d": [
+    "a",
+    "x",
+    "b"
+   ]
+  },
+  "expected": 2
+ },
+ {
+  "name": "count via reduce over null",
+  "rule": {
+   "reduce": [
+    {
+     "filter": [
+      {
+       "var": "d"
+      },
+      {
+       "in": [
+        {
+         "var": ""
+        },
+        [
+         "a",
+         "b"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "+": [
+      {
+       "var": "accumulator"
+      },
+      1
+     ]
+    },
+    0
+   ]
+  },
+  "data": {
+   "d": null
+  },
+  "expected": 0
+ },
+ {
+  "name": "sum via reduce",
+  "rule": {
+   "reduce": [
+    {
+     "var": "d"
+    },
+    {
+     "+": [
+      {
+       "var": "current"
+      },
+      {
+       "var": "accumulator"
+      }
+     ]
+    },
+    0
+   ]
+  },
+  "data": {
+   "d": [
+    1,
+    2,
+    3
+   ]
+  },
+  "expected": 6
+ },
+ {
+  "name": "numeric string >= number",
+  "rule": {
+   ">=": [
+    {
+     "var": "n"
+    },
+    3
+   ]
+  },
+  "data": {
+   "n": "3"
+  },
+  "expected": true
+ },
+ {
+  "name": "int equals float",
+  "rule": {
+   "==": [
+    {
+     "var": "n"
+    },
+    3
+   ]
+  },
+  "data": {
+   "n": 3
+  },
+  "expected": true
+ },
+ {
+  "name": "addition",
+  "rule": {
+   "+": [
+    1,
+    2,
+    3
+   ]
+  },
+  "data": {},
+  "expected": 6
+ },
+ {
+  "name": "string addition coerces",
+  "rule": {
+   "+": [
+    "1",
+    2
+   ]
+  },
+  "data": {},
+  "expected": 3
+ },
+ {
+  "name": "subtraction",
+  "rule": {
+   "-": [
+    10,
+    4
+   ]
+  },
+  "data": {},
+  "expected": 6
+ },
+ {
+  "name": "negation",
+  "rule": {
+   "-": [
+    4
+   ]
+  },
+  "data": {},
+  "expected": -4
+ },
+ {
+  "name": "multiplication",
+  "rule": {
+   "*": [
+    2,
+    3.5
+   ]
+  },
+  "data": {},
+  "expected": 7
+ },
+ {
+  "name": "division",
+  "rule": {
+   "/": [
+    7,
+    2
+   ]
+  },
+  "data": {},
+  "expected": 3.5
+ },
+ {
+  "name": "modulo",
+  "rule": {
+   "%": [
+    7,
+    2
+   ]
+  },
+  "data": {},
+  "expected": 1
+ },
+ {
+  "name": "min",
+  "rule": {
+   "min": [
+    3,
+    1,
+    2
+   ]
+  },
+  "data": {},
+  "expected": 1
+ },
+ {
+  "name": "max",
+  "rule": {
+   "max": [
+    3,
+    1,
+    2
+   ]
+  },
+  "data": {},
+  "expected": 3
+ },
+ {
+  "name": "cat",
+  "rule": {
+   "cat": [
+    "a",
+    1,
+    "b"
+   ]
+  },
+  "data": {},
+  "expected": "a1b"
+ },
+ {
+  "name": "substr",
+  "rule": {
+   "substr": [
+    "Vayu",
+    1,
+    2
+   ]
+  },
+  "data": {},
+  "expected": "ay"
+ },
+ {
+  "name": "substr negative",
+  "rule": {
+   "substr": [
+    "Vayu",
+    -2
+   ]
+  },
+  "data": {},
+  "expected": "yu"
+ }
+]

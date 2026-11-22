@@ -1,0 +1,4312 @@
+[
+ {
+  "name": "required and empty",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1",
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "a": "required"
+   },
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "a": true
+   },
+   "required": {
+    "a": true
+   }
+  }
+ },
+ {
+  "name": "optional and empty",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1"
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "required": {
+    "a": false
+   }
+  }
+ },
+ {
+  "name": "required and filled",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1",
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "x"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "whitespace-only is empty",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1",
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "   "
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "a": "required"
+   },
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "empty list is empty",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "p",
+     "type": "photo",
+     "section": "s1",
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "p": []
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "p": "required"
+   },
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "empty object is empty",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "g",
+     "type": "gps",
+     "section": "s1",
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "g": {}
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "g": "required"
+   },
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "zero is not empty",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "n",
+     "type": "number",
+     "section": "s1",
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "n": 0
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "false is not empty",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "y",
+     "type": "yes_no",
+     "section": "s1",
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "y": false
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "missing answer is empty",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1",
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "a": "required"
+   },
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "statically hidden field is never required",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1",
+     "required": true,
+     "visible": false
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "a": false
+   },
+   "required": {
+    "a": false
+   }
+  }
+ },
+ {
+  "name": "hidden section hides its fields",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1",
+     "visible": false
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1",
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "a": false
+   },
+   "required": {
+    "a": false
+   }
+  }
+ },
+ {
+  "name": "hidden page hides sections and fields",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page",
+     "visible": false
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1",
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "a": false
+   }
+  }
+ },
+ {
+  "name": "show_if true shows",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1"
+    },
+    {
+     "key": "b",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "==": [
+       {
+        "var": "inspection.a"
+       },
+       "yes"
+      ]
+     },
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "yes"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "b": "required"
+   },
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "b": true
+   },
+   "required": {
+    "b": true
+   }
+  }
+ },
+ {
+  "name": "show_if false hides and is not required",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1"
+    },
+    {
+     "key": "b",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "==": [
+       {
+        "var": "inspection.a"
+       },
+       "yes"
+      ]
+     },
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "no"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "b": false
+   },
+   "required": {
+    "b": false
+   }
+  }
+ },
+ {
+  "name": "show_if on an empty field hides",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1"
+    },
+    {
+     "key": "b",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "==": [
+       {
+        "var": "inspection.a"
+       },
+       "yes"
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "b": false
+   }
+  }
+ },
+ {
+  "name": "hidden field is null for dependents (chain hidden)",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1"
+    },
+    {
+     "key": "b",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "==": [
+       {
+        "var": "inspection.a"
+       },
+       "yes"
+      ]
+     }
+    },
+    {
+     "key": "c",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "==": [
+       {
+        "var": "inspection.b"
+       },
+       "x"
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "no",
+    "b": "x"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "b": false,
+    "c": false
+   }
+  }
+ },
+ {
+  "name": "chain shown",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1"
+    },
+    {
+     "key": "b",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "==": [
+       {
+        "var": "inspection.a"
+       },
+       "yes"
+      ]
+     }
+    },
+    {
+     "key": "c",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "==": [
+       {
+        "var": "inspection.b"
+       },
+       "x"
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "yes",
+    "b": "x"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "b": true,
+    "c": true
+   }
+  }
+ },
+ {
+  "name": "three-level chain collapses from the top",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1"
+    },
+    {
+     "key": "b",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "==": [
+       {
+        "var": "inspection.a"
+       },
+       "yes"
+      ]
+     }
+    },
+    {
+     "key": "c",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "==": [
+       {
+        "var": "inspection.b"
+       },
+       "x"
+      ]
+     }
+    },
+    {
+     "key": "d",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "!!": [
+       {
+        "var": "inspection.c"
+       }
+      ]
+     },
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "no",
+    "b": "x",
+    "c": "y"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "b": false,
+    "c": false,
+    "d": false
+   },
+   "required": {
+    "d": false
+   }
+  }
+ },
+ {
+  "name": "field hidden by show_if keeps static-hidden sibling hidden",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1"
+    },
+    {
+     "key": "b",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "==": [
+       {
+        "var": "inspection.a"
+       },
+       "yes"
+      ]
+     },
+     "visible": false
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "yes"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "b": false
+   }
+  }
+ },
+ {
+  "name": "section show_if on booking field shows",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    },
+    {
+     "id": "s2",
+     "kind": "section",
+     "parent": "p1",
+     "show_if": {
+      "in": [
+       "cng",
+       {
+        "var": "booking.fuel_types"
+       }
+      ]
+     }
+    }
+   ],
+   "fields": [
+    {
+     "key": "hydro",
+     "type": "date",
+     "section": "s2",
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {
+    "fuel_types": [
+     "petrol",
+     "cng"
+    ]
+   },
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "hydro": "required"
+   },
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "hydro": true
+   }
+  }
+ },
+ {
+  "name": "section show_if on booking field hides",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    },
+    {
+     "id": "s2",
+     "kind": "section",
+     "parent": "p1",
+     "show_if": {
+      "in": [
+       "cng",
+       {
+        "var": "booking.fuel_types"
+       }
+      ]
+     }
+    }
+   ],
+   "fields": [
+    {
+     "key": "hydro",
+     "type": "date",
+     "section": "s2",
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {
+    "fuel_types": [
+     "petrol"
+    ]
+   },
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "hydro": false
+   }
+  }
+ },
+ {
+  "name": "missing booking answer hides",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    },
+    {
+     "id": "s2",
+     "kind": "section",
+     "parent": "p1",
+     "show_if": {
+      "in": [
+       "cng",
+       {
+        "var": "booking.fuel_types"
+       }
+      ]
+     }
+    }
+   ],
+   "fields": [
+    {
+     "key": "hydro",
+     "type": "date",
+     "section": "s2",
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "hydro": false
+   }
+  }
+ },
+ {
+  "name": "empty booking list hides",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    },
+    {
+     "id": "s2",
+     "kind": "section",
+     "parent": "p1",
+     "show_if": {
+      "in": [
+       "cng",
+       {
+        "var": "booking.fuel_types"
+       }
+      ]
+     }
+    }
+   ],
+   "fields": [
+    {
+     "key": "hydro",
+     "type": "date",
+     "section": "s2"
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {
+    "fuel_types": []
+   },
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "hydro": false
+   }
+  }
+ },
+ {
+  "name": "scalar cross-form equality",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "ac",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "==": [
+       {
+        "var": "booking.inspection_type"
+       },
+       "used_car"
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {
+    "inspection_type": "used_car"
+   },
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "ac": true
+   }
+  }
+ },
+ {
+  "name": "page show_if hides everything under it",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page",
+     "show_if": {
+      "==": [
+       {
+        "var": "booking.inspection_type"
+       },
+       "ev"
+      ]
+     }
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1",
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "a": false
+   },
+   "required": {
+    "a": false
+   }
+  }
+ },
+ {
+  "name": "ops form references its own fields",
+  "spec": {
+   "form": "ops",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "mode",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "upi",
+       "label": "UPI"
+      },
+      {
+       "key": "cash",
+       "label": "Cash"
+      }
+     ]
+    },
+    {
+     "key": "txn",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "==": [
+       {
+        "var": "ops.mode"
+       },
+       "upi"
+      ]
+     },
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {
+    "mode": "upi"
+   },
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "txn": "required"
+   },
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "txn": true
+   }
+  }
+ },
+ {
+  "name": "ops form hides by own field",
+  "spec": {
+   "form": "ops",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "mode",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "upi",
+       "label": "UPI"
+      },
+      {
+       "key": "cash",
+       "label": "Cash"
+      }
+     ]
+    },
+    {
+     "key": "txn",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "==": [
+       {
+        "var": "ops.mode"
+       },
+       "upi"
+      ]
+     },
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {
+    "mode": "cash"
+   },
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "txn": false
+   }
+  }
+ },
+ {
+  "name": "nested and/or/not",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1"
+    },
+    {
+     "key": "b",
+     "type": "short_text",
+     "section": "s1"
+    },
+    {
+     "key": "c",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "and": [
+       {
+        "or": [
+         {
+          "==": [
+           {
+            "var": "inspection.a"
+           },
+           "x"
+          ]
+         },
+         {
+          "==": [
+           {
+            "var": "inspection.a"
+           },
+           "y"
+          ]
+         }
+        ]
+       },
+       {
+        "!": [
+         {
+          "==": [
+           {
+            "var": "inspection.b"
+           },
+           "z"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "y",
+    "b": "q"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "c": true
+   }
+  }
+ },
+ {
+  "name": "nested and/or/not false branch",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1"
+    },
+    {
+     "key": "b",
+     "type": "short_text",
+     "section": "s1"
+    },
+    {
+     "key": "c",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "and": [
+       {
+        "or": [
+         {
+          "==": [
+           {
+            "var": "inspection.a"
+           },
+           "x"
+          ]
+         },
+         {
+          "==": [
+           {
+            "var": "inspection.a"
+           },
+           "y"
+          ]
+         }
+        ]
+       },
+       {
+        "!": [
+         {
+          "==": [
+           {
+            "var": "inspection.b"
+           },
+           "z"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "y",
+    "b": "z"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "c": false
+   }
+  }
+ },
+ {
+  "name": "is-empty via not (missing/missing_some are banned)",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1"
+    },
+    {
+     "key": "hint",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "!": [
+       {
+        "var": "inspection.a"
+       }
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "hint": true
+   }
+  }
+ },
+ {
+  "name": "is-empty via not, filled",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "short_text",
+     "section": "s1"
+    },
+    {
+     "key": "hint",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "!": [
+       {
+        "var": "inspection.a"
+       }
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "x"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "hint": false
+   }
+  }
+ },
+ {
+  "name": "show_if using _today",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "d",
+     "type": "date",
+     "section": "s1"
+    },
+    {
+     "key": "late",
+     "type": "short_text",
+     "section": "s1",
+     "show_if": {
+      "<": [
+       {
+        "var": "inspection.d"
+       },
+       {
+        "var": "_today"
+       }
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "d": "2026-10-01"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "visible": {
+    "late": true
+   }
+  }
+ },
+ {
+  "name": "required_if true",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "photo",
+     "type": "photo",
+     "section": "s1",
+     "required_if": {
+      "==": [
+       {
+        "var": "inspection.a"
+       },
+       "dent"
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "dent"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "photo": "required"
+   },
+   "derived": {},
+   "defects": [
+    "inspection.a"
+   ],
+   "required": {
+    "photo": true
+   }
+  }
+ },
+ {
+  "name": "required_if false",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "photo",
+     "type": "photo",
+     "section": "s1",
+     "required_if": {
+      "==": [
+       {
+        "var": "inspection.a"
+       },
+       "dent"
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "ok"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "required": {
+    "photo": false
+   }
+  }
+ },
+ {
+  "name": "required_if on a hidden field is ignored",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "photo",
+     "type": "photo",
+     "section": "s1",
+     "required_if": {
+      "==": [
+       {
+        "var": "inspection.a"
+       },
+       "dent"
+      ]
+     },
+     "visible": false
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "dent"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [
+    "inspection.a"
+   ],
+   "required": {
+    "photo": false
+   }
+  }
+ },
+ {
+  "name": "required_if referencing a hidden field sees null",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ],
+     "visible": false
+    },
+    {
+     "key": "photo",
+     "type": "photo",
+     "section": "s1",
+     "required_if": {
+      "==": [
+       {
+        "var": "inspection.a"
+       },
+       "dent"
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "dent"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [],
+   "required": {
+    "photo": false
+   }
+  }
+ },
+ {
+  "name": "single choice defect",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "dent"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [
+    "inspection.a"
+   ]
+  }
+ },
+ {
+  "name": "multi choice with one defect option",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "m",
+     "type": "multi_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "m": [
+     "ok",
+     "scratch"
+    ]
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [
+    "inspection.m"
+   ]
+  }
+ },
+ {
+  "name": "multi choice without defects",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "m",
+     "type": "multi_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "m": [
+     "ok",
+     "na"
+    ]
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "non-defect option",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "ok"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "hidden field's defect is not counted",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ],
+     "visible": false
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "dent"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "defects are sorted",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "z",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "b",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "z": "dent",
+    "b": "scratch"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": [
+    "inspection.b",
+    "inspection.z"
+   ]
+  }
+ },
+ {
+  "name": "defect drives visibility (fixpoint)",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "a",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "why",
+     "type": "long_text",
+     "section": "s1",
+     "show_if": {
+      "some": [
+       {
+        "var": "_defects"
+       },
+       {
+        "in": [
+         {
+          "var": ""
+         },
+         [
+          "inspection.a"
+         ]
+        ]
+       }
+      ]
+     },
+     "required": true
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "a": "dent"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "why": "required"
+   },
+   "derived": {},
+   "defects": [
+    "inspection.a"
+   ],
+   "visible": {
+    "why": true
+   }
+  }
+ },
+ {
+  "name": "derived any-defect true",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "door",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "bonnet",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "kc",
+     "type": "derived",
+     "section": "s1",
+     "rule": {
+      "some": [
+       {
+        "var": "_defects"
+       },
+       {
+        "in": [
+         {
+          "var": ""
+         },
+         [
+          "inspection.door",
+          "inspection.bonnet"
+         ]
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "door": "dent",
+    "bonnet": "ok"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {
+    "kc": true
+   },
+   "defects": [
+    "inspection.door"
+   ]
+  }
+ },
+ {
+  "name": "derived any-defect false",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "door",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "bonnet",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "kc",
+     "type": "derived",
+     "section": "s1",
+     "rule": {
+      "some": [
+       {
+        "var": "_defects"
+       },
+       {
+        "in": [
+         {
+          "var": ""
+         },
+         [
+          "inspection.door",
+          "inspection.bonnet"
+         ]
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "door": "ok",
+    "bonnet": "na"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {
+    "kc": false
+   },
+   "defects": []
+  }
+ },
+ {
+  "name": "derived count >= 2 true",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "door",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "bonnet",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "kc",
+     "type": "derived",
+     "section": "s1",
+     "rule": {
+      ">=": [
+       {
+        "reduce": [
+         {
+          "filter": [
+           {
+            "var": "_defects"
+           },
+           {
+            "in": [
+             {
+              "var": ""
+             },
+             [
+              "inspection.door",
+              "inspection.bonnet"
+             ]
+            ]
+           }
+          ]
+         },
+         {
+          "+": [
+           {
+            "var": "accumulator"
+           },
+           1
+          ]
+         },
+         0
+        ]
+       },
+       2
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "door": "dent",
+    "bonnet": "scratch"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {
+    "kc": true
+   },
+   "defects": [
+    "inspection.bonnet",
+    "inspection.door"
+   ]
+  }
+ },
+ {
+  "name": "derived count >= 2 false",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "door",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "bonnet",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "kc",
+     "type": "derived",
+     "section": "s1",
+     "rule": {
+      ">=": [
+       {
+        "reduce": [
+         {
+          "filter": [
+           {
+            "var": "_defects"
+           },
+           {
+            "in": [
+             {
+              "var": ""
+             },
+             [
+              "inspection.door",
+              "inspection.bonnet"
+             ]
+            ]
+           }
+          ]
+         },
+         {
+          "+": [
+           {
+            "var": "accumulator"
+           },
+           1
+          ]
+         },
+         0
+        ]
+       },
+       2
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "door": "dent",
+    "bonnet": "ok"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {
+    "kc": false
+   },
+   "defects": [
+    "inspection.door"
+   ]
+  }
+ },
+ {
+  "name": "derived with no answers",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "door",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "bonnet",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "kc",
+     "type": "derived",
+     "section": "s1",
+     "rule": {
+      "some": [
+       {
+        "var": "_defects"
+       },
+       {
+        "in": [
+         {
+          "var": ""
+         },
+         [
+          "inspection.door",
+          "inspection.bonnet"
+         ]
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {
+    "kc": false
+   },
+   "defects": []
+  }
+ },
+ {
+  "name": "override wins over rule",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "door",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "bonnet",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "kc",
+     "type": "derived",
+     "section": "s1",
+     "rule": {
+      "some": [
+       {
+        "var": "_defects"
+       },
+       {
+        "in": [
+         {
+          "var": ""
+         },
+         [
+          "inspection.door",
+          "inspection.bonnet"
+         ]
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "door": "dent"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {
+   "kc": false
+  },
+  "expected": {
+   "errors": {},
+   "derived": {
+    "kc": false
+   },
+   "defects": [
+    "inspection.door"
+   ]
+  }
+ },
+ {
+  "name": "null override is ignored",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "door",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "bonnet",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "kc",
+     "type": "derived",
+     "section": "s1",
+     "rule": {
+      "some": [
+       {
+        "var": "_defects"
+       },
+       {
+        "in": [
+         {
+          "var": ""
+         },
+         [
+          "inspection.door",
+          "inspection.bonnet"
+         ]
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "door": "dent"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {
+   "kc": null
+  },
+  "expected": {
+   "errors": {},
+   "derived": {
+    "kc": true
+   },
+   "defects": [
+    "inspection.door"
+   ]
+  }
+ },
+ {
+  "name": "hidden derived field is null",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    },
+    {
+     "id": "s2",
+     "kind": "section",
+     "parent": "p1",
+     "visible": false
+    }
+   ],
+   "fields": [
+    {
+     "key": "door",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "bonnet",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "kc",
+     "type": "derived",
+     "section": "s2",
+     "rule": {
+      "some": [
+       {
+        "var": "_defects"
+       },
+       {
+        "in": [
+         {
+          "var": ""
+         },
+         [
+          "inspection.door",
+          "inspection.bonnet"
+         ]
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "door": "dent"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {
+    "kc": null
+   },
+   "defects": [
+    "inspection.door"
+   ]
+  }
+ },
+ {
+  "name": "derived ignores hidden panels",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "door",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ],
+     "visible": false
+    },
+    {
+     "key": "bonnet",
+     "type": "single_choice",
+     "section": "s1",
+     "options": [
+      {
+       "key": "ok",
+       "label": "Ok"
+      },
+      {
+       "key": "dent",
+       "label": "Dent",
+       "is_defect": true,
+       "severity": "major"
+      },
+      {
+       "key": "scratch",
+       "label": "Scratch",
+       "is_defect": true,
+       "severity": "minor"
+      },
+      {
+       "key": "na",
+       "label": "Not applicable"
+      }
+     ]
+    },
+    {
+     "key": "kc",
+     "type": "derived",
+     "section": "s1",
+     "rule": {
+      "some": [
+       {
+        "var": "_defects"
+       },
+       {
+        "in": [
+         {
+          "var": ""
+         },
+         [
+          "inspection.door",
+          "inspection.bonnet"
+         ]
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "checks": []
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "door": "dent",
+    "bonnet": "ok"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {
+    "kc": false
+   },
+   "defects": []
+  }
+ },
+ {
+  "name": "check passes",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "mfg",
+     "type": "date",
+     "section": "s1"
+    }
+   ],
+   "checks": [
+    {
+     "rule": {
+      "<=": [
+       {
+        "var": "inspection.mfg"
+       },
+       {
+        "var": "_today"
+       }
+      ]
+     },
+     "message": "Cannot be in the future",
+     "fields": [
+      "mfg"
+     ]
+    }
+   ]
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "mfg": "2026-09-01"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "check on equal date passes",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "mfg",
+     "type": "date",
+     "section": "s1"
+    }
+   ],
+   "checks": [
+    {
+     "rule": {
+      "<=": [
+       {
+        "var": "inspection.mfg"
+       },
+       {
+        "var": "_today"
+       }
+      ]
+     },
+     "message": "Cannot be in the future",
+     "fields": [
+      "mfg"
+     ]
+    }
+   ]
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "mfg": "2026-10-14"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "check fails",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "mfg",
+     "type": "date",
+     "section": "s1"
+    }
+   ],
+   "checks": [
+    {
+     "rule": {
+      "<=": [
+       {
+        "var": "inspection.mfg"
+       },
+       {
+        "var": "_today"
+       }
+      ]
+     },
+     "message": "Cannot be in the future",
+     "fields": [
+      "mfg"
+     ]
+    }
+   ]
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "mfg": "2026-12-01"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "mfg": "check_failed"
+   },
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "check skipped when field empty",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "mfg",
+     "type": "date",
+     "section": "s1"
+    }
+   ],
+   "checks": [
+    {
+     "rule": {
+      "<=": [
+       {
+        "var": "inspection.mfg"
+       },
+       {
+        "var": "_today"
+       }
+      ]
+     },
+     "message": "Cannot be in the future",
+     "fields": [
+      "mfg"
+     ]
+    }
+   ]
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "check skipped when field hidden",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "mfg",
+     "type": "date",
+     "section": "s1",
+     "visible": false
+    }
+   ],
+   "checks": [
+    {
+     "rule": {
+      "<=": [
+       {
+        "var": "inspection.mfg"
+       },
+       {
+        "var": "_today"
+       }
+      ]
+     },
+     "message": "Cannot be in the future",
+     "fields": [
+      "mfg"
+     ]
+    }
+   ]
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "mfg": "2026-12-01"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "required error beats check",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "mfg",
+     "type": "date",
+     "section": "s1",
+     "required": true
+    }
+   ],
+   "checks": [
+    {
+     "rule": {
+      "<=": [
+       {
+        "var": "inspection.mfg"
+       },
+       {
+        "var": "_today"
+       }
+      ]
+     },
+     "message": "Cannot be in the future",
+     "fields": [
+      "mfg"
+     ]
+    }
+   ]
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {}
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "mfg": "required"
+   },
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "numeric check fails on zero",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "odo",
+     "type": "number",
+     "section": "s1"
+    }
+   ],
+   "checks": [
+    {
+     "rule": {
+      ">": [
+       {
+        "var": "inspection.odo"
+       },
+       0
+      ]
+     },
+     "message": "Must be above 0",
+     "fields": [
+      "odo"
+     ]
+    }
+   ]
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "odo": 0
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "odo": "check_failed"
+   },
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "numeric check passes",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "odo",
+     "type": "number",
+     "section": "s1"
+    }
+   ],
+   "checks": [
+    {
+     "rule": {
+      ">": [
+       {
+        "var": "inspection.odo"
+       },
+       0
+      ]
+     },
+     "message": "Must be above 0",
+     "fields": [
+      "odo"
+     ]
+    }
+   ]
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "odo": 45
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "two-field check marks both fields",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "start",
+     "type": "date",
+     "section": "s1"
+    },
+    {
+     "key": "end",
+     "type": "date",
+     "section": "s1"
+    }
+   ],
+   "checks": [
+    {
+     "rule": {
+      "<=": [
+       {
+        "var": "inspection.start"
+       },
+       {
+        "var": "inspection.end"
+       }
+      ]
+     },
+     "message": "Start must be before end",
+     "fields": [
+      "start",
+      "end"
+     ]
+    }
+   ]
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "start": "2026-10-10",
+    "end": "2026-10-01"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "start": "check_failed",
+    "end": "check_failed"
+   },
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "two-field check skipped when one is empty",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "start",
+     "type": "date",
+     "section": "s1"
+    },
+    {
+     "key": "end",
+     "type": "date",
+     "section": "s1"
+    }
+   ],
+   "checks": [
+    {
+     "rule": {
+      "<=": [
+       {
+        "var": "inspection.start"
+       },
+       {
+        "var": "inspection.end"
+       }
+      ]
+     },
+     "message": "Start must be before end",
+     "fields": [
+      "start",
+      "end"
+     ]
+    }
+   ]
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "start": "2026-10-10"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {},
+   "derived": {},
+   "defects": []
+  }
+ },
+ {
+  "name": "check keeps an existing required error",
+  "spec": {
+   "form": "inspection",
+   "containers": [
+    {
+     "id": "p1",
+     "kind": "page"
+    },
+    {
+     "id": "s1",
+     "kind": "section",
+     "parent": "p1"
+    }
+   ],
+   "fields": [
+    {
+     "key": "start",
+     "type": "date",
+     "section": "s1"
+    },
+    {
+     "key": "end",
+     "type": "date",
+     "section": "s1"
+    },
+    {
+     "key": "note",
+     "type": "short_text",
+     "section": "s1",
+     "required": true
+    }
+   ],
+   "checks": [
+    {
+     "rule": {
+      "<=": [
+       {
+        "var": "inspection.start"
+       },
+       {
+        "var": "inspection.end"
+       }
+      ]
+     },
+     "message": "Start must be before end",
+     "fields": [
+      "start",
+      "end"
+     ]
+    }
+   ]
+  },
+  "answers": {
+   "booking": {},
+   "ops": {},
+   "inspection": {
+    "start": "2026-10-10",
+    "end": "2026-10-01"
+   }
+  },
+  "today": "2026-10-14",
+  "overrides": {},
+  "expected": {
+   "errors": {
+    "start": "check_failed",
+    "end": "check_failed",
+    "note": "required"
+   },
+   "derived": {},
+   "defects": []
+  }
+ }
+]
