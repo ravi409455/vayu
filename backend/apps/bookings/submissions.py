@@ -1,0 +1,205 @@
+"""Start, submit and Ops edits of inspections, including the offline conflict rules."""
+from django.conf import settings
+from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
+
+from apps.core import events
+from apps.forms.access import levels_for
+from apps.forms.models import Form, FormKind, FormVersion, VersionStatus
+from apps.forms.rules import validate_answers
+from apps.forms.serializers import VersionTreeSerializer
+
+from .models import Booking, Inspection
+from .services import _changed, _lock, err, sync_columns, today
+
+
+def latest_published(form) -> FormVersion | None:
+    return form.versions.filter(status=VersionStatus.PUBLISHED).order_by("-number").first()
+
+
+def inspection_version(inspection_type: str) -> FormVersion:
+    form = Form.objects.filter(kind=FormKind.INSPECTION, is_active=True,
+                               inspection_type=inspection_type).first()
+    version = latest_published(form) if form else None
+    if version is None:
+        raise err("NO_INSPECTION_FORM", f"No published inspection form for '{inspection_type}'.",
+                  409)
+    return version
+
+
+def ops_version() -> FormVersion | None:
+    form = Form.objects.filter(kind=FormKind.OPS, is_active=True).first()
+    return latest_published(form) if form else None
+
+
+def own_filter(user) -> Q:
+    """Bookings an expert may see: assigned to them, or where they still hold a draft."""
+    return Q(assigned_expert_id=user.pk) | Q(inspections__expert_id=user.pk,
+                                             inspections__status="draft")
+
+
+def form_for_role(version: FormVersion, role: str, stage: str) -> dict:
+    """The version tree an expert fills in: hidden fields removed, each field tagged with the
+    caller's access level."""
+    levels = levels_for(version, role, stage)
+    tree = VersionTreeSerializer(version).data
+    pages = []
+    for page in tree["pages"]:
+        sections = []
+        for section in page["sections"]:
+            fields = [{**f, "level": levels[f["key"]]} for f in section["fields"]
+                      if levels.get(f["key"]) != "hidden"]
+            if fields:
+                sections.append({**section, "fields": fields})
+        if sections:
+            pages.append({**page, "sections": sections})
+    return {**tree, "pages": pages}
+
+
+def _alert(b: Booking, code: str, detail: str) -> None:
+    b.alerts = [*b.alerts, {"code": code, "detail": detail, "at": timezone.now().isoformat()}]
+
+
+@transaction.atomic
+def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, app_version):
+    b = _lock(b)
+    existing = Inspection.objects.filter(client_start_uuid=client_uuid).first()
+    if existing is not None:
+        return b, existing
+    if app_version is not None and app_version < settings.MIN_APP_VERSION:
+        raise err("APP_TOO_OLD", "Update the app to start new jobs.", 426)
+    if b.assigned_expert_id != actor.pk:
+        raise err("NOT_ASSIGNED", "This job is no longer assigned to you.", 409)
+    if b.stage == "in_progress":
+        raise err("ALREADY_STARTED", "This job is already started.", 409)
+    if b.stage != "assigned":
+        raise err("INVALID_STAGE", f"A {b.stage} job cannot be started.", 409)
+    changes = {"stage": ["assigned", "in_progress"]}
+    if inspection_type and inspection_type != b.inspection_type:
+        # the expert physically started this type offline: it wins over Ops' later change
+        changes["inspection_type"] = [b.inspection_type, inspection_type]
+        _alert(b, "TYPE_CHANGE_REJECTED",
+               f"Type change to {b.inspection_type} rejected: expert started {inspection_type}")
+        events.emit("alert.type_change_rejected", booking=str(b.id), booking_id=b.booking_id)
+        b.answers = {**b.answers, "inspection_type": inspection_type}
+        sync_columns(b)
+    version = inspection_version(b.inspection_type)
+    b.stage, b.started_at = "in_progress", timezone.now()
+    insp = Inspection.objects.create(booking=b, expert=actor, form_version=version,
+                                     client_start_uuid=client_uuid,
+                                     client_started_at=client_started_at)
+    _changed(actor, b, changes)
+    events.emit("inspection.started", booking=str(b.id), inspection=str(insp.id))
+    return b, insp
+
+
+def _clean_both(b: Booking, version: FormVersion, answers: dict):
+    ans_i, ans_o = answers.get("inspection") or {}, answers.get("ops") or {}
+    cleaned_i, errors = validate_answers(
+        version, {"inspection": ans_i, "booking": b.answers, "ops": ans_o}, today())
+    cleaned_o: dict = {}
+    ov = ops_version()
+    if ov is not None:
+        cleaned_o, e2 = validate_answers(
+            ov, {"ops": ans_o, "booking": b.answers, "inspection": cleaned_i}, today())
+        errors = {**errors, **e2}
+    if errors:
+        raise err("INVALID_ANSWERS", "Some answers are invalid.", errors=errors)
+    return cleaned_i, cleaned_o, ov
+
+
+def _locked_keys(role: str, stage: str, version, ops_v, answers: dict, old: dict) -> list[str]:
+    """Keys the role may not change at this stage (unknown keys are left to validation)."""
+    locked: list[str] = []
+    for v, key in ((version, "inspection"), (ops_v, "ops")):
+        if v is None:
+            continue
+        levels = levels_for(v, role, stage)
+        # hidden: always refused (no value oracle); view-only: refused only if it changes
+        locked += [k for k, val in (answers.get(key) or {}).items()
+                   if k in levels and (levels[k] == "hidden" or (
+                       levels[k] != "edit" and val != (old.get(key) or {}).get(k)))]
+    return sorted(locked)
+
+
+@transaction.atomic
+def submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id=None):
+    b = _lock(b)
+    done = Inspection.objects.filter(client_submission_uuid=submission_uuid).first()
+    if done is not None:
+        return b, done
+    insp = b.inspections.filter(expert=actor, status="draft").first()
+    if insp is None:
+        version = FormVersion.objects.filter(pk=form_version_id, status=VersionStatus.PUBLISHED,
+                                             form__kind=FormKind.INSPECTION).first() \
+            if form_version_id else None
+        if version is None:
+            raise err("NOT_STARTED", "Start the inspection first.", 409)
+        insp = Inspection.objects.create(booking=b, expert=actor, form_version=version)
+    version = insp.form_version
+    ov = ops_version()
+    locked = _locked_keys(actor.role, "in_progress", version, ov, answers, {})
+    if locked:
+        raise err("FIELD_ACCESS", "You cannot change these fields.", 403, keys=locked)
+    cleaned_i, cleaned_o, _ = _clean_both(b, version, answers)
+    insp.answers = {"inspection": cleaned_i, "ops": cleaned_o}
+    insp.status, insp.submitted_at = "submitted", timezone.now()
+    insp.client_submission_uuid = submission_uuid
+    insp.save()
+    _advance(actor, b, insp)
+    events.emit("inspection.submitted", booking=str(b.id), inspection=str(insp.id))
+    return b, insp
+
+
+def _advance(actor, b: Booking, insp: Inspection) -> None:
+    changes: dict = {}
+    if b.stage == "cancelled":
+        pass                                          # kept on the cancelled booking
+    elif b.assigned_expert_id != actor.pk:            # reassigned while the expert worked offline
+        other_started = b.inspections.filter(expert_id=b.assigned_expert_id,
+                                             status="draft").exists()
+        b.conflict = "TWO_EXPERTS"
+        _alert(b, "CONFLICT_TWO_EXPERTS", "Two experts inspected this booking.")
+        if not other_started:
+            b.withdrawn_expert_id = b.assigned_expert_id
+            b.assigned_expert = actor
+            changes = {"stage": [b.stage, "submitted"]}
+            b.stage = "submitted"
+    elif b.stage in ("in_progress", "assigned"):
+        if b.stage == "assigned" and b.released_draft_expected:
+            b.conflict = "RELEASED_DRAFT_ARRIVED"
+            _alert(b, "RELEASED_DRAFT_ARRIVED", "A force-released draft was submitted.")
+        b.released_draft_expected = False
+        changes = {"stage": [b.stage, "submitted"]}
+        b.stage = "submitted"
+    _changed(actor, b, changes or {"inspection": [None, str(insp.id)]})
+
+
+@transaction.atomic
+def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) -> Inspection:
+    insp = Inspection.objects.select_for_update().get(pk=insp.pk)
+    if row_version != insp.row_version:
+        raise err("STALE_INSPECTION", "Someone changed this inspection since you opened it.", 409,
+                  changed_by=insp.last_change.get("by"), changed_at=insp.last_change.get("at"),
+                  changed_keys=insp.last_change.get("keys", []), row_version=insp.row_version)
+    b = insp.booking
+    version, ov = insp.form_version, ops_version()
+    locked = _locked_keys(actor.role, b.stage, version, ov, answers, insp.answers)
+    if locked:
+        raise err("FIELD_ACCESS", "You cannot change these fields at this stage.", 403, keys=locked)
+    merged = {k: {**(insp.answers.get(k) or {}), **(answers.get(k) or {})}
+              for k in ("inspection", "ops")}
+    cleaned_i, cleaned_o, _ = _clean_both(b, version, merged)
+    new = {"inspection": cleaned_i, "ops": cleaned_o}
+    keys = sorted(k for part in ("inspection", "ops") for k in set(new[part]) | set(
+        insp.answers.get(part) or {}) if new[part].get(k) != (insp.answers.get(part) or {}).get(k))
+    if keys:
+        insp.answers = new
+        insp.row_version += 1
+        insp.last_edited_by, insp.last_edited_at = actor, timezone.now()
+        insp.last_change = {"by": actor.username, "at": insp.last_edited_at.isoformat(),
+                            "keys": keys}
+        insp.save()
+        events.emit("inspection.updated", booking=str(b.id), inspection=str(insp.id), keys=keys)
+    return insp

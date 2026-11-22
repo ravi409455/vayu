@@ -1,19 +1,24 @@
-from rest_framework import mixins, status, viewsets
+import uuid
+
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from rest_framework import generics, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from apps.accounts.permissions import perm, scope_for
 
-from . import services
-from .models import Booking
-from .serializers import BookingSerializer
+from . import services, submissions
+from .models import Booking, Inspection
+from .serializers import BookingSerializer, InspectionSerializer
 
 ACTION_PERMISSIONS = {
     "list": "bookings.view", "retrieve": "bookings.view", "create": "bookings.create",
     "partial_update": "bookings.edit", "change_type": "bookings.edit",
     "assign": "bookings.assign", "reschedule": "bookings.reschedule", "cancel": "bookings.cancel",
     "force_release": "bookings.force_release", "destroy": "bookings.delete",
+    "start": "submissions.fill", "submit": "submissions.fill", "inspections": "submissions.view",
 }
 
 
@@ -31,9 +36,9 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         qs = Booking.objects.select_related("last_edited_by", "released_by").prefetch_related(
             "reschedules__by")
         key = ACTION_PERMISSIONS.get(self.action, "bookings.view")
-        if key in ("bookings.view", "bookings.edit") and \
-                scope_for(self.request.user, key, self.request) == "own":
-            qs = qs.filter(assigned_expert_id=self.request.user.pk)
+        scoped = ("bookings.view", "bookings.edit", "submissions.fill", "submissions.view")
+        if key in scoped and scope_for(self.request.user, key, self.request) == "own":
+            qs = qs.filter(submissions.own_filter(self.request.user)).distinct()
         return qs
 
     def create(self, request, *args, **kwargs):
@@ -78,3 +83,70 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
     def change_type(self, request, pk=None):
         return self._out(services.change_type(request.user, self.get_object(),
                                               request.data.get("inspection_type")))
+
+
+    def _uuid(self, name):
+        try:
+            return uuid.UUID(str(self.request.data.get(name)))
+        except ValueError as e:
+            raise ValidationError({name: "A UUID is required."}) from e
+
+    @action(detail=True, methods=["post"])
+    def start(self, request, pk=None):
+        raw = request.headers.get("X-App-Version", "")
+        app_version = int(raw) if raw.isdigit() else None
+        started = request.data.get("client_started_at")
+        b, insp = submissions.start(
+            request.user, self.get_object(), self._uuid("client_uuid"),
+            parse_datetime(started) if isinstance(started, str) else None,
+            request.data.get("inspection_type"), app_version)
+        ctx = self.get_serializer_context()
+        return Response({
+            "booking": BookingSerializer(Booking.objects.get(pk=b.pk), context=ctx).data,
+            "inspection": InspectionSerializer(insp, context=ctx).data,
+            "form": submissions.form_for_role(insp.form_version, request.user.role, "in_progress"),
+            "server_time": timezone.now().isoformat()})
+
+    @action(detail=True, methods=["post"])
+    def submit(self, request, pk=None):
+        version = request.data.get("form_version")
+        b, insp = submissions.submit(
+            request.user, self.get_object(), self._uuid("client_submission_uuid"),
+            request.data.get("answers") or {}, version if isinstance(version, int) else None)
+        ctx = self.get_serializer_context()
+        return Response({
+            "booking": BookingSerializer(Booking.objects.get(pk=b.pk), context=ctx).data,
+            "inspection": InspectionSerializer(insp, context=ctx).data,
+            "server_time": timezone.now().isoformat()})
+
+    @action(detail=True, methods=["get"])
+    def inspections(self, request, pk=None):
+        qs = self.get_object().inspections.all()
+        if scope_for(request.user, "submissions.view", request) == "own":
+            qs = qs.filter(expert_id=request.user.pk)
+        return Response(InspectionSerializer(qs, many=True,
+                                             context=self.get_serializer_context()).data)
+
+
+class InspectionDetail(generics.RetrieveUpdateAPIView):
+    serializer_class = InspectionSerializer
+    http_method_names = ["get", "patch", "head", "options"]
+    declared_permissions = ("submissions.view", "submissions.edit")
+
+    def get_permissions(self):
+        return [perm("submissions.view", "submissions.edit")()]
+
+    def get_queryset(self):
+        qs = Inspection.objects.select_related("booking", "form_version", "last_edited_by")
+        key = "submissions.view" if self.request.method == "GET" else "submissions.edit"
+        if scope_for(self.request.user, key, self.request) == "own":
+            qs = qs.filter(expert_id=self.request.user.pk)
+        return qs
+
+    def partial_update(self, request, *args, **kwargs):
+        if "row_version" not in request.data:
+            raise ValidationError({"row_version": "This field is required."})
+        insp = submissions.edit_inspection(request.user, self.get_object(),
+                                           request.data.get("answers") or {},
+                                           request.data["row_version"])
+        return Response(InspectionSerializer(insp, context=self.get_serializer_context()).data)

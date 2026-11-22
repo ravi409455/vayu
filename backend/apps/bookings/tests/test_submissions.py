@@ -2,6 +2,7 @@
 import uuid
 
 import pytest
+from rest_framework.exceptions import APIException
 
 from apps.accounts.models import Role
 from apps.bookings.models import Booking, Inspection
@@ -213,7 +214,7 @@ def test_reassigned_to_b_who_started_keeps_both_for_ops_to_choose(started):
     b_user = ienv.make_user("expert", username="bee")
     Booking.objects.filter(pk=booking["id"]).update(assigned_expert=b_user)
     Inspection.objects.create(booking_id=booking["id"], expert=b_user,
-                              form_version=Inspection.objects.first().form_version,
+                              form_version=Inspection.objects.get(booking_id=booking["id"]).form_version,
                               client_start_uuid=uuid.uuid4())
     r = submit(ienv.expert, booking)
     assert r.status_code == 200
@@ -303,3 +304,156 @@ def test_submit_can_create_the_draft_from_the_phones_pinned_version(ienv, bookin
     assert r.status_code == 200 and r.json()["inspection"]["status"] == "submitted"
     bad = submit(ienv.expert, booking, form_version=99999)
     assert bad.status_code in (400, 409)
+
+
+# ---------------------------------------------------------------- hidden-field oracle, start errors, ops form
+
+def test_hidden_fields_are_refused_whatever_the_value_so_guesses_leak_nothing(started):
+    ienv, booking, _ = started
+    submit(ienv.expert, booking)
+    insp = Inspection.objects.get(status="submitted")
+    # ops sees 'grade' as view (system-filled); make it hidden for ops, then try to confirm a guess
+    ienv.admin.patch(f"/api/v1/fields/{_field_id(insp, 'grade')}", {"access": {
+        "ops": {s: "hidden" for s in ("submitted", "in_progress", "draft", "assigned",
+                                      "completed", "cancelled")}}}, format="json")
+    # (published versions are immutable, so exercise the service rule directly)
+    from apps.bookings import submissions
+    from apps.forms.models import Field
+
+    Field.objects.filter(version=insp.form_version, key="grade").update(
+        access={"ops": {"submitted": "hidden"}})
+    for guess in (1, 5, None):
+        locked = submissions._locked_keys("ops", "submitted", insp.form_version, None,
+                                          {"inspection": {"grade": guess}},
+                                          {"inspection": {"grade": 5}})
+        assert locked == ["grade"]  # same answer for a right and a wrong guess
+
+
+def _field_id(insp, key):
+    from apps.forms.models import Field
+
+    return Field.objects.get(version=insp.form_version, key=key).id
+
+
+def test_booking_edit_refuses_hidden_fields_even_with_the_stored_value(env, db):
+    from apps.forms.models import Form
+
+    form = Form.objects.get(kind="booking")
+    d = env.admin.post(f"/api/v1/forms/{form.id}/drafts").json()["id"]
+    sec = env.admin.get(f"/api/v1/form-versions/{d}").json()["pages"][0]["sections"][0]["id"]
+    env.admin.post(f"/api/v1/sections/{sec}/fields", {"key": "secret_note", "label": "S",
+                   "type": "short_text", "access": {"ops": {s: "hidden" for s in (
+                       "draft", "assigned", "in_progress", "submitted", "completed",
+                       "cancelled")}}}, format="json")
+    publish_form(env.admin, form.id)
+    b = create(env.admin, secret_note="s3cret").json()
+    for value in ("s3cret", "wrong guess"):
+        r = env.ops.patch(f"/api/v1/bookings/{b['id']}", {"answers": {"secret_note": value},
+                                                          "row_version": 0}, format="json")
+        assert r.status_code == 403 and r.json()["keys"] == ["secret_note"]
+
+
+def test_start_error_paths(ienv, booking):
+    from apps.bookings import submissions
+
+    assign(ienv, booking)
+    assert start(ienv.expert, booking).status_code == 200
+    again = start(ienv.expert, booking)
+    assert again.status_code == 409 and again.json()["code"] == "ALREADY_STARTED"
+    b = Booking.objects.get(pk=booking["id"])
+    other = ienv.make_user("expert", username="e9")
+    with pytest.raises(APIException) as e:
+        submissions.start(other, b, uuid.uuid4(), None, "pdi", None)
+    assert e.value.detail["code"] == "NOT_ASSIGNED"  # type: ignore
+    Booking.objects.filter(pk=b.pk).update(stage="cancelled")
+    b.refresh_from_db()
+    with pytest.raises(APIException) as e:
+        submissions.start(ienv.expert_user, b, uuid.uuid4(), None, "pdi", None)
+    assert e.value.detail["code"] == "INVALID_STAGE"  # type: ignore
+
+
+def test_a_bad_uuid_is_a_400(ienv, booking):
+    assign(ienv, booking)
+    r = ienv.expert.post(f"/api/v1/bookings/{booking['id']}/start", {"client_uuid": "nope"},
+                         format="json")
+    assert r.status_code == 400
+
+
+def test_the_experts_form_drops_sections_and_pages_with_nothing_to_show(ienv, booking):
+    admin = ienv.admin
+    d = admin.post(f"/api/v1/forms/{ienv.form_id}/drafts").json()["id"]
+    page = admin.get(f"/api/v1/form-versions/{d}").json()["pages"][0]
+    sec = admin.post(f"/api/v1/pages/{page['id']}/sections", {"title": "Ratings"},
+                     format="json").json()
+    admin.post(f"/api/v1/sections/{sec['id']}/fields", {"key": "rating_two", "label": "R",
+               "type": "rating", "config": {"category": "ac"}}, format="json")
+    pg2 = admin.post(f"/api/v1/form-versions/{d}/pages", {"title": "Ops only"}, format="json").json()
+    s2 = admin.post(f"/api/v1/pages/{pg2['id']}/sections", {"title": "S"}, format="json").json()
+    admin.post(f"/api/v1/sections/{s2['id']}/fields", {"key": "rating_three", "label": "R",
+               "type": "rating", "config": {"category": "tyres"}}, format="json")
+    publish_form(admin, ienv.form_id)
+    assign(ienv, booking)
+    form = start(ienv.expert, booking).json()["form"]
+    assert [s["title"] for p in form["pages"] for s in p["sections"]] == ["Section 1"]
+    assert len(form["pages"]) == 1
+
+
+def test_an_ops_form_is_validated_stored_and_access_controlled(ienv, booking):
+    admin = ienv.admin
+    ops_form = admin.post("/api/v1/forms", {"key": "ops", "kind": "ops", "name": "Ops"},
+                          format="json").json()
+    v = ops_form["draft_version"]["id"]
+    sec = admin.get(f"/api/v1/form-versions/{v}").json()["pages"][0]["sections"][0]["id"]
+    admin.post(f"/api/v1/sections/{sec}/fields", {"key": "pay_mode", "label": "Mode",
+               "type": "short_text", "required": True}, format="json")
+    admin.post(f"/api/v1/sections/{sec}/fields", {"key": "ops_only", "label": "Ops", "type":
+               "short_text", "access": {"expert": {"in_progress": "hidden"}}}, format="json")
+    publish_form(admin, ops_form["id"])
+    assign(ienv, booking)
+    start(ienv.expert, booking)
+    bad = submit(ienv.expert, booking, {**GOOD, "ops": {}})
+    assert bad.status_code == 400 and bad.json()["errors"] == {"pay_mode": "required"}
+    sneaky = submit(ienv.expert, booking, {**GOOD, "ops": {"pay_mode": "upi", "ops_only": "x"}})
+    assert sneaky.status_code == 403 and sneaky.json()["keys"] == ["ops_only"]
+    ok = submit(ienv.expert, booking, {**GOOD, "ops": {"pay_mode": "upi"}})
+    assert ok.status_code == 200
+    assert ok.json()["inspection"]["answers"]["ops"] == {"pay_mode": "upi"}
+
+
+def test_an_ops_edit_that_changes_nothing_keeps_the_row_version(started):
+    ienv, booking, _ = started
+    submit(ienv.expert, booking)
+    insp = Inspection.objects.get(status="submitted")
+    r = ienv.ops.patch(f"/api/v1/inspections/{insp.id}",
+                       {"answers": {"inspection": {"odometer": 45}}, "row_version": 0},
+                       format="json")
+    assert r.status_code == 200 and r.json()["row_version"] == 0
+
+
+def test_experts_read_only_their_own_inspection(started):
+    ienv, booking, _ = started
+    submit(ienv.expert, booking)
+    insp = Inspection.objects.get(status="submitted")
+    assert ienv.expert.get(f"/api/v1/inspections/{insp.id}").status_code == 200
+    other = ienv.make_user("expert", username="e5")
+    from rest_framework.test import APIClient
+
+    c = APIClient()
+    c.force_authenticate(user=other)
+    assert c.get(f"/api/v1/inspections/{insp.id}").status_code == 404
+
+
+def test_serializer_without_a_request_returns_everything(started):
+    from apps.bookings.serializers import InspectionSerializer
+
+    _, _, body = started
+    data = InspectionSerializer(Inspection.objects.get(pk=body["inspection"]["id"])).data
+    assert data["status"] == "draft"
+
+
+def test_a_late_second_submission_on_a_finished_booking_is_stored_without_moving_the_stage(started):
+    ienv, booking, _ = started
+    Booking.objects.filter(pk=booking["id"]).update(stage="completed")
+    r = submit(ienv.expert, booking)
+    assert r.status_code == 200
+    assert Booking.objects.get(pk=booking["id"]).stage == "completed"

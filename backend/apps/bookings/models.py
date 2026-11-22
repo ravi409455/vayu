@@ -35,6 +35,10 @@ class Booking(models.Model):
     released_draft_expected = models.BooleanField(default=False)
     cancel_reason = models.CharField(max_length=64, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+    conflict = models.CharField(max_length=40, blank=True)  # TWO_EXPERTS, RELEASED_DRAFT_ARRIVED
+    withdrawn_expert = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                         on_delete=models.PROTECT, related_name="+")
+    alerts = models.JSONField(default=list)        # [{"code": ..., "at": ..., "detail": ...}]
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT,
                                    related_name="+")
     created_at = models.DateTimeField(default=timezone.now)
@@ -56,3 +60,30 @@ class RescheduleLog(models.Model):
 
     class Meta:
         ordering = ["at", "id"]
+
+
+class Inspection(models.Model):
+    """One expert's inspection of a booking. A booking can have several only in a conflict
+    (two experts); Ops then choose which one counts."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name="inspections")
+    expert = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+                               related_name="inspections")
+    form_version = models.ForeignKey("forms.FormVersion", on_delete=models.PROTECT,
+                                     related_name="+")  # frozen at start
+    status = models.CharField(max_length=10, default="draft")  # draft | submitted
+    answers = models.JSONField(default=dict)    # {"inspection": {...}, "ops": {...}} (cleaned)
+    row_version = models.PositiveIntegerField(default=0)
+    last_change = models.JSONField(default=dict)
+    last_edited_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                       on_delete=models.PROTECT, related_name="+")
+    last_edited_at = models.DateTimeField(null=True, blank=True)
+    client_started_at = models.DateTimeField(null=True, blank=True)
+    client_start_uuid = models.UUIDField(null=True, blank=True, unique=True)
+    client_submission_uuid = models.UUIDField(null=True, blank=True, unique=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["created_at"]

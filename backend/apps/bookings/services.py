@@ -106,9 +106,12 @@ def edit(actor, b: Booking, new_answers: dict, row_version: int) -> Booking:
     version = booking_form_version()
     levels = levels_for(version, actor.role, b.stage)
     default = "edit" if actor.role == "admin" else "view"
+    # Hidden fields are refused whatever the value (else a 403-or-not leaks whether a guess
+    # matches); read-only fields may be re-sent unchanged, as a UI resends the whole form.
     locked = sorted(k for k, v in new_answers.items()
-                    if v != b.answers.get(k) and levels.get(k, default) != "edit")
-    if locked:  # checked before validation: re-sent unchanged values are fine
+                    if levels.get(k, default) == "hidden"
+                    or (v != b.answers.get(k) and levels.get(k, default) != "edit"))
+    if locked:  # checked before validation
         raise err("FIELD_ACCESS", "You cannot change these fields at this stage.", 403, keys=locked)
     merged = {**b.answers, **new_answers}
     cleaned = clean(version, merged)

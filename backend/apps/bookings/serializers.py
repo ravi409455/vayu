@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.forms.access import levels_for, visible_answers
 
-from .models import Booking, RescheduleLog
+from .models import Booking, Inspection, RescheduleLog
 
 
 class RescheduleSerializer(serializers.ModelSerializer):
@@ -40,4 +40,29 @@ class BookingSerializer(serializers.ModelSerializer):
             if key not in cache:
                 cache[key] = levels_for(cache["version"], role, instance.stage)
             data["answers"] = visible_answers(cache[key], data["answers"], role)
+        return data
+
+
+class InspectionSerializer(serializers.ModelSerializer):
+    last_edited_by = serializers.CharField(source="last_edited_by.username", default=None)
+    form_version = serializers.IntegerField(source="form_version_id")
+    booking = serializers.UUIDField(source="booking_id")
+
+    class Meta:
+        model = Inspection
+        fields = ["id", "booking", "expert", "status", "answers", "row_version", "form_version",
+                  "submitted_at", "last_edited_by", "last_edited_at", "created_at"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        if request is not None:
+            from .submissions import ops_version
+
+            role, stage = request.user.role, instance.booking.stage
+            ov = ops_version()
+            for part, version in (("inspection", instance.form_version), ("ops", ov)):
+                if version is not None and part in data["answers"]:
+                    data["answers"][part] = visible_answers(
+                        levels_for(version, role, stage), data["answers"][part], role)
         return data

@@ -79,6 +79,9 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=60),
 }
 
+# Android: apps older than this cannot start new jobs (they can still finish one in progress)
+MIN_APP_VERSION = int(env("MIN_APP_VERSION", "0"))
+
 # Auth policy (REQUIREMENTS §2)
 LOCKOUT_MAX_FAILURES = 5
 LOCKOUT_MINUTES = 15
