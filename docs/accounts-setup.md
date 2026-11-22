@@ -140,9 +140,60 @@ Developer-plan limits drop events once the monthly quota is used; they don't bil
 noisy bug floods the quota, set a cap: **Settings → Projects → (project) → Client Keys → Configure
 → Rate Limit**.
 
-## DNS (at deploy)
-At wherever carcid.in is registered, add `A` records pointing to the DigitalOcean droplets:
-`app.carcid.in` and `verify.carcid.in` → production IP; `staging.carcid.in` → staging IP.
+## DNS (GoDaddy): prepare now, add records at deploy
+`carcid.in` is registered at **GoDaddy** and its DNS is hosted there (nameservers
+`ns19/ns20.domaincontrol.com`). We only **add three subdomain records** there. We do **not** move
+the domain or change its nameservers, because that could break the existing website and email.
+
+### The three names
+| Name | Record | Points to | Used for |
+|---|---|---|---|
+| `app.carcid.in` | A | production server IP | web app + API (`/api/v1`) + APK download page |
+| `verify.carcid.in` | CNAME | `app.carcid.in` | public page behind the QR code on every PDF |
+| `staging.carcid.in` | A | staging server IP | staging copy used to build and test forms |
+
+- **`verify.carcid.in` is permanent.** The QR code printed on each report contains this address,
+  so every report ever issued depends on it. Pick the name now, and never rename it.
+- `verify` is a CNAME to `app`, so if the production server ever changes, one record moves both.
+
+### Do now (about 10 minutes, no server needed)
+1. Log in at **godaddy.com** → profile menu → **My Products** → find `carcid.in` → **DNS**
+   (sometimes shown as **Manage DNS**).
+2. Make sure you can open the **records table** and the **Add New Record** button. If you can't
+   (the domain belongs to someone else's GoDaddy account), get delegate or admin access now.
+3. Check the table for conflicts and fix them before deploy:
+   - Existing records named `app`, `staging` or `verify`. A name can't be both a CNAME and
+     another record, so remove or rename any clash.
+   - A wildcard `*` record. It's allowed, but tell me; it can hide mistakes.
+   - A **CAA** record. If one exists, it must allow `letsencrypt.org`, or HTTPS certificates
+     will fail. Add `0 issue "letsencrypt.org"` if needed.
+4. Don't touch `@`, `www`, `MX`, `TXT` (email, SPF, DKIM) or the nameservers.
+
+### Do at deploy, once the servers exist
+For each row in the table above: **Add New Record** → choose the **Type** → **Name** is only the
+part before `.carcid.in` (e.g. `app`, not `app.carcid.in`) → **Value** is the IP address (for the
+CNAME, `app.carcid.in`) → **TTL** the shortest offered (e.g. 600 seconds) → **Save**.
+
+Use a **Reserved IP** on DigitalOcean for each server and point DNS at it. Then a rebuilt or
+resized server keeps the same address and DNS never needs to change.
+
+### Check it
+Records usually work within minutes. From any terminal:
+```bash
+dig +short app.carcid.in        # should print the production IP
+dig +short verify.carcid.in     # should print app.carcid.in, then the same IP
+dig +short staging.carcid.in    # should print the staging IP
+curl -I https://app.carcid.in/api/v1/health   # HTTP 200 once the server is running
+```
+**HTTPS is automatic.** Caddy gets a free certificate from Let's Encrypt the first time a
+browser asks, provided DNS already points to the server and **ports 80 and 443 are open** in the
+DigitalOcean firewall (allow only 22, 80 and 443). If DNS is wrong, Caddy retries and logs
+errors; fix DNS and it succeeds on its own.
+
+### Where the names are used in the code
+`ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` in the server env files, the CORS rules on the R2
+buckets (already in this guide), and the Caddyfile (`verify.carcid.in` is added in Phase 7 when
+the verify page exists).
 
 ## DigitalOcean (the very end)
 Production droplet: Bangalore (BLR1), 4 vCPU / 8 GB. Staging: smaller (2 vCPU / 4 GB is enough).
