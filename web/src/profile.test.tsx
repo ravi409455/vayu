@@ -177,7 +177,7 @@ describe("the Admin's Users screen", () => {
     shell(<Users />);
     await screen.findByText("Ravi Expert");
     const rows = screen.getAllByRole("row");
-    await u.click(within(rows.find((r) => /Ravi Expert/.test(r.textContent ?? ""))!).getByRole("button", { name: "Edit" }));
+    await u.click(within(rows.find((r) => /Ravi Expert/.test(r.textContent ?? ""))!).getByText("Ravi Expert"));
     expect(screen.getByLabelText("Phone")).toHaveValue("+919876500111");
     await u.clear(screen.getByLabelText("Phone"));
     await u.type(screen.getByLabelText("Phone"), "98765 43210");
@@ -195,7 +195,7 @@ describe("the Admin's Users screen", () => {
     shell(<Users />);
     await screen.findByText("Meera");
     const rows = screen.getAllByRole("row");
-    await u.click(within(rows.find((r) => /Meera/.test(r.textContent ?? ""))!).getByRole("button", { name: "Edit" }));
+    await u.click(within(rows.find((r) => /Meera/.test(r.textContent ?? ""))!).getByText(/Meera/));
     expect(screen.queryByRole("button", { name: "Remove picture" })).toBeNull();
     await u.type(screen.getByLabelText("Phone"), "123");
     await u.click(screen.getByRole("button", { name: "Save" }));

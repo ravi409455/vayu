@@ -6,7 +6,7 @@ import { useList, useRefresh } from "../../api/hooks";
 import { useAuth } from "../../auth";
 import { slugKey } from "../../lib/fieldTypes";
 import { newFieldDef } from "../../lib/libraryDef";
-import { Field, Modal, PageHeader, Pill, useToast } from "../../ui/kit";
+import { Empty, Field, Modal, PageHeader, Pill, useToast } from "../../ui/kit";
 
 type Item = { id: number; kind: "field" | "section"; key: string; name: string; revision: number; archived: boolean; used_in: number };
 
@@ -31,19 +31,20 @@ export function Library() {
     <>
       <PageHeader title="Library" subtitle="Reusable fields and sections: built once, used in many forms, and updated everywhere from one place.">
         {can("library.edit") && <button className="primary" onClick={() => setCreating(true)}>New item</button>}</PageHeader>
-      <div className="card"><div className="grid2">
-        <input aria-label="Search the library" placeholder="Search by name or key" value={q} onChange={(e) => setQ(e.target.value)} />
-        <select aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value)}><option value="">Fields and sections</option><option value="field">Fields</option><option value="section">Sections</option></select>
-        <label className="check"><input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} /> Show archived</label>
-      </div></div>
-      {rows.length === 0 && <div className="card empty-state"><strong>{q || kind ? "Nothing matches" : "The library is empty"}</strong><p>{q || kind ? "Try another search." : "Create an item here, or open a form in the builder and choose “Save to library” on a field or a section."}</p></div>}
+      <div className="filters">
+        <input aria-label="Search the library" className="filter-search" placeholder="Search by name or key" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="seg" role="group" aria-label="Kind">{([["", "All"], ["field", "Fields"], ["section", "Sections"]] as const).map(([k, l]) => <button key={k} aria-pressed={kind === k} onClick={() => setKind(k)}>{l}</button>)}</div>
+        <label className="check small"><input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} /> Show archived</label>
+      </div>
+      {rows.length === 0 && <Empty title={q || kind ? "Nothing matches" : "The library is empty"}>{q || kind ? "Try another search." : "Create an item here, or open a form in the builder and choose “Save to library” on a field or a section."}</Empty>}
       {rows.length > 0 && (
-        <table><thead><tr><th>Name</th><th>Kind</th><th>Key</th><th>Revision</th><th>Used in</th><th /></tr></thead>
+        <div className="table-card"><table className="rows"><thead><tr><th>Name</th><th>Kind</th><th>Revision</th><th>Used in</th><th /></tr></thead>
           <tbody>{rows.map((i) => (
-            <tr key={i.id}>
-              <td><Link to={`/library/${i.id}`}>{i.name}</Link></td><td>{i.kind}</td><td className="mono">{i.key}</td><td>r{i.revision}</td>
-              <td>{i.used_in === 0 ? <span className="muted">no form</span> : `${i.used_in} form${i.used_in === 1 ? "" : "s"}`}</td>
-              <td>{i.archived && <Pill tone="warn">Archived</Pill>}</td></tr>))}</tbody></table>)}
+            <tr key={i.id} className="click" onClick={() => nav(`/library/${i.id}`)}>
+              <td><Link className="cell-main" to={`/library/${i.id}`} onClick={(e) => e.stopPropagation()}>{i.name}</Link><div className="cell-sub mono">{i.key}</div></td>
+              <td>{i.kind === "section" ? "Section" : "Field"}</td><td className="muted">r{i.revision}</td>
+              <td>{i.used_in === 0 ? <span className="pill">Not used</span> : `${i.used_in} form${i.used_in === 1 ? "" : "s"}`}</td>
+              <td>{i.archived && <Pill tone="warn">Archived</Pill>}</td></tr>))}</tbody></table></div>)}
       {creating && (
         <Modal title="New library item" onClose={() => setCreating(false)}
           actions={<><button onClick={() => setCreating(false)}>Cancel</button><button className="primary" disabled={!n.name.trim() || !/^[a-z][a-z0-9_]{1,62}$/.test(n.key)} onClick={() => create.mutate()}>Create and open</button></>}>

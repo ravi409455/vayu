@@ -4,6 +4,7 @@ import { api, type Page } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { Delivery, FormSummary, Integration } from "../../api/types";
 import { Empty, Field, Modal, Pill, Tabs, useToast, when, PageHeader } from "../../ui/kit";
+import { MoreMenu } from "../../ui/Menu";
 
 const EVENT_LABEL: Record<string, string> = {
   "booking.created": "Booking created", "booking.updated": "Booking updated (incl. assignment and stage)", "booking.deleted": "Booking deleted",
@@ -53,10 +54,14 @@ export function Integrations() {
         <tbody>{(list.data ?? []).map((i) => (
           <tr key={i.id}>
             <td>{i.name} {!i.is_active && <Pill tone="warn">Off</Pill>}</td><td className="mono">{i.form_key}</td><td className="mono small">{i.url}</td><td className="small">{i.events.join(", ")}</td>
-            <td style={{ textAlign: "right" }}>
-              <button className="link" onClick={() => setEdit(i)}>Edit</button><button className="link" onClick={() => test.mutate(i)}>Test</button>
-              <button className="link" onClick={() => setLog(i)}>Deliveries</button><button className="link" onClick={() => rotate.mutate(i)}>New secret</button>
-              <button className="link" onClick={() => confirm(`Delete ${i.name}?`) && remove.mutate(i)}>Delete</button></td></tr>))}</tbody></table>}
+            <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+              <button className="sm" onClick={() => test.mutate(i)}>Test</button>{" "}
+              <MoreMenu label={`Actions for ${i.name}`} items={[
+                { label: "Edit", onClick: () => setEdit(i) },
+                { label: "Deliveries", onClick: () => setLog(i) },
+                { label: "New secret", onClick: () => rotate.mutate(i) },
+                { label: "Delete…", danger: true, onClick: () => { if (confirm(`Delete ${i.name}?`)) remove.mutate(i); } },
+              ]} /></td></tr>))}</tbody></table>}
       {edit && <Editor value={edit} onChange={setEdit} events={events.data ?? []} forms={eligible} onSave={() => save.mutate(edit)} onClose={() => setEdit(null)} fail={fail} />}
       {secret && <Modal title="Signing secret" onClose={() => setSecret(null)}><p>Copy it now. It is shown only once.</p><pre className="mono card" data-testid="secret">{secret}</pre></Modal>}
       {log && <DeliveryLog integration={log} onClose={() => setLog(null)} />}

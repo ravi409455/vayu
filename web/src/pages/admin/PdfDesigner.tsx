@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { api, csrfToken } from "../../api/client";
+import { api, csrfToken, type Page } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
-import type { FormSummary } from "../../api/types";
+import type { Booking, FormSummary } from "../../api/types";
 import { Trash2 } from "lucide-react";
 import { useAuth } from "../../auth";
 import { ConditionBuilder } from "../../ui/ConditionBuilder";
-import { Confirm, Field, PageHeader, Pill, useToast } from "../../ui/kit";
+import { Confirm, Empty, Field, PageHeader, Pill, useToast } from "../../ui/kit";
+import { MoreMenu } from "../../ui/Menu";
+import { fmtDay } from "../../lib/format";
 import { useRefChoices, type RefChoice } from "../../lib/useChoices";
 
 type Row = { label: string; field: string };
@@ -50,7 +52,8 @@ export function PdfDesigner() {
   const templates = useList<Template>("pdf-templates", "pdf-templates");
   const forms = useList<FormSummary>("forms", "forms");
   const [tid, setTid] = useState<number | null>(null);
-  const t = (templates.data ?? []).find((x) => x.id === tid) ?? null;
+  const t = (templates.data ?? []).find((x) => x.id === tid) ?? (templates.data ?? [])[0] ?? null;
+  const formName = (x: Template) => (forms.data ?? []).find((f) => f.id === x.form)?.name ?? x.form_key;
   const editable = can("pdf_templates.edit");
   const withoutTemplate = (forms.data ?? []).filter((f) => f.type === "custom" && !(templates.data ?? []).some((x) => x.form === f.id));
   const make = useMutation({ mutationFn: (form: number) => api<Template>("pdf-templates", { body: { form } }), onSuccess: (r) => { void refresh("pdf-templates"); setTid(r.id); }, onError: fail });
@@ -61,25 +64,33 @@ export function PdfDesigner() {
           <select aria-label="Create a template for" value="" onChange={(e) => e.target.value && make.mutate(Number(e.target.value))} style={{ maxWidth: 240 }}>
             <option value="">+ New template for…</option>{withoutTemplate.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select>)}
       </PageHeader>
-      <div className="bar">{(templates.data ?? []).map((x) => <button key={x.id} className={tid === x.id ? "primary" : ""} onClick={() => setTid(x.id)}>{x.form_key}</button>)}</div>
-      {t ? <Designer key={t.id} template={t} editable={editable} say={say} fail={fail} refresh={() => refresh("pdf-templates")} /> : <p className="muted">Pick a template, or create one for an inspection form.</p>}
+      <div className="tabs" role="tablist" aria-label="Templates">{(templates.data ?? []).map((x) => (
+        <button key={x.id} role="tab" aria-selected={(t?.id ?? null) === x.id} className={t?.id === x.id ? "on" : ""} onClick={() => setTid(x.id)}>{formName(x)}</button>))}</div>
+      {t ? <Designer key={t.id} template={t} form={(forms.data ?? []).find((f) => f.id === t.form)} editable={editable} say={say} fail={fail} refresh={() => refresh("pdf-templates")} />
+        : <Empty title="No PDF templates yet">Create one for an inspection form with “New template for…”.</Empty>}
     </>
   );
 }
 
-function Designer({ template, editable, say, fail, refresh }: { template: Template; editable: boolean; say: (m: string) => void; fail: (e: unknown) => void; refresh: () => unknown }) {
+function Designer({ template, form, editable, say, fail, refresh }: { template: Template; form?: FormSummary; editable: boolean; say: (m: string) => void; fail: (e: unknown) => void; refresh: () => unknown }) {
   const draftMeta = template.versions.find((v) => v.status === "draft");
   const latest = template.versions[template.versions.length - 1];
   const vid = (draftMeta ?? latest)?.id;
   const ver = useQuery({ queryKey: ["pdf-version", vid], enabled: !!vid, queryFn: () => api<TVersion>(`pdf-template-versions/${vid}`) });
   const choices = useRefChoices(template.form);
+  // bookings that can show this layout: inspected with this form, newest first
+  const sample = useQuery({ queryKey: ["pdf-sample", form?.inspection_type], enabled: !!form?.inspection_type,
+    queryFn: async () => (await Promise.all(["completed", "submitted"].map((stage) => api<Page<Booking>>("bookings", { query: { type: form!.inspection_type, stage } })))).flatMap((r) => r.results) });
   const [def, setDef] = useState<Definition>({ blocks: [] });
   const [sel, setSel] = useState<number | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [rendering, setRendering] = useState(false);
   const [bookingId, setBookingId] = useState("");
+  const [changed, setChanged] = useState(false);
   const v = ver.data;
   const reload = useRefresh();
-  useEffect(() => { if (v) setDef({ ...v.definition, blocks: v.definition.blocks ?? [] }); }, [v]);
+  useEffect(() => { if (v) { setDef({ ...v.definition, blocks: v.definition.blocks ?? [] }); setChanged(false); } }, [v]);
+  const chosen = bookingId || sample.data?.[0]?.id || "";
   const draft = v?.status === "draft";
   const ok = editable && draft;
   const [discard, setDiscard] = useState(false);
@@ -87,10 +98,11 @@ function Designer({ template, editable, say, fail, refresh }: { template: Templa
     try { await api(`pdf-template-versions/${v!.id}`, { method: "DELETE" }); setDiscard(false); say("Draft discarded. The live layout is unchanged."); await reload("pdf-version"); await reload("pdf-templates"); await refresh(); }
     catch (e) { setDiscard(false); fail(e); }
   }
-
+  const edit = (d: Definition) => { setDef(d); setChanged(true); };
   const save = async (): Promise<TVersion | null> => {
     try {
       const r = await api<TVersion>(`pdf-template-versions/${v!.id}`, { method: "PATCH", body: { definition: def, row_version: v!.row_version } });
+      setChanged(false);
       await reload("pdf-version");
       return r;
     } catch (e) { fail(e); return null; }
@@ -104,51 +116,71 @@ function Designer({ template, editable, say, fail, refresh }: { template: Templa
     } catch (e) { fail(e); }
   }
   async function preview() {
-    if (ok && !(await save())) return;          // a published layout cannot change: just render it
-    const res = await fetch(`/api/v1/pdf-template-versions/${v!.id}/preview`, { method: "POST", credentials: "same-origin",
-      headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken() }, body: JSON.stringify({ booking: bookingId.trim() }) });
-    if (!res.ok) { say("Preview failed: pick a submitted booking inspected with this form."); return; }
-    setPreviewUrl(URL.createObjectURL(await res.blob()));
+    if (!v || !chosen) return;
+    setRendering(true);
+    try {
+      if (ok && changed && !(await save())) return;          // a published layout cannot change: just render it
+      const res = await fetch(`/api/v1/pdf-template-versions/${v.id}/preview`, { method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken() }, body: JSON.stringify({ booking: chosen }) });
+      if (!res.ok) { say("Preview failed: pick a submitted booking inspected with this form."); return; }
+      setPreviewUrl(URL.createObjectURL(await res.blob()));
+    } finally { setRendering(false); }
   }
-  const setBlock = (i: number, p: Partial<Block>) => setDef({ ...def, blocks: def.blocks.map((b, j) => (j === i ? { ...b, ...p } : b)) });
+  useEffect(() => { if (v && chosen) void preview(); }, [v?.id, chosen]); // eslint-disable-line react-hooks/exhaustive-deps
+  const setBlock = (i: number, p: Partial<Block>) => edit({ ...def, blocks: def.blocks.map((b, j) => (j === i ? { ...b, ...p } : b)) });
   const b = sel !== null ? def.blocks[sel] : undefined;
+  const label = (blk: Block) => blk.title || (blk.text ? blk.text.slice(0, 24) : BLOCK_LABEL[blk.type]);
 
   return (
     <>
       <div className="bar">
-        {draftMeta ? <Pill tone="info">Draft v{draftMeta.number}</Pill> : <Pill tone="ok">Live v{latest?.number}</Pill>}
-        {editable && !draftMeta && <button onClick={async () => { try { await api(`pdf-templates/${template.id}/drafts`, { body: {} }); await refresh(); } catch (e) { fail(e); } }}>Start a new draft</button>}
-        {ok && <><button onClick={async () => { if (await save()) say("Saved."); }}>Save</button>
-          {template.versions.some((x) => x.status === "published") && <button className="danger" onClick={() => setDiscard(true)}><Trash2 size={14} aria-hidden /> Discard draft</button>}
+        {draftMeta ? <Pill tone="warn">Draft v{draftMeta.number}</Pill> : <Pill tone="ok">Live v{latest?.number}</Pill>}
+        <span className="muted small grow">{draftMeta ? `${template.versions.some((x) => x.status === "published") ? "Reports use the live version until you publish. " : ""}${changed ? "Unsaved changes." : "Saved."}` : "This layout is live. Start a draft to change it."}</span>
+        {editable && !draftMeta && <button className="primary" onClick={async () => { try { await api(`pdf-templates/${template.id}/drafts`, { body: {} }); await refresh(); } catch (e) { fail(e); } }}>Start a new draft</button>}
+        {ok && <>
+          <MoreMenu label="More template actions" items={[{ label: "Discard draft", danger: true, onClick: () => setDiscard(true), hidden: !template.versions.some((x) => x.status === "published") }]} />
+          <button disabled={!changed} onClick={async () => { if (await save()) say("Saved."); }}>Save</button>
           <button className="primary" onClick={publish}>Publish</button></>}
-        <span className="grow" />
-        <input style={{ maxWidth: 300 }} placeholder="Booking (internal id) for the preview" value={bookingId} onChange={(e) => setBookingId(e.target.value)} />
-        <button onClick={preview} disabled={!bookingId}>Preview PDF</button>
       </div>
       {discard && <Confirm title="Discard this draft?" danger confirmLabel="Discard draft" onCancel={() => setDiscard(false)} onConfirm={discardDraft}><p>Your unpublished changes to this layout are thrown away. The live layout is not affected.</p></Confirm>}
-      <div className="split">
-        <div className="card">
-          <h3>Layout</h3>
-          <Field label="File name"><input disabled={!ok} value={def.filename ?? "{booking_id}{type_code}.pdf"} onChange={(e) => setDef({ ...def, filename: e.target.value })} /></Field>
-          <Field label="Type code (added to the name)"><input disabled={!ok} value={def.type_code ?? ""} onChange={(e) => setDef({ ...def, type_code: e.target.value })} /></Field>
-          <Field label="Header title"><input disabled={!ok} value={def.branding?.title ?? ""} onChange={(e) => setDef({ ...def, branding: { ...def.branding, title: e.target.value } })} /></Field>
-          <Field label="Header colour"><input type="color" disabled={!ok} value={def.branding?.color ?? "#a62830"} onChange={(e) => setDef({ ...def, branding: { ...def.branding, color: e.target.value } })} /></Field>
-          <label className="check"><input type="checkbox" disabled={!ok} checked={!!def.branding?.watermark} onChange={(e) => setDef({ ...def, branding: { ...def.branding, watermark: e.target.checked } })} /> Watermark</label>
-          <h3>Blocks</h3>
+      <div className="pdf-layout">
+        <aside className="card pdf-blocks" aria-label="Blocks">
+          <button className={`tree-item${sel === null ? " on" : ""}`} onClick={() => setSel(null)} style={{ width: "100%", border: 0, background: sel === null ? undefined : "none" }}>Page settings</button>
+          <div className="rail-h" style={{ margin: "10px 8px 4px" }}>Blocks, top to bottom</div>
           {def.blocks.map((blk, i) => (
-            <div key={i} className={`tree-item${sel === i ? " on" : ""}`} onClick={() => setSel(i)}>
-              <span className="grow">{BLOCK_LABEL[blk.type]}{blk.title ? ` · ${blk.title}` : blk.text ? ` · ${blk.text.slice(0, 18)}` : ""}</span>
-              {ok && <><button className="link" aria-label="Move up" onClick={(e) => { e.stopPropagation(); setDef({ ...def, blocks: moveBlock(def.blocks, i, i - 1) }); setSel(Math.max(0, i - 1)); }}>↑</button>
-                <button className="link" aria-label="Move down" onClick={(e) => { e.stopPropagation(); setDef({ ...def, blocks: moveBlock(def.blocks, i, i + 1) }); setSel(Math.min(def.blocks.length - 1, i + 1)); }}>↓</button></>}
+            <div key={i} className={`tree-item${sel === i ? " on" : ""}`} onClick={() => setSel(i)} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && setSel(i)}>
+              <span className="grow ellipsis" title={BLOCK_LABEL[blk.type]}>{label(blk)}</span>
+              {ok && <span className="row-tools"><button className="link" aria-label="Move up" onClick={(e) => { e.stopPropagation(); edit({ ...def, blocks: moveBlock(def.blocks, i, i - 1) }); setSel(Math.max(0, i - 1)); }}>↑</button>
+                <button className="link" aria-label="Move down" onClick={(e) => { e.stopPropagation(); edit({ ...def, blocks: moveBlock(def.blocks, i, i + 1) }); setSel(Math.min(def.blocks.length - 1, i + 1)); }}>↓</button></span>}
             </div>
           ))}
-          {ok && <select aria-label="Add a block" value="" onChange={(e) => { if (e.target.value) { setDef({ ...def, blocks: [...def.blocks, newBlock(e.target.value)] }); setSel(def.blocks.length); } }}>
+          {ok && <select aria-label="Add a block" value="" style={{ marginTop: 8 }} onChange={(e) => { if (e.target.value) { edit({ ...def, blocks: [...def.blocks, newBlock(e.target.value)] }); setSel(def.blocks.length); } }}>
             <option value="">+ Add a block…</option>{Object.entries(BLOCK_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
-        </div>
-        <div>
-          {b && sel !== null && <BlockEditor block={b} ok={ok} choices={choices} onChange={(p) => setBlock(sel, p)} onDelete={() => { setDef({ ...def, blocks: def.blocks.filter((_, j) => j !== sel) }); setSel(null); }} />}
-          {previewUrl && <iframe title="PDF preview" src={previewUrl} style={{ width: "100%", height: 700, border: "1px solid var(--line)", borderRadius: 10, marginTop: 12 }} />}
-        </div>
+        </aside>
+        <section className="pdf-preview" aria-label="Preview">
+          <div className="bar">
+            <span className="muted small">Preview with</span>
+            <select aria-label="Booking for the preview" value={chosen} onChange={(e) => setBookingId(e.target.value)} style={{ maxWidth: 360 }}>
+              {(sample.data ?? []).length === 0 && <option value="">No completed booking of this form yet</option>}
+              {(sample.data ?? []).map((bk) => <option key={bk.id} value={bk.id}>{bk.booking_id} · {String(bk.answers.customer_name ?? "")} · {fmtDay(bk.answers.inspection_date)}</option>)}
+            </select>
+            <span className="grow" />
+            <button className="sm" disabled={!chosen || rendering} onClick={preview}>{rendering ? "Rendering…" : changed ? "Save and refresh" : "Refresh"}</button>
+            {previewUrl && <a className="btn sm" href={previewUrl} target="_blank" rel="noreferrer">Open full PDF</a>}
+          </div>
+          {previewUrl ? <iframe title="PDF preview" src={previewUrl} className="pdf-frame" />
+            : <Empty title={chosen ? "Rendering the preview…" : "Nothing to preview yet"}>{chosen ? "" : "Complete one booking inspected with this form to see the layout with real answers."}</Empty>}
+        </section>
+        <aside className="card pdf-settings" aria-label={b ? "Block settings" : "Page settings"}>
+          {b && sel !== null ? <BlockEditor block={b} ok={ok} choices={choices} onChange={(p) => setBlock(sel, p)} onDelete={() => { edit({ ...def, blocks: def.blocks.filter((_, j) => j !== sel) }); setSel(null); }} /> : <>
+            <h3 style={{ marginTop: 0 }}>Page settings</h3>
+            <Field label="File name"><input disabled={!ok} value={def.filename ?? "{booking_id}{type_code}.pdf"} onChange={(e) => edit({ ...def, filename: e.target.value })} /></Field>
+            <Field label="Type code (added to the name)"><input disabled={!ok} value={def.type_code ?? ""} onChange={(e) => edit({ ...def, type_code: e.target.value })} /></Field>
+            <Field label="Header title"><input disabled={!ok} value={def.branding?.title ?? ""} onChange={(e) => edit({ ...def, branding: { ...def.branding, title: e.target.value } })} /></Field>
+            <Field label="Header colour"><input type="color" disabled={!ok} value={def.branding?.color ?? "#a62830"} onChange={(e) => edit({ ...def, branding: { ...def.branding, color: e.target.value } })} /></Field>
+            <label className="check"><input type="checkbox" disabled={!ok} checked={!!def.branding?.watermark} onChange={(e) => edit({ ...def, branding: { ...def.branding, watermark: e.target.checked } })} /> Watermark</label>
+          </>}
+        </aside>
       </div>
     </>
   );

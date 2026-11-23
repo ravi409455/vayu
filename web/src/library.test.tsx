@@ -45,7 +45,7 @@ describe("the library list", () => {
     expect(await screen.findByRole("link", { name: "Tyres" })).toHaveAttribute("href", "/library/7");
     expect(screen.getByText("2 forms")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New item" })).toBeInTheDocument();
-    await u.selectOptions(screen.getByLabelText("Kind"), "field");
+    await u.click(within(screen.getByRole("group", { name: "Kind" })).getByRole("button", { name: "Fields" }));
     await u.click(screen.getByLabelText("Show archived"));
     await waitFor(() => expect(calls.some((c) => c.url.includes("kind=field") && c.url.includes("include_archived=1"))).toBe(true));
   });

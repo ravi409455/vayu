@@ -51,6 +51,8 @@ def authenticate(username: str, password: str) -> User:
             user.save(update_fields=["failed_attempts", "locked_until"])
     if error:
         raise error
+    # last sign-in, for the Users list (web and phone alike)
+    type(user).objects.filter(pk=user.pk).update(last_login=timezone.now())  # type: ignore[union-attr]
     return user  # type: ignore[return-value]
 
 

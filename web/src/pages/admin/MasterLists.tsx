@@ -4,7 +4,8 @@ import { api } from "../../api/client";
 import { asList, useList, useRefresh } from "../../api/hooks";
 import type { MasterList, MasterListItem } from "../../api/types";
 import { useAuth } from "../../auth";
-import { Field, Modal, Pill, useToast, PageHeader } from "../../ui/kit";
+import { Empty, Pill, useToast, PageHeader } from "../../ui/kit";
+import { slugKey } from "../../lib/fieldTypes";
 
 export function MasterLists() {
   const { can } = useAuth();
@@ -12,16 +13,16 @@ export function MasterLists() {
   const refresh = useRefresh();
   const lists = useList<MasterList>("master-lists", "master-lists");
   const [open, setOpen] = useState<MasterList | null>(null);
-  const [item, setItem] = useState({ key: "", label: "" });
+  const [item, setItem] = useState({ key: "", label: "", keyTouched: false });
   const manage = can("master_lists.manage");
   const items = useQuery({
-    queryKey: ["master-list-items", open?.key],
-    enabled: !!open,
-    queryFn: async () => asList<MasterListItem>(await api(`master-lists/${open!.key}/items`, { query: { include_archived: 1 } })),
+    queryKey: ["master-list-items", (open ?? lists.data?.[0])?.key],
+    enabled: !!(open ?? lists.data?.[0]),
+    queryFn: async () => asList<MasterListItem>(await api(`master-lists/${(open ?? lists.data![0])!.key}/items`, { query: { include_archived: 1 } })),
   });
   const add = useMutation({
-    mutationFn: () => api(`master-lists/${open!.key}/items`, { body: { key: item.key, label: item.label } }),
-    onSuccess: () => { setItem({ key: "", label: "" }); void refresh("master-list-items"); },
+    mutationFn: () => api(`master-lists/${(open ?? lists.data![0])!.key}/items`, { body: { key: item.key, label: item.label } }),
+    onSuccess: () => { setItem({ key: "", label: "", keyTouched: false }); say("Added."); void refresh("master-list-items"); },
     onError: fail,
   });
   const patch = useMutation({
@@ -29,28 +30,34 @@ export function MasterLists() {
     onSuccess: () => { say("Saved."); void refresh("master-list-items"); },
     onError: fail,
   });
+  const current = open ?? (lists.data ?? [])[0] ?? null;
   return (
     <>
-      <PageHeader title="Master lists" />
-      <table><thead><tr><th>List</th><th>Key</th><th /></tr></thead>
-        <tbody>{(lists.data ?? []).map((l) => (
-          <tr key={l.id} className="click" onClick={() => setOpen(l)}><td>{l.name}</td><td className="mono">{l.key}</td><td><button className="link">Open</button></td></tr>
-        ))}</tbody></table>
-      {open && (
-        <Modal title={open.name} onClose={() => setOpen(null)}>
-          <table><tbody>{(items.data ?? []).map((i) => (
-            <tr key={i.id}>
-              <td className="mono">{i.key}</td>
-              <td>{manage ? <input defaultValue={i.label} onBlur={(e) => e.target.value !== i.label && patch.mutate({ id: i.id, body: { label: e.target.value } })} /> : i.label}</td>
-              <td>{i.archived ? <Pill tone="warn">Archived</Pill> : null}</td>
-              <td>{manage && <button className="link" onClick={() => patch.mutate({ id: i.id, body: { archived: !i.archived } })}>{i.archived ? "Restore" : "Archive"}</button>}</td>
-            </tr>))}</tbody></table>
-          {manage && <div className="bar" style={{ marginTop: 12 }}>
-            <Field label="New key"><input aria-label="New key" value={item.key} onChange={(e) => setItem({ ...item, key: e.target.value })} /></Field>
-            <Field label="Label"><input aria-label="Label" value={item.label} onChange={(e) => setItem({ ...item, label: e.target.value })} /></Field>
-            <button className="primary" disabled={!item.key || !item.label} onClick={() => add.mutate()}>Add</button></div>}
-        </Modal>
-      )}
+      <PageHeader title="Master lists" subtitle="The choices dropdowns offer: cities, car models, reasons…" />
+      <div className="split-view">
+        <nav className="card list-nav" aria-label="Lists">
+          {(lists.data ?? []).map((l) => (
+            <button key={l.id} className={`tree-item${current?.id === l.id ? " on" : ""}`} aria-current={current?.id === l.id} onClick={() => setOpen(l)}>
+              <span className="grow">{l.name}</span></button>))}
+        </nav>
+        {current && (
+          <section className="table-card" aria-label={current.name}>
+            <h2 className="table-title">{current.name} <span className="muted small mono">{current.key}</span></h2>
+            <table className="rows"><thead><tr><th>Label</th><th>Key</th><th>Status</th><th aria-label="Actions" /></tr></thead>
+              <tbody>{(items.data ?? []).map((i) => (
+                <tr key={i.id} className={i.archived ? "muted" : ""}>
+                  <td>{manage ? <input aria-label={`Label of ${i.key}`} defaultValue={i.label} onBlur={(e) => e.target.value !== i.label && patch.mutate({ id: i.id, body: { label: e.target.value } })} /> : i.label}</td>
+                  <td className="mono small">{i.key}</td>
+                  <td>{i.archived ? <Pill tone="warn">Archived</Pill> : <Pill tone="ok">In use</Pill>}</td>
+                  <td style={{ textAlign: "right" }}>{manage && <button className="sm" onClick={() => patch.mutate({ id: i.id, body: { archived: !i.archived } })}>{i.archived ? "Restore" : "Archive"}</button>}</td>
+                </tr>))}</tbody></table>
+            {items.data && items.data.length === 0 && <Empty>This list is empty.</Empty>}
+            {manage && <div className="table-foot add-item">
+              <input aria-label="Label" placeholder="New item label" value={item.label} onChange={(e) => setItem({ ...item, label: e.target.value, key: item.keyTouched ? item.key : slugKey(e.target.value) })} />
+              <input aria-label="New key" placeholder="key" className="mono" value={item.key} onChange={(e) => setItem({ ...item, key: e.target.value, keyTouched: true })} />
+              <button className="primary sm" disabled={!item.key || !item.label} onClick={() => add.mutate()}>Add item</button></div>}
+          </section>)}
+      </div>
     </>
   );
 }

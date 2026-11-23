@@ -105,9 +105,10 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   await json(await expert.post(`bookings/${b.id}/start`, { data: { client_uuid: crypto.randomUUID(), inspection_type: "used_car" } }));
   await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection: { chassis_no: "MA3ABCDEFG123456", odometer: 12345 }, start: { selfie: [await uploadFile(expert, b.id, "selfie", "photo", "image/jpeg", JPEG)] }, end: { taking_payment: false } } } }));
 
-  await page.getByPlaceholder("Booking (internal id) for the preview").fill(b.id);
   const pdf = page.waitForResponse((r) => r.url().includes("/preview") && r.request().method() === "POST");
-  await page.getByRole("button", { name: "Preview PDF" }).click();
+  await page.reload();                                                        // the picker now finds the booking
+  await page.getByRole("tab", { name: "Used car" }).click();
+  await page.getByLabel("Booking for the preview").selectOption(b.id);         // picked by Booking ID, not a typed internal id
   const res = await pdf;
   expect(res.status()).toBe(200);
   expect(res.headers()["content-type"]).toContain("application/pdf");

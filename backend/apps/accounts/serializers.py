@@ -14,8 +14,9 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "username", "name", "email", "role", "is_active",
-                  "must_change_password", "locked_until", "password", "phone", "avatar_url"]
-        read_only_fields = ["must_change_password", "locked_until"]
+                  "must_change_password", "locked_until", "password", "phone", "avatar_url",
+                  "last_login"]
+        read_only_fields = ["must_change_password", "locked_until", "last_login"]
 
     def get_avatar_url(self, obj):
         """Where this person's picture is served from (the version busts the browser's cache);

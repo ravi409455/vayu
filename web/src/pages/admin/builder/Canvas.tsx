@@ -43,8 +43,7 @@ function FieldRow({ field, selected, onSelect, readOnly }: { field: FormField; s
       onKeyDown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget) onSelect(); }}>
       {!readOnly && <Handle listeners={s.listeners} attributes={s.attributes} label={`Move field ${field.label || field.key}`} />}
       <span className="type-badge sm"><Icon size={14} aria-hidden /></span>
-      <span className="grow ellipsis"><strong>{field.label || field.key}</strong>{(field.required || !!field.required_if) && <span className="req" aria-label="required"> *</span>}
-        <span className="muted small mono"> {field.key}</span></span>
+      <span className="grow ellipsis" title={field.key}><strong>{field.label || field.key}</strong>{(field.required || !!field.required_if) && <span className="req" aria-label="required"> *</span>}</span>
       {!field.visible && <span title="Hidden"><EyeOff size={14} aria-label="Hidden" /></span>}
       {logic && <span title="Has rules (shows or is required only sometimes)"><GitBranch size={14} aria-label="Has rules" /></span>}
       {access && <span title="Custom access"><ShieldCheck size={14} aria-label="Custom access" /></span>}

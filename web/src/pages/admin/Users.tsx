@@ -5,7 +5,11 @@ import { useList, useRefresh } from "../../api/hooks";
 import type { User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { Avatar } from "../../ui/Avatar";
-import { Confirm, Field, Modal, Pill, useToast, PageHeader } from "../../ui/kit";
+import { Confirm, Empty, Field, Modal, Pill, useToast, PageHeader } from "../../ui/kit";
+import { MoreMenu } from "../../ui/Menu";
+import { fmtStamp } from "../../lib/format";
+
+const ROLE: Record<string, string> = { admin: "Admin", ops: "Ops", expert: "Expert" };
 
 export function Users() {
   const { can } = useAuth();
@@ -18,6 +22,12 @@ export function Users() {
   const [signOut, setSignOut] = useState<User | null>(null);
   const [deactivate, setDeactivate] = useState<User | null>(null);
   const manage = can("users.manage");
+  const [q, setQ] = useState("");
+  const [role, setRole] = useState<"" | "admin" | "ops" | "expert">("");
+  const [showOff, setShowOff] = useState(false);
+  const needle = q.trim().toLowerCase();
+  const shown = (users.data ?? []).filter((u) => u.username !== "api-key-service" && (showOff || u.is_active) && (!role || u.role === role)
+    && (!needle || [u.name, u.username, u.email].some((x) => (x ?? "").toLowerCase().includes(needle))));
 
   const save = useMutation({
     mutationFn: (u: Partial<User> & { password?: string }) =>
@@ -49,28 +59,40 @@ export function Users() {
 
   return (
     <>
-      <PageHeader title="Users">
+      <PageHeader title="Users" count={shown.length}>
         {manage && <button className="primary" onClick={() => setForm({ role: "expert" })}>New user</button>}</PageHeader>
-      <table>
-        <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th /></tr></thead>
-        <tbody>
-          {(users.data ?? []).filter((u) => u.username !== "api-key-service").map((u) => (
-            <tr key={u.id}>
-              <td><span className="who-avatar"><Avatar who={u} size={24} />{u.name}</span></td><td className="mono">{u.username}</td><td>{u.role}</td>
-              <td>{u.is_active ? <Pill tone="ok">Active</Pill> : <Pill tone="bad">Disabled</Pill>}
-                {u.must_change_password && <> <Pill tone="warn">Must change password</Pill></>}</td>
-              <td style={{ textAlign: "right" }}>
-                {manage && <>
-                  <button className="link" onClick={() => setForm(u)}>Edit</button>
-                  <button className="link" onClick={() => setReset(u)}>Reset password</button>
-                  <button className="link" onClick={() => setDeactivate(u)}>{u.is_active ? "Deactivate" : "Reactivate"}</button>
-                </>}
-                {can("users.sign_out_devices") && <button className="link" onClick={() => setSignOut(u)}>Sign out devices</button>}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="filters">
+        <input aria-label="Find a user" className="filter-search" placeholder="Find by name, username or email" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="seg" role="group" aria-label="Role">
+          {(["", "admin", "ops", "expert"] as const).map((r) => <button key={r} aria-pressed={role === r} onClick={() => setRole(r)}>{r ? ROLE[r] : "All"}</button>)}
+        </div>
+        <label className="check small"><input type="checkbox" checked={showOff} onChange={(e) => setShowOff(e.target.checked)} /> Show deactivated</label>
+      </div>
+      <div className="table-card">
+        <table className="rows">
+          <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Last sign-in</th><th aria-label="Actions" /></tr></thead>
+          <tbody>
+            {shown.map((u) => (
+              <tr key={u.id} className={manage ? "click" : ""} onClick={() => manage && setForm(u)}>
+                <td><span className="who-avatar"><Avatar who={u} size={28} /><span><span className="cell-main">{u.name || u.username}</span><div className="cell-sub mono">{u.username}{u.email ? ` · ${u.email}` : ""}</div></span></span></td>
+                <td><span className="pill">{ROLE[u.role] ?? u.role}</span></td>
+                <td>{u.is_active ? <Pill tone="ok">Active</Pill> : <Pill tone="bad">Deactivated</Pill>}
+                  {u.must_change_password && <> <Pill tone="warn">Must change password</Pill></>}</td>
+                <td className="muted small">{u.last_login ? fmtStamp(u.last_login) : "Never"}</td>
+                <td style={{ textAlign: "right" }}>
+                  <MoreMenu label={`Actions for ${u.username}`} items={[
+                    { label: "Edit", onClick: () => setForm(u), hidden: !manage },
+                    { label: "Reset password", onClick: () => setReset(u), hidden: !manage },
+                    { label: "Sign out of every device", onClick: () => setSignOut(u), hidden: !can("users.sign_out_devices") },
+                    { label: u.is_active ? "Deactivate…" : "Reactivate", danger: u.is_active, onClick: () => setDeactivate(u), hidden: !manage },
+                  ]} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {users.data && shown.length === 0 && <Empty>No user matches.</Empty>}
+      </div>
 
       {form && (
         <Modal title={form.id ? "Edit user" : "New user"} onClose={() => setForm(null)}

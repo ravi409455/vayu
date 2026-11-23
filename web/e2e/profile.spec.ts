@@ -166,7 +166,7 @@ test("an Admin edits a phone and removes a picture; the expert falls back to ini
   await page.goto("/users");
   const row = page.locator("tr", { hasText: "Ravi Expert" });
   await expect(row.locator("img.avatar")).toBeVisible();
-  await row.getByRole("button", { name: "Edit" }).click();
+  await row.getByText("Ravi Expert").click();                                  // the row opens the editor
   await page.getByLabel("Phone").fill("98765 43210");
   await page.getByRole("button", { name: "Remove picture" }).click();
   await expect(page.getByText(/initials show instead/)).toBeVisible();

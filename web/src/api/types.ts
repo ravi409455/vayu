@@ -6,7 +6,7 @@ export type Me = {
 };
 export type User = {
   id: number; username: string; name: string; email: string; phone?: string; role: Role;
-  is_active: boolean; must_change_password: boolean; avatar_url?: string | null;
+  is_active: boolean; must_change_password: boolean; avatar_url?: string | null; last_login?: string | null;
 };
 export type Access = Record<string, Record<string, "hidden" | "view" | "edit">>;
 export type Option = { key: string; label: string; is_defect?: boolean; severity?: string | null };

@@ -153,3 +153,14 @@ def test_forced_change_applies_to_views_with_their_own_permissions(make_user, lo
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {login(client, 'boss').json()['access']}")
     r = client.get(path)
     assert r.status_code == 403 and r.json()["code"] == "PASSWORD_CHANGE_REQUIRED"
+
+
+def test_a_sign_in_is_remembered_as_last_sign_in_and_a_failed_one_is_not(make_user, login):
+    user = make_user(Role.OPS)
+    assert user.last_login is None
+    assert login(APIClient(), user.username, "wrong").status_code == 401
+    user.refresh_from_db()
+    assert user.last_login is None
+    assert login(APIClient(), user.username, device_name="test phone").status_code == 200
+    user.refresh_from_db()
+    assert user.last_login is not None

@@ -89,7 +89,8 @@ test("forms: duplicate a form, and import a file as a copy", async ({ page }) =>
   const { admin, a } = await setup("four");
   await signIn(page, "admin");
   await page.goto(`/forms/${a.form.id}`);
-  await page.getByRole("button", { name: "Duplicate as new form" }).click();
+  await page.getByRole("button", { name: "More form actions" }).click();
+  await page.getByRole("menuitem", { name: "Duplicate as new form" }).click();
   await page.getByLabel("Name of the copy").fill("Brakes check two");
   await page.getByRole("dialog").getByRole("button", { name: "Duplicate" }).click();
   await expect(page.getByRole("heading", { name: /Brakes check two/, level: 1 })).toBeVisible();   // we are on the copy

@@ -3804,6 +3804,11 @@ components:
         avatar_url:
           type: string
           readOnly: true
+        last_login:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
     Reschedule:
       type: object
       properties:
@@ -3944,9 +3949,15 @@ components:
         avatar_url:
           type: string
           readOnly: true
+        last_login:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
       required:
       - avatar_url
       - id
+      - last_login
       - locked_until
       - must_change_password
       - role

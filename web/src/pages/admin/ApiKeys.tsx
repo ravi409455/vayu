@@ -4,6 +4,7 @@ import { api } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { ApiKeyRow, FormSummary } from "../../api/types";
 import { Empty, Field, Modal, Pill, useToast, when, PageHeader } from "../../ui/kit";
+import { MoreMenu } from "../../ui/Menu";
 
 /** "a, b" -> ["a", "b"]; "*" -> ["*"] (every field, only when typed on purpose);
  *  empty means no access at all (fail closed). */
@@ -46,9 +47,10 @@ export function ApiKeys() {
             <td className="mono">vk_{k.prefix}_…</td>
             <td className="small">{Object.entries(k.scope.forms).map(([f, v]) => `${f}: ${v.join(", ")}`).join(" · ")}</td>
             <td>{when(k.last_used_at) || "never"}</td>
-            <td style={{ textAlign: "right" }}>{!k.revoked_at && <>
-              <button className="link" onClick={() => setEdit({ id: k.id, name: k.name, allow_delete: k.allow_delete, scope: Object.fromEntries(Object.entries(k.scope.forms).map(([f, v]) => [f, v.join(", ")])) })}>Edit</button>
-              <button className="link" onClick={() => confirm(`Revoke ${k.name}? It stops working immediately.`) && revoke.mutate(k)}>Revoke</button></>}</td></tr>))}</tbody></table>}
+            <td style={{ textAlign: "right" }}>{!k.revoked_at && <MoreMenu label={`Actions for ${k.name}`} items={[
+              { label: "Edit", onClick: () => setEdit({ id: k.id, name: k.name, allow_delete: k.allow_delete, scope: Object.fromEntries(Object.entries(k.scope.forms).map(([f, v]) => [f, v.join(", ")])) }) },
+              { label: "Revoke…", danger: true, onClick: () => { if (confirm(`Revoke ${k.name}? It stops working immediately.`)) revoke.mutate(k); } },
+            ]} />}</td></tr>))}</tbody></table>}
       {edit && (
         <Modal title={edit.id ? "Edit API key" : "New API key"} onClose={() => setEdit(null)}
           actions={<><button onClick={() => setEdit(null)}>Cancel</button><button className="primary" disabled={!edit.name || Object.values(edit.scope).every((v) => parseFields(v).length === 0)} onClick={() => save.mutate(edit)}>Save</button></>}>

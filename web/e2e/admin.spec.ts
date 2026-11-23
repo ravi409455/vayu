@@ -14,23 +14,27 @@ test.describe("admin screens", () => {
     await d.getByRole("button", { name: "Save" }).click();
     const row = page.locator("tr", { hasText: "nina" });
     await expect(row).toContainText("Must change password");
-    await row.getByRole("button", { name: "Reset password" }).click();
+    await row.getByRole("button", { name: "Actions for nina" }).click();
+    await page.getByRole("menuitem", { name: "Reset password" }).click();
     await page.getByRole("dialog").getByLabel("Temporary password").fill("Temp-pass-22");
     await page.getByRole("dialog").getByRole("button", { name: "Reset" }).click();
     await expect(page.getByRole("status")).toContainText("Password reset");
-    await row.getByRole("button", { name: "Deactivate" }).click();
+    await row.getByRole("button", { name: "Actions for nina" }).click();
+    await page.getByRole("menuitem", { name: "Deactivate…" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Deactivate" }).click();
-    await expect(row).toContainText("Disabled");
+    await expect(row).toHaveCount(0);                                            // deactivated people are hidden by default
+    await page.getByLabel("Show deactivated").check();
+    await expect(row).toContainText("Deactivated");
   });
 
   test("master lists: add an item and archive it", async ({ page }) => {
     await signIn(page, "admin");
     await page.goto("/lists");
-    await page.locator("tr", { hasText: "City" }).first().click();
-    const d = page.getByRole("dialog");
-    await d.getByLabel("New key").fill("mumbai");
+    await page.getByRole("button", { name: "City", exact: true }).click();
+    const d = page.getByRole("region", { name: "City" });
     await d.getByLabel("Label", { exact: true }).fill("Mumbai");
-    await d.getByRole("button", { name: "Add" }).click();
+    await d.getByLabel("New key").fill("mumbai");
+    await d.getByRole("button", { name: "Add item" }).click();
     const row = d.locator("tr", { hasText: "mumbai" });
     await expect(row).toBeVisible();
     await row.getByRole("button", { name: "Archive" }).click();
@@ -40,17 +44,15 @@ test.describe("admin screens", () => {
   test("roles: Ops gets a permission and it is saved", async ({ page }) => {
     await signIn(page, "admin");
     await page.goto("/roles");
-    const btn = page.getByRole("button", { name: /^View dashboards: / });
-    await expect(btn).toBeVisible();
-    const before = await btn.textContent();
-    await page.getByRole("button", { name: "Export dashboard data to CSV: all" }).click();   // all -> off
+    const exportOps = page.getByRole("radiogroup", { name: "Export dashboard data to CSV (Ops)" });
+    await expect(page.getByRole("radiogroup", { name: "View dashboards (Ops)" })).toBeVisible();
+    await exportOps.getByRole("radio", { name: "Off" }).click();
     await page.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByRole("status")).toContainText("Permissions saved");
     const roles = await json(await (await apiAs("admin")).get("roles"));
     expect(roles.find((r: { role: string }) => r.role === "ops").permissions["dashboards.export"]).toBeUndefined();
-    expect(before).toBeTruthy();
     // put it back so other tests keep their rights
-    await page.getByRole("button", { name: "Export dashboard data to CSV: off" }).click();
+    await exportOps.getByRole("radio", { name: "All" }).click();
     await page.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByRole("status")).toContainText("Permissions saved");
   });
@@ -103,7 +105,8 @@ test.describe("admin screens", () => {
     const ok = await page.request.get("http://localhost:8000/api/v1/ext/bookings", { headers: { Authorization: `Api-Key ${key}` } });
     expect(ok.status()).toBe(200);
     page.once("dialog", (x) => x.accept());
-    await page.locator("tr", { hasText: "ERP" }).getByRole("button", { name: "Revoke" }).click();
+    await page.locator("tr", { hasText: "ERP" }).getByRole("button", { name: "Actions for ERP" }).click();
+    await page.getByRole("menuitem", { name: "Revoke…" }).click();
     await expect(page.locator("tr", { hasText: "ERP" })).toContainText("Revoked");
     const gone = await page.request.get("http://localhost:8000/api/v1/ext/bookings", { headers: { Authorization: `Api-Key ${key}` } });
     expect(gone.status()).toBe(401);
@@ -129,7 +132,7 @@ test.describe("admin screens", () => {
     await signIn(page, "admin");
     await page.goto("/audit");
     await expect(page.locator("tr", { hasText: "user.create" }).first()).toBeVisible();
-    await page.getByPlaceholder(/Filter by action/).fill("api_key");
+    await page.getByLabel("Area").selectOption("api_key");
     await expect(page.locator("tr", { hasText: "api_key.create" }).first()).toBeVisible();
   });
 

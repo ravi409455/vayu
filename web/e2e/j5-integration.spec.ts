@@ -50,7 +50,8 @@ test("J5: webhook with a valid signature, ZIP download and the verify page", asy
     expect(payload.image_zip_url).toMatch(/\/zip\//);
 
     // the delivery log shows it
-    await page.getByRole("button", { name: "Deliveries" }).click();
+    await page.getByRole("button", { name: /^Actions for / }).first().click();
+    await page.getByRole("menuitem", { name: "Deliveries" }).click();
     await expect(page.getByRole("dialog").locator("tr", { hasText: "pdf.ready" })).toContainText("success");
     await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
 

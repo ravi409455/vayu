@@ -49,7 +49,8 @@ test.describe("form builder", () => {
     if (!form.draft_version) await json(await admin.post(`forms/${form.id}/drafts`, { data: {} }));
     await signIn(page, "admin");
     await page.goto(`/forms/${form.id}`);
-    await page.getByRole("button", { name: "Discard draft" }).click();
+    await page.getByRole("button", { name: "More form actions" }).click();
+    await page.getByRole("menuitem", { name: "Discard draft" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Discard draft" }).click();
     await expect(page.getByText("Start a new draft")).toBeVisible();
     expect((await json(await admin.get(`forms/${form.id}`))).draft_version).toBeNull();
@@ -58,7 +59,8 @@ test.describe("form builder", () => {
     await page.getByRole("button", { name: "New custom form" }).click();
     await page.getByLabel("Name", { exact: true }).fill("Scratch");
       await page.getByRole("button", { name: "Create" }).click();
-    await page.getByRole("button", { name: "Discard draft" }).click();
+    await page.getByRole("button", { name: "More form actions" }).click();
+    await page.getByRole("menuitem", { name: "Discard draft" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Discard draft" }).click();
     await expect(page.getByRole("status").filter({ hasText: /never been published/ })).toBeVisible();
   });
@@ -143,7 +145,8 @@ test.describe("system forms are named and tuned by the Admin", () => {
     const end = (await json(await admin.get("forms?type=end"))).results[0];
     await signIn(page, "admin");
     await page.goto(`/forms/${end.id}`);
-    await page.getByRole("button", { name: "Rename" }).click();
+    await page.getByRole("button", { name: "More form actions" }).click();
+    await page.getByRole("menuitem", { name: "Rename" }).click();
     await page.getByRole("dialog").getByLabel("Name").fill("Payment and review");
     await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("Renamed.")).toBeVisible();

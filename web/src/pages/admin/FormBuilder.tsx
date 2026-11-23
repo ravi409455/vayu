@@ -1,4 +1,4 @@
-import { Copy, Download, Eye, Pencil, Rocket, Trash2, Users } from "lucide-react";
+import { Eye, Rocket } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
@@ -18,6 +18,7 @@ import { PreviewDialog } from "./builder/PreviewDialog";
 import { DuplicateDialog } from "./ImportForm";
 import { FieldEditor, type FieldDraft } from "./FieldEditor";
 import { useCrumb } from "../../ui/crumb";
+import { MoreMenu } from "../../ui/Menu";
 
 type Issue = { path: string; code: string; message: string };
 
@@ -120,35 +121,39 @@ export function FormBuilder() {
 
   return (
     <>
-      <PageHeader title={<>{f.name} <span className="muted mono small">{f.key}</span></>}
-        subtitle={draft ? "You are editing a draft. Experts keep using the live version until you publish." : "This version is live and cannot be changed. Start a draft to make changes."}>
-        {f.published_version && <Pill tone="ok">Live: v{f.published_version.number}</Pill>}
-        {draft && <Pill tone="info">Draft v{f.draft_version!.number}</Pill>}
-        {can("forms.edit") && <button onClick={() => setRenaming(f.name)}><Pencil size={15} aria-hidden /> Rename</button>}
+      <PageHeader title={<>{f.name} {draft ? <Pill tone="warn">Draft v{f.draft_version!.number}</Pill> : f.published_version ? <Pill tone="ok">Live v{f.published_version.number}</Pill> : null}</>}
+        subtitle={draft ? `${f.published_version ? `Live: v${f.published_version.number}. ` : ""}Experts keep using the live version until you publish.` : "This version is live and cannot be changed. Start a draft to make changes."}>
         {v && <button onClick={() => setPreview(true)}><Eye size={15} aria-hidden /> Preview</button>}
-        {f.type === "custom" && <button onClick={() => setVisibility(f.submission_roles ?? ["expert", "ops"])}><Users size={15} aria-hidden /> Who sees submissions</button>}
-        {f.published_version && can("forms.promote") && (
-          <a className="btn" href={`/api/v1/promote/export?version=${f.published_version.id}`} download><Download size={15} aria-hidden /> Export</a>)}
-        {f.type === "custom" && can("forms.edit") && <button onClick={() => setDuplicating(true)}><Copy size={15} aria-hidden /> Duplicate as new form</button>}
-        {draft && can("forms.edit") && <button className="danger" onClick={() => setDiscard(true)}><Trash2 size={15} aria-hidden /> Discard draft</button>}
+        <MoreMenu label="More form actions" items={[
+          { label: "Rename", onClick: () => setRenaming(f.name), hidden: !can("forms.edit") },
+          { label: "Who sees submissions", onClick: () => setVisibility(f.submission_roles ?? ["expert", "ops"]), hidden: f.type !== "custom" },
+          { label: "Export", onClick: () => { window.location.href = `/api/v1/promote/export?version=${f.published_version!.id}`; }, hidden: !(f.published_version && can("forms.promote")) },
+          { label: "Duplicate as new form", onClick: () => setDuplicating(true), hidden: !(f.type === "custom" && can("forms.edit")) },
+          { label: "Discard draft", danger: true, onClick: () => setDiscard(true), hidden: !(draft && can("forms.edit")) },
+        ]} />
         {!draft && can("forms.edit") && <button className="primary" onClick={startDraft}>Start a new draft</button>}
         {draft && can("forms.publish") && <button className="primary" onClick={checkAndPublish}><Rocket size={15} aria-hidden /> Check &amp; publish…</button>}
       </PageHeader>
       {!v ? <p className="muted">No version yet.</p> : (
         <>
-          {f.type === "custom" && (
-            <div className="card form-switches" aria-label="Form settings">
-              <label className="check"><input type="checkbox" checked={v.use_start !== false} disabled={!edit || setSwitch.isPending} onChange={(e) => setSwitch.mutate({ use_start: e.target.checked })} /> Begins with the start form</label>
-              <label className="check"><input type="checkbox" checked={v.use_end !== false} disabled={!edit || setSwitch.isPending} onChange={(e) => setSwitch.mutate({ use_end: e.target.checked })} /> Ends with the end form
-                <InfoTip>When on, the expert fills in the start form first and the end form last, and rules here may use start.* and end.* answers. When off, those steps are skipped for this form. Changes apply to this draft and are frozen when you publish.</InfoTip></label>
-            </div>)}
           <Tabs tabs={[{ id: "structure", label: "Questions" }, { id: "checks", label: "Key Checks" }, { id: "ratings", label: "Ratings" }]} value={tab} onChange={setTab} />
           {tab === "structure" && (
             <div className="builder">
               <Canvas pages={pages} pageId={pageId} sel={sel} onSelect={onSelect} onPage={setPageId} readOnly={!edit} onDrag={onDrag}
                 onAddPage={() => setAdding({ kind: "page", id: 0 })} onAddSection={(pid) => setAdding({ kind: "section", id: pid })} onAddField={(sid) => setAdding({ kind: "field", id: sid })} />
               <aside className="card inspector" aria-label="Settings">
-                {!found && <div className="empty-state"><p><strong>Nothing selected</strong></p><p>Click a page, a section or a field to change its settings. Drag the grips to reorder.</p></div>}
+                {!found && (
+                  <div aria-label="Form settings">
+                    <div className="insp-head"><div className="grow"><h2>Form settings</h2><p className="muted small">{f.type === "custom" ? "Inspection form" : `The ${f.type} form`} · key <span className="mono">{f.key}</span></p></div></div>
+                    {f.type === "custom" && <>
+                      <label className="check"><input type="checkbox" checked={v.use_start !== false} disabled={!edit || setSwitch.isPending} onChange={(e) => setSwitch.mutate({ use_start: e.target.checked })} /> Begins with the start form</label>
+                      <label className="check"><input type="checkbox" checked={v.use_end !== false} disabled={!edit || setSwitch.isPending} onChange={(e) => setSwitch.mutate({ use_end: e.target.checked })} /> Ends with the end form
+                        <InfoTip>When on, the expert fills in the start form first and the end form last, and rules here may use start.* and end.* answers. When off, those steps are skipped for this form. Changes apply to this draft and are frozen when you publish.</InfoTip></label>
+                      <div className="field"><span className="label-row">Who sees submissions</span>
+                        <div className="bar" style={{ margin: 0 }}><span className="muted small grow">{(f.submission_roles ?? ["expert", "ops"]).join(", ")} and Admin</span><button className="sm" onClick={() => setVisibility(f.submission_roles ?? ["expert", "ops"])}>Change</button></div></div>
+                    </>}
+                    <p className="muted small" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>Click a page, a section or a question to change it. Drag the grips to reorder.</p>
+                  </div>)}
                 {found?.field && (
                   <FieldEditor field={found.field} choices={choices} readOnly={!edit || !!found.field.library || found.section!.locked} kind={f.type}
                     parents={{ section: found.section!.access, page: found.page.access }}
