@@ -22,7 +22,10 @@ def handler(exc, context):
             getattr(exc.__cause__, "sqlstate", None) in BAD_VALUE or "NUL" in str(exc)):
         # a value the database cannot hold (too long, out of range, NUL byte) is the client's
         # doing - but it can also mean one of our columns is too small, so it is always logged
-        logger.error("Database refused a value", exc_info=exc)
+        # metadata only: the exception text can quote the customer's value
+        logger.error("Database refused a value (sqlstate=%s, path=%s)",
+                     getattr(exc.__cause__, "sqlstate", None),
+                     getattr(context.get("request"), "path", "?"))
         exc = CodedError("INVALID_INPUT", "A value is not acceptable.", 400)
     return exception_handler(exc, context)
 
