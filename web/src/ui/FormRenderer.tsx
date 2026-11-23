@@ -15,6 +15,7 @@ export type RenderProps = {
   onChange: (key: string, value: unknown) => void;
   errors?: Record<string, string>;
   readOnly?: boolean;
+  readOnlyKeys?: string[];            // fields changed only through their own action (expert, type)
   role?: string;
   bookingId?: string;                 // needed for photo / video / file fields
   pages?: FormPage[];                 // render only these pages (the wizard shows one at a time)
@@ -40,7 +41,7 @@ export function FormRenderer(p: RenderProps) {
                 <h3 style={{ marginTop: 0 }}>{s.title}</h3>
                 {fields.map((f) => (
                   <FieldInput key={f.id} f={f} value={p.values[f.key]} derived={result.derived[f.key]} required={!!result.required[f.key]}
-                    error={p.errors?.[f.key]} readOnly={p.readOnly || f.level === "view" || f.type === "derived" || f.type === "rating"}
+                    error={p.errors?.[f.key]} readOnly={p.readOnly || p.readOnlyKeys?.includes(f.key) || f.level === "view" || f.type === "derived" || f.type === "rating"}
                     onChange={(v) => p.onChange(f.key, v)} p={p} />
                 ))}
               </section>

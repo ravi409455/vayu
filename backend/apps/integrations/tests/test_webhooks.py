@@ -262,7 +262,7 @@ def test_link_toggles(renv, http, settings, pdf, image, video):
     if pdf:
         assert p["pdf_url"].startswith("https://") and "X-Amz-Expires=604800" in p["pdf_url"]
     if image:
-        assert "/api/v1/zips/" in p["image_zip_url"]
+        assert "/zip/" in p["image_zip_url"]
     if video:
         assert p["video_zip_url"] is None                    # no video was uploaded
 

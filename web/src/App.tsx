@@ -18,6 +18,13 @@ const ApiKeys = lazy(() => import("./pages/admin/ApiKeys").then((m) => ({ defaul
 const Promote = lazy(() => import("./pages/admin/Promote").then((m) => ({ default: m.Promote })));
 const MyJobs = lazy(() => import("./pages/expert/MyJobs").then((m) => ({ default: m.MyJobs })));
 const Job = lazy(() => import("./pages/expert/Job").then((m) => ({ default: m.Job })));
+const JobBoard = lazy(() => import("./pages/ops/JobBoard").then((m) => ({ default: m.JobBoard })));
+const BookingPage = lazy(() => import("./pages/ops/Booking").then((m) => ({ default: m.BookingPage })));
+const Problems = lazy(() => import("./pages/ops/Problems").then((m) => ({ default: m.Problems })));
+const Search = lazy(() => import("./pages/ops/Search").then((m) => ({ default: m.Search })));
+const Dashboards = lazy(() => import("./pages/ops/Dashboards").then((m) => ({ default: m.Dashboards })));
+const VerifyPage = lazy(() => import("./pages/Public").then((m) => ({ default: m.VerifyPage })));
+const ZipPage = lazy(() => import("./pages/Public").then((m) => ({ default: m.ZipPage })));
 const FormBuilder = lazy(() => import("./pages/admin/FormBuilder").then((m) => ({ default: m.FormBuilder })));
 
 function Home() {
@@ -30,9 +37,16 @@ export function App() {
     <Suspense fallback={<p className="muted pad">Loading…</p>}>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/verify/:token" element={<VerifyPage />} />
+        <Route path="/zip/:token" element={<ZipPage />} />
         <Route path="/change-password" element={<RequireAuth><ChangePassword /></RequireAuth>} />
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
           <Route path="/" element={<Home />} />
+          <Route path="/board" element={<RequireAuth perm="bookings.view" not="expert"><JobBoard /></RequireAuth>} />
+          <Route path="/booking/:id" element={<RequireAuth perm="bookings.view" not="expert"><BookingPage /></RequireAuth>} />
+          <Route path="/problems" element={<RequireAuth perm="bookings.view" not="expert"><Problems /></RequireAuth>} />
+          <Route path="/search" element={<RequireAuth perm="bookings.view" not="expert"><Search /></RequireAuth>} />
+          <Route path="/dashboards" element={<RequireAuth perm="dashboards.view"><Dashboards /></RequireAuth>} />
           <Route path="/jobs" element={<RequireAuth perm="submissions.fill"><MyJobs /></RequireAuth>} />
           <Route path="/jobs/:id" element={<RequireAuth perm="submissions.fill"><Job /></RequireAuth>} />
           <Route path="/users" element={<RequireAuth perm="users.view"><Users /></RequireAuth>} />

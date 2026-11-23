@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -112,6 +113,7 @@ class BookingReport(APIView):
             raise err("NO_REPORT", "No report has been generated yet.", 404)
         return Response({"revision": r.revision, "status": r.status, "stale": r.stale,
                          "generated_at": r.generated_at, "filename": r.filename, "error": r.error,
+                         "verify_url": f"{settings.VERIFY_BASE_URL}/{r.token}",
                          "url": storage.presign_get(r.key, r.filename) if r.status == "ready"
                          else None})
 

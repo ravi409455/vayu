@@ -74,9 +74,9 @@ function Editor({ value, onChange, events, forms, onSave, onClose, fail }: { val
   return (
     <Modal title={value.id ? "Edit integration" : "New integration"} onClose={onClose}
       actions={<><button onClick={onClose}>Cancel</button><button className="primary" disabled={!value.name || !value.url || !(value.events?.length)} onClick={onSave}>Save</button></>}>
-      <Field label="Name"><input value={value.name ?? ""} onChange={(e) => set({ name: e.target.value })} /></Field>
-      <Field label="Form"><select value={value.form} disabled={!!value.id} onChange={(e) => set({ form: Number(e.target.value) })}>{forms.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
-      <Field label="Webhook URL" help="Must be https and reachable from the internet."><input value={value.url ?? ""} onChange={(e) => set({ url: e.target.value })} /></Field>
+      <Field label="Name"><input aria-label="Name" value={value.name ?? ""} onChange={(e) => set({ name: e.target.value })} /></Field>
+      <Field label="Form"><select aria-label="Form" value={value.form} disabled={!!value.id} onChange={(e) => set({ form: Number(e.target.value) })}>{forms.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
+      <Field label="Webhook URL" help="Must be https and reachable from the internet."><input aria-label="Webhook URL" value={value.url ?? ""} onChange={(e) => set({ url: e.target.value })} /></Field>
       <h3>Send when…</h3>
       {events.map((e) => <label className="check" key={e}><input type="checkbox" checked={!!value.events?.includes(e)} onChange={() => toggle(e)} /> {EVENT_LABEL[e] ?? e}</label>)}
       <h3>What to include</h3>

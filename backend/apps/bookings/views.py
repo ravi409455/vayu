@@ -22,6 +22,7 @@ ACTION_PERMISSIONS = {
     "partial_update": "bookings.edit", "change_type": "bookings.edit",
     "assign": "bookings.assign", "reschedule": "bookings.reschedule", "cancel": "bookings.cancel",
     "force_release": "bookings.force_release", "destroy": "bookings.delete",
+    "resolve_conflict": "bookings.edit",
     "start": "submissions.fill", "submit": "submissions.fill", "inspections": "submissions.view",
 }
 
@@ -53,6 +54,13 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
                 if param == "expert" and not p[param].isdigit():
                     raise ValidationError({param: "Use a user id."})
                 qs = qs.filter(**{column: p[param]})
+        problem = p.get("problem")                    # the Ops problem queue
+        if problem == "conflict":
+            qs = qs.exclude(conflict="")
+        elif problem == "type_change":
+            qs = qs.filter(alerts__contains=[{"code": "TYPE_CHANGE_REJECTED"}])
+        elif problem:
+            raise ValidationError({"problem": "Use conflict or type_change."})
         for param, lookup in (("date_from", "inspection_date__gte"),
                               ("date_to", "inspection_date__lte")):
             if p.get(param):
@@ -109,6 +117,11 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
     @action(detail=True, methods=["post"], url_path="force-release")
     def force_release(self, request, pk=None):
         return self._out(services.force_release(request.user, self.get_object()))
+
+    @action(detail=True, methods=["post"], url_path="resolve-conflict")
+    def resolve_conflict(self, request, pk=None):
+        return self._out(submissions.resolve_conflict(request.user, self.get_object(),
+                                                      request.data.get("inspection")))
 
     @action(detail=True, methods=["post"], url_path="change-type")
     def change_type(self, request, pk=None):

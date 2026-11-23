@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from apps.core import events
+from apps.core import tasks as core_tasks
 from apps.forms.access import STAGES, levels_for
 from apps.forms.models import Form, FormKind, FormVersion, VersionStatus
 from apps.forms.rules import validate_answers
@@ -293,3 +294,34 @@ def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Insp
     events.emit("inspection.updated", booking=str(insp.booking_id), inspection=str(insp.id),
                 keys=["overrides"])
     return insp
+
+
+@transaction.atomic
+def resolve_conflict(actor, b: Booking, inspection_id) -> Booking:
+    """Two experts inspected one booking: Ops keep one inspection. The other is set aside
+    ("superseded"), never deleted, and the booking carries on with the kept one."""
+    b = _lock(b)
+    if not b.conflict:
+        raise err("NO_CONFLICT", "This booking has no conflict to resolve.", 409)
+    keep = b.inspections.filter(pk=inspection_id, status="submitted").first()
+    if keep is None:
+        raise err("INVALID_INSPECTION", "Choose one of this booking's submitted inspections.")
+    b.inspections.exclude(pk=keep.pk).update(status="superseded")
+    changes: dict = {"conflict": [b.conflict, ""],
+                     "inspection": [None, str(keep.id)]}
+    if b.assigned_expert_id != keep.expert_id:
+        changes["assigned_expert"] = [b.assigned_expert_id, keep.expert_id]
+    b.conflict, b.withdrawn_expert = "", None
+    b.assigned_expert = keep.expert
+    if b.stage in ("assigned", "in_progress"):
+        changes["stage"] = [b.stage, "submitted"]
+        b.stage = "submitted"
+    b.chassis_no = (keep.answers.get("inspection") or {}).get("chassis_no", "")
+    _changed(actor, b, changes)
+    scoring.recompute(keep)
+    events.emit("inspection.updated", booking=str(b.id), inspection=str(keep.id),
+                keys=["conflict_resolved"])
+    from apps.media.services import check_completion
+
+    core_tasks.after_commit(lambda: check_completion(b.id))
+    return b

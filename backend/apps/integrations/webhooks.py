@@ -217,7 +217,7 @@ def build_payload(d: Delivery) -> dict:
             has = MediaAsset.objects.filter(booking=booking, status="verified",
                                            kind__in=zips.KIND_TYPES[kind]).exists()
             z = zips.request_zip(booking, kind) if has else None
-            body[f"{kind}_zip_url"] = (f"{settings.PUBLIC_BASE_URL}/api/v1/zips/"
+            body[f"{kind}_zip_url"] = (f"{settings.PUBLIC_BASE_URL}/zip/"
                                        f"{zips.token_for(z.id)}" if z else None)
     return body
 

@@ -273,3 +273,18 @@ def test_a_value_too_long_for_its_column_is_a_logged_400(job, caplog):
                                                       "customer_name": "A", "customer_phone": "9876543210"}},
                      format="json")
     assert r.status_code in (400, 201) and Booking.objects.filter(booking_id=long_id).count() <= 1
+
+
+def test_the_zip_link_can_answer_in_json_for_the_preparing_page(job, settings):
+    from rest_framework.test import APIClient
+
+    env, b = job
+    a = upload(env.expert, b["id"], jpeg(), settings).json()["id"]
+    submit_with(env, b, photo_a=[a])
+    link = env.ops.post(f"/api/v1/bookings/{b['id']}/media-zip", {"kind": "image"},
+                        format="json").json()["url"]
+    anon = APIClient()
+    out = anon.get(link + "?format=json")
+    assert out.status_code == 200 and out.json()["status"] == "ready"
+    assert out.json()["url"].startswith("https://") and out.json()["progress"] == 100
+    assert anon.get(link).status_code == 302                        # without it: a plain redirect

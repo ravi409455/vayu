@@ -89,3 +89,59 @@ export async function seedForms(): Promise<Pdi> {
   await json(await admin.post(`pdf-template-versions/${tv.id}/publish`, { data: { row_version: saved.row_version } }));
   return { formId: pdi.id, bookingFormId: booking.id, opsFormId: ops.id, templateId: t.id };
 }
+
+// a valid small JPEG
+export const JPEG = Buffer.from(
+  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAwAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==",
+  "base64");
+
+async function sha256Hex(buf: Buffer): Promise<string> {
+  const { createHash } = await import("node:crypto");
+  return createHash("sha256").update(buf).digest("hex");
+}
+
+/** Uploads one file the way the browser does: initiate, PUT each part, complete. */
+export async function uploadFile(expert: APIRequestContext, bookingId: string, fieldKey: string, kind: string, contentType: string, data: Buffer): Promise<string> {
+  const init = await json(await expert.post("media/initiate", { data: { booking: bookingId, client_uuid: crypto.randomUUID(), field_key: fieldKey, kind, content_type: contentType, size: data.length, sha256: await sha256Hex(data), source: "camera" } }));
+  const parts: { part_number: number; etag: string }[] = [];
+  for (const p of init.parts) {
+    const r = await fetch(p.url, { method: "PUT", body: new Uint8Array(data.subarray((p.part_number - 1) * init.part_size, p.part_number * init.part_size)) });
+    parts.push({ part_number: p.part_number, etag: r.headers.get("etag")! });
+  }
+  const done = await json(await expert.post(`media/${init.id}/complete`, { data: { parts } }));
+  if (done.status !== "verified") throw new Error(`upload not verified: ${done.status}`);
+  return init.id as string;
+}
+
+export async function expertId(): Promise<number> {
+  const admin = await apiAs("admin");
+  const users = await json(await admin.get("users"));
+  return (users.results ?? users).find((u: { username: string }) => u.username === "expert").id;
+}
+
+export type JobOptions = { bookingId: string; door?: string; photo?: boolean; odometer?: number; type?: string };
+
+/** A booking taken all the way: created by Ops, assigned, started and submitted by the expert. */
+export async function submittedJob(o: JobOptions): Promise<string> {
+  const ops = await apiAs("ops");
+  const expert = await apiAs("expert");
+  const b = await json(await ops.post("bookings", { data: { answers: {
+    booking_id: o.bookingId, customer_name: "Test Customer", customer_phone: "9876500099", address: "9 Test Street", city: "delhi",
+    inspection_date: "2026-11-25", inspection_time: "09:30", inspection_type: o.type ?? "pdi", car_make_model: "maruti_victoris" } } }));
+  await json(await ops.post(`bookings/${b.id}/assign`, { data: { expert: await expertId() } }));
+  await json(await expert.post(`bookings/${b.id}/start`, { data: { client_uuid: crypto.randomUUID(), inspection_type: o.type ?? "pdi" } }));
+  const inspection: Record<string, unknown> = { chassis_no: "MA3YPKCSKTJ273129", door: o.door ?? "ok", odometer: o.odometer ?? 100 };
+  if (o.photo) inspection.door_photo = [await uploadFile(expert, b.id, "door_photo", "photo", "image/jpeg", JPEG)];
+  await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection, ops: { payment_status: "pay_later" } } } }));
+  return b.id as string;
+}
+
+export async function waitForReport(bookingId: string): Promise<{ url: string; verify_url: string; filename: string; stale: boolean; revision: number }> {
+  const ops = await apiAs("ops");
+  for (let i = 0; i < 60; i++) {
+    const r = await ops.get(`bookings/${bookingId}/report`);
+    if (r.ok()) { const j = await r.json(); if (j.status === "ready") return j; }
+    await new Promise((res) => setTimeout(res, 500));
+  }
+  throw new Error("report never became ready");
+}

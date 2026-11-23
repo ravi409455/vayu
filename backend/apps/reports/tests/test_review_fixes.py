@@ -91,3 +91,12 @@ def test_the_verify_link_never_wraps_even_with_hyphens_in_the_token():
                                                stamp="now", token=token))
     text = pypdf.PdfReader(io.BytesIO(pdf)).pages[0].extract_text()
     assert f"verify.carcid.in/{token}" in text
+
+
+def test_the_report_info_carries_the_public_verify_link(report_env, settings):
+    from apps.reports.models import Report
+
+    env, b = report_env
+    got = env.ops.get(f"/api/v1/bookings/{b['id']}/report").json()
+    token = Report.objects.get(booking_id=b["id"]).token
+    assert got["verify_url"] == f"{settings.VERIFY_BASE_URL}/{token}"

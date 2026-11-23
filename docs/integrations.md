@@ -13,7 +13,7 @@ Each integration belongs to one form and subscribes to events. It fires on every
 
 An integration on the **booking form** receives the `booking.*` events of all bookings. An integration on an **inspection form** receives all nine events for bookings of that inspection type.
 
-**Body.** Always `event`, `delivery`, `occurred_at`, `booking: {id, booking_id}` (internal ID and Booking ID). Toggles add `data` (booking + inspection answers, limited to the integration's *fields* list when set), `pdf_url` (signed, 7 days), `image_zip_url`, `video_zip_url` (open a "Preparing…" page, ZIP cached 7 days). With a **template** the body is your text instead: `{{ field.customer_name }}`, `{{ booking.booking_id }}`, `{{ event }}`, `{{ pdf_url }}`. Templates run in a sandbox; anything unsafe fails that delivery (it never runs).
+**Body.** Always `event`, `delivery`, `occurred_at`, `booking: {id, booking_id}` (internal ID and Booking ID). Toggles add `data` (booking + inspection answers, limited to the integration's *fields* list when set), `pdf_url` (signed, 7 days), `image_zip_url`, `video_zip_url` (a web page that shows "Preparing… x%" and then downloads; ZIP cached 7 days; machines can call `GET /api/v1/zips/<token>?format=json`). With a **template** the body is your text instead: `{{ field.customer_name }}`, `{{ booking.booking_id }}`, `{{ event }}`, `{{ pdf_url }}`. Templates run in a sandbox; anything unsafe fails that delivery (it never runs).
 
 **Signature.** `X-Vayu-Signature: sha256=<hex>` = HMAC-SHA256 of the raw body with the integration's secret (shown once; rotate any time). Also `X-Vayu-Event` and `X-Vayu-Delivery` (use it to ignore duplicates).
 

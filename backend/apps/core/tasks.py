@@ -5,5 +5,5 @@ from collections.abc import Callable
 from django.db import transaction
 
 
-def after_commit(fn: Callable[[], None]) -> None:
+def after_commit(fn: Callable[[], object]) -> None:
     transaction.on_commit(fn)
