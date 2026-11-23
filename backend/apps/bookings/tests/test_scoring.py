@@ -4,6 +4,7 @@ import uuid
 import pytest
 
 from apps.bookings.models import Inspection
+from apps.bookings.tests.conftest import custom_form
 
 from .conftest import create
 from .test_submissions import assign, publish_form, start
@@ -21,8 +22,7 @@ CFG = {"categories": [{"key": "engine", "label": "Engine", "sections": ["Engine"
 @pytest.fixture
 def senv(env):
     admin = env.admin
-    form = admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "PDI",
-                                        "inspection_type": "pdi"}, format="json").json()
+    form = custom_form(admin, "pdi", "PDI")
     v = form["draft_version"]["id"]
     page = admin.get(f"/api/v1/form-versions/{v}").json()["pages"][0]
 
@@ -135,8 +135,7 @@ def test_hidden_and_unanswered_fields_never_count(senv):
 
 def test_without_a_rating_config_only_key_checks_are_computed(env):
     admin = env.admin
-    form = admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "PDI",
-                                        "inspection_type": "pdi"}, format="json").json()
+    form = custom_form(admin, "pdi", "PDI")
     publish_form(admin, form["id"])
     _, insp = run(env, {})
     s = scores(insp)

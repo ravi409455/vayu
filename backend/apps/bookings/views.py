@@ -28,6 +28,10 @@ ACTION_PERMISSIONS = {
 }
 
 
+def _pinned_form(version, role):
+    return submissions.form_for_role(version, role, "in_progress") if version else None
+
+
 class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
                      mixins.UpdateModelMixin, mixins.DestroyModelMixin, viewsets.GenericViewSet):
     serializer_class = BookingSerializer
@@ -153,9 +157,10 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
             "booking": BookingSerializer(Booking.objects.get(pk=b.pk), context=ctx).data,
             "inspection": InspectionSerializer(insp, context=ctx).data,
             "form": submissions.form_for_role(insp.form_version, request.user.role, "in_progress"),
-            # the check-in / wrap-up form (payment, review...) the expert also fills in
-            "ops_form": (submissions.form_for_role(ov, request.user.role, "in_progress")
-                         if (ov := submissions.ops_version()) is not None else None),
+            # the start form (check-in) and end form (wrap-up) this inspection goes through; null
+            # when the form does not use it. Pinned: they never change under a started job.
+            "start_form": _pinned_form(insp.start_version, request.user.role),
+            "end_form": _pinned_form(insp.end_version, request.user.role),
             "server_time": timezone.now().isoformat()})
 
     @action(detail=True, methods=["post"])

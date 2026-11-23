@@ -6,6 +6,7 @@ import pytest
 from PIL import Image
 
 from apps.bookings.models import Booking
+from apps.bookings.tests.conftest import custom_form
 from apps.bookings.tests.test_submissions import assign, publish_form, start
 from apps.media import storage
 from apps.media.models import MediaAsset, MediaZip
@@ -19,8 +20,7 @@ pytestmark = pytest.mark.django_db
 def menv(env):
     """PDI form with a photo (max 2), video (max 1), file and signature field."""
     admin = env.admin
-    form = admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "PDI",
-                                        "inspection_type": "pdi"}, format="json").json()
+    form = custom_form(admin, "pdi", "PDI")
     v = form["draft_version"]["id"]
     sec = admin.get(f"/api/v1/form-versions/{v}").json()["pages"][0]["sections"][0]["id"]
     for key, type_, cfg in (("photo_a", "photo", {"max_count": 2}), ("clip", "video", {"max_count": 1}),
@@ -514,21 +514,26 @@ def test_experts_download_only_their_own_media(job, settings):
     assert c.get(f"/api/v1/media/{media_id}/url").status_code == 404
 
 
-def test_ops_form_media_is_validated_and_awaited_for_completion(job, settings):
-    env, b = job
-    ops_form = env.admin.post("/api/v1/forms", {"key": "ops", "kind": "ops", "name": "Ops"},
-                              format="json").json()
-    publish_form(env.admin, ops_form["id"])        # its system fields (selfie, payment...) come with it
+def test_start_form_media_is_validated_and_awaited_for_completion(menv, settings):
+    from apps.bookings.tests.conftest import publish_draft
+    from apps.forms.models import Form
+
+    publish_draft(menv.admin, Form.objects.get(type="start").id)   # its selfie field comes with it
+    publish_draft(menv.admin, Form.objects.get(type="end").id)
+    b = create(menv.ops, booking_id="MD1").json()
+    assign(menv, b)
+    start(menv.expert, b)
+    env = menv
     sid = upload(env.expert, b["id"], jpeg(), settings, field_key="selfie").json()["id"]
     body = {"client_submission_uuid": str(uuid.uuid4()), "answers": {
         "inspection": {"chassis_no": "MA3YPKCSKTJ273129"},
-        "ops": {"selfie": [sid], "taking_payment": False}}}
+        "start": {"selfie": [sid]}, "end": {"taking_payment": False}}}
     assert env.expert.post(f"/api/v1/bookings/{b['id']}/submit", body, format="json"
                            ).status_code == 200
     assert stage(b) == "completed"
     bad = {"client_submission_uuid": str(uuid.uuid4()), "answers": {
         "inspection": {"chassis_no": "MA3YPKCSKTJ273129"},
-        "ops": {"selfie": [str(uuid.uuid4())], "taking_payment": False}}}
+        "start": {"selfie": [str(uuid.uuid4())]}, "end": {"taking_payment": False}}}
     other = create(env.ops, booking_id="MD3").json()
     assign(env, other)
     start(env.expert, other)

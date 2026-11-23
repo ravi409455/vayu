@@ -22,7 +22,8 @@ def compute(insp) -> dict:
     version, cfg = insp.form_version, _cfg(insp.form_version)
     overrides = insp.overrides or {}
     answers = {"inspection": insp.answers.get("inspection") or {},
-               "ops": insp.answers.get("ops") or {}, "booking": insp.booking.answers}
+               "start": insp.answers.get("start") or {}, "end": insp.answers.get("end") or {},
+               "booking": insp.booking.answers}
     day = (timezone.localtime(insp.submitted_at).date().isoformat() if insp.submitted_at
            else timezone.localdate().isoformat())
     result = evaluate_form(spec_from_version(version), answers, day, overrides.get("derived", {}))

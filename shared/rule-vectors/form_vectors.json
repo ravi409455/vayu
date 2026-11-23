@@ -26,7 +26,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -71,7 +72,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -112,7 +114,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "x"
    }
@@ -152,7 +155,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "   "
    }
@@ -194,7 +198,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "p": []
    }
@@ -236,7 +241,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "g": {}
    }
@@ -278,7 +284,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "n": 0
    }
@@ -318,7 +325,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "y": false
    }
@@ -358,7 +366,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -399,7 +408,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -444,7 +454,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -489,7 +500,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -543,7 +555,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "yes"
    }
@@ -604,7 +617,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "no"
    }
@@ -662,7 +676,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -728,7 +743,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "no",
     "b": "x"
@@ -798,7 +814,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "yes",
     "b": "x"
@@ -881,7 +898,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "no",
     "b": "x",
@@ -944,7 +962,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "yes"
    }
@@ -1005,7 +1024,8 @@
      "cng"
     ]
    },
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -1065,7 +1085,8 @@
      "petrol"
     ]
    },
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -1119,7 +1140,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -1174,7 +1196,8 @@
    "booking": {
     "fuel_types": []
    },
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -1224,7 +1247,8 @@
    "booking": {
     "inspection_type": "used_car"
    },
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -1273,7 +1297,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -1291,9 +1316,9 @@
   }
  },
  {
-  "name": "ops form references its own fields",
+  "name": "start form references its own fields",
   "spec": {
-   "form": "ops",
+   "form": "start",
    "containers": [
     {
      "id": "p1",
@@ -1328,7 +1353,7 @@
      "show_if": {
       "==": [
        {
-        "var": "ops.mode"
+        "var": "start.mode"
        },
        "upi"
       ]
@@ -1340,7 +1365,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {
+   "end": {},
+   "start": {
     "mode": "upi"
    },
    "inspection": {}
@@ -1359,9 +1385,9 @@
   }
  },
  {
-  "name": "ops form hides by own field",
+  "name": "start form hides by own field",
   "spec": {
-   "form": "ops",
+   "form": "start",
    "containers": [
     {
      "id": "p1",
@@ -1396,7 +1422,7 @@
      "show_if": {
       "==": [
        {
-        "var": "ops.mode"
+        "var": "start.mode"
        },
        "upi"
       ]
@@ -1408,7 +1434,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {
+   "end": {},
+   "start": {
     "mode": "cash"
    },
    "inspection": {}
@@ -1496,7 +1523,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "y",
     "b": "q"
@@ -1585,7 +1613,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "y",
     "b": "z"
@@ -1640,7 +1669,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -1692,7 +1722,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "x"
    }
@@ -1749,7 +1780,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "d": "2026-10-01"
    }
@@ -1826,7 +1858,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "dent"
    }
@@ -1907,7 +1940,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "ok"
    }
@@ -1985,7 +2019,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "dent"
    }
@@ -2065,7 +2100,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "dent"
    }
@@ -2129,7 +2165,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "dent"
    }
@@ -2192,7 +2229,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "m": [
      "ok",
@@ -2258,7 +2296,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "m": [
      "ok",
@@ -2322,7 +2361,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "ok"
    }
@@ -2384,7 +2424,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "dent"
    }
@@ -2472,7 +2513,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "z": "dent",
     "b": "scratch"
@@ -2560,7 +2602,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "a": "dent"
    }
@@ -2678,7 +2721,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "door": "dent",
     "bonnet": "ok"
@@ -2794,7 +2838,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "door": "ok",
     "bonnet": "na"
@@ -2926,7 +2971,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "door": "dent",
     "bonnet": "scratch"
@@ -3061,7 +3107,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "door": "dent",
     "bonnet": "ok"
@@ -3177,7 +3224,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -3288,7 +3336,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "door": "dent"
    }
@@ -3405,7 +3454,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "door": "dent"
    }
@@ -3528,7 +3578,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "door": "dent"
    }
@@ -3644,7 +3695,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "door": "dent",
     "bonnet": "ok"
@@ -3703,7 +3755,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "mfg": "2026-09-01"
    }
@@ -3759,7 +3812,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "mfg": "2026-10-14"
    }
@@ -3815,7 +3869,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "mfg": "2026-12-01"
    }
@@ -3873,7 +3928,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -3928,7 +3984,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "mfg": "2026-12-01"
    }
@@ -3985,7 +4042,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {}
   },
   "today": "2026-10-14",
@@ -4039,7 +4097,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "odo": 0
    }
@@ -4095,7 +4154,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "odo": 45
    }
@@ -4157,7 +4217,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "start": "2026-10-10",
     "end": "2026-10-01"
@@ -4223,7 +4284,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "start": "2026-10-10"
    }
@@ -4291,7 +4353,8 @@
   },
   "answers": {
    "booking": {},
-   "ops": {},
+   "start": {},
+   "end": {},
    "inspection": {
     "start": "2026-10-10",
     "end": "2026-10-01"

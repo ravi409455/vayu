@@ -9,7 +9,7 @@ from .models import (
     LIST_KEY_RE,
     Field,
     Form,
-    FormKind,
+    FormType,
     FormVersion,
     LibraryItem,
     MasterList,
@@ -82,15 +82,9 @@ class FormSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Form
-        fields = ["id", "key", "kind", "name", "is_active", "inspection_type", "submission_roles",
+        fields = ["id", "key", "type", "name", "is_active", "inspection_type", "submission_roles",
                   "draft_version", "published_version"]
-        read_only_fields = ["kind"]
-
-    def get_fields(self):
-        fields = super().get_fields()
-        if self.instance is None:  # kind is set once, at creation
-            fields["kind"] = serializers.ChoiceField(choices=FormKind.choices)
-        return fields
+        read_only_fields = ["type", "inspection_type"]
 
     def validate_key(self, value):
         if self.instance is not None and value != self.instance.key:
@@ -104,30 +98,19 @@ class FormSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        kind = attrs.get("kind") or (self.instance and self.instance.kind)
-        if "submission_roles" in attrs and kind != FormKind.INSPECTION:
-            raise serializers.ValidationError("Only inspection forms have submissions to share.")
-        active = attrs.get("is_active", self.instance.is_active if self.instance else True)
-        itype = attrs.get("inspection_type", self.instance.inspection_type if self.instance else "")
-        if itype:
-            if kind != FormKind.INSPECTION:
-                raise serializers.ValidationError("Only inspection forms have an inspection type.")
-            item = MasterListItem.objects.filter(list__key="inspection_type", key=itype,
-                                                 archived=False).exists()
-            if not item:
-                raise serializers.ValidationError(f"'{itype}' is not an inspection type.")
-            clash = Form.objects.filter(kind=FormKind.INSPECTION, is_active=True,
-                                        inspection_type=itype)
-            if self.instance:
-                clash = clash.exclude(pk=self.instance.pk)
-            if active and clash.exists():
-                raise serializers.ValidationError(f"Another active form already handles '{itype}'.")
-        if kind in (FormKind.BOOKING, FormKind.OPS) and active:
-            others = Form.objects.filter(kind=kind, is_active=True)
-            if self.instance:
-                others = others.exclude(pk=self.instance.pk)
-            if others.exists():
-                raise serializers.ValidationError(f"There is already an active {kind} form.")
+        # Admins create custom forms only; the booking, start and end forms already exist
+        wanted = self.initial_data.get("type", FormType.CUSTOM) if self.instance is None else None
+        if self.instance is None and wanted != FormType.CUSTOM:
+            raise serializers.ValidationError(
+                {"type": "Only custom forms can be created; the booking, start and end forms "
+                         "already exist."})
+        form_type = self.instance.type if self.instance else FormType.CUSTOM
+        if "submission_roles" in attrs and form_type != FormType.CUSTOM:
+            raise serializers.ValidationError("Only custom forms have submissions to share.")
+        if self.instance is not None and self.instance.is_system \
+                and attrs.get("is_active") is False:
+            raise CodedError("SYSTEM_FORM", "The booking, start and end forms cannot be "
+                                            "switched off.", 400)
         return attrs
 
     def get_draft_version(self, obj):
@@ -241,19 +224,12 @@ class PageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Page
-        fields = ["id", "title", "order", "visible", "gate", "slot", "show_if", "access",
+        fields = ["id", "title", "order", "visible", "gate", "show_if", "access",
                   "sections"]
 
     def validate(self, attrs):
         _check_rules(attrs, "show_if")
         _check_access(attrs)
-        if "slot" in attrs and self.instance is not None and attrs["slot"] != self.instance.slot:
-            if self.instance.version.form.kind != "ops":
-                raise CodedError("INVALID_SLOT", "Only the check-in/wrap-up form has page slots.",
-                                 400)
-            if Field.objects.filter(section__page=self.instance, is_system=True).exists():
-                raise CodedError("SYSTEM_PAGE", "This page holds system fields: it stays where "
-                                 "it is.", 400)
         return attrs
 
 
@@ -280,7 +256,7 @@ class VersionTreeSerializer(serializers.ModelSerializer):
     class Meta:
         model = FormVersion
         fields = ["id", "form", "number", "status", "published_at", "row_version", "pages",
-                  "checks", "rating_config"]
+                  "checks", "rating_config", "use_start", "use_end"]
 
     checks = serializers.SerializerMethodField()
 

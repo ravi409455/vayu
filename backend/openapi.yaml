@@ -1110,6 +1110,24 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/form-versions/{id}/settings:
+    patch:
+      operationId: form_versions_settings_partial_update
+      description: 'A custom form''s two switches: begins with the start form, ends
+        with the end form.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - form-versions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/form-versions/{id}/validate:
     post:
       operationId: form_versions_validate_create
@@ -2617,9 +2635,6 @@ components:
       - summary
       - target_id
       - target_type
-    BlankEnum:
-      enum:
-      - ''
     Booking:
       type: object
       properties:
@@ -2729,7 +2744,7 @@ components:
         helper_text:
           type: string
         type:
-          $ref: '#/components/schemas/TypeEnum'
+          $ref: '#/components/schemas/FieldTypeEnum'
         config: {}
         required:
           type: boolean
@@ -2761,6 +2776,54 @@ components:
       - library
       - locked
       - type
+    FieldTypeEnum:
+      enum:
+      - single_choice
+      - multi_choice
+      - yes_no
+      - master_list
+      - user_picker
+      - short_text
+      - long_text
+      - number
+      - currency
+      - phone
+      - date
+      - time
+      - datetime
+      - gps
+      - photo
+      - video
+      - file
+      - signature
+      - form_choice
+      - image
+      - derived
+      - rating
+      type: string
+      description: |-
+        * `single_choice` - Single Choice
+        * `multi_choice` - Multi Choice
+        * `yes_no` - Yes No
+        * `master_list` - Master List
+        * `user_picker` - User Picker
+        * `short_text` - Short Text
+        * `long_text` - Long Text
+        * `number` - Number
+        * `currency` - Currency
+        * `phone` - Phone
+        * `date` - Date
+        * `time` - Time
+        * `datetime` - Datetime
+        * `gps` - Gps
+        * `photo` - Photo
+        * `video` - Video
+        * `file` - File
+        * `signature` - Signature
+        * `form_choice` - Form Choice
+        * `image` - Image
+        * `derived` - Derived
+        * `rating` - Rating
     Form:
       type: object
       properties:
@@ -2770,8 +2833,10 @@ components:
         key:
           type: string
           maxLength: 64
-        kind:
-          $ref: '#/components/schemas/FormKindEnum'
+        type:
+          allOf:
+          - $ref: '#/components/schemas/FormTypeEnum'
+          readOnly: true
         name:
           type: string
           maxLength: 150
@@ -2780,8 +2845,8 @@ components:
           default: true
         inspection_type:
           type: string
+          readOnly: true
           default: ''
-          maxLength: 64
         submission_roles: {}
         draft_version:
           type: string
@@ -2792,20 +2857,23 @@ components:
       required:
       - draft_version
       - id
+      - inspection_type
       - key
-      - kind
       - name
       - published_version
-    FormKindEnum:
+      - type
+    FormTypeEnum:
       enum:
       - booking
-      - ops
-      - inspection
+      - start
+      - end
+      - custom
       type: string
       description: |-
         * `booking` - Booking
-        * `ops` - Ops
-        * `inspection` - Inspection
+        * `start` - Start
+        * `end` - End
+        * `custom` - Custom
     Inspection:
       type: object
       properties:
@@ -2848,7 +2916,7 @@ components:
       - expert
       - form_version
       - id
-    Kind4e2Enum:
+    KindEnum:
       enum:
       - field
       - section
@@ -2863,7 +2931,7 @@ components:
           type: integer
           readOnly: true
         kind:
-          $ref: '#/components/schemas/Kind4e2Enum'
+          $ref: '#/components/schemas/KindEnum'
         key:
           type: string
           maxLength: 64
@@ -2890,7 +2958,7 @@ components:
           type: integer
           readOnly: true
         kind:
-          $ref: '#/components/schemas/Kind4e2Enum'
+          $ref: '#/components/schemas/KindEnum'
         key:
           type: string
           maxLength: 64
@@ -2969,10 +3037,6 @@ components:
           type: boolean
         gate:
           type: boolean
-        slot:
-          oneOf:
-          - $ref: '#/components/schemas/SlotEnum'
-          - $ref: '#/components/schemas/BlankEnum'
         show_if:
           nullable: true
         access: {}
@@ -3213,7 +3277,7 @@ components:
         helper_text:
           type: string
         type:
-          $ref: '#/components/schemas/TypeEnum'
+          $ref: '#/components/schemas/FieldTypeEnum'
         config: {}
         required:
           type: boolean
@@ -3246,8 +3310,10 @@ components:
         key:
           type: string
           maxLength: 64
-        kind:
-          $ref: '#/components/schemas/FormKindEnum'
+        type:
+          allOf:
+          - $ref: '#/components/schemas/FormTypeEnum'
+          readOnly: true
         name:
           type: string
           maxLength: 150
@@ -3256,8 +3322,8 @@ components:
           default: true
         inspection_type:
           type: string
+          readOnly: true
           default: ''
-          maxLength: 64
         submission_roles: {}
         draft_version:
           type: string
@@ -3309,7 +3375,7 @@ components:
           type: integer
           readOnly: true
         kind:
-          $ref: '#/components/schemas/Kind4e2Enum'
+          $ref: '#/components/schemas/KindEnum'
         key:
           type: string
           maxLength: 64
@@ -3370,10 +3436,6 @@ components:
           type: boolean
         gate:
           type: boolean
-        slot:
-          oneOf:
-          - $ref: '#/components/schemas/SlotEnum'
-          - $ref: '#/components/schemas/BlankEnum'
         show_if:
           nullable: true
         access: {}
@@ -3524,14 +3586,6 @@ components:
       - library
       - locked
       - title
-    SlotEnum:
-      enum:
-      - before
-      - after
-      type: string
-      description: |-
-        * `before` - before
-        * `after` - after
     StageEnum:
       enum:
       - draft
@@ -3556,52 +3610,6 @@ components:
       description: |-
         * `draft` - Draft
         * `published` - Published
-    TypeEnum:
-      enum:
-      - single_choice
-      - multi_choice
-      - yes_no
-      - master_list
-      - user_picker
-      - short_text
-      - long_text
-      - number
-      - currency
-      - phone
-      - date
-      - time
-      - datetime
-      - gps
-      - photo
-      - video
-      - file
-      - signature
-      - image
-      - derived
-      - rating
-      type: string
-      description: |-
-        * `single_choice` - Single Choice
-        * `multi_choice` - Multi Choice
-        * `yes_no` - Yes No
-        * `master_list` - Master List
-        * `user_picker` - User Picker
-        * `short_text` - Short Text
-        * `long_text` - Long Text
-        * `number` - Number
-        * `currency` - Currency
-        * `phone` - Phone
-        * `date` - Date
-        * `time` - Time
-        * `datetime` - Datetime
-        * `gps` - Gps
-        * `photo` - Photo
-        * `video` - Video
-        * `file` - File
-        * `signature` - Signature
-        * `image` - Image
-        * `derived` - Derived
-        * `rating` - Rating
     User:
       type: object
       properties:
@@ -3673,6 +3681,10 @@ components:
           type: string
           readOnly: true
         rating_config: {}
+        use_start:
+          type: boolean
+        use_end:
+          type: boolean
       required:
       - checks
       - form

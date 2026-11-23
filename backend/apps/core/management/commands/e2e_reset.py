@@ -44,6 +44,9 @@ class Command(BaseCommand):
             for key, scope in grants.items():
                 RolePermission.objects.get_or_create(role=role, permission=key,
                                                      defaults={"scope": scope})
+        from apps.forms.services import ensure_system_forms
+
+        ensure_system_forms()
         call_command("seed_master_lists", verbosity=0)
         for key, items in ITEMS.items():
             lst = MasterList.objects.get(key=key)

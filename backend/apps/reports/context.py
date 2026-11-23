@@ -5,8 +5,7 @@ from typing import Any
 
 from apps.bookings.models import Booking, Inspection
 from apps.bookings.services import booking_form_version
-from apps.bookings.submissions import ops_version
-from apps.forms.models import Field, MasterListItem
+from apps.forms.models import PARTS, Field, MasterListItem
 from apps.forms.rules import truthy
 
 from .definition import field_ref
@@ -66,16 +65,15 @@ def display(field: Field | None, value: Any, scores: dict) -> tuple[str, bool]:
 
 
 class Source:
-    """Looks up (form, key) -> field and value across the booking, inspection and ops forms."""
+    """Looks up (form, key) -> field and value across the booking, inspection, start and end
+    forms, each as the version this inspection was started on."""
 
     def __init__(self, booking: Booking, insp: Inspection):
         self.scores = insp.scores or {}
         self.answers = {"booking": booking.answers,
-                        "inspection": (insp.answers.get("inspection") or {}),
-                        "ops": (insp.answers.get("ops") or {})}
+                        **{p: (insp.answers.get(p) or {}) for p in PARTS}}
         self.fields: dict[str, dict[str, Field]] = {}
-        versions = (("booking", booking_form_version()), ("inspection", insp.form_version),
-                    ("ops", ops_version()))
+        versions = (("booking", booking_form_version()), *insp.pinned().items())
         for kind, version in versions:
             self.fields[kind] = ({f.key: f for f in Field.objects.filter(version=version)}
                                  if version else {})

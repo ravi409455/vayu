@@ -75,28 +75,28 @@ class Command(BaseCommand):
             User.objects.create_user(username=username, password=PASSWORD, role=role, name=name,
                                      must_change_password=must)
         admin = User.objects.get(username="admin")
-        booking = form_services.create_form(admin, key="booking", kind="booking", name="Booking")
-        _publish(booking)
-        self._ops_form(admin)
+        form_services.ensure_system_forms()
+        _publish(Form.objects.get(type="booking"))
+        self._system_forms(admin)
         self._inspection_forms(admin)
         self._bookings()
         self.stdout.write(self.style.SUCCESS(
             f"Demo ready. Sign in as admin / ops / expert / expert2 with password {PASSWORD}"))
 
-    def _ops_form(self, admin):
-        """The check-in/wrap-up system form comes with its locked fields; add a few custom ones
-        and a payment QR picture beside them."""
+    def _system_forms(self, admin):
+        """The start (check-in) and end (wrap-up) forms come with their locked fields; add a few
+        custom ones and a payment QR picture to the end form."""
         import io
 
         from PIL import Image
 
         from apps.forms import assets
 
-        form = form_services.create_form(admin, key="checkin", kind="ops",
-                                         name="Check-in and wrap-up")
+        _publish(Form.objects.get(type="start"))
+        form = Form.objects.get(type="end")
         v = form.versions.get(status="draft")
         pay = Section.objects.get(version=v, title="Payment")
-        paid = {"==": [{"var": "ops.taking_payment"}, True]}
+        paid = {"==": [{"var": "end.taking_payment"}, True]}
         qr = Image.new("RGB", (25, 25), "white")
         for x in range(25):
             for y in range(25):
@@ -107,10 +107,10 @@ class Command(BaseCommand):
         asset = assets.create_asset(admin, buf.getvalue())
         _field(v, pay, "pay_qr", "Scan to pay", "image", show_if=paid,
                config={"asset": str(asset.id)})
-        wrap = Page.objects.get(version=v, slot="after")
+        wrap = Page.objects.get(version=v)
         review = Section.objects.create(version=v, page=wrap, title="Review", order=1)
         _field(v, review, "google_review", "Google review taken", "yes_no")
-        shot = {"==": [{"var": "ops.google_review"}, True]}
+        shot = {"==": [{"var": "end.google_review"}, True]}
         _field(v, review, "review_screenshot", "Review screenshot", "photo", show_if=shot,
                config={"max_count": 1})
         _field(v, review, "perfume_given", "Car perfume given", "yes_no")
@@ -180,5 +180,5 @@ class Command(BaseCommand):
             "inspection": {"chassis_no": "MA3YPKCSKTJ273129", "registration_no": "DL1CAB1234",
                            "odometer": 4200, "bonnet": "ok", "door_fl": "minor",
                            "remarks": "Clean car."},
-            "ops": {"taking_payment": False, "selfie": [selfie]}})
+            "start": {"selfie": [selfie]}, "end": {"taking_payment": False}})
         check_completion(b3.id)        # Completed: the PDF is made by the worker

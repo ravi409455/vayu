@@ -7,13 +7,21 @@ from django.utils import timezone
 from apps.core import events
 from apps.core import tasks as core_tasks
 from apps.forms.access import STAGES, levels_for, may_see_submissions
-from apps.forms.models import Field, Form, FormKind, FormVersion, VersionStatus
+from apps.forms.models import PARTS, Field, Form, FormType, FormVersion, VersionStatus
 from apps.forms.rules import validate_answers
 from apps.forms.serializers import VersionTreeSerializer
 from apps.scoring import service as scoring
 
 from .models import Booking, Inspection
-from .services import _changed, _lock, active_item, booking_form_version, err, sync_columns, today
+from .services import (
+    _changed,
+    _lock,
+    active_inspection_type,
+    booking_form_version,
+    err,
+    sync_columns,
+    today,
+)
 
 
 def latest_published(form) -> FormVersion | None:
@@ -21,7 +29,7 @@ def latest_published(form) -> FormVersion | None:
 
 
 def inspection_version(inspection_type: str) -> FormVersion:
-    form = Form.objects.filter(kind=FormKind.INSPECTION, is_active=True,
+    form = Form.objects.filter(type=FormType.CUSTOM, is_active=True,
                                inspection_type=inspection_type).first()
     version = latest_published(form) if form else None
     if version is None:
@@ -30,9 +38,26 @@ def inspection_version(inspection_type: str) -> FormVersion:
     return version
 
 
-def ops_version() -> FormVersion | None:
-    form = Form.objects.filter(kind=FormKind.OPS, is_active=True).first()
+def system_version(form_type: str) -> FormVersion | None:
+    """The live version of the start or end form (None while it has not been published)."""
+    form = Form.objects.filter(type=form_type).first()
     return latest_published(form) if form else None
+
+
+def versions_to_pin(version: FormVersion) -> dict:
+    """The versions one inspection goes through: its custom form's, plus the live start / end
+    forms when the custom version begins / ends with them."""
+    return {"inspection": version,
+            "start": system_version(FormType.START) if version.use_start else None,
+            "end": system_version(FormType.END) if version.use_end else None}
+
+
+def current_versions(booking: Booking) -> dict:
+    """What a booking's file uploads and reports are measured against: the pinned versions of its
+    latest inspection, or, before anyone started, what a new inspection would pin."""
+    insp = booking.inspections.select_related("form_version", "start_version",
+                                              "end_version").order_by("-created_at").first()
+    return insp.pinned() if insp else versions_to_pin(inspection_version(booking.inspection_type))
 
 
 class _Role:
@@ -69,11 +94,11 @@ def form_for_role(version: FormVersion, role: str, stage: str) -> dict:
 
 
 def check_shape(answers) -> None:
-    """answers must be {"inspection": {...}, "ops": {...}} (either part optional)."""
+    """answers must be {"inspection": {...}, "start": {...}, "end": {...}} (every part optional)."""
     if not isinstance(answers, dict) or any(
-            answers.get(k) is not None and not isinstance(answers[k], dict)
-            for k in ("inspection", "ops")):
-        raise err("INVALID_ANSWERS", "answers must look like {inspection: {...}, ops: {...}}.")
+            answers.get(k) is not None and not isinstance(answers[k], dict) for k in PARTS):
+        raise err("INVALID_ANSWERS",
+                  "answers must look like {inspection: {...}, start: {...}, end: {...}}.")
 
 
 def _alert(b: Booking, code: str, detail: str) -> None:
@@ -99,8 +124,7 @@ def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, ap
     changes = {"stage": ["assigned", "in_progress"]}
     if inspection_type is not None and inspection_type != b.inspection_type:
         # the expert physically started this type offline: it wins over Ops' later change
-        if not isinstance(inspection_type, str) or not active_item("inspection_type",
-                                                                    inspection_type):
+        if not isinstance(inspection_type, str) or not active_inspection_type(inspection_type):
             raise err("INVALID_TYPE", "Unknown inspection type.")
         changes["inspection_type"] = [b.inspection_type, inspection_type]
         _alert(b, "TYPE_CHANGE_REJECTED",
@@ -108,9 +132,10 @@ def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, ap
         events.emit("alert.type_change_rejected", booking=str(b.id), booking_id=b.booking_id)
         b.answers = {**b.answers, "inspection_type": inspection_type}
         sync_columns(b)
-    version = inspection_version(b.inspection_type)
+    pinned = versions_to_pin(inspection_version(b.inspection_type))
     b.stage, b.started_at = "in_progress", timezone.now()
-    insp = Inspection.objects.create(booking=b, expert=actor, form_version=version,
+    insp = Inspection.objects.create(booking=b, expert=actor, form_version=pinned["inspection"],
+                                     start_version=pinned["start"], end_version=pinned["end"],
                                      client_start_uuid=client_uuid,
                                      client_started_at=client_started_at)
     _changed(actor, b, changes)
@@ -133,28 +158,37 @@ def stamp_auto(version: FormVersion | None, answers: dict) -> dict:
     return out
 
 
-def _clean_both(b: Booking, version: FormVersion, answers: dict):
-    ans_i, ans_o = answers.get("inspection") or {}, answers.get("ops") or {}
-    cleaned_i, errors = validate_answers(
-        version, {"inspection": ans_i, "booking": b.answers, "ops": ans_o}, today())
-    cleaned_o: dict = {}
-    ov = ops_version()
-    if ov is not None:
-        cleaned_o, e2 = validate_answers(
-            ov, {"ops": ans_o, "booking": b.answers, "inspection": cleaned_i}, today())
-        errors = {**errors, **e2}
+def _clean_all(b: Booking, pinned: dict, answers: dict):
+    """Validate each part against the version it was started on. A part with no version (its
+    form is not used) holds no answers. Returns (cleaned by part, errors)."""
+    raw = {part: answers.get(part) or {} for part in PARTS}
+    cleaned: dict[str, dict] = {}
+    errors: dict = {}
+    unused = [part for part, v in pinned.items() if v is None and raw[part]]
+    if unused:
+        raise err("INVALID_ANSWERS", "This inspection does not use that form.",
+                  errors={k: "NOT_USED" for part in unused for k in raw[part]})
+    for part in PARTS:
+        version = pinned[part]
+        if version is None:
+            cleaned[part] = {}
+            continue
+        context = {"booking": b.answers, **{p: (cleaned.get(p) or raw[p]) for p in PARTS}}
+        cleaned[part], e = validate_answers(version, {**context, part: raw[part]}, today())
+        errors = {**errors, **e}
     from apps.media.services import reference_errors
 
-    errors = {**errors, **reference_errors(b, [(version, cleaned_i), (ov, cleaned_o)])}
+    errors = {**errors, **reference_errors(
+        b, [(pinned[p], cleaned[p]) for p in PARTS if pinned[p] is not None])}
     if errors:
         raise err("INVALID_ANSWERS", "Some answers are invalid.", errors=errors)
-    return cleaned_i, cleaned_o, ov
+    return cleaned
 
 
-def _locked_keys(role: str, stage: str, version, ops_v, answers: dict, old: dict) -> list[str]:
+def _locked_keys(role: str, stage: str, pinned: dict, answers: dict, old: dict) -> list[str]:
     """Keys the role may not change at this stage (unknown keys are left to validation)."""
     locked: list[str] = []
-    for v, key in ((version, "inspection"), (ops_v, "ops")):
+    for key, v in pinned.items():
         if v is None:
             continue
         levels = levels_for(v, role, stage)
@@ -178,23 +212,23 @@ def submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id=No
     if insp is None:
         # an offline start that never reached us: the phone names its pinned version, but it must
         # belong to the form that handles this booking's type (no shopping for a weaker form)
-        form = Form.objects.filter(kind=FormKind.INSPECTION, is_active=True,
+        form = Form.objects.filter(type=FormType.CUSTOM, is_active=True,
                                    inspection_type=b.inspection_type).first()
         version = (FormVersion.objects.filter(pk=form_version_id, form=form,
                                               status=VersionStatus.PUBLISHED).first()
                    if form_version_id and form else None)
         if version is None:
             raise err("NOT_STARTED", "Start the inspection first.", 409)
-        insp = Inspection.objects.create(booking=b, expert=actor, form_version=version)
-    version = insp.form_version
-    ov = ops_version()
-    locked = _locked_keys(actor.role, "in_progress", version, ov, answers, {})
+        pinned = versions_to_pin(version)
+        insp = Inspection.objects.create(booking=b, expert=actor, form_version=version,
+                                         start_version=pinned["start"],
+                                         end_version=pinned["end"])
+    pinned = insp.pinned()
+    locked = _locked_keys(actor.role, "in_progress", pinned, answers, {})
     if locked:
         raise err("FIELD_ACCESS", "You cannot change these fields.", 403, keys=locked)
-    answers = {"inspection": stamp_auto(version, answers.get("inspection") or {}),
-               "ops": stamp_auto(ov, answers.get("ops") or {})}
-    cleaned_i, cleaned_o, _ = _clean_both(b, version, answers)
-    insp.answers = {"inspection": cleaned_i, "ops": cleaned_o}
+    answers = {p: stamp_auto(pinned[p], answers.get(p) or {}) for p in PARTS}
+    insp.answers = _clean_all(b, pinned, answers)
     insp.status, insp.submitted_at = "submitted", timezone.now()
     insp.client_submission_uuid = submission_uuid
     insp.save()
@@ -246,15 +280,13 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
                   changed_by=insp.last_change.get("by"), changed_at=insp.last_change.get("at"),
                   changed_keys=insp.last_change.get("keys", []), row_version=insp.row_version)
     b = insp.booking
-    version, ov = insp.form_version, ops_version()
-    locked = _locked_keys(actor.role, b.stage, version, ov, answers, insp.answers)
+    pinned = insp.pinned()
+    locked = _locked_keys(actor.role, b.stage, pinned, answers, insp.answers)
     if locked:
         raise err("FIELD_ACCESS", "You cannot change these fields at this stage.", 403, keys=locked)
-    merged = {k: {**(insp.answers.get(k) or {}), **(answers.get(k) or {})}
-              for k in ("inspection", "ops")}
-    cleaned_i, cleaned_o, _ = _clean_both(b, version, merged)
-    new = {"inspection": cleaned_i, "ops": cleaned_o}
-    keys = sorted(k for part in ("inspection", "ops") for k in set(new[part]) | set(
+    merged = {k: {**(insp.answers.get(k) or {}), **(answers.get(k) or {})} for k in PARTS}
+    new = _clean_all(b, pinned, merged)
+    keys = sorted(k for part in PARTS for k in set(new[part]) | set(
         insp.answers.get(part) or {}) if new[part].get(k) != (insp.answers.get(part) or {}).get(k))
     if keys:
         insp.answers = new
@@ -288,13 +320,13 @@ def searchable_stages(role: str) -> dict[str, list[str]]:
     by_stage = {s: levels_for(booking_version, role, s) for s in STAGES}
     out = {c: [s for s in STAGES if by_stage[s].get(key, "hidden") != "hidden"]  # fail closed
            for c, key in BOOKING_SEARCH.items()}
-    versions = [v for f in Form.objects.filter(kind=FormKind.INSPECTION, is_active=True)
+    versions = [v for f in Form.objects.filter(type=FormType.CUSTOM, is_active=True)
                 if (v := latest_published(f))]
     chassis = {s: [levels_for(v, role, s).get("chassis_no", "hidden") for v in versions]
                or ["hidden"] for s in STAGES}                    # no form to say: closed
     out["chassis_no"] = [s for s in STAGES if "hidden" not in chassis[s]]
     if any(not may_see_submissions(_Role(role), f) for f in Form.objects.filter(
-            kind=FormKind.INSPECTION)):
+            type=FormType.CUSTOM)):
         out["chassis_no"] = []                  # a hidden submission must not be searchable
     return out
 

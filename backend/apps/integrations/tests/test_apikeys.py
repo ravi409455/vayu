@@ -133,6 +133,9 @@ def test_lookup_by_internal_id_or_booking_id(env, booking):
 
 
 def test_listing_filters_and_scopes_the_data(env, booking):
+    from apps.bookings.tests.conftest import custom_form, publish_draft
+
+    publish_draft(env.admin, custom_form(env.admin, "ev")["id"])
     create(env.ops, booking_id="B2", city="delhi", inspection_type="ev")
     c = client(new_key(env, {"forms": {"booking": ["booking_id", "city"]}}))
     page = c.get("/api/v1/ext/bookings").json()
@@ -310,6 +313,6 @@ def test_swagger_is_admin_only_and_describes_the_api(env):
 def test_a_booking_type_without_an_active_form_cannot_be_reached_through_the_api(ienv, booking):
     from apps.forms.models import Form
 
-    Form.objects.filter(kind="inspection").update(is_active=False)
+    Form.objects.filter(type="custom").update(is_active=False)
     c = client(new_key(ienv, {"forms": {"booking": ["*"]}}))
     assert c.get(f"/api/v1/ext/bookings/{booking['id']}/inspection").status_code == 403

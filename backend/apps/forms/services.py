@@ -9,6 +9,7 @@ from apps.core.errors import CodedError
 from .models import (
     Field,
     Form,
+    FormType,
     FormVersion,
     MasterListItem,
     Page,
@@ -17,7 +18,7 @@ from .models import (
     VersionStatus,
     lock_draft,
 )
-from .system_fields import SYSTEM_FIELDS
+from .system_fields import PAGE_TITLE, SYSTEM_FIELDS
 
 
 def item_label(list_key: str, item_key: str) -> str | None:
@@ -26,31 +27,50 @@ def item_label(list_key: str, item_key: str) -> str | None:
             .values_list("label", flat=True).first())
 
 
-@transaction.atomic
-def create_form(actor, *, key: str, kind: str, name: str, inspection_type: str = "") -> Form:
-    form = Form.objects.create(key=key, kind=kind, name=name, inspection_type=inspection_type)
+def _build_first_version(form: Form) -> FormVersion:
+    """Version 1 of a new form: one page, with the locked system fields of its type."""
     version = FormVersion.objects.create(form=form, number=1)
-    if kind == "ops":
-        titles = {"before": "Check-in", "after": "Wrap-up"}
-        pages = {slot: Page.objects.create(version=version, title=t, order=n, slot=slot,
-                                           gate=slot == "before")
-                 for n, (slot, t) in enumerate(titles.items())}
-    else:
-        pages = {"": Page.objects.create(version=version, title="Page 1", order=0)}
-    sections: dict[tuple[str, str], Section] = {}
-    for order, spec in enumerate(SYSTEM_FIELDS[kind]):
+    page = Page.objects.create(version=version, title=PAGE_TITLE[form.type], order=0,
+                               gate=form.type == FormType.START)
+    sections: dict[str, Section] = {}
+    for order, spec in enumerate(SYSTEM_FIELDS.get(form.type, [])):
         spec = dict(spec)
-        slot, title = spec.pop("page", ""), spec.pop("section", "Section 1")
-        if (slot, title) not in sections:
-            sections[(slot, title)] = Section.objects.create(
-                version=version, page=pages[slot], title=title, order=len(
-                    [1 for k in sections if k[0] == slot]))
-        Field.objects.create(version=version, section=sections[(slot, title)], order=order,
+        title = spec.pop("section", "Section 1")
+        if title not in sections:
+            sections[title] = Section.objects.create(version=version, page=page, title=title,
+                                                     order=len(sections))
+        Field.objects.create(version=version, section=sections[title], order=order,
                              is_system=True, **{"config": {}, **spec})
     if not sections:                                          # no system fields: one empty section
-        Section.objects.create(version=version, page=pages[""], title="Section 1", order=0)
-    audit.record(actor, "form.create", "form", form.id, f"Created {kind} form {key}")
+        Section.objects.create(version=version, page=page, title="Section 1", order=0)
+    return version
+
+
+@transaction.atomic
+def create_form(actor, *, key: str, name: str, inspection_type: str = "") -> Form:
+    """Admins create custom forms only; the booking, start and end forms exist from the start."""
+    form = Form.objects.create(key=key, type=FormType.CUSTOM, name=name,
+                               inspection_type=inspection_type or key)
+    _build_first_version(form)
+    audit.record(actor, "form.create", "form", form.id, f"Created form {key}")
     return form
+
+
+SYSTEM_FORM_NAMES = {FormType.BOOKING: ("booking", "Booking"),
+                     FormType.START: ("start", "Start (check-in)"),
+                     FormType.END: ("end", "End (wrap-up)")}
+
+
+def ensure_system_forms() -> None:
+    """The booking, start and end forms: exactly one of each, always there. Safe to run again."""
+    for ftype, (key, name) in SYSTEM_FORM_NAMES.items():
+        if Form.objects.filter(type=ftype).exists():
+            continue
+        wanted, n = key, 2
+        while Form.objects.filter(key=wanted).exists():
+            wanted, n = f"{key}{n}", n + 1
+        with transaction.atomic():
+            _build_first_version(Form.objects.create(key=wanted, type=ftype, name=name))
 
 
 @transaction.atomic
@@ -63,7 +83,8 @@ def create_draft(actor, form: Form) -> FormVersion:
         raise CodedError("NOTHING_TO_COPY", "This form has no published version yet.", 409)
     number = (form.versions.aggregate(n=Max("number"))["n"] or 0) + 1
     draft = FormVersion.objects.create(form=form, number=number,
-                                       rating_config=source.rating_config)
+                                       rating_config=source.rating_config,
+                                       use_start=source.use_start, use_end=source.use_end)
     for page in Page.objects.filter(version=source):
         old_page_id = page.id
         page.pk, page.version = None, draft
@@ -88,7 +109,7 @@ def system_field_issues(version: FormVersion) -> list:
 
     present = {f.key: f for f in Field.objects.filter(version=version, is_system=True)}
     issues = []
-    for spec in SYSTEM_FIELDS[version.form.kind]:
+    for spec in SYSTEM_FIELDS.get(version.form.type, []):
         f = present.get(spec["key"])
         if f is None:
             issues.append(Issue(f"system_fields.{spec['key']}", "MISSING_SYSTEM_FIELD",

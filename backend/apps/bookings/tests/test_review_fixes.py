@@ -3,20 +3,21 @@ from unittest import mock
 import pytest
 
 from apps.bookings import submissions
+from apps.bookings.models import Booking
 from apps.bookings.tests.test_submissions import ienv, started  # noqa: F401
 from apps.core.errors import CodedError
 
 pytestmark = pytest.mark.django_db
 
 
-@pytest.mark.parametrize("bad", [{"inspection": "x"}, {"ops": [1]}, "x", [1], 5])
+@pytest.mark.parametrize("bad", [{"inspection": "x"}, {"start": [1]}, {"end": "x"}, "x", [1], 5])
 def test_answers_must_be_objects(bad):
     with pytest.raises(CodedError) as e:
         submissions.check_shape(bad)
     assert e.value.detail == {"code": "INVALID_ANSWERS", "detail": mock.ANY}
 
 
-@pytest.mark.parametrize("ok", [{}, {"inspection": {}}, {"inspection": None, "ops": {"a": 1}}])
+@pytest.mark.parametrize("ok", [{}, {"inspection": {}}, {"inspection": None, "start": {"a": 1}, "end": {}}])
 def test_well_formed_answers_pass(ok):
     submissions.check_shape(ok)
 
@@ -26,27 +27,62 @@ def test_the_expert_filter_needs_a_user_id(env):
     assert env.ops.get(f"/api/v1/bookings?expert={env.expert_user.id}").status_code == 200
 
 
-def test_start_also_returns_the_check_in_form_for_the_wizard(ienv, booking):
+def _publish_system(admin, ftype, field_key):
+    from apps.forms.models import Form
+
+    form = Form.objects.get(type=ftype)
+    v = form.versions.get(status="draft").id
+    sec = admin.get(f"/api/v1/form-versions/{v}").json()["pages"][0]["sections"][0]["id"]
+    assert admin.post(f"/api/v1/sections/{sec}/fields", {
+        "key": field_key, "label": field_key, "type": "yes_no"}, format="json").status_code == 201
+    rv = admin.get(f"/api/v1/form-versions/{v}").json()["row_version"]
+    assert admin.post(f"/api/v1/form-versions/{v}/publish", {"row_version": rv},
+                      format="json").status_code == 200
+
+
+def test_start_returns_the_start_and_end_forms_the_inspection_is_pinned_to(ienv, booking):
+    from apps.bookings.models import Inspection
     from apps.bookings.tests.test_submissions import assign, start
 
     assign(ienv, booking)
     r = start(ienv.expert, booking)
-    assert r.json()["ops_form"] is None                       # no check-in form published yet
-    form = ienv.admin.post("/api/v1/forms", {"key": "checkin", "kind": "ops", "name": "Check-in"},
-                           format="json").json()
-    v = form["draft_version"]["id"]
-    sec = ienv.admin.get(f"/api/v1/form-versions/{v}").json()["pages"][0]["sections"][0]["id"]
-    assert ienv.admin.post(f"/api/v1/sections/{sec}/fields", {
-        "key": "paid", "label": "Paid", "type": "yes_no"}, format="json").status_code == 201
-    rv = ienv.admin.get(f"/api/v1/form-versions/{v}").json()["row_version"]
-    ienv.admin.post(f"/api/v1/form-versions/{v}/publish", {"row_version": rv}, format="json")
-    from apps.bookings.models import Inspection
+    assert r.json()["start_form"] is None and r.json()["end_form"] is None    # nothing published
+    Inspection.objects.all().delete()
+    Booking.objects.filter(pk=booking["id"]).update(stage="assigned")
+    _publish_system(ienv.admin, "start", "paid_start")
+    _publish_system(ienv.admin, "end", "paid_end")
+    out = start(ienv.expert, booking).json()
+    for part, key in (("start_form", "paid_start"), ("end_form", "paid_end")):
+        keys = [f["key"] for p in out[part]["pages"] for s in p["sections"] for f in s["fields"]]
+        assert key in keys and "rating_config" not in out[part]
+    insp = Inspection.objects.get(booking_id=booking["id"])
+    assert insp.start_version_id and insp.end_version_id
 
-    # the same start request again (it is idempotent) now carries the form
-    uuid_ = str(Inspection.objects.get(booking_id=booking["id"]).client_start_uuid)
-    out = start(ienv.expert, booking, client_uuid=uuid_).json()
-    keys = [f["key"] for p in out["ops_form"]["pages"] for s in p["sections"] for f in s["fields"]]
-    assert "paid" in keys and "rating_config" not in out["ops_form"]
+
+def test_the_pinned_start_form_does_not_change_when_a_newer_one_is_published(ienv, booking):
+    from apps.bookings.models import Inspection
+    from apps.bookings.tests.test_submissions import assign, start
+
+    _publish_system(ienv.admin, "start", "first_q")
+    assign(ienv, booking)
+    out = start(ienv.expert, booking).json()
+    pinned = Inspection.objects.get(booking_id=booking["id"]).start_version_id
+    from apps.forms.models import Form
+
+    start_form = Form.objects.get(type="start")
+    draft = ienv.admin.post(f"/api/v1/forms/{start_form.id}/drafts").json()["id"]
+    sec = ienv.admin.get(f"/api/v1/form-versions/{draft}").json()["pages"][0]["sections"][0]["id"]
+    ienv.admin.post(f"/api/v1/sections/{sec}/fields", {"key": "second_q", "label": "q",
+                    "type": "yes_no"}, format="json")
+    rv = ienv.admin.get(f"/api/v1/form-versions/{draft}").json()["row_version"]
+    ienv.admin.post(f"/api/v1/form-versions/{draft}/publish", {"row_version": rv}, format="json")
+    again = start(ienv.expert, booking, client_uuid=str(Inspection.objects.get(
+        booking_id=booking["id"]).client_start_uuid)).json()          # idempotent restart
+    keys = [f["key"] for p in again["start_form"]["pages"] for s in p["sections"]
+            for f in s["fields"]]
+    assert "second_q" not in keys and "first_q" in keys
+    assert Inspection.objects.get(booking_id=booking["id"]).start_version_id == pinned
+    assert out["start_form"] is not None
 
 
 def test_a_booking_shows_its_conflict_and_alerts(env, booking):

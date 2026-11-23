@@ -31,6 +31,7 @@ ALLOWED_KEYS: dict[str, set[str]] = {
     "date": {"auto"}, "time": {"auto"}, "datetime": {"auto"}, "gps": {"auto"},
     "image": {"asset", "name"},
     "master_list": {"list"},
+    "form_choice": set(),
     "user_picker": {"role"},
     "short_text": {"max_length", "pattern", "pattern_message"},
     "long_text": {"max_length"},
@@ -102,6 +103,8 @@ def validate_config(type: str, config: Any) -> None:
     elif type == "master_list":
         if not MasterList.objects.filter(key=config.get("list")).exists():
             raise ConfigError(f"Master list '{config.get('list')}' does not exist.")
+    elif type == "form_choice":
+        pass                                  # the choices are the custom forms; nothing to set
     elif type == "user_picker":
         if config.get("role") not in ROLES:
             raise ConfigError(f"role must be one of {', '.join(ROLES)}.")
@@ -258,6 +261,15 @@ def clean_answer(field, value: Any, *, override: bool = False) -> Any:
             raise AnswerError("INVALID_OPTION", "Not one of the options.")
         if item.archived:
             raise AnswerError("ARCHIVED_OPTION", "This option is no longer available.")
+        return value
+    if t == "form_choice":
+        from .models import Form, FormType, VersionStatus
+
+        if not isinstance(value, str):
+            raise AnswerError("INVALID_TYPE", "Choose one option.")
+        if not Form.objects.filter(type=FormType.CUSTOM, is_active=True, inspection_type=value,
+                                   versions__status=VersionStatus.PUBLISHED).exists():
+            raise AnswerError("INVALID_OPTION", "Not one of the options.")
         return value
     if t == "user_picker":
         from apps.accounts.models import User  # avoid an import cycle at module load

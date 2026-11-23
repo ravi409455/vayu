@@ -6,8 +6,6 @@ from apps.forms.models import MasterList, MasterListItem
 LISTS = {
     "city": ("City", []),
     "car_make_model": ("Car make/model", []),
-    "inspection_type": ("Inspection type", [
-        ("pdi", "PDI (new car)"), ("used_car", "Used car"), ("ev", "EV")]),
     "cancel_reason": ("Cancel reason", [
         ("customer_cancelled", "Customer cancelled"), ("on_arrival", "Cancelled on arrival"),
         ("car_not_available", "Car not available"), ("duplicate", "Duplicate booking"),

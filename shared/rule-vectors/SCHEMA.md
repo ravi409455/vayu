@@ -30,7 +30,7 @@ field's type (numbers/dates/text for ordering; lists for `in`/iteration).
 
 ## Data a rule sees
 ```json
-{ "booking": {"<key>": value, ...}, "ops": {...}, "inspection": {...},
+{ "booking": {"<key>": value, ...}, "start": {...}, "end": {...}, "inspection": {...},
   "_today": "YYYY-MM-DD", "_defects": ["inspection.<key>", ...] }
 ```
 - Rules reference fields by qualified name: `{"var": "booking.fuel_type"}`.
@@ -41,7 +41,7 @@ field's type (numbers/dates/text for ordering; lists for `in`/iteration).
 - `_defects`: qualified keys of **visible** choice fields where the chosen option (single) or any chosen
   option (multi) has `is_defect: true`. Sorted.
 
-## Evaluation of one form (`spec.form` is booking | ops | inspection)
+## Evaluation of one form (`spec.form` is booking | start | end | inspection; "inspection" is the custom form)
 1. **Truthiness** is JsonLogic's: evaluate `{"!!": [rule]}`. A missing rule (`null`) means true.
 2. **Visibility** of a page, section or field is `visible` AND parent visible AND truthy(`show_if`).
    Compute it to a fixpoint: start with everything visible, build the data (hidden → null, `_defects`
@@ -65,7 +65,7 @@ field's type (numbers/dates/text for ordering; lists for `in`/iteration).
                         "show_if": null, "required": false, "required_if": null,
                         "options": [...], "rule": {...}}],
             "checks": [{"rule": {...}, "message": "...", "fields": ["a"]}] },
-  "answers": {"booking": {}, "ops": {}, "inspection": {}},
+  "answers": {"booking": {}, "start": {}, "end": {}, "inspection": {}},
   "today": "2026-10-14",
   "overrides": {"k": true},
   "expected": { "visible": {"a": true}, "required": {"a": false},

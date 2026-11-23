@@ -30,4 +30,4 @@ def make(env, form, **over):
 
 
 def booking_form_id() -> int:
-    return Form.objects.get(kind="booking").id
+    return Form.objects.get(type="booking").id

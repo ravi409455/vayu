@@ -58,8 +58,6 @@ class InspectionSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         request = self.context.get("request")
         if request is not None:
-            from .submissions import ops_version
-
             role, stage = request.user.role, instance.booking.stage
             hidden = self.context.setdefault("_hidden_forms", hidden_inspection_forms(request.user))
             if instance.form_version.form_id in hidden:        # not theirs to see
@@ -70,8 +68,7 @@ class InspectionSerializer(serializers.ModelSerializer):
                 data.pop("overrides", None)
             if "scores" in data and role != "admin":
                 self._hide_scores(data["scores"], instance, role, stage)
-            ov = ops_version()
-            for part, version in (("inspection", instance.form_version), ("ops", ov)):
+            for part, version in instance.pinned().items():
                 if part not in data["answers"]:
                     continue
                 if version is not None:

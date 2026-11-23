@@ -5,7 +5,7 @@ from django.utils import timezone
 from apps.accounts import audit
 from apps.bookings.services import err
 from apps.core.errors import CodedError
-from apps.forms.models import Field, Form, FormKind, FormVersion
+from apps.forms.models import Field, Form, FormType, FormVersion
 
 from .definition import referenced_fields, validate_definition
 from .models import PdfTemplate, PdfTemplateVersion
@@ -14,7 +14,7 @@ DEFAULT_DEFINITION = {"filename": "{booking_id}{type_code}.pdf", "type_code": ""
 
 
 def create_template(actor, form: Form) -> PdfTemplate:
-    if form.kind != FormKind.INSPECTION:
+    if form.type != FormType.CUSTOM:
         raise err("INVALID_FORM", "Only inspection forms have PDF templates.")
     if PdfTemplate.objects.filter(form=form).exists():
         raise err("TEMPLATE_EXISTS", "This form already has a PDF template.", 409)
@@ -56,7 +56,7 @@ def create_draft(actor, t: PdfTemplate) -> PdfTemplateVersion:
 
 def _known_keys(template: PdfTemplate) -> dict[str, set[str]]:
     from apps.bookings.services import booking_form_version
-    from apps.bookings.submissions import ops_version
+    from apps.bookings.submissions import system_version
 
     def keys(version):
         return set(Field.objects.filter(version=version).values_list("key", flat=True)) \
@@ -67,7 +67,12 @@ def _known_keys(template: PdfTemplate) -> dict[str, set[str]]:
         booking = booking_form_version()
     except CodedError:
         booking = None
-    return {"inspection": keys(latest), "booking": keys(booking), "ops": keys(ops_version())}
+    # a form that does not begin / end with the start / end form cannot show their answers
+    use_start = latest is None or latest.use_start
+    use_end = latest is None or latest.use_end
+    return {"inspection": keys(latest), "booking": keys(booking),
+            "start": keys(system_version("start")) if use_start else set(),
+            "end": keys(system_version("end")) if use_end else set()}
 
 
 def publish(actor, v: PdfTemplateVersion, row_version: int) -> PdfTemplateVersion:
@@ -81,7 +86,10 @@ def publish(actor, v: PdfTemplateVersion, row_version: int) -> PdfTemplateVersio
                       row_version=v.row_version)
         known = _known_keys(v.template)
         issues = [{"path": "definition", "code": "UNKNOWN_FIELD",
-                   "message": f"'{form}.{key}' is not a field of the {form} form."}
+                   "message": (f"'{form}.{key}' needs the {form} form, which this form does not "
+                               "include (see its form settings)."
+                               if form in ("start", "end") and not known.get(form)
+                               else f"'{form}.{key}' is not a field of the {form} form.")}
                   for form, key in sorted(referenced_fields(v.definition))
                   if key not in known.get(form, set())]
         if issues:

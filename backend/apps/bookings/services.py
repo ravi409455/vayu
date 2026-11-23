@@ -9,7 +9,7 @@ from apps.core import events
 from apps.core.errors import CodedError
 from apps.forms.access import levels_for
 from apps.forms.fieldtypes import AnswerError, clean_answer
-from apps.forms.models import Field, Form, FormKind, FormVersion, MasterListItem, VersionStatus
+from apps.forms.models import Field, Form, FormType, FormVersion, MasterListItem, VersionStatus
 from apps.forms.rules import validate_answers
 
 from .models import Booking, RescheduleLog
@@ -30,7 +30,7 @@ def today() -> str:
 
 
 def booking_form_version() -> FormVersion:
-    form = Form.objects.filter(kind=FormKind.BOOKING, is_active=True).first()
+    form = Form.objects.filter(type=FormType.BOOKING).first()
     version = (form.versions.filter(status=VersionStatus.PUBLISHED).order_by("-number").first()
                if form else None)
     if version is None:
@@ -40,6 +40,12 @@ def booking_form_version() -> FormVersion:
 
 def active_item(list_key: str, key: str) -> bool:
     return MasterListItem.objects.filter(list__key=list_key, key=key, archived=False).exists()
+
+
+def active_inspection_type(key: str) -> bool:
+    """Is there a live custom form that handles this inspection type?"""
+    return Form.objects.filter(type=FormType.CUSTOM, is_active=True, inspection_type=key,
+                               versions__status=VersionStatus.PUBLISHED).exists()
 
 
 def clean(version: FormVersion, answers: dict) -> dict:
@@ -211,7 +217,7 @@ def change_type(actor, b: Booking, inspection_type) -> Booking:
     b = _lock(b)
     if b.started_at is not None or b.stage not in ("draft", "assigned"):
         raise err("TYPE_LOCKED", "The inspection type is locked once the job has started.", 409)
-    if not isinstance(inspection_type, str) or not active_item("inspection_type", inspection_type):
+    if not isinstance(inspection_type, str) or not active_inspection_type(inspection_type):
         raise err("INVALID_TYPE", "Choose an inspection type from the list.")
     changes = {"inspection_type": [b.inspection_type, inspection_type]}
     b.answers = {**b.answers, "inspection_type": inspection_type}

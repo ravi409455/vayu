@@ -143,13 +143,13 @@ def targets(booking, public: str) -> list[Integration]:
     this booking's type (every event) that subscribed to this event."""
     from django.db.models import Q
 
-    from apps.forms.models import FormKind
+    from apps.forms.models import FormType
 
     rows = Integration.objects.filter(is_active=True, form__is_active=True).select_related("form")
-    q = Q(form__kind=FormKind.BOOKING) & Q(events__contains=[public]) \
+    q = Q(form__type=FormType.BOOKING) & Q(events__contains=[public]) \
         if public.startswith("booking.") else Q(pk__in=[])
     if booking is not None:
-        q |= (Q(form__kind=FormKind.INSPECTION, form__inspection_type=booking.inspection_type)
+        q |= (Q(form__type=FormType.CUSTOM, form__inspection_type=booking.inspection_type)
               & Q(events__contains=[public]))
     return list(rows.filter(q))
 
@@ -208,6 +208,9 @@ def build_payload(d: Delivery) -> dict:
         body["data"] = {"booking": _scoped(booking.answers, integ.fields),
                         "inspection": _scoped(((insp.answers.get("inspection") or {})
                                                if insp else {}), integ.fields)}
+        if not integ.fields:       # the start / end answers go only to a hook that gets everything
+            body["data"]["start"] = (insp.answers.get("start") or {}) if insp else {}
+            body["data"]["end"] = (insp.answers.get("end") or {}) if insp else {}
     if integ.include_pdf:
         report = Report.objects.filter(booking=booking, status="ready").first()
         body["pdf_url"] = (media_storage.presign_get(

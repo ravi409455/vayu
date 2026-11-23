@@ -62,7 +62,7 @@ def test_a_switched_off_hidden_form_stays_hidden_from_search(done):
 
     env, b = done
     hide_from(env, "ops")
-    Form.objects.filter(kind="inspection").update(is_active=False)         # hiding must not depend on it being live
+    Form.objects.filter(type="custom").update(is_active=False)         # hiding must not depend on it being live
     assert env.ops.get("/api/v1/bookings?search=273129").json()["count"] == 0
 
 
@@ -106,7 +106,7 @@ def test_photo_fields_of_a_hidden_form_are_hidden_for_that_role(ienv, booking, s
 def test_only_inspection_forms_have_the_setting_and_it_is_validated(ienv):
     from apps.forms.models import Form
 
-    booking_form = Form.objects.get(kind="booking")
+    booking_form = Form.objects.get(type="booking")
     r = ienv.admin.patch(f"/api/v1/forms/{booking_form.id}", {"submission_roles": ["ops"]},
                          format="json")
     assert r.status_code == 400

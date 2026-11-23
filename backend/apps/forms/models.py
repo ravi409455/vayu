@@ -28,10 +28,18 @@ class MasterListItem(models.Model):
         ordering = ["order", "id"]
 
 
-class FormKind(models.TextChoices):
+class FormType(models.TextChoices):
     BOOKING = "booking"
-    OPS = "ops"
-    INSPECTION = "inspection"
+    START = "start"          # the check-in an expert does before the inspection
+    END = "end"              # the wrap-up (payment...) after it
+    CUSTOM = "custom"        # PDI, PPI, EV...: what Admins build
+
+
+SYSTEM_TYPES = (FormType.BOOKING, FormType.START, FormType.END)
+# the name each form's answers go by in rules, PDF templates and stored data
+NAMESPACE = {"booking": "booking", "start": "start", "end": "end", "custom": "inspection"}
+# the parts of one inspection's answers (the booking's own answers live on the booking)
+PARTS = ("inspection", "start", "end")
 
 
 def default_submission_roles() -> list[str]:
@@ -40,24 +48,33 @@ def default_submission_roles() -> list[str]:
 
 class Form(models.Model):
     key = models.CharField(max_length=64, unique=True)
-    kind = models.CharField(max_length=16, choices=FormKind.choices)
+    type = models.CharField(max_length=16, choices=FormType.choices)
     name = models.CharField(max_length=150)
     is_active = models.BooleanField(default=True)
-    inspection_type = models.CharField(max_length=64, blank=True)  # inspection_type list item key
-    # inspection forms: which roles may see this form's submissions at all (Admin always can)
+    # custom forms: the value bookings point at (the form's key when it was created)
+    inspection_type = models.CharField(max_length=64, blank=True)
+    # custom forms: which roles may see this form's submissions at all (Admin always can)
     submission_roles = models.JSONField(default=default_submission_roles)
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["kind"], condition=Q(is_active=True, kind__in=["booking", "ops"]),
-                name="one_active_booking_and_ops_form"),
+                fields=["type"], condition=Q(type__in=["booking", "start", "end"]),
+                name="one_system_form_per_type"),
             models.UniqueConstraint(
                 fields=["inspection_type"],
-                condition=Q(is_active=True, kind="inspection") & ~Q(inspection_type=""),
+                condition=Q(is_active=True, type="custom") & ~Q(inspection_type=""),
                 name="one_active_form_per_inspection_type"),
         ]
+
+    @property
+    def ns(self) -> str:
+        return NAMESPACE[self.type]
+
+    @property
+    def is_system(self) -> bool:
+        return self.type in SYSTEM_TYPES
 
 
 class VersionStatus(models.TextChoices):
@@ -74,6 +91,9 @@ class FormVersion(models.Model):
     published_at = models.DateTimeField(null=True, blank=True)
     row_version = models.PositiveIntegerField(default=0)
     rating_config = models.JSONField(default=dict, blank=True)  # see apps/scoring/engine.py
+    # custom forms: does the expert begin with the start form / finish with the end form?
+    use_start = models.BooleanField(default=True)
+    use_end = models.BooleanField(default=True)
 
     class Meta:
         constraints = [
@@ -163,9 +183,6 @@ class Page(DraftOnly):
     visible = models.BooleanField(default=True)
     # the person cannot move on from this page until everything required on it is filled in
     gate = models.BooleanField(default=False)
-    # check-in/wrap-up form only: where the page sits in the expert's steps
-    slot = models.CharField(max_length=6, blank=True,
-                            choices=[("before", "before"), ("after", "after")])
     show_if = models.JSONField(null=True, blank=True)
     access = models.JSONField(default=dict, blank=True)
 
@@ -216,6 +233,7 @@ class FieldType(models.TextChoices):
     VIDEO = "video"
     FILE = "file"
     SIGNATURE = "signature"
+    FORM_CHOICE = "form_choice"  # the booking form's pick of a custom form (shown by name)
     IMAGE = "image"      # a picture the Admin uploads, shown to people filling the form (read-only)
     DERIVED = "derived"  # system-filled (Key Checks), Ops can override
     RATING = "rating"    # system-filled (suggested rating), Ops can override

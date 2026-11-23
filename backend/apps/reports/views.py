@@ -109,7 +109,7 @@ def _report_booking(request, pk) -> Booking:
     b = get_object_or_404(qs, pk=pk)
     # the report is the submission: judged by every form it could come from (the form of any
     # inspection actually on this booking, and any form of its type, switched off or not)
-    forms = Form.objects.filter(kind="inspection").filter(
+    forms = Form.objects.filter(type="custom").filter(
         Q(inspection_type=b.inspection_type)
         | Q(pk__in=b.inspections.values("form_version__form_id")))
     if any(not may_see_submissions(request.user, f) for f in forms):
@@ -176,8 +176,8 @@ class Verify(APIView):
         insp = context.latest_inspection(b)
         car = MasterListItem.objects.filter(list__key="car_make_model", key=b.car_make_model) \
             .values_list("label", flat=True).first() or b.car_make_model
-        kind = MasterListItem.objects.filter(list__key="inspection_type", key=b.inspection_type) \
-            .values_list("label", flat=True).first() or b.inspection_type
+        kind = Form.objects.filter(type="custom", inspection_type=b.inspection_type) \
+            .values_list("name", flat=True).first() or b.inspection_type
         word = ((insp.scores or {}).get("overall") or {}).get("word") if insp else None
         return Response({"valid": True, "booking_id": b.booking_id, "car": car, "type": kind,
                          "date": b.inspection_date, "overall_rating": word,

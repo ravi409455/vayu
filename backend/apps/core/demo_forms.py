@@ -212,8 +212,7 @@ def build_inspection(admin, *, key, name, itype, pages):
     """Create, fill and publish one inspection form; returns (form, {section: [field keys]})."""
     from apps.forms.models import LibraryItem
 
-    form = form_services.create_form(admin, key=key, kind="inspection", name=name,
-                                     inspection_type=itype)
+    form = form_services.create_form(admin, key=key, name=name, inspection_type=itype)
     v = form.versions.get(status="draft")
     first = Page.objects.get(version=v)
     chassis = Field.objects.get(version=v, key="chassis_no")

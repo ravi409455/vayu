@@ -9,7 +9,7 @@ import jsonlogic_rs
 
 from .fieldtypes import AnswerError, ConfigError, clean_answer, is_empty, validate_config
 
-FORMS = ("booking", "ops", "inspection")
+FORMS = ("booking", "start", "end", "inspection")
 # Deliberately small. Everything form logic needs (conditions, "is empty", defect counts) fits in
 # these. Arithmetic other than "+" (used to count inside reduce), string and min/max operators are
 # banned: the Python and JS libraries disagree on null handling there, and no form needs them.
@@ -180,7 +180,7 @@ def spec_from_version(version) -> FormSpec:
               for f in Field.objects.filter(version=version)]
     checks = [CheckSpec(rule=c.rule, message=c.message, fields=c.fields, id=c.id)
               for c in VersionCheck.objects.filter(version=version)]
-    return FormSpec(form=version.form.kind, containers=containers, fields=fields, checks=checks)
+    return FormSpec(form=version.form.ns, containers=containers, fields=fields, checks=checks)
 
 
 def validate_answers(version, answers: dict, today: str,
@@ -190,7 +190,7 @@ def validate_answers(version, answers: dict, today: str,
     Type errors win over rule errors; answers to hidden fields are dropped unchecked."""
     from .models import Field
 
-    own = version.form.kind
+    own = version.form.ns
     fields = {f.key: f for f in Field.objects.filter(version=version)}
     raw = answers.get(own) or {}
     errors: dict[str, str] = {k: "UNKNOWN_FIELD" for k in raw if k not in fields}
@@ -289,19 +289,26 @@ def rule_vars(rule: Any) -> set[str]:
 
 
 def _known_fields(version) -> dict[str, dict[str, str]]:
-    """form kind -> {key: type} for the version being validated and the active booking/ops
-    forms' latest versions (draft if any)."""
+    """form namespace -> {key: type} for the version being validated and the booking, start and
+    end forms' latest versions (draft if any). A custom form only knows start / end when it
+    includes them."""
     from .models import Field, Form, FormVersion
 
-    known = {version.form.kind: dict(Field.objects.filter(version=version)
-                                     .values_list("key", "type"))}
-    for kind in ("booking", "ops"):
-        if kind == version.form.kind:
+    own = version.form
+    known = {own.ns: dict(Field.objects.filter(version=version).values_list("key", "type"))}
+    wanted = ["booking"]
+    if own.type == "custom":
+        wanted += [t for t, used in (("start", version.use_start), ("end", version.use_end))
+                   if used]
+    else:
+        wanted += ["start", "end"]
+    for ftype in wanted:
+        if ftype == own.type:
             continue
-        form = Form.objects.filter(kind=kind, is_active=True).first()
+        form = Form.objects.filter(type=ftype).first()
         latest = form and FormVersion.objects.filter(form=form).order_by("-number").first()
         if latest:
-            known[kind] = dict(Field.objects.filter(version=latest).values_list("key", "type"))
+            known[ftype] = dict(Field.objects.filter(version=latest).values_list("key", "type"))
     return known
 
 
@@ -313,7 +320,12 @@ def _reference_issues(rule: Any, path: str, known: dict) -> list[Issue]:
         form, _, rest = name.partition(".")
         key = rest.split(".")[0]
         ftype = known.get(form, {}).get(key)
-        if ftype is None:
+        if ftype is None and form in ("start", "end") and form not in known:
+            issues.append(Issue(path, "FORM_NOT_INCLUDED",
+                                f"'{name}' uses the {form} form, but this form does not "
+                                f"{'begin' if form == 'start' else 'end'} with it. Turn that on "
+                                "in the form settings or remove the rule.", ref=name))
+        elif ftype is None:
             issues.append(Issue(path, "UNKNOWN_FIELD", f"'{name}' is not a known field "
                                 "(use form.key, e.g. inspection.door or booking.city).", ref=name))
         elif ftype in SYSTEM_FILLED:
@@ -360,7 +372,7 @@ def _cycle_issues(version, own: str) -> list[Issue]:
 def validate_version(version) -> list[Issue]:
     from .models import Field, Page, Section, VersionCheck
 
-    own = version.form.kind
+    own = version.form.ns
     known = _known_fields(version)
     issues: list[Issue] = []
 
@@ -397,13 +409,14 @@ def validate_version(version) -> list[Issue]:
 
 
 def dependent_issues(version) -> list[Issue]:
-    """Publishing a booking/ops form must not break rules of the live versions of other forms that
-    read its fields (e.g. an inspection rule on booking.fuel_type). Returns those breakages."""
+    """Publishing a booking, start or end form must not break rules of the live versions of other
+    forms that read its fields (e.g. an inspection rule on booking.fuel_type). Returns those
+    breakages."""
     from .models import Form, FormVersion, VersionStatus
 
-    kind = version.form.kind
+    kind = version.form.ns
     out: list[Issue] = []
-    for form in Form.objects.filter(is_active=True).exclude(kind=kind):
+    for form in Form.objects.filter(is_active=True).exclude(type=version.form.type):
         live = FormVersion.objects.filter(form=form, status=VersionStatus.PUBLISHED) \
             .order_by("-number").first()
         if live is None:

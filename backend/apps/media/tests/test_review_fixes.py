@@ -237,7 +237,7 @@ def test_hidden_fields_fail_closed_when_no_form_describes_the_booking(job, setti
     asset = upload(env.expert, b["id"], jpeg(), settings).json()["id"]
     booking = Booking.objects.get(pk=b["id"])
     booking.inspections.all().delete()                      # no inspection yet ...
-    Form.objects.filter(kind="inspection").update(is_active=False)   # ... and no active form
+    Form.objects.filter(type="custom").update(is_active=False)   # ... and no active form
     assert hidden_fields(env.ops_user, booking) == {MediaAsset.objects.get(pk=asset).field_key}
     assert hidden_fields(env.admin_user, booking) == set()
 
@@ -298,7 +298,7 @@ def test_every_photo_field_of_a_form_hidden_from_a_role_is_hidden_for_that_role(
     upload(env.expert, b["id"], jpeg(), settings)
     booking = Booking.objects.get(pk=b["id"])
     assert "photo_a" not in hidden_fields(env.ops_user, booking)
-    form = Form.objects.get(kind="inspection")
+    form = Form.objects.get(type="custom")
     env.admin.patch(f"/api/v1/forms/{form.id}", {"submission_roles": ["expert"]}, format="json")
     assert {"photo_a", "clip", "doc", "sign"} <= hidden_fields(env.ops_user, booking)
     assert hidden_fields(env.admin_user, booking) == set()                 # Admin always sees

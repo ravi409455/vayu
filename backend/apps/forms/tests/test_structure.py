@@ -33,9 +33,11 @@ OPS_SYSTEM_KEYS = {"checkin_gps", "checkin_time", "selfie", "taking_payment", "p
 
 @pytest.mark.parametrize(
     "kind,expected",
-    [("booking", BOOKING_SYSTEM_KEYS), ("inspection", {"chassis_no"}), ("ops", OPS_SYSTEM_KEYS)],
+    [("booking", BOOKING_SYSTEM_KEYS), ("inspection", {"chassis_no"}),
+     ("start", {"checkin_gps", "checkin_time", "selfie"}),
+     ("end", {"taking_payment", "payment_mode", "payment_amount", "payment_screenshot"})],
 )
-def test_system_fields_are_created_per_kind(make_form, tree, kind, expected):
+def test_system_fields_are_created_per_type(make_form, tree, kind, expected):
     form = make_form(key=f"{kind}_form", kind=kind)
     t = tree(form["draft_version"]["id"])
     system = {f["key"] for p in t["pages"] for s in p["sections"] for f in s["fields"]
@@ -43,13 +45,16 @@ def test_system_fields_are_created_per_kind(make_form, tree, kind, expected):
     assert system == expected
 
 
-def test_only_one_active_booking_and_ops_form(make_form, admin):
-    make_form(key="booking", kind="booking")
-    make_form(key="ops", kind="ops")
-    for key, kind in [("booking2", "booking"), ("ops2", "ops")]:
-        r = admin.post("/api/v1/forms", {"key": key, "kind": kind, "name": key}, format="json")
+def test_the_three_system_forms_exist_once_and_cannot_be_added(make_form, admin):
+    from apps.forms.models import Form
+
+    assert sorted(Form.objects.exclude(type="custom").values_list("type", flat=True)) == [
+        "booking", "end", "start"]
+    for kind in ("booking", "start", "end"):
+        r = admin.post("/api/v1/forms", {"key": f"{kind}2", "type": kind, "name": kind},
+                       format="json")
         assert r.status_code == 400
-    make_form(key="ppi")  # many inspection forms are fine
+    make_form(key="ppi")  # many custom forms are fine
     make_form(key="ev")
 
 
@@ -202,7 +207,7 @@ def test_ops_reads_forms_expert_cannot_and_only_admin_writes(api_as, make_form, 
     ops, _ = api_as(Role.OPS)
     assert ops.get(f"/api/v1/form-versions/{v}").status_code == 200
     assert ops.get("/api/v1/forms").status_code == 200
-    assert ops.post("/api/v1/forms", {"key": "x", "kind": "inspection", "name": "x"},
+    assert ops.post("/api/v1/forms", {"key": "x", "name": "x"},
                     format="json").status_code == 403
     assert ops.post(f"/api/v1/form-versions/{v}/pages", {"title": "x"},
                     format="json").status_code == 403

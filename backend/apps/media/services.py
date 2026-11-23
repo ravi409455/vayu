@@ -12,13 +12,13 @@ from django.utils import timezone
 from apps.accounts.permissions import scope_for
 from apps.bookings.models import Booking, Inspection
 from apps.bookings.services import err
-from apps.bookings.submissions import inspection_version, ops_version, own_filter
+from apps.bookings.submissions import current_versions, own_filter
 from apps.core import events
 from apps.core import tasks as core_tasks
 from apps.core.errors import CodedError
 from apps.forms.access import hidden_inspection_forms, levels_for
 from apps.forms.fieldtypes import DEFAULT_MAX_COUNT
-from apps.forms.models import Field
+from apps.forms.models import PARTS, Field
 
 from . import storage
 from .models import KINDS, MediaAsset, MediaZip
@@ -56,14 +56,9 @@ def readable_booking(request, booking_id) -> Booking:
 
 
 def field_for(booking: Booking, field_key: str) -> Field:
-    """The form field (inspection or ops form) a media upload belongs to."""
-    versions = []
-    insp = booking.inspections.order_by("-created_at").first()
-    versions.append(insp.form_version if insp else inspection_version(booking.inspection_type))
-    if (ov := ops_version()) is not None:
-        versions.append(ov)
-    for v in versions:
-        f = Field.objects.filter(version=v, key=field_key).first()
+    """The form field (custom, start or end form) a media upload belongs to."""
+    for v in current_versions(booking).values():
+        f = Field.objects.filter(version=v, key=field_key).first() if v else None
         if f is not None:
             return f
     raise err("UNKNOWN_FIELD", f"'{field_key}' is not a field of this inspection.")
@@ -74,12 +69,11 @@ def hidden_fields(user, booking: Booking) -> set[str]:
     form too: Ops-only photo fields stay Ops-only)."""
     if user.role == "admin":
         return set()
-    insp = booking.inspections.order_by("-created_at").first()
     try:
-        main = insp.form_version if insp else inspection_version(booking.inspection_type)
+        pinned = current_versions(booking)
     except CodedError:       # no form says what this user may see: fail closed, hide every file
         return set(MediaAsset.objects.filter(booking=booking).values_list("field_key", flat=True))
-    versions = [main, ops_version()]
+    main, versions = pinned["inspection"], list(pinned.values())
     out: set[str] = set()
     if main.form_id in hidden_inspection_forms(user):          # the whole submission is off limits
         out |= set(Field.objects.filter(version=main, type__in=KINDS).values_list("key", flat=True))
@@ -211,8 +205,6 @@ def reference_errors(booking: Booking, parts: list[tuple]) -> dict[str, str]:
     """Answers may only point at this booking's media of the right kind."""
     errors: dict[str, str] = {}
     for version, answers in parts:
-        if version is None:
-            continue
         refs = referenced_ids(version, answers)
         found = {str(a.id): a for a in MediaAsset.objects.filter(booking=booking,
                                                                   id__in=list(refs))}
@@ -228,10 +220,10 @@ def reference_errors(booking: Booking, parts: list[tuple]) -> dict[str, str]:
 
 
 def expected_media(inspection: Inspection) -> set[str]:
-    ops = ops_version()
-    ids = set(referenced_ids(inspection.form_version, inspection.answers.get("inspection") or {}))
-    if ops is not None:
-        ids |= set(referenced_ids(ops, inspection.answers.get("ops") or {}))
+    ids: set[str] = set()
+    for part, version in inspection.pinned().items():
+        if version is not None:
+            ids |= set(referenced_ids(version, inspection.answers.get(part) or {}))
     return ids
 
 
@@ -283,7 +275,7 @@ def delete_asset(actor, asset: MediaAsset) -> None:
     with transaction.atomic():
         for insp in asset.booking.inspections.select_for_update().all():
             changed = False
-            for part in ("inspection", "ops"):
+            for part in PARTS:
                 answers = dict(insp.answers.get(part) or {})
                 for key, value in answers.items():
                     if value == str(asset.id):

@@ -109,47 +109,22 @@ def lists():
     call_command("seed_master_lists")
 
 
-def test_inspection_form_can_be_tied_to_a_booking_type(admin, lists):
-    r = admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "PDI",
-                                     "inspection_type": "pdi"}, format="json")
+def test_a_new_form_is_tied_to_the_booking_type_named_by_its_key(admin):
+    r = admin.post("/api/v1/forms", {"key": "pdi", "name": "PDI"}, format="json")
     assert r.status_code == 201 and r.json()["inspection_type"] == "pdi"
+    assert r.json()["type"] == "custom"
 
 
-def test_inspection_type_is_optional_and_defaults_blank(admin, lists):
-    r = admin.post("/api/v1/forms", {"key": "scratch", "kind": "inspection", "name": "S"},
+def test_the_type_cannot_be_chosen_or_changed(admin):
+    r = admin.post("/api/v1/forms", {"key": "scratch", "name": "S", "inspection_type": "other"},
                    format="json")
-    assert r.json()["inspection_type"] == ""
+    assert r.json()["inspection_type"] == "scratch"                   # always the form's key
+    f = r.json()
+    admin.patch(f"/api/v1/forms/{f['id']}", {"inspection_type": "used_car"}, format="json")
+    assert admin.get(f"/api/v1/forms/{f['id']}").json()["inspection_type"] == "scratch"
 
 
-def test_only_one_active_inspection_form_per_type(admin, lists):
-    admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "A",
-                                 "inspection_type": "pdi"}, format="json")
-    r = admin.post("/api/v1/forms", {"key": "pdi2", "kind": "inspection", "name": "B",
-                                     "inspection_type": "pdi"}, format="json")
+@pytest.mark.parametrize("ftype", ["booking", "start", "end"])
+def test_only_custom_forms_can_be_created(admin, ftype):
+    r = admin.post("/api/v1/forms", {"key": "x_form", "type": ftype, "name": "X"}, format="json")
     assert r.status_code == 400
-    other = admin.post("/api/v1/forms", {"key": "ev", "kind": "inspection", "name": "EV",
-                                         "inspection_type": "ev"}, format="json")
-    assert other.status_code == 201
-
-
-def test_retiring_a_form_frees_its_type(admin, lists):
-    a = admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "A",
-                                     "inspection_type": "pdi"}, format="json").json()
-    admin.patch(f"/api/v1/forms/{a['id']}", {"is_active": False}, format="json")
-    r = admin.post("/api/v1/forms", {"key": "pdi2", "kind": "inspection", "name": "B",
-                                     "inspection_type": "pdi"}, format="json")
-    assert r.status_code == 201
-
-
-@pytest.mark.parametrize("kind,t", [("booking", "pdi"), ("ops", "pdi"), ("inspection", "nope")])
-def test_invalid_inspection_types(admin, lists, kind, t):
-    r = admin.post("/api/v1/forms", {"key": "x_form", "kind": kind, "name": "X",
-                                     "inspection_type": t}, format="json")
-    assert r.status_code == 400
-
-
-def test_type_can_be_changed_later(admin, lists):
-    f = admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "A"},
-                   format="json").json()
-    r = admin.patch(f"/api/v1/forms/{f['id']}", {"inspection_type": "used_car"}, format="json")
-    assert r.status_code == 200 and r.json()["inspection_type"] == "used_car"

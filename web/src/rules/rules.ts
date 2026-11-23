@@ -2,7 +2,7 @@
 // mirrors backend/apps/forms/rules.py and the Kotlin adapter, all proven by the same cases).
 import jsonLogic from "json-logic-js";
 
-export const FORMS = ["booking", "ops", "inspection"] as const;
+export const FORMS = ["booking", "start", "end", "inspection"] as const;
 type Values = Record<string, unknown>;
 
 export type Container = {

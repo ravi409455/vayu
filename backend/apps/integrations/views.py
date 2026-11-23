@@ -15,7 +15,7 @@ from apps.accounts import audit
 from apps.accounts.permissions import perm
 from apps.bookings.models import Booking
 from apps.bookings.services import err
-from apps.forms.models import Field, Form, FormKind
+from apps.forms.models import Field, Form, FormType
 
 from . import apikeys, webhooks
 from .models import ApiKey, Delivery, Integration
@@ -29,7 +29,7 @@ def _clean_integration(data: dict, current: Integration | None = None) -> dict:
     if "form" in data or current is None:
         form_id = data.get("form")
         form = Form.objects.filter(pk=form_id).first() if isinstance(form_id, int) else None
-        if form is None or form.kind not in (FormKind.BOOKING, FormKind.INSPECTION):
+        if form is None or form.type not in (FormType.BOOKING, FormType.CUSTOM):
             raise err("INVALID_FORM", "Choose a booking or inspection form.")
         out["form"] = form
     if "name" in data or current is None:
@@ -163,7 +163,7 @@ def _booking_for(request, form: Form) -> Booking | None:
         except ValueError as e:
             raise ValidationError({"booking": "Not a valid booking id."}) from e
     qs = Booking.objects.all()
-    if form.kind == FormKind.INSPECTION:
+    if form.type == FormType.CUSTOM:
         qs = qs.filter(inspection_type=form.inspection_type)
     return qs.order_by("-created_at").first()
 
@@ -248,7 +248,7 @@ def _clean_scope(scope) -> dict:
         raise err("INVALID_SCOPE", 'scope must look like {"forms": {"<form key>": ["<field>"]}}.')
     out: dict = {}
     for key, fields in scope["forms"].items():
-        form = Form.objects.filter(key=key, kind__in=[FormKind.BOOKING, FormKind.INSPECTION],
+        form = Form.objects.filter(key=key, type__in=[FormType.BOOKING, FormType.CUSTOM],
                                    is_active=True).first()
         if form is None:
             raise err("INVALID_SCOPE", f"'{key}' is not an active booking or inspection form.")

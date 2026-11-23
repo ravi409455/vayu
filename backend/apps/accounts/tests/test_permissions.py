@@ -120,7 +120,7 @@ def test_only_roles_managers_can_read_or_edit_roles(api_as, role):
 def test_granting_and_revoking_takes_effect_on_the_next_request(api_as):
     admin, _ = api_as(Role.ADMIN)
     ops, _ = api_as(Role.OPS)
-    new_form = {"key": "ppi", "kind": "inspection", "name": "PPI"}
+    new_form = {"key": "ppi", "name": "PPI"}
     assert ops.post("/api/v1/forms", new_form, format="json").status_code == 403
     perms = dict(DEFAULTS["ops"], **{"forms.edit": "all"})
     assert put_perms(admin, "ops", perms).status_code == 200
@@ -201,7 +201,7 @@ def test_forms_are_readable_by_ops_never_by_experts_and_editable_only_when_grant
     admin, _ = api_as(Role.ADMIN)
     ops, _ = api_as(Role.OPS)
     expert, _ = api_as(Role.EXPERT)
-    form = admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "PDI"},
+    form = admin.post("/api/v1/forms", {"key": "pdi", "name": "PDI"},
                       format="json").json()
     v = form["draft_version"]["id"]
     assert ops.get(f"/api/v1/form-versions/{v}").status_code == 200
@@ -218,7 +218,7 @@ def test_forms_are_readable_by_ops_never_by_experts_and_editable_only_when_grant
 def test_saving_to_the_library_needs_both_forms_edit_and_library_edit(api_as):
     admin, _ = api_as(Role.ADMIN)
     ops, _ = api_as(Role.OPS)
-    form = admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "PDI"},
+    form = admin.post("/api/v1/forms", {"key": "pdi", "name": "PDI"},
                       format="json").json()
     t = admin.get(f"/api/v1/form-versions/{form['draft_version']['id']}").json()
     sid = t["pages"][0]["sections"][0]["id"]

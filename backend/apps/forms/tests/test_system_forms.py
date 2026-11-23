@@ -1,4 +1,4 @@
-"""The check-in/wrap-up system form, page slots, the image field, automatic date/time."""
+"""The start (check-in) and end (wrap-up) system forms, the image field, automatic date/time."""
 import base64
 import io
 
@@ -7,7 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 
 from apps.accounts.models import AuditLog
-from apps.forms.models import Field, Form, FormAsset, Page
+from apps.forms.models import Field, Form, FormAsset
 from apps.media import storage
 from apps.media.tests.conftest import s3  # noqa: F401  (in-memory S3 for the pictures)
 
@@ -28,11 +28,13 @@ def upload(admin, data: bytes, name="qr.png", ctype="image/png"):
 
 
 @pytest.fixture
-def ops_form(admin):
-    r = admin.post("/api/v1/forms", {"key": "checkin", "kind": "ops", "name": "Check-in"},
-                   format="json")
-    assert r.status_code == 201
-    return Form.objects.get(key="checkin")
+def start_form():
+    return Form.objects.get(type="start")
+
+
+@pytest.fixture
+def end_form():
+    return Form.objects.get(type="end")
 
 
 def tree(admin, version):
@@ -41,30 +43,32 @@ def tree(admin, version):
 
 # ---------------------------------------------------------------- the system form
 
-def test_the_check_in_form_starts_with_two_fixed_pages_and_its_locked_fields(admin, ops_form):
-    v = ops_form.versions.get()
-    t = tree(admin, v.id)
-    assert [(p["title"], p["slot"]) for p in t["pages"]] == [("Check-in", "before"),
-                                                             ("Wrap-up", "after")]
+def test_the_start_and_end_forms_come_with_their_locked_fields(admin, start_form, end_form):
+    t = tree(admin, start_form.versions.get().id)
+    assert [p["title"] for p in t["pages"]] == ["Check-in"]
     assert t["pages"][0]["gate"] is True                     # check-in must be done first
-    fields = {f["key"]: f for p in t["pages"] for s in p["sections"] for f in s["fields"]}
+    fields = {f["key"]: f for s in t["pages"][0]["sections"] for f in s["fields"]}
     assert all(f["is_system"] for f in fields.values())
-    assert set(fields) == {"checkin_gps", "checkin_time", "selfie", "taking_payment",
-                           "payment_mode", "payment_amount", "payment_screenshot"}
+    assert set(fields) == {"checkin_gps", "checkin_time", "selfie"}
     assert fields["checkin_gps"]["config"] == {"auto": True}
     assert fields["checkin_time"]["config"] == {"auto": True}
     assert fields["selfie"]["required"] is True and fields["selfie"]["config"]["capture"] == "camera"
+    e = tree(admin, end_form.versions.get().id)
+    assert [p["title"] for p in e["pages"]] == ["Wrap-up"] and e["pages"][0]["gate"] is False
+    fields = {f["key"]: f for s in e["pages"][0]["sections"] for f in s["fields"]}
+    assert set(fields) == {"taking_payment", "payment_mode", "payment_amount",
+                           "payment_screenshot"}
     assert fields["taking_payment"]["type"] == "yes_no" and fields["taking_payment"]["required"]
     for k in ("payment_mode", "payment_amount", "payment_screenshot"):          # only when paying
-        assert fields[k]["show_if"] == {"==": [{"var": "ops.taking_payment"}, True]}
+        assert fields[k]["show_if"] == {"==": [{"var": "end.taking_payment"}, True]}
         assert fields[k]["required_if"] == fields[k]["show_if"]
 
 
 def test_the_system_form_publishes_as_it_is_and_its_basics_cannot_be_removed_or_retyped(
-        admin, ops_form):
-    v = ops_form.versions.get()
+        admin, start_form):
+    v = start_form.versions.get()
     publish(admin, v.id)
-    d = admin.post(f"/api/v1/forms/{ops_form.id}/drafts").json()["id"]
+    d = admin.post(f"/api/v1/forms/{start_form.id}/drafts").json()["id"]
     gps = next(f for p in tree(admin, d)["pages"] for s in p["sections"] for f in s["fields"]
                if f["key"] == "checkin_gps")
     assert admin.delete(f"/api/v1/fields/{gps['id']}").status_code in (400, 409)
@@ -76,50 +80,33 @@ def test_the_system_form_publishes_as_it_is_and_its_basics_cannot_be_removed_or_
     assert admin.delete(f"/api/v1/pages/{page['id']}").json()["code"] == "SYSTEM_FIELD"
 
 
-def test_custom_fields_can_be_added_beside_the_locked_ones(admin, ops_form):
-    t = tree(admin, ops_form.versions.get().id)
-    sec = t["pages"][1]["sections"][0]["id"]
+def test_custom_fields_can_be_added_beside_the_locked_ones(admin, end_form):
+    t = tree(admin, end_form.versions.get().id)
+    sec = t["pages"][0]["sections"][0]["id"]
     r = admin.post(f"/api/v1/sections/{sec}/fields", {"key": "google_review", "label": "Review",
                    "type": "yes_no"}, format="json")
     assert r.status_code == 201 and r.json()["is_system"] is False
 
 
-def test_system_fields_stay_on_their_page_when_dragged(admin, ops_form):
-    t = tree(admin, ops_form.versions.get().id)
-    before, after = t["pages"]
-    selfie = next(f for s in before["sections"] for f in s["fields"] if f["key"] == "selfie")
+def test_system_fields_stay_on_their_page_when_dragged(admin, start_form):
+    t = tree(admin, start_form.versions.get().id)
+    extra = admin.post(f"/api/v1/form-versions/{t['id']}/pages", {"title": "Extra"},
+                       format="json").json()
+    extra_sec = admin.post(f"/api/v1/pages/{extra['id']}/sections", {"title": "More"},
+                           format="json").json()
+    first = t["pages"][0]["sections"][0]
+    selfie = next(f for f in first["fields"] if f["key"] == "selfie")
     r = admin.post(f"/api/v1/form-versions/{t['id']}/reorder", {"fields": {
-        str(after["sections"][0]["id"]): [selfie["id"]]}}, format="json")
+        str(extra_sec["id"]): [selfie["id"]]}}, format="json")
     assert r.status_code == 400 and r.json()["code"] == "SYSTEM_FIELD"
-    first = before["sections"][0]
     order = [f["id"] for f in first["fields"]]
     assert admin.post(f"/api/v1/form-versions/{t['id']}/reorder", {"fields": {
         str(first["id"]): list(reversed(order))}}, format="json").status_code == 200   # reorder ok
 
 
-def test_page_slots_can_be_set_only_on_the_ops_form_and_not_on_system_pages(admin, ops_form,
-                                                                            staging):
-    t = tree(admin, ops_form.versions.get().id)
-    custom = admin.post(f"/api/v1/form-versions/{t['id']}/pages", {"title": "Extra"},
-                        format="json").json()
-    assert admin.patch(f"/api/v1/pages/{custom['id']}", {"slot": "before"},
-                       format="json").json()["slot"] == "before"
-    system_page = t["pages"][0]
-    r = admin.patch(f"/api/v1/pages/{system_page['id']}", {"slot": "after"}, format="json")
-    assert r.status_code == 400 and r.json()["code"] == "SYSTEM_PAGE"
-    assert admin.patch(f"/api/v1/pages/{system_page['id']}", {"slot": "before"},
-                       format="json").status_code == 200                  # unchanged is fine
-    form = admin.post("/api/v1/forms", {"key": "pdi2", "kind": "inspection", "name": "P"},
-                      format="json").json()
-    page = tree(admin, form["draft_version"]["id"])["pages"][0]
-    r = admin.patch(f"/api/v1/pages/{page['id']}", {"slot": "before"}, format="json")
-    assert r.status_code == 400 and r.json()["code"] == "INVALID_SLOT"
-    assert staging
-
-
 # ---------------------------------------------------------------- the image field
 
-def test_a_picture_is_uploaded_shown_and_used_by_an_image_field(admin, ops_form, api_as):
+def test_a_picture_is_uploaded_shown_and_used_by_an_image_field(admin, end_form, api_as):
     r = upload(admin, png())
     assert r.status_code == 201
     asset = FormAsset.objects.get(pk=r.json()["id"])
@@ -127,8 +114,8 @@ def test_a_picture_is_uploaded_shown_and_used_by_an_image_field(admin, ops_form,
     assert AuditLog.objects.filter(action="form.asset_upload").exists()
     shown = admin.get(r.json()["url"])
     assert shown.status_code == 302 and "form-assets" in shown["Location"]
-    t = tree(admin, ops_form.versions.get().id)
-    sec = t["pages"][1]["sections"][0]["id"]
+    t = tree(admin, end_form.versions.get().id)
+    sec = t["pages"][0]["sections"][0]["id"]
     made = admin.post(f"/api/v1/sections/{sec}/fields", {
         "key": "pay_qr", "label": "Scan to pay", "type": "image", "config": {"asset": str(asset.id)}},
         format="json")
@@ -156,9 +143,9 @@ def test_a_jpeg_is_accepted_and_a_missing_file_is_refused(admin):
     assert admin.post("/api/v1/form-assets", {}, format="multipart").status_code == 400
 
 
-def test_an_image_field_needs_an_uploaded_picture_and_takes_no_answers(admin, ops_form):
-    t = tree(admin, ops_form.versions.get().id)
-    sec = t["pages"][1]["sections"][0]["id"]
+def test_an_image_field_needs_an_uploaded_picture_and_takes_no_answers(admin, end_form):
+    t = tree(admin, end_form.versions.get().id)
+    sec = t["pages"][0]["sections"][0]["id"]
     for config in ({}, {"asset": "nope"}, {"asset": "11111111-1111-1111-1111-111111111111"}):
         r = admin.post(f"/api/v1/sections/{sec}/fields", {"key": "pay_qr", "label": "x",
                        "type": "image", "config": config}, format="json")
@@ -170,9 +157,9 @@ def test_an_image_field_needs_an_uploaded_picture_and_takes_no_answers(admin, op
         clean_answer(field, "anything")
 
 
-def test_automatic_settings_must_be_true_or_false(admin, ops_form):
-    t = tree(admin, ops_form.versions.get().id)
-    sec = t["pages"][1]["sections"][0]["id"]
+def test_automatic_settings_must_be_true_or_false(admin, end_form):
+    t = tree(admin, end_form.versions.get().id)
+    sec = t["pages"][0]["sections"][0]["id"]
     ok = admin.post(f"/api/v1/sections/{sec}/fields", {"key": "when", "label": "When",
                     "type": "datetime", "config": {"auto": True}}, format="json")
     assert ok.status_code == 201
@@ -218,23 +205,29 @@ def test_damaged_pictures_in_a_bundle_are_refused(admin, staging):
         assert r.status_code == 400 and r.json()["code"] in ("INVALID_BUNDLE", "INVALID_IMAGE"), bad
 
 
-def test_slots_and_visibility_survive_promotion_and_bad_values_are_refused(admin, ops_form):
-    admin.patch(f"/api/v1/forms/{ops_form.id}", {"submission_roles": ["ops"]}, format="json")
-    assert Form.objects.get(pk=ops_form.id).submission_roles == ["expert", "ops"]   # ops form: refused
-    v = ops_form.versions.get().id
+def test_a_system_form_promotes_into_the_system_form_of_the_same_type(admin, start_form):
+    v = start_form.versions.get().id
     publish(admin, v)
     bundle = export(admin, v)
-    assert [p["slot"] for p in bundle["version"]["pages"]] == ["before", "after"]
-    wipe()
+    assert bundle["form"]["type"] == "start" and "slot" not in bundle["version"]["pages"][0]
+    bundle["form"]["key"] = "some_other_key"                 # found by type, whatever it is called
     r = admin.post("/api/v1/promote/import", bundle, format="json")
-    assert r.status_code == 201
-    assert list(Page.objects.filter(version_id=r.json()["draft_version"]).order_by("order")
-                .values_list("slot", flat=True)) == ["before", "after"]
+    assert r.status_code == 201, r.content
+    assert Form.objects.filter(type="start").count() == 1
+    assert Form.objects.get(type="start").versions.count() == 2
+    assert admin.patch(f"/api/v1/forms/{start_form.id}", {"is_active": False},
+                       format="json").json()["code"] == "SYSTEM_FORM"
+
+
+def test_submission_visibility_travels_and_bad_values_are_refused(admin, staging):
+    admin.patch(f"/api/v1/forms/{staging['form']['id']}", {"submission_roles": ["ops"]},
+                format="json")
+    bundle = export(admin, staging["version"])
+    assert bundle["form"]["submission_roles"] == ["ops"]
     wipe()
-    bundle["version"]["pages"][0]["slot"] = "sideways"
-    assert admin.post("/api/v1/promote/import", bundle, format="json").json()["code"] == \
-        "INVALID_BUNDLE"
-    bundle["version"]["pages"][0]["slot"] = "before"
+    assert admin.post("/api/v1/promote/import", bundle, format="json").status_code == 201
+    assert Form.objects.get(key="pdi").submission_roles == ["ops"]
+    wipe()
     bundle["form"]["submission_roles"] = ["admin"]
     assert admin.post("/api/v1/promote/import", bundle, format="json").json()["code"] == \
         "INVALID_BUNDLE"

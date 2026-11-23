@@ -6,6 +6,7 @@ from rest_framework.exceptions import APIException
 
 from apps.accounts.models import Role
 from apps.bookings.models import Booking, Inspection
+from apps.bookings.tests.conftest import custom_form, publish_draft
 from apps.core import events
 from apps.media.tests.conftest import s3  # noqa: F401  (in-memory S3 for the selfie)
 
@@ -28,8 +29,7 @@ def publish_form(admin, form_id):
 def ienv(env):
     """Published PDI inspection form (door choice, photo required if dent, odometer, rating)."""
     admin = env.admin
-    form = admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "PDI",
-                                        "inspection_type": "pdi"}, format="json").json()
+    form = custom_form(admin, "pdi", "PDI")
     v = form["draft_version"]["id"]
     sec = admin.get(f"/api/v1/form-versions/{v}").json()["pages"][0]["sections"][0]["id"]
 
@@ -116,9 +116,9 @@ def test_only_the_assigned_expert_can_start(ienv, booking):
 
 def test_start_needs_a_published_inspection_form_for_the_type(ienv, booking):
     assign(ienv, booking)
-    ienv.ops.post(f"/api/v1/bookings/{booking['id']}/change-type", {"inspection_type": "ev"},
-                  format="json")
-    r = start(ienv.expert, booking, inspection_type="ev")
+    custom_form(ienv.admin, "ev", "EV")                       # created, never published
+    Booking.objects.filter(pk=booking["id"]).update(inspection_type="ev")
+    r = start(ienv.expert, booking, inspection_type=None)
     assert r.status_code == 409 and r.json()["code"] == "NO_INSPECTION_FORM"
 
 
@@ -128,10 +128,12 @@ def test_the_form_version_stays_pinned_after_a_new_one_is_published(started):
     rv = ienv.admin.get(f"/api/v1/form-versions/{d}").json()["row_version"]
     ienv.admin.post(f"/api/v1/form-versions/{d}/publish", {"row_version": rv}, format="json")
     insp = Inspection.objects.get(pk=body["inspection"]["id"])
-    assert insp.form_version.number == 1
+    assert insp.form_version.number == 2          # v1 was the empty form; v2 was live at the start
+    assert insp.form_version.form.versions.filter(status="published").count() == 3
 
 
 def test_offline_type_change_by_ops_loses_to_the_experts_start(ienv, booking):
+    publish_draft(ienv.admin, custom_form(ienv.admin, "ev", "EV")["id"])
     assign(ienv, booking)
     ienv.ops.post(f"/api/v1/bookings/{booking['id']}/change-type", {"inspection_type": "ev"},
                   format="json")
@@ -327,7 +329,7 @@ def test_hidden_fields_are_refused_whatever_the_value_so_guesses_leak_nothing(st
     Field.objects.filter(version=insp.form_version, key="grade").update(
         access={"ops": {"submitted": "hidden"}})
     for guess in (1, 5, None):
-        locked = submissions._locked_keys("ops", "submitted", insp.form_version, None,
+        locked = submissions._locked_keys("ops", "submitted", {"inspection": insp.form_version},
                                           {"inspection": {"grade": guess}},
                                           {"inspection": {"grade": 5}})
         assert locked == ["grade"]  # same answer for a right and a wrong guess
@@ -342,7 +344,7 @@ def _field_id(insp, key):
 def test_booking_edit_refuses_hidden_fields_even_with_the_stored_value(env, db):
     from apps.forms.models import Form
 
-    form = Form.objects.get(kind="booking")
+    form = Form.objects.get(type="booking")
     d = env.admin.post(f"/api/v1/forms/{form.id}/drafts").json()["id"]
     sec = env.admin.get(f"/api/v1/form-versions/{d}").json()["pages"][0]["sections"][0]["id"]
     env.admin.post(f"/api/v1/sections/{sec}/fields", {"key": "secret_note", "label": "S",
@@ -406,33 +408,67 @@ def test_the_experts_form_drops_sections_and_pages_with_nothing_to_show(ienv, bo
     assert len(form["pages"]) == 1
 
 
-def test_an_ops_form_is_validated_stored_and_access_controlled(ienv, booking, settings):
+def _publish_with(admin, ftype, *fields):
+    from apps.forms.models import Form
+
+    form = Form.objects.get(type=ftype)
+    v = form.versions.get(status="draft").id
+    sec = admin.get(f"/api/v1/form-versions/{v}").json()["pages"][0]["sections"][0]["id"]
+    for f in fields:
+        assert admin.post(f"/api/v1/sections/{sec}/fields", f, format="json").status_code == 201
+    publish_form(admin, form.id)
+
+
+def test_start_and_end_forms_are_validated_stored_and_access_controlled(ienv, booking, settings):
     from apps.media.tests.conftest import jpeg, upload
 
     admin = ienv.admin
-    ops_form = admin.post("/api/v1/forms", {"key": "ops", "kind": "ops", "name": "Ops"},
-                          format="json").json()
-    v = ops_form["draft_version"]["id"]
-    sec = admin.get(f"/api/v1/form-versions/{v}").json()["pages"][0]["sections"][0]["id"]
-    admin.post(f"/api/v1/sections/{sec}/fields", {"key": "pay_mode", "label": "Mode",
-               "type": "short_text", "required": True}, format="json")
-    admin.post(f"/api/v1/sections/{sec}/fields", {"key": "ops_only", "label": "Ops", "type":
-               "short_text", "access": {"expert": {"in_progress": "hidden"}}}, format="json")
-    publish_form(admin, ops_form["id"])
+    _publish_with(admin, "start",
+                  {"key": "pay_mode", "label": "Mode", "type": "short_text", "required": True},
+                  {"key": "ops_only", "label": "Ops", "type": "short_text",
+                   "access": {"expert": {"in_progress": "hidden"}}})
+    _publish_with(admin, "end")
     assign(ienv, booking)
     start(ienv.expert, booking)
     selfie = upload(ienv.expert, booking["id"], jpeg(), settings, field_key="selfie").json()["id"]
-    system = {"taking_payment": False, "selfie": [selfie]}
-    bad = submit(ienv.expert, booking, {**GOOD, "ops": {}})
+    bad = submit(ienv.expert, booking, {**GOOD, "start": {}, "end": {}})
     assert bad.status_code == 400
     assert set(bad.json()["errors"]) == {"pay_mode", "selfie", "taking_payment"}   # all required
-    sneaky = submit(ienv.expert, booking, {**GOOD, "ops": {"pay_mode": "upi", "ops_only": "x"}})
+    sneaky = submit(ienv.expert, booking, {**GOOD, "start": {"pay_mode": "upi", "ops_only": "x"}})
     assert sneaky.status_code == 403 and sneaky.json()["keys"] == ["ops_only"]
-    ok = submit(ienv.expert, booking, {**GOOD, "ops": {"pay_mode": "upi", **system}})
+    ok = submit(ienv.expert, booking, {**GOOD, "start": {"pay_mode": "upi", "selfie": [selfie]},
+                                       "end": {"taking_payment": False}})
     assert ok.status_code == 200
-    stored = ok.json()["inspection"]["answers"]["ops"]
-    assert stored.pop("checkin_time").endswith("+05:30")          # stamped by the server
-    assert stored == {"pay_mode": "upi", **system}
+    stored = ok.json()["inspection"]["answers"]
+    assert stored["start"].pop("checkin_time").endswith("+05:30")     # stamped by the server
+    assert stored["start"] == {"pay_mode": "upi", "selfie": [selfie]}
+    assert stored["end"] == {"taking_payment": False}
+
+
+def test_a_form_the_inspection_does_not_use_takes_no_answers(ienv, booking):
+    _publish_with(ienv.admin, "start")
+    assign(ienv, booking)
+    start(ienv.expert, booking)
+    Inspection.objects.update(start_version=None)               # this inspection skips the start form
+    r = submit(ienv.expert, booking, {**GOOD, "start": {"selfie": []}, "end": {}})
+    assert r.status_code == 400 and r.json()["errors"] == {"selfie": "NOT_USED"}
+
+
+def test_a_custom_form_can_skip_the_start_and_end_forms(ienv, booking):
+    _publish_with(ienv.admin, "start")
+    _publish_with(ienv.admin, "end")
+    d = ienv.admin.post(f"/api/v1/forms/{ienv.form_id}/drafts").json()["id"]
+    assert ienv.admin.patch(f"/api/v1/form-versions/{d}/settings",
+                            {"use_start": False, "use_end": False}, format="json").status_code == 200
+    publish_form(ienv.admin, ienv.form_id)
+    assign(ienv, booking)
+    started_ = start(ienv.expert, booking).json()
+    assert started_["start_form"] is None and started_["end_form"] is None
+    insp = Inspection.objects.get(booking_id=booking["id"])
+    assert insp.start_version is None and insp.end_version is None
+    ok = submit(ienv.expert, booking)                               # nothing from start / end needed
+    assert ok.status_code == 200
+    assert Inspection.objects.get(booking_id=booking["id"]).answers["start"] == {}
 
 
 def test_an_ops_edit_that_changes_nothing_keeps_the_row_version(started):
@@ -487,8 +523,7 @@ def test_start_rejects_an_unknown_inspection_type(ienv, booking):
 
 def test_submit_cannot_pick_another_forms_version(ienv, booking):
     admin = ienv.admin
-    other = admin.post("/api/v1/forms", {"key": "ev", "kind": "inspection", "name": "EV",
-                                         "inspection_type": "ev"}, format="json").json()
+    other = custom_form(admin, "ev", "EV")
     publish_form(admin, other["id"])
     ev_version = admin.get(f"/api/v1/forms/{other['id']}").json()["published_version"]["id"]
     assign(ienv, booking)
@@ -516,15 +551,15 @@ def test_idempotency_keys_are_scoped_to_the_booking_and_expert(ienv, booking):
     assert s.status_code == 409 and s.json()["code"] == "UUID_CONFLICT"
 
 
-def test_an_ops_part_with_no_ops_form_is_hidden_from_non_admins(started):
+def test_a_part_with_no_pinned_form_is_hidden_from_non_admins(started):
     ienv, booking, _ = started
     submit(ienv.expert, booking)
     insp = Inspection.objects.get(status="submitted")
-    insp.answers = {**insp.answers, "ops": {"pay_mode": "upi"}}   # stored, but no ops form exists
+    insp.answers = {**insp.answers, "start": {"pay_mode": "upi"}}   # stored, but no form to say
     insp.save()
     url = f"/api/v1/inspections/{insp.id}"
-    assert "ops" not in ienv.ops.get(url).json()["answers"]
-    assert ienv.admin.get(url).json()["answers"]["ops"] == {"pay_mode": "upi"}
+    assert "start" not in ienv.ops.get(url).json()["answers"]
+    assert ienv.admin.get(url).json()["answers"]["start"] == {"pay_mode": "upi"}
 
 
 def test_correcting_the_chassis_number_updates_search(started):

@@ -13,7 +13,11 @@ def admin(api_as):
 @pytest.fixture
 def make_form(admin):
     def _make(key="pdi", kind="inspection", name=None):
-        r = admin.post("/api/v1/forms", {"key": key, "kind": kind, "name": name or key.upper()},
+        if kind in ("booking", "start", "end"):            # these exist from the start
+            from apps.forms.models import Form
+
+            return admin.get(f"/api/v1/forms/{Form.objects.get(type=kind).id}").json()
+        r = admin.post("/api/v1/forms", {"key": key, "name": name or key.upper()},
                        format="json")
         assert r.status_code == 201, r.json()
         return r.json()

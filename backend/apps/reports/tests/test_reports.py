@@ -6,6 +6,7 @@ import pypdf
 import pytest
 
 from apps.bookings.models import Booking
+from apps.bookings.tests.conftest import custom_form
 from apps.bookings.tests.test_submissions import assign, publish_form, start
 from apps.core import events
 from apps.media import storage
@@ -46,8 +47,7 @@ DEFN = {
 @pytest.fixture
 def renv(env):
     admin = env.admin
-    form = admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "PDI",
-                                        "inspection_type": "pdi"}, format="json").json()
+    form = custom_form(admin, "pdi", "PDI")
     v = form["draft_version"]["id"]
     sec = admin.get(f"/api/v1/form-versions/{v}").json()["pages"][0]["sections"][0]["id"]
 
@@ -152,7 +152,7 @@ def test_template_workflow(renv):
     dup = a.post("/api/v1/pdf-templates", {"form": renv.form_id}, format="json")
     assert dup.status_code == 409 and dup.json()["code"] == "TEMPLATE_EXISTS"
     booking_form = a.get("/api/v1/forms").json()["results"]
-    bf = [f for f in booking_form if f["kind"] == "booking"][0]
+    bf = [f for f in booking_form if f["type"] == "booking"][0]
     assert a.post("/api/v1/pdf-templates", {"form": bf["id"]}, format="json").status_code == 400
     set_template(renv)
     v = a.get(f"/api/v1/pdf-template-versions/{renv.template_version_id}").json()
@@ -224,7 +224,7 @@ def test_form_publish_warns_about_fields_the_template_never_shows(renv):
 
 
 def test_publish_has_no_warnings_without_a_template(env):
-    f = env.admin.post("/api/v1/forms", {"key": "ppi", "kind": "inspection", "name": "PPI"},
+    f = env.admin.post("/api/v1/forms", {"key": "ppi", "name": "PPI"},
                        format="json").json()
     rv = env.admin.get(f"/api/v1/form-versions/{f['draft_version']['id']}").json()["row_version"]
     r = env.admin.post(f"/api/v1/form-versions/{f['draft_version']['id']}/publish",
@@ -317,8 +317,7 @@ def test_a_completed_booking_gets_a_pdf_automatically(renv, settings):
 
 
 def test_no_template_means_no_report_but_the_booking_still_completes(env, settings):
-    f = env.admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "PDI",
-                                         "inspection_type": "pdi"}, format="json").json()
+    f = custom_form(env.admin, "pdi", "PDI")
     publish_form(env.admin, f["id"])
     b = create(env.ops, booking_id="NT1").json()
     assign(env, b)
@@ -426,7 +425,7 @@ def test_verify_shows_a_summary_and_nothing_about_the_customer(renv, settings):
     assert r.status_code == 200
     body = r.json()
     assert body["valid"] is True and body["booking_id"] == "SA37926"
-    assert body["car"] == "Maruti Victoris" and body["type"] == "PDI (new car)"
+    assert body["car"] == "Maruti Victoris" and body["type"] == "PDI"
     assert body["overall_rating"] == "good" and body["revision"] == 1 and body["current"] is True
     blob = str(body)
     for private in ("Asha", "9876543210", "MG Road", "delhi", "MA3YPKCSKTJ273129"):
@@ -490,7 +489,7 @@ def test_publishing_a_template_works_without_a_booking_form_and_detects_stale_dr
     from apps.accounts.models import Role
 
     admin, _ = api_as(Role.ADMIN)
-    form = admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "PDI"},
+    form = admin.post("/api/v1/forms", {"key": "pdi", "name": "PDI"},
                       format="json").json()
     t = admin.post("/api/v1/pdf-templates", {"form": form["id"]}, format="json").json()
     v = t["versions"][0]["id"]

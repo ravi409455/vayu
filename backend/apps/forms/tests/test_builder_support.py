@@ -170,7 +170,7 @@ def test_discard_refusals(admin, staging, api_as):
     assert r.status_code == 409 and r.json()["code"] == "NO_DRAFT"
     ops, _ = api_as(Role.OPS)
     assert ops.delete(f"/api/v1/forms/{form_id}/draft").status_code == 403
-    new = admin.post("/api/v1/forms", {"key": "fresh", "kind": "inspection", "name": "Fresh"},
+    new = admin.post("/api/v1/forms", {"key": "fresh", "name": "Fresh"},
                      format="json").json()
     r = admin.delete(f"/api/v1/forms/{new['id']}/draft")
     assert r.status_code == 409 and r.json()["code"] == "FIRST_DRAFT"

@@ -73,11 +73,12 @@ def test_bad_integrations_are_refused(ienv, change, code):
     assert r.status_code == 400 and r.json()["code"] == code
 
 
-def test_ops_forms_cannot_have_integrations(ienv):
+@pytest.mark.parametrize("ftype", ["start", "end"])
+def test_start_and_end_forms_cannot_have_integrations(ienv, ftype):
     from apps.forms.models import Form
 
-    ops_form = Form.objects.create(key="ops", kind="ops", name="Ops")
-    r = ienv.admin.post("/api/v1/integrations", {"form": ops_form.id, "name": "x", "url": HOOK,
+    system_form = Form.objects.get(type=ftype)
+    r = ienv.admin.post("/api/v1/integrations", {"form": system_form.id, "name": "x", "url": HOOK,
                                                  "events": ["booking.created"]}, format="json")
     assert r.json()["code"] == "INVALID_FORM"
 
@@ -235,6 +236,7 @@ def test_full_data_is_scoped_to_the_integrations_fields(ienv, http):
     data = body_of(sent(http)[-1])["data"]
     assert data["booking"] == {"booking_id": "ZZ2", "city": "delhi"}
     assert "customer_phone" not in json.dumps(data)
+    assert "start" not in data and "end" not in data       # scoped hooks never get them
 
 
 def test_full_data_includes_the_inspection_after_submission(ienv, http, booking):
@@ -245,6 +247,7 @@ def test_full_data_includes_the_inspection_after_submission(ienv, http, booking)
     data = body_of(sent(http)[-1])["data"]
     assert data["inspection"]["chassis_no"] == GOOD["inspection"]["chassis_no"]
     assert data["booking"]["customer_name"] == "Asha"
+    assert data["start"] == {} and data["end"] == {}      # everything unscoped: start / end too
 
 
 @pytest.mark.parametrize("pdf,image,video", [(0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 1)])

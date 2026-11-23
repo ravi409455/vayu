@@ -3,7 +3,7 @@ import io
 
 import pytest
 
-from .conftest import create
+from .conftest import create, custom_form, publish_draft
 from .test_submissions import GOOD, assign, ienv, start, submit  # noqa: F401
 
 pytestmark = pytest.mark.django_db
@@ -11,6 +11,8 @@ pytestmark = pytest.mark.django_db
 
 @pytest.fixture
 def many(env):
+    for key in ("ev", "used_car"):
+        publish_draft(env.admin, custom_form(env.admin, key)["id"])
     rows = [("SA10001", "Asha Rao", "9876500001", "pdi", "2026-10-14"),
             ("VI20002", "Ravi Kumar", "9876500002", "ev", "2026-10-14"),
             ("AD30003", "Asha Verma", "9876500003", "pdi", "2026-10-21"),
@@ -162,7 +164,7 @@ def test_date_to_bounds_dashboards_and_bad_booking_filters_are_400(many):
 def _hide_phone_from_ops(env):
     from apps.forms.models import Form
 
-    form = Form.objects.get(kind="booking")
+    form = Form.objects.get(type="booking")
     d = env.admin.post(f"/api/v1/forms/{form.id}/drafts").json()["id"]
     t = env.admin.get(f"/api/v1/form-versions/{d}").json()
     phone = [f for p in t["pages"] for s in p["sections"] for f in s["fields"]
@@ -216,7 +218,9 @@ def test_csv_cells_that_look_like_formulas_are_neutralised():
 
 def test_chassis_is_unsearchable_for_non_admins_when_no_inspection_form_describes_it(many):
     from apps.bookings.models import Booking
+    from apps.forms.models import Form
 
+    Form.objects.filter(type="custom").update(is_active=False)     # nothing describes the chassis
     Booking.objects.filter(booking_id="SA10001").update(chassis_no="MA3SECRETCHASSIS1")
     assert ids(many.admin, "search=SECRETCHASSIS") == ["SA10001"]
     assert ids(many.ops, "search=SECRETCHASSIS") == []       # no active inspection form here

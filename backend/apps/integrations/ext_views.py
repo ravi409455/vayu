@@ -14,7 +14,7 @@ from apps.accounts import audit
 from apps.bookings import services, submissions
 from apps.bookings.models import Booking, Inspection
 from apps.core.errors import CodedError
-from apps.forms.models import Form, FormKind
+from apps.forms.models import Form, FormType
 
 from .apikeys import ApiKeyAuthentication
 from .models import ApiKey
@@ -56,11 +56,11 @@ def only(answers: dict, allowed: list[str]) -> dict:
 
 
 def booking_form() -> Form | None:
-    return Form.objects.filter(kind=FormKind.BOOKING, is_active=True).first()
+    return Form.objects.filter(type=FormType.BOOKING, is_active=True).first()
 
 
 def inspection_form(b: Booking) -> Form | None:
-    return Form.objects.filter(kind=FormKind.INSPECTION, is_active=True,
+    return Form.objects.filter(type=FormType.CUSTOM, is_active=True,
                                inspection_type=b.inspection_type).first()
 
 

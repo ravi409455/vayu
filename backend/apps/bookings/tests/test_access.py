@@ -14,7 +14,7 @@ pytestmark = pytest.mark.django_db
 def v2(env):
     """Booking form v2 with extra fields that carry explicit access."""
     admin = env.admin
-    form = Form.objects.get(kind="booking")
+    form = Form.objects.get(type="booking")
     d = admin.post(f"/api/v1/forms/{form.id}/drafts").json()["id"]
     t = admin.get(f"/api/v1/form-versions/{d}").json()
     sec = t["pages"][0]["sections"][0]["id"]

@@ -94,10 +94,8 @@ def test_seed_command_is_idempotent_and_has_launch_lists():
     call_command("seed_master_lists")
     call_command("seed_master_lists")
     keys = set(MasterList.objects.values_list("key", flat=True))
-    assert {"city", "car_make_model", "cancel_reason", "reschedule_reason", "ops_status",
-            "inspection_type"} <= keys
+    assert {"city", "car_make_model", "cancel_reason", "reschedule_reason", "ops_status"} <= keys
+    assert "inspection_type" not in keys              # the custom forms themselves say it
     cancel = set(MasterList.objects.get(key="cancel_reason").items.values_list("key", flat=True))
     assert "on_arrival" in cancel
-    types = set(MasterList.objects.get(key="inspection_type").items.values_list("key", flat=True))
-    assert types == {"pdi", "used_car", "ev"}
     assert MasterList.objects.get(key="cancel_reason").items.count() == len(cancel)  # no dupes

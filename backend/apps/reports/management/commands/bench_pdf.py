@@ -46,7 +46,7 @@ class Command(BaseCommand):
         parser.add_argument("--field", default="door_photo")
 
     def handle(self, *args, photos, form, field, **options):
-        f = Form.objects.filter(key=form, kind="inspection").first()
+        f = Form.objects.filter(key=form, type="custom").first()
         published = FormVersion.objects.filter(form=f, status="published")
         version = published.order_by("-number").first() if f else None
         if f is None or version is None:
@@ -74,7 +74,7 @@ class Command(BaseCommand):
                     ids.append(str(a.id))
                 insp = Inspection.objects.create(
                     booking=b, expert=expert, form_version=version, status="submitted",
-                    answers={"inspection": {field: ids}, "ops": {}})
+                    answers={"inspection": {field: ids}, "start": {}, "end": {}})
                 items = [{"field": f"inspection.{field}", "index": i, "caption": f"Photo {i + 1}"}
                          for i in range(photos)]
                 tv = PdfTemplateVersion(definition={"blocks": [

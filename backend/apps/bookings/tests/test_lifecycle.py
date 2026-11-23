@@ -189,6 +189,9 @@ def test_cancelled_and_completed_bookings_reject_actions(env, booking):
 # ---------------------------------------------------------------- type lock / force release / delete
 
 def test_type_change_before_start_ok_after_start_locked(env, booking):
+    from .conftest import custom_form, publish_draft
+
+    publish_draft(env.admin, custom_form(env.admin, "ev")["id"])
     url = f"/api/v1/bookings/{booking['id']}/change-type"
     r = env.ops.post(url, {"inspection_type": "ev"}, format="json")
     assert r.status_code == 200 and r.json()["inspection_type"] == "ev"

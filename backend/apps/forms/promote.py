@@ -12,14 +12,16 @@ from apps.core.errors import CodedError
 
 from .access import validate_access
 from .fieldtypes import validate_config as validate_field_config
+from .legacy import OldBundleError, upgrade_v1
 from .models import (
     KEY_RE,
+    SYSTEM_TYPES,
     Field,
     FieldKey,
     FieldType,
     Form,
     FormAsset,
-    FormKind,
+    FormType,
     FormVersion,
     LibraryItem,
     MasterList,
@@ -32,7 +34,7 @@ from .models import (
 from .rules import rule_syntax_issues
 from .system_fields import SYSTEM_FIELDS
 
-SCHEMA = 1
+SCHEMA = 2
 
 
 def bad(code: str, message: str, status: int = 400, **extra) -> CodedError:
@@ -79,7 +81,7 @@ def export_bundle(version: FormVersion) -> dict:
                 "library": {"key": link.key, "revision": s.library_revision} if link else None,
                 "fields": [_field(f) for f in fields]})
         pages.append({"title": page.title, "order": page.order, "visible": page.visible,
-                      "gate": page.gate, "slot": page.slot, "show_if": page.show_if,
+                      "gate": page.gate, "show_if": page.show_if,
                       "access": page.access, "sections": sections})
     library = [{"kind": i.kind, "key": i.key, "name": i.name, "definition": i.definition,
                 "revision": i.revision, "archived": i.archived}
@@ -94,10 +96,11 @@ def export_bundle(version: FormVersion) -> dict:
     last = template.versions.order_by("-number").first() if template else None
     return {
         "schema": SCHEMA,
-        "form": {"key": version.form.key, "kind": version.form.kind, "name": version.form.name,
+        "form": {"key": version.form.key, "type": version.form.type, "name": version.form.name,
                  "inspection_type": version.form.inspection_type,
                  "submission_roles": version.form.submission_roles},
         "version": {"rating_config": version.rating_config, "pages": pages,
+                    "use_start": version.use_start, "use_end": version.use_end,
                     "checks": [{"rule": c.rule, "message": c.message, "fields": c.fields,
                                 "order": c.order}
                                for c in VersionCheck.objects.filter(version=version)]},
@@ -158,10 +161,13 @@ def _check_shape(b: Any) -> None:
         raise bad("BUNDLE_TOO_NEW", "This bundle comes from a newer version of Vayu; upgrade "
                   "this server first.")
     form, version = b.get("form"), b.get("version")
-    if (b.get("schema") != SCHEMA or not isinstance(form, dict) or not isinstance(version, dict)
+    if (b.get("schema") not in (1, SCHEMA) or not isinstance(form, dict)
+            or not isinstance(version, dict)
             or not isinstance(version.get("pages"), list)
             or not isinstance(b.get("library"), list) or not isinstance(b.get("master_lists"), list)
-            or form.get("kind") not in FormKind.values
+            or form.get("type" if b.get("schema") == SCHEMA else "kind")
+            not in (FormType.values if b.get("schema") == SCHEMA else
+                    ("booking", "inspection", "ops"))
             or not all(isinstance(form.get(k), str) and form[k] or k == "inspection_type"
                        for k in ("key", "name"))):
         raise bad("INVALID_BUNDLE", "This is not a valid Vayu form bundle.")
@@ -200,11 +206,11 @@ def _check_content(b: dict) -> None:
         roles = b["form"].get("submission_roles", ["expert", "ops"])
         if not isinstance(roles, list) or set(roles) - {"expert", "ops"}:
             raise ValueError("submission_roles may only name expert and ops.")
+        if not all(isinstance(b["version"].get(k, True), bool) for k in ("use_start", "use_end")):
+            raise ValueError("use_start and use_end must be true or false.")
         for p in b["version"]["pages"]:
             if not isinstance(p.get("gate", False), bool):
                 raise ValueError("A page's gate must be true or false.")
-            if p.get("slot", "") not in ("", "before", "after"):
-                raise ValueError("A page's slot must be before or after.")
             validate_access(p["access"])
             rules(("page.show_if", p["show_if"]))
             for s in p["sections"]:
@@ -227,21 +233,18 @@ def _check_content(b: dict) -> None:
 def _conflicts(b: dict, existing: Form | None) -> list[str]:
     out: list[str] = []
     form = b["form"]
-    if existing and existing.kind != form["kind"]:
-        out.append(f"Form '{form['key']}' exists with kind {existing.kind}; the bundle's kind is "
-                   f"{form['kind']}.")
-    if form["inspection_type"]:
-        clash = Form.objects.filter(kind=FormKind.INSPECTION, is_active=True,
+    if existing and existing.type != form["type"]:
+        out.append(f"Form '{form['key']}' is a {existing.type} form here; the bundle's is a "
+                   f"{form['type']} form.")
+    if form["type"] == FormType.CUSTOM and form["inspection_type"]:
+        clash = Form.objects.filter(type=FormType.CUSTOM, is_active=True,
                                     inspection_type=form["inspection_type"])
         if existing:
             clash = clash.exclude(pk=existing.pk)
         other = clash.first()
-        if form["kind"] == FormKind.INSPECTION and other is not None:
+        if other is not None:
             out.append(f"The inspection type '{form['inspection_type']}' is already handled by "
                        f"form '{other.key}'.")
-    if form["kind"] in (FormKind.BOOKING, FormKind.OPS) and not existing:
-        if Form.objects.filter(kind=form["kind"], is_active=True).exists():
-            out.append(f"There is already an active {form['kind']} form.")
     if existing:
         reserved = dict(FieldKey.objects.filter(form=existing).values_list("key", "type"))
         for p in b["version"]["pages"]:
@@ -294,7 +297,7 @@ def _import_library(b: dict, notes: list[str]) -> tuple[dict, int]:
 
 def _is_system(version, f: dict) -> bool:
     """Only the platform's own fields are system fields; a bundle cannot grant that flag."""
-    return any(f["key"] == spec["key"] for spec in SYSTEM_FIELDS[version.form.kind])
+    return any(f["key"] == spec["key"] for spec in SYSTEM_FIELDS.get(version.form.type, []))
 
 
 def _build_field(version, section, f: dict, items: dict) -> None:
@@ -310,10 +313,18 @@ def _build_field(version, section, f: dict, items: dict) -> None:
 
 def import_bundle(actor, b: Any) -> dict:
     _check_shape(b)
+    if b["schema"] == 1:
+        try:
+            b = upgrade_v1(b)
+        except OldBundleError as e:
+            raise bad("OLD_BUNDLE", str(e)) from e
     from apps.reports.models import PdfTemplate, PdfTemplateVersion
 
     form_data = b["form"]
-    existing = Form.objects.filter(key=form_data["key"]).first()
+    # the booking, start and end forms are found by type; custom forms by key
+    existing = (Form.objects.filter(type=form_data["type"]).first()
+                if form_data["type"] in SYSTEM_TYPES
+                else Form.objects.filter(key=form_data["key"]).first())
     conflicts = _conflicts(b, existing)
     if conflicts:
         raise bad("IMPORT_CONFLICTS", "This bundle conflicts with what is already here.",
@@ -331,16 +342,18 @@ def import_bundle(actor, b: Any) -> dict:
         items, library_created = _import_library(b, notes)
         _check_content(b)       # needs the lists; failure rolls all back
         form = existing or Form.objects.create(
-            key=form_data["key"], kind=form_data["kind"], name=form_data["name"],
+            key=form_data["key"], type=form_data["type"], name=form_data["name"],
             inspection_type=form_data["inspection_type"],
             submission_roles=form_data.get("submission_roles", ["expert", "ops"]))
         number = (form.versions.aggregate(n=Max("number"))["n"] or 0) + 1
-        version = FormVersion.objects.create(form=form, number=number,
-                                             rating_config=b["version"].get("rating_config", {}))
+        version = FormVersion.objects.create(
+            form=form, number=number, rating_config=b["version"].get("rating_config", {}),
+            use_start=b["version"].get("use_start", True),
+            use_end=b["version"].get("use_end", True))
         for p in b["version"]["pages"]:
             page = Page.objects.create(version=version, title=p["title"], order=p["order"],
                                        visible=p["visible"], gate=p.get("gate", False),
-                                       slot=p.get("slot", ""), show_if=p["show_if"],
+                                       show_if=p["show_if"],
                                        access=p["access"])
             for s in p["sections"]:
                 link = s.get("library")
@@ -354,7 +367,7 @@ def import_bundle(actor, b: Any) -> dict:
         for c in b["version"].get("checks", []):
             VersionCheck.objects.create(version=version, rule=c["rule"], message=c["message"],
                                         fields=c["fields"], order=c["order"])
-        if b.get("pdf_template") and form.kind == FormKind.INSPECTION:
+        if b.get("pdf_template") and form.type == FormType.CUSTOM:
             t, _ = PdfTemplate.objects.get_or_create(form=form)
             last = t.versions.order_by("-number").first()
             PdfTemplateVersion.objects.create(template=t, number=(last.number + 1) if last else 1,

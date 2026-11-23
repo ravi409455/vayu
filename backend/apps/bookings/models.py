@@ -73,8 +73,14 @@ class Inspection(models.Model):
                                related_name="inspections")
     form_version = models.ForeignKey("forms.FormVersion", on_delete=models.PROTECT,
                                      related_name="+")  # frozen at start
+    # the start / end forms this inspection goes through, frozen at start (null: not used)
+    start_version = models.ForeignKey("forms.FormVersion", null=True, blank=True,
+                                      on_delete=models.PROTECT, related_name="+")
+    end_version = models.ForeignKey("forms.FormVersion", null=True, blank=True,
+                                    on_delete=models.PROTECT, related_name="+")
     status = models.CharField(max_length=10, default="draft")  # draft | submitted
-    answers = models.JSONField(default=dict)    # {"inspection": {...}, "ops": {...}} (cleaned)
+    # {"inspection": {...}, "start": {...}, "end": {...}} (cleaned)
+    answers = models.JSONField(default=dict)
     scores = models.JSONField(default=dict)     # computed: Key Checks, ratings, overall
     overrides = models.JSONField(default=dict)  # Ops overrides: ratings, derived, overall
     row_version = models.PositiveIntegerField(default=0)
@@ -90,3 +96,8 @@ class Inspection(models.Model):
 
     class Meta:
         ordering = ["created_at"]
+
+    def pinned(self) -> dict:
+        """part -> the form version this inspection was started on (None: part not used)."""
+        return {"inspection": self.form_version, "start": self.start_version,
+                "end": self.end_version}

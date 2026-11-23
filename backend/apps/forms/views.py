@@ -91,17 +91,21 @@ class MasterListItemViewSet(mixins.UpdateModelMixin, viewsets.GenericViewSet):
 
 class FormViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
                   mixins.UpdateModelMixin, viewsets.GenericViewSet):
-    queryset = Form.objects.order_by("kind", "key")
+    queryset = Form.objects.order_by("type", "key")
     serializer_class = FormSerializer
     permission_classes = [perm("forms.view", "forms.edit")]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]  # delete: the draft
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        wanted = self.request.query_params.get("type")
+        return qs.filter(type=wanted) if wanted else qs
 
     def create(self, request, *args, **kwargs):
         s = self.get_serializer(data=request.data)
         s.is_valid(raise_exception=True)
         d = s.validated_data
-        form = services.create_form(request.user, key=d["key"], kind=d["kind"], name=d["name"],
-                                    inspection_type=d.get("inspection_type", ""))
+        form = services.create_form(request.user, key=d["key"], name=d["name"])
         return Response(self.get_serializer(form).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["delete"], url_path="draft")
@@ -359,6 +363,32 @@ class PublishVersion(generics.GenericAPIView):
         return Response({"id": v.id, "number": v.number, "status": v.status,
                          "published_at": v.published_at, "row_version": v.row_version,
                          "warnings": pdf_warnings(v)})
+
+
+class VersionSettings(generics.GenericAPIView):
+    """A custom form's two switches: begins with the start form, ends with the end form."""
+    permission_classes = [perm("forms.view", "forms.edit")]
+    serializer_class = serializers.Serializer
+
+    def patch(self, request, pk):
+        body = request.data
+        if not isinstance(body, dict) or not body or set(body) - {"use_start", "use_end"} \
+                or not all(isinstance(v, bool) for v in body.values()):
+            raise CodedError("INVALID_SETTINGS", "Send use_start and/or use_end as true/false.",
+                             400)
+        with transaction.atomic():
+            lock_draft(pk)
+            version = get_object_or_404(FormVersion.objects.select_related("form"), pk=pk)
+            if version.form.type != "custom":
+                raise CodedError("INVALID_SETTINGS", "Only custom forms have these settings.", 400)
+            for k, v in body.items():
+                setattr(version, k, v)
+            version.row_version += 1
+            version.save(update_fields=[*body, "row_version"])
+        audit.record(request.user, "form.settings", "form_version", pk,
+                     f"Begins with start: {version.use_start}, ends with end: {version.use_end}")
+        return Response({"use_start": version.use_start, "use_end": version.use_end,
+                         "row_version": version.row_version})
 
 
 class RatingConfigView(generics.GenericAPIView):

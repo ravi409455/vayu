@@ -57,7 +57,7 @@ def levels_for(version, role: str, stage: str) -> dict[str, str]:
     system-filled fields, even if a layer says so."""
     from .models import Field, Page, Section
 
-    kind = version.form.kind
+    kind = version.form.type
     pages = {p.id: p.access for p in Page.objects.filter(version=version)}
     sections = {s.id: (s.access, pages.get(s.page_id, {}))
                 for s in Section.objects.filter(version=version)}
@@ -83,10 +83,10 @@ def may_see_submissions(user, form) -> bool:
 
 
 def hidden_inspection_forms(user) -> list[int]:
-    """Ids of inspection forms whose submissions this user may not see at all."""
-    from .models import Form, FormKind
+    """Ids of custom forms whose submissions this user may not see at all."""
+    from .models import Form, FormType
 
     if user.role == "admin":
         return []
-    return [f.id for f in Form.objects.filter(kind=FormKind.INSPECTION)
+    return [f.id for f in Form.objects.filter(type=FormType.CUSTOM)
             if not may_see_submissions(user, f)]

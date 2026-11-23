@@ -38,7 +38,7 @@ def staging(admin):
     for i, (k, label) in enumerate((("north", "North"), ("south", "South"))):
         admin.post("/api/v1/master-lists/yard/items", {"key": k, "label": label, "order": i},
                    format="json")
-    form = admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "PDI"},
+    form = admin.post("/api/v1/forms", {"key": "pdi", "name": "PDI"},
                       format="json").json()
     v = form["draft_version"]["id"]
     page = admin.get(f"/api/v1/form-versions/{v}").json()["pages"][0]
@@ -98,9 +98,10 @@ def wipe():
 
 def test_export_is_self_contained_and_has_no_environment_ids(admin, staging):
     b = export(admin, staging["version"])
-    assert b["schema"] == 1 and b["form"] == {"key": "pdi", "kind": "inspection", "name": "PDI",
-                                              "inspection_type": "",
+    assert b["schema"] == 2 and b["form"] == {"key": "pdi", "type": "custom", "name": "PDI",
+                                              "inspection_type": "pdi",
                                               "submission_roles": ["expert", "ops"]}
+    assert b["version"]["use_start"] is True and b["version"]["use_end"] is True
     sections = {s["title"]: s for p in b["version"]["pages"] for s in p["sections"]}
     assert set(sections) == {"Section 1", "Brakes"}
     fields = {f["key"]: f for f in sections["Section 1"]["fields"]}
@@ -222,7 +223,7 @@ def test_imported_structure_and_details_match(admin, staging):
 def test_key_conflicts_are_rejected_listing_each_one_and_writing_nothing(admin, staging):
     bundle = export(admin, staging["version"])
     wipe()
-    other = admin.post("/api/v1/forms", {"key": "pdi", "kind": "inspection", "name": "Old"},
+    other = admin.post("/api/v1/forms", {"key": "pdi", "name": "Old"},
                        format="json").json()
     sec = admin.get(f"/api/v1/form-versions/{other['draft_version']['id']}").json()[
         "pages"][0]["sections"][0]["id"]
@@ -237,19 +238,14 @@ def test_key_conflicts_are_rejected_listing_each_one_and_writing_nothing(admin, 
     assert (FormVersion.objects.count(), Field.objects.count(), LibraryItem.objects.count()) == before
 
 
-def test_kind_and_inspection_type_conflicts(admin, staging):
+def test_type_and_inspection_type_conflicts(admin, staging):
     bundle = export(admin, staging["version"])
     wipe()
-    admin.post("/api/v1/forms", {"key": "pdi", "kind": "ops", "name": "Not an inspection form"},
-               format="json")
+    Form.objects.create(key="pdi", type="start", name="Not a custom form")
     r = admin.post("/api/v1/promote/import", bundle, format="json")
-    assert r.status_code == 400 and any("kind" in c for c in r.json()["conflicts"])
+    assert r.status_code == 400 and any("is a start form" in c for c in r.json()["conflicts"])
     wipe()
-    from django.core.management import call_command
-
-    call_command("seed_master_lists")
-    admin.post("/api/v1/forms", {"key": "other", "kind": "inspection", "name": "O",
-                                 "inspection_type": "pdi"}, format="json")
+    Form.objects.create(key="other", type="custom", name="O", inspection_type="pdi")
     typed = {**bundle, "form": {**bundle["form"], "inspection_type": "pdi"}}
     r = admin.post("/api/v1/promote/import", typed, format="json")
     assert r.status_code == 400 and any("inspection type" in c for c in r.json()["conflicts"])
@@ -258,7 +254,7 @@ def test_kind_and_inspection_type_conflicts(admin, staging):
 @pytest.mark.parametrize("mutate,status", [
     (lambda b: {**b, "schema": 99}, 400), (lambda b: {k: v for k, v in b.items() if k != "form"}, 400),
     (lambda b: {**b, "version": {"pages": "x"}}, 400), (lambda b: [], 400),
-    (lambda b: {**b, "form": {**b["form"], "kind": "weird"}}, 400),
+    (lambda b: {**b, "form": {**b["form"], "type": "weird"}}, 400),
 ])
 def test_bad_bundles_are_rejected(admin, staging, mutate, status):
     bundle = export(admin, staging["version"])
@@ -271,7 +267,7 @@ def test_bad_bundles_are_rejected(admin, staging, mutate, status):
 
 def test_a_bundle_from_a_newer_server_is_refused_with_a_clear_code(admin, staging):
     bundle = export(admin, staging["version"])
-    r = admin.post("/api/v1/promote/import", {**bundle, "schema": 2}, format="json")
+    r = admin.post("/api/v1/promote/import", {**bundle, "schema": 3}, format="json")
     assert r.status_code == 400 and r.json()["code"] == "BUNDLE_TOO_NEW"
 
 
@@ -288,9 +284,7 @@ def test_booking_forms_with_system_fields_promote_too(admin):
     from django.core.management import call_command
 
     call_command("seed_master_lists")
-    f = admin.post("/api/v1/forms", {"key": "booking", "kind": "booking", "name": "B"},
-                   format="json").json()
-    v = f["draft_version"]["id"]
+    v = Form.objects.get(type="booking").versions.get(status="draft").id
     publish(admin, v)
     bundle = export(admin, v)
     wipe()
@@ -314,20 +308,6 @@ def test_an_existing_form_may_keep_its_own_inspection_type(admin, staging):
     Form.objects.filter(key="pdi").update(inspection_type="pdi")
     bundle = export(admin, staging["version"])
     assert admin.post("/api/v1/promote/import", bundle, format="json").status_code == 201
-
-
-def test_a_second_booking_form_is_a_conflict(admin):
-    from django.core.management import call_command
-
-    call_command("seed_master_lists")
-    f = admin.post("/api/v1/forms", {"key": "booking", "kind": "booking", "name": "B"},
-                   format="json").json()
-    bundle = export(admin, f["draft_version"]["id"])
-    renamed = {**bundle, "form": {**bundle["form"], "key": "booking_two"}}
-    r = admin.post("/api/v1/promote/import", renamed, format="json")
-    assert r.status_code == 400 and any("active booking form" in c for c in r.json()["conflicts"])
-    typed = {**bundle, "form": {**bundle["form"], "key": "b3", "inspection_type": "pdi"}}
-    assert admin.post("/api/v1/promote/import", typed, format="json").status_code == 400  # same cause
 
 
 def test_a_library_field_with_a_different_type_is_a_conflict(admin, staging):
