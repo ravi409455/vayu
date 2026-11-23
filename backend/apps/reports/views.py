@@ -81,7 +81,9 @@ class Preview(APIView):
 
     def post(self, request, pk):
         tv = get_object_or_404(PdfTemplateVersion.objects.select_related("template__form"), pk=pk)
-        booking = get_object_or_404(Booking, pk=request.data.get("booking"))
+        if scope_for(request.user, "reports.view", request) is None:
+            raise err("FORBIDDEN", "Previews use real data, so they need reports.view.", 403)
+        booking = _report_booking(request, request.data.get("booking"))
         insp = context.latest_inspection(booking)
         if insp is None or insp.form_version.form_id != tv.template.form_id:
             raise err("INVALID_BOOKING", "Pick a submitted booking inspected with this form.")

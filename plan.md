@@ -605,3 +605,10 @@ Replaces "three fixed roles" with an Admin-editable role x permission matrix (RE
 
 ### 2026-11-22 — Phase 4 notes
 - **Events carry values on purpose** (`booking.updated` has old->new, including customer fields; Booking ID edits need it). Nothing logs or sends them yet. **Phase 9 must**: log delivery metadata only (never payloads), include personal fields only when an integration has "full data" enabled, and apply the receiving integration's field scope. (Security review finding, accepted with this condition.)
+
+### 2026-11-23 — Phases 6-8 built
+- **Storage in tests:** an in-memory S3 (moto) stands in for R2; `docs/r2-check.md` is the manual real-R2 check, still to run (needs your bucket).
+- **PDF engine changed:** WeasyPrint instead of headless Chromium (no browser to ship, native "Page x of y", Pango already present). CI and the Docker image install the system libraries and the image job proves it can render a PDF.
+- **Phase 8 scope trimmed:** promotion is file-based (export a bundle on staging, import it as a draft on production). The "staging pushes to prod with an Admin API key" mode needs API keys, so it moves to Phase 9.
+- **Behaviour to know:** a submission with no media goes straight to Completed; Completed triggers the PDF on a one-at-a-time queue.
+- **Review fixes:** scores follow field access; experts never get the rating config; PDF failures store only a reason code (details go to logs); template previews need `reports.view`; the Phase 6 commit's automated review did not complete (HTTP 429) and has no result.

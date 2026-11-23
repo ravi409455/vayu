@@ -379,7 +379,8 @@ def test_a_failing_render_is_retried_then_recorded_and_alerted(renv, settings, m
     with events.capture() as seen:
         b = complete_job(renv, settings=settings)
     r = Report.objects.get(booking_id=b["id"])
-    assert r.status == "failed" and "renderer crashed" in r.error and len(calls) == 3   # 1 + 2 retries
+    assert r.status == "failed" and r.error == "render_failed" and len(calls) == 3   # 1 + 2 retries
+    assert "renderer crashed" not in r.error                      # raw error text stays in the logs
     assert "alert.pdf_failed" in [n for n, _ in seen]
     assert renv.ops.get("/api/v1/problems/reports").json()[0]["status"] == "failed"
     monkeypatch.undo()
@@ -499,3 +500,32 @@ def test_publishing_a_template_works_without_a_booking_form_and_detects_stale_dr
     stale = admin.post(f"/api/v1/pdf-template-versions/{d['id']}/publish", {"row_version": 5},
                        format="json")
     assert stale.status_code == 409 and stale.json()["code"] == "STALE_DRAFT"
+
+
+def test_a_storage_failure_is_recorded_as_such_and_previews_need_reports_view(renv, settings,
+                                                                               monkeypatch):
+    from botocore.exceptions import ClientError
+
+    from apps.accounts.catalog import DEFAULTS
+    from apps.media import storage as st
+
+    set_template(renv)
+    real_put = st.put
+
+    def failing_put(key, data, content_type):
+        if key.startswith("reports/"):
+            raise ClientError({"Error": {"Code": "500", "Message": "https://secret.example"}}, "Put")
+        return real_put(key, data, content_type)
+
+    monkeypatch.setattr(st, "put", failing_put)
+    b = complete_job(renv, settings=settings)
+    r = Report.objects.get(booking_id=b["id"])
+    assert r.error == "storage_failed" and "secret" not in r.error
+    monkeypatch.undo()
+    draft = renv.admin.post(f"/api/v1/pdf-templates/{renv.template_id}/drafts").json()
+    perms = {**DEFAULTS["ops"], "pdf_templates.edit": "all", "pdf_templates.view": "all"}
+    perms.pop("reports.view")
+    renv.admin.put("/api/v1/roles/ops/permissions", {"permissions": perms}, format="json")
+    r = renv.ops.post(f"/api/v1/pdf-template-versions/{draft['id']}/preview",
+                      {"booking": b["id"]}, format="json")
+    assert r.status_code == 403 and r.json()["code"] == "FORBIDDEN"

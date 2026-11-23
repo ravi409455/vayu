@@ -1,5 +1,7 @@
+import logging
 import time
 
+from botocore.exceptions import ClientError
 from celery import shared_task
 from django.conf import settings
 from django.db import transaction
@@ -13,6 +15,7 @@ from . import context, definition, render
 from .models import PdfTemplateVersion, Report
 
 MAX_RETRIES = 2
+logger = logging.getLogger(__name__)
 
 
 def published_template(booking: Booking, insp) -> PdfTemplateVersion | None:
@@ -59,8 +62,10 @@ def render_report(booking_id: str) -> str:
     try:
         pdf, name, key = _render_with_retries(booking, insp, tv, report.token, revision)
     except Exception as exc:  # noqa: BLE001 - recorded, not raised: Ops see it as a problem
-        Report.objects.filter(pk=report.pk).update(status="failed", error=str(exc)[:500])
-        events.emit("alert.pdf_failed", booking=str(booking.id), error=str(exc)[:200])
+        reason = "storage_failed" if isinstance(exc, ClientError) else "render_failed"
+        logger.exception("PDF render failed for booking %s", booking.id)   # detail stays in logs
+        Report.objects.filter(pk=report.pk).update(status="failed", error=reason)
+        events.emit("alert.pdf_failed", booking=str(booking.id), reason=reason)
         return "failed"
     with transaction.atomic():
         report = Report.objects.select_for_update().get(pk=report.pk)

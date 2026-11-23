@@ -9,7 +9,7 @@ from apps.accounts import audit
 from apps.accounts.permissions import perm
 from apps.core.errors import CodedError
 
-from . import library, services
+from . import library, promote, services
 from .models import (
     Field,
     Form,
@@ -374,3 +374,24 @@ def pdf_warnings(version) -> list:
     from apps.reports.service import warnings
 
     return warnings(version)
+
+
+class PromoteExport(generics.GenericAPIView):
+    permission_classes = [perm("forms.promote")]
+    serializer_class = serializers.Serializer
+
+    def get(self, request):
+        if not request.query_params.get("version"):
+            raise serializers.ValidationError({"version": "This query parameter is required."})
+        version = get_object_or_404(FormVersion.objects.select_related("form"),
+                                    pk=request.query_params["version"])
+        return Response(promote.export_bundle(version))
+
+
+class PromoteImport(generics.GenericAPIView):
+    permission_classes = [perm("forms.promote")]
+    serializer_class = serializers.Serializer
+
+    def post(self, request):
+        return Response(promote.import_bundle(request.user, request.data),
+                        status=status.HTTP_201_CREATED)
