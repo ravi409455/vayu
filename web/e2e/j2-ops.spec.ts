@@ -17,7 +17,8 @@ test("J2: Ops run a booking from creation to cancellation", async ({ page }) => 
   await page.getByLabel("Inspection type").selectOption("pdi");
   await page.getByLabel("Car make/model").selectOption("maruti_victoris");
   await page.getByRole("button", { name: "Create booking" }).click();
-  await expect(page.getByRole("heading", { name: /J2-100/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Sunita Rao/ })).toBeVisible();
+  await expect(page.getByText(/J2-100/).first()).toBeVisible();
   await expect(page.getByText("Not assigned").first()).toBeVisible();
 
   // assign

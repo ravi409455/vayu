@@ -77,7 +77,7 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   await page.getByRole("button", { name: "Publish now" }).click();
   await expect(page.getByRole("dialog", { name: "Published" })).toBeVisible();
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
-  await expect(page.getByText("Live: v1")).toBeVisible();
+  await expect(page.getByText("Live v1").first()).toBeVisible();
 
   // PDF template: map Odometer to a report label
   await page.goto("/pdf");

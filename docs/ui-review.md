@@ -162,3 +162,21 @@ About **12-13 days** in total. Each step keeps the browser tests green and adds 
    real board (columns by stage)?
 4. **Logo:** is there an official Car C.I.D. / Vayu mark to use, or should a simple monogram tile be designed?
 5. **Ops home:** a new **Today** page as the landing page (recommended)?
+
+---
+
+## 6. Status (2026-11-23)
+Decisions taken: ink primary buttons, light sidebar, Bookings and Job board merged, a monogram
+tile until an official mark exists, Today as the Ops home. Mockups: the "Vayu UI mockups" canvas.
+
+| Step | Commit | What landed |
+|---|---|---|
+| 1 Shell and visual system | 00c1206 | Top bar (breadcrumb, ⌘K booking search, environment badge, account menu), light sidebar with logo, auto-collapse below 1200 px, ink primary, green / red answer choices, one header and empty-state pattern, dark-theme depth |
+| 2 Ops core | 54ebe52 | Today home; one Bookings page (views, filters, list / board, row menu); booking page (header, rail with customer / car / activity, review sheet, gallery, ratings buttons, inline report); Problems grouped with badge and bell; booking activity log (backend) |
+| 3 Dashboard | cea7ee7 | Period presets, six headline numbers vs the previous period, stacked chart, by-expert table, exact numbers; `dashboards/summary` (backend); timeline made fail-closed |
+| 4 Admin | 4e78bb9 | Builder header and Form settings panel; PDF templates with live preview and booking picker; users (search, roles, last sign-in, menu); roles matrix; master-list split view; audit filters; row menus |
+| 5 Expert and polish | 95c0a1c | My jobs grouped with details panel; job summary with Call / Directions; inspection step list and sticky footer; human dates everywhere; tablet check |
+
+Left out on purpose (small, can follow): a calendar view of bookings; drag-to-assign on the
+board; drag ordering of master-list items; a city filter on the dashboard; the Promote page
+is unchanged.

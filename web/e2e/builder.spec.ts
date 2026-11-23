@@ -159,7 +159,7 @@ test.describe("system forms are named and tuned by the Admin", () => {
     // the payment mode choices are editable like any choice field
     await page.goto(`/forms/${end.id}`);
     await page.getByRole("button", { name: "Start a new draft" }).click();
-    await expect(page.getByText(/You are editing a draft/)).toBeVisible();
+    await expect(page.getByText(/Experts keep using the live version until you publish/)).toBeVisible();
     await page.locator(".field-row", { hasText: "Payment mode" }).click();
     await expect(page.getByRole("heading", { name: "Payment mode" })).toBeVisible();
     await expect(page.getByLabel("Choice label").first()).toHaveValue("Cash");

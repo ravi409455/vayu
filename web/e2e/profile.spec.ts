@@ -39,14 +39,15 @@ async function contrast(page: Page, selector: string): Promise<number> {
 test("a picture: uploaded, square, in the sidebar, seen by Ops next to the expert, hidden from other experts", async ({ page, browser }) => {
   const id = await assignedTo("expert", "PIC-1");
   await signIn(page, "expert");
-  await page.getByRole("link", { name: /Your profile/ }).click();
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: /Your profile/ }).click();
   await expect(page.getByRole("heading", { name: /Your profile/ })).toBeVisible();
   await page.getByLabel("Upload a picture", { exact: false }).first().setInputFiles({ name: "me.jpg", mimeType: "image/jpeg", buffer: JPEG });
   await expect(page.getByText("Picture saved.")).toBeVisible();
   const big = page.getByRole("region", { name: "Picture" }).locator("img.avatar");
   await expect(big).toBeVisible();
   expect(await big.evaluate((i: HTMLImageElement) => [i.naturalWidth, i.naturalHeight])).toEqual([256, 256]);   // cropped square
-  await expect(page.locator(".who-name img.avatar")).toBeVisible();                                          // shown in the sidebar too
+  await expect(page.locator(".who-name img.avatar")).toBeVisible();                                          // shown in the top bar too
 
   const ops = await browser.newContext({ baseURL: "http://localhost:5173" });
   const opsPage = await ops.newPage();
@@ -191,9 +192,9 @@ test("an Admin edits a phone and removes a picture; the expert falls back to ini
 test("users.manage is Admin only: the Roles screen says so and the API refuses to grant it", async ({ page }) => {
   await signIn(page, "admin");
   await page.goto("/roles");
-  await page.getByRole("tab", { name: /Ops/ }).click().catch(() => {});
+  // one table now: Ops and Expert side by side
   const row = page.locator("tr", { hasText: "Create, edit, deactivate users" });
-  await expect(row.getByText("Admin only")).toBeVisible();
+  await expect(row.getByText("Admin only").first()).toBeVisible();
   const admin = await apiAs("admin");
   const r = await admin.put("roles/ops/permissions", { data: { permissions: { "users.manage": "all" } } });
   expect(r.status()).toBe(400);
