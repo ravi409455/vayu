@@ -17,6 +17,9 @@ from django.conf import settings
 from django.utils import timezone
 from jinja2 import TemplateError
 from jinja2.sandbox import ImmutableSandboxedEnvironment
+from requests.adapters import HTTPAdapter
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
 from apps.core import tasks as core_tasks
 
@@ -65,6 +68,53 @@ def check_url(url: str) -> str | None:
             ipaddress.ip_address(a).is_global for a in addresses):
         return "blocked_address"
     return None
+
+
+class BlockedAddress(OSError):
+    pass
+
+
+class _PeerGuard:
+    """Checks the address actually connected to, so a DNS answer that changes between our check
+    and the connection (DNS rebinding) cannot reach a private address."""
+
+    def _new_conn(self):
+        sock = super()._new_conn()  # type: ignore[misc]
+        if not settings.WEBHOOK_ALLOW_PRIVATE and not ipaddress.ip_address(
+                sock.getpeername()[0]).is_global:
+            sock.close()
+            raise BlockedAddress("blocked_address")
+        return sock
+
+
+class GuardedHTTPConnection(_PeerGuard, HTTPConnection):
+    pass
+
+
+class GuardedHTTPSConnection(_PeerGuard, HTTPSConnection):
+    pass
+
+
+class GuardedHTTPPool(HTTPConnectionPool):
+    ConnectionCls = GuardedHTTPConnection
+
+
+class GuardedHTTPSPool(HTTPSConnectionPool):
+    ConnectionCls = GuardedHTTPSConnection
+
+
+class GuardedAdapter(HTTPAdapter):
+    def init_poolmanager(self, *args, **kwargs):
+        super().init_poolmanager(*args, **kwargs)
+        self.poolmanager.pool_classes_by_scheme = {"http": GuardedHTTPPool,
+                                                   "https": GuardedHTTPSPool}
+
+
+def session() -> requests.Session:
+    s = requests.Session()
+    s.mount("http://", GuardedAdapter())
+    s.mount("https://", GuardedAdapter())
+    return s
 
 
 # ------------------------------------------------------------------ routing
@@ -238,11 +288,15 @@ def attempt(d: Delivery) -> Delivery:
                "X-Vayu-Delivery": str(d.id), "X-Vayu-Signature": sign(integ.secret, raw),
                "User-Agent": "Vayu-Webhooks/1"}
     try:
-        r = requests.post(integ.url, data=raw, headers=headers, timeout=settings.WEBHOOK_TIMEOUT,
-                          allow_redirects=False)
+        with session() as s:
+            r = s.post(integ.url, data=raw, headers=headers, timeout=settings.WEBHOOK_TIMEOUT,
+                       allow_redirects=False)
     except requests.Timeout:
         return _retry(d, "timeout", None)
-    except requests.RequestException:
+    except requests.RequestException as e:
+        if "blocked_address" in str(e):          # the connection went to a private address
+            _finish(d, "failed", "blocked_address")
+            return d
         return _retry(d, "connection_error", None)
     if 200 <= r.status_code < 300:
         _finish(d, "success", "", r.status_code)

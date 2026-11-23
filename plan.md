@@ -628,3 +628,4 @@ Replaces "three fixed roles" with an Admin-editable role x permission matrix (RE
 - Push-mode promotion (staging pushes to prod with an API key) is **still deferred**: bundles stay file-based. Not needed for launch.
 - The integration signing secret is stored as plain text (it must be readable to sign). Database access = secret access; acceptable for a single-tenant internal system, revisit with envelope encryption if that changes.
 - The API-key identity is an inactive Admin-role service user: it cannot sign in and does not count as "the last admin".
+- Security review (Phase 9): the connected socket address is now checked too (DNS-rebinding safe). API keys act as an Admin-role service identity **on purpose**: a key is limited by its form/field scope, not by Ops' per-stage field levels; validation, stale checks and action-only fields still apply.

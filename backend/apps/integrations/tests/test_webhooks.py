@@ -556,3 +556,52 @@ def test_events_for_a_booking_that_no_longer_exists_reach_booking_form_integrati
 def test_an_over_long_template_is_refused_by_the_renderer_itself(ienv):
     with pytest.raises(Exception, match="too long"):
         webhooks.render_template("x" * 10_001, {"event": "e", "booking": {}})
+
+
+def test_the_connected_address_is_checked_so_dns_rebinding_cannot_reach_private_hosts(
+        monkeypatch, settings):
+    """check_url passes (DNS said 'public'), but the socket really connected to a private address."""
+    from unittest import mock
+
+    class FakeSocket:
+        def __init__(self, ip):
+            self.ip, self.closed = ip, False
+
+        def getpeername(self):
+            return (self.ip, 443)
+
+        def close(self):
+            self.closed = True
+
+    for ip, blocked in (("10.1.2.3", True), ("169.254.169.254", True), ("93.184.216.34", False)):
+        sock = FakeSocket(ip)
+        with mock.patch("urllib3.connection.HTTPConnection._new_conn", return_value=sock):
+            conn = webhooks.GuardedHTTPConnection("hooks.example.com", 80)
+            if blocked:
+                with pytest.raises(webhooks.BlockedAddress):
+                    conn._new_conn()
+                assert sock.closed
+            else:
+                assert conn._new_conn() is sock
+    settings.WEBHOOK_ALLOW_PRIVATE = True
+    with mock.patch("urllib3.connection.HTTPConnection._new_conn", return_value=FakeSocket("10.0.0.1")):
+        assert webhooks.GuardedHTTPConnection("x", 80)._new_conn()
+    with mock.patch("urllib3.connection.HTTPSConnection._new_conn", return_value=FakeSocket("10.0.0.1")):
+        assert webhooks.GuardedHTTPSConnection("x", 443)._new_conn()
+    assert webhooks.GuardedHTTPPool.ConnectionCls is webhooks.GuardedHTTPConnection
+    assert webhooks.GuardedHTTPSPool.ConnectionCls is webhooks.GuardedHTTPSConnection
+
+
+def test_a_connection_blocked_at_the_socket_fails_the_delivery_for_good(ienv, monkeypatch):
+    with responses.RequestsMock() as r:
+        r.add(responses.POST, HOOK, body=requests.ConnectionError("blocked_address"))
+        d = delivery(ienv, ref="RB1")
+    assert d.status == "failed" and d.error == "blocked_address" and d.next_retry_at is None
+
+
+def test_the_session_uses_the_guarded_adapter():
+    s = webhooks.session()
+    assert isinstance(s.get_adapter("https://x.example.com"), webhooks.GuardedAdapter)
+    adapter = s.get_adapter("https://x.example.com")
+    assert isinstance(adapter, webhooks.GuardedAdapter)
+    assert adapter.poolmanager.pool_classes_by_scheme["https"] is webhooks.GuardedHTTPSPool
