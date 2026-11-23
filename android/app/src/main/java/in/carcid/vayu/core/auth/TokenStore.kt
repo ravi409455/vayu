@@ -23,7 +23,7 @@ class PrefsTokenStore(context: Context) : TokenStore {
     }
     override fun clear() { prefs.edit().clear().apply() }
     override fun me(): Map<String, String>? = prefs.getString("me.username", null)?.let {
-        listOf("id", "username", "name", "role", "theme").associateWith { k -> prefs.getString("me.$k", "")!! }
+        listOf("id", "username", "name", "role", "theme", "must_change").associateWith { k -> prefs.getString("me.$k", "")!! }
     }
     override fun saveMe(fields: Map<String, String>) {
         prefs.edit().apply { fields.forEach { (k, v) -> putString("me.$k", v) } }.apply()

@@ -105,7 +105,7 @@ private fun Shell(content: @Composable () -> Unit) {
 @Composable
 fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String) -> Unit) = Shell {
     var user by rememberSaveable { mutableStateOf("") }
-    var pass by rememberSaveable { mutableStateOf("") }
+    var pass by remember { mutableStateOf("") }          // never saved to disk (no rememberSaveable)
     var show by remember { mutableStateOf(false) }
     Brand()
     Illustration(Icons.Outlined.DirectionsCar)
@@ -115,7 +115,7 @@ fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String) -> Unit) = She
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         SoftField(user, { user = it }, "Username", icon = Icons.Outlined.Person)
         SoftField(pass, { pass = it }, "Password", icon = Icons.Outlined.Lock,
-            visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
+            visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(), password = true,
             trailing = {
                 IconButton(onClick = { show = !show }) {
                     Icon(if (show) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
@@ -143,16 +143,16 @@ fun AdminRefusedScreen(onBack: () -> Unit) = Shell {
 
 @Composable
 fun ChangePasswordScreen(state: Screen.ChangePassword, onSave: (String, String) -> Unit) = Shell {
-    var a by rememberSaveable { mutableStateOf("") }
-    var b by rememberSaveable { mutableStateOf("") }
+    var a by remember { mutableStateOf("") }
+    var b by remember { mutableStateOf("") }
     Brand()
     Illustration(Icons.Outlined.Lock)
     Text("Choose your password", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink)
     Text("Your Admin gave you a temporary one. Pick your own to carry on.", color = Vayu.colors.muted)
     Spacer(Modifier.height(16.dp))
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        SoftField(a, { a = it }, "New password", icon = Icons.Outlined.Lock, visualTransformation = PasswordVisualTransformation())
-        SoftField(b, { b = it }, "Type it again", icon = Icons.Outlined.Lock, visualTransformation = PasswordVisualTransformation())
+        SoftField(a, { a = it }, "New password", icon = Icons.Outlined.Lock, visualTransformation = PasswordVisualTransformation(), password = true)
+        SoftField(b, { b = it }, "Type it again", icon = Icons.Outlined.Lock, visualTransformation = PasswordVisualTransformation(), password = true)
         if (state.error != null) Text(state.error, color = Vayu.colors.bad, style = MaterialTheme.typography.bodyMedium)
         PrimaryButton(if (state.busy) "Saving…" else "Save and continue", { onSave(a, b) }, enabled = !state.busy)
     }

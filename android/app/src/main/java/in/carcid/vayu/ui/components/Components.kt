@@ -260,7 +260,7 @@ fun SoftField(value: String, onValueChange: (String) -> Unit, placeholder: Strin
               icon: ImageVector? = null, trailing: (@Composable () -> Unit)? = null,
               visualTransformation: androidx.compose.ui.text.input.VisualTransformation =
                   androidx.compose.ui.text.input.VisualTransformation.None,
-              error: Boolean = false) {
+              error: Boolean = false, password: Boolean = false) {
     Row(modifier.fillMaxWidth().heightIn(min = 54.dp).clip(RoundedCornerShape(14.dp)).background(Vayu.colors.soft)
         .let { if (error) it.border(2.dp, Vayu.colors.bad, RoundedCornerShape(14.dp)) else it }
         .padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically,
@@ -269,6 +269,10 @@ fun SoftField(value: String, onValueChange: (String) -> Unit, placeholder: Strin
         Box(Modifier.weight(1f)) {
             if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = Vayu.colors.muted)
             BasicTextField(value, onValueChange, singleLine = true, visualTransformation = visualTransformation,
+                // passwords: no suggestions, no keyboard learning
+                keyboardOptions = if (password) androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Password, autoCorrectEnabled = false)
+                else androidx.compose.foundation.text.KeyboardOptions.Default,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Vayu.colors.ink),
                 cursorBrush = SolidColor(Vayu.colors.ink),
                 modifier = Modifier.fillMaxWidth().semantics { contentDescription = placeholder })

@@ -24,12 +24,17 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
     private val _screen = MutableStateFlow<Screen>(Screen.Loading)
     val screen: StateFlow<Screen> = _screen
     private var lastPassword = ""
+    /** Below this version the app may finish a started job but not start new ones (enforced in Phase 14). */
+    var minAppVersion = 0
+        private set
 
     init { viewModelScope.launch { resume() } }
 
     private suspend fun resume() {
         if (tokens.access() == null) { _screen.value = Screen.SignIn(); return }
-        val cached = tokens.me()?.let { Me(it["id"]!!.toIntOrNull() ?: 0, it["username"]!!, it["name"]!!, it["role"]!!, false, it["theme"]!!) }
+        // offline: open on the saved profile only for an app role with no pending password change
+        val cached = tokens.me()?.takeIf { it["role"] in setOf("expert", "ops") && it["must_change"] == "false" }
+            ?.let { Me(it["id"]!!.toIntOrNull() ?: 0, it["username"]!!, it["name"]!!, it["role"]!!, false, it["theme"]!!) }
         try {
             enter(api.me())
         } catch (e: ApiError) {
@@ -70,10 +75,14 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
 
     private suspend fun enter(me: Me) {
         tokens.saveMe(mapOf("id" to me.id.toString(), "username" to me.username, "name" to me.name,
-            "role" to me.role, "theme" to me.theme))
+            "role" to me.role, "theme" to me.theme, "must_change" to me.mustChangePassword.toString()))
         if (me.mustChangePassword) { _screen.value = Screen.ChangePassword(); return }
         _screen.value = Screen.Home(me)
-        runCatching { api.heartbeat(drafts = 0, files = 0) }      // nothing is stored on the phone yet
+        try {
+            minAppVersion = api.heartbeat(drafts = 0, files = 0)     // nothing is stored on the phone yet
+        } catch (e: ApiError) {
+            if (e.code == "DEVICE_REVOKED") { tokens.clear(); _screen.value = Screen.SignIn() }
+        }
     }
 
     fun openProfile() { (screen.value as? Screen.Home)?.let { _screen.value = Screen.Profile(it.me) } }
