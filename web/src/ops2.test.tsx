@@ -198,3 +198,18 @@ describe("stacked bars", () => {
     expect(f.cols[0]!.values.__other).toBe(1 + 2 + 3);         // the three smallest
   });
 });
+
+describe("my jobs quick filters", () => {
+  it("sorts each job into To do / Today / Upcoming / Started / Done", async () => {
+    const { matchesJob } = await import("./pages/expert/MyJobs");
+    const j = (stage: string, d: string) => ({ stage, answers: { inspection_date: d } });
+    const today = j("assigned", "2026-11-23"), later = j("assigned", "2026-12-01"), started = j("in_progress", "2026-11-23"), done = j("completed", "2026-11-20");
+    const pick = (f: Parameters<typeof matchesJob>[1]) => [today, later, started, done].filter((b) => matchesJob(b, f, NOW));
+    expect(pick("open")).toEqual([today, later, started]);
+    expect(pick("today")).toEqual([today, started]);
+    expect(pick("upcoming")).toEqual([later]);
+    expect(pick("started")).toEqual([started]);
+    expect(pick("done")).toEqual([done]);
+    expect(pick("all")).toHaveLength(4);
+  });
+});
