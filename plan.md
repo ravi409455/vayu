@@ -642,3 +642,4 @@ Replaces "three fixed roles" with an Admin-editable role x permission matrix (RE
 - Web Sentry not wired (needs the DSN); do it with the deploy.
 - The verify host: the QR links to `VERIFY_BASE_URL/<token>`; in the web app the page is `/verify/<token>`: map `verify.<domain>/<token>` to it in Caddy.
 **Still manual:** load test + PDF benchmark on staging (`docs/benchmarks.md`; PDF with 150 photos took 16 s on a laptop); the 2-day staging trial by you plus 2-3 Ops/experts before Android; building the PDI/PPI/EV forms in the builder.
+- Security review notes (Phases 10-12): conflict resolution leaves other experts' drafts untouched on purpose (a reassigned expert may still submit; the submit path then flags a new conflict, tested); CI no longer interpolates GitHub context into shell (passed through `env`).

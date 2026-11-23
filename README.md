@@ -5,12 +5,15 @@ reports, webhooks. See `REQUIREMENTS.md` (what) and `plan.md` (how/when).
 
 ```
 backend/   Django + DRF (Python 3.12, managed by uv)
-web/       React app (from Phase 7)
+web/       React app
 android/   Kotlin app (from Phase 13)
 shared/    test vectors shared by all clients
 infra/     docker compose + Caddy
 docs/      setup guides, benchmarks
 ```
+
+## Run it on your laptop
+`scripts/local.sh up`, then open http://localhost:5173. Details: `docs/local.md`.
 
 ## Backend: run the tests
 

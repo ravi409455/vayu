@@ -14,3 +14,18 @@ services:
   redis:
     image: redis:7-alpine
     ports: ["127.0.0.1:6379:6379"]
+  # Object store for local review (stand-in for Cloudflare R2): files are kept in a Docker volume.
+  s3:
+    image: andrewgaul/s3proxy:latest
+    environment:
+      S3PROXY_ENDPOINT: http://0.0.0.0:80
+      S3PROXY_AUTHORIZATION: aws-v2-or-v4
+      S3PROXY_IDENTITY: vayulocal
+      S3PROXY_CREDENTIAL: vayulocal-secret
+      S3PROXY_CORS_ALLOW_ALL: "true"
+      JCLOUDS_PROVIDER: filesystem
+      JCLOUDS_FILESYSTEM_BASEDIR: /data
+    ports: ["127.0.0.1:9000:80"]
+    volumes: ["s3-data:/data"]
+volumes:
+  s3-data:

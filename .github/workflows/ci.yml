@@ -31,8 +31,11 @@ jobs:
           diff openapi.yaml /tmp/openapi.yaml || (echo "Run: cd backend && DJANGO_SETTINGS_MODULE=vayu.settings.test uv run python manage.py spectacular --file openapi.yaml" && exit 1)
         env: {DJANGO_SETTINGS_MODULE: vayu.settings.test}
       - name: no breaking API changes (oasdiff)
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          base=$([ "${{ github.event_name }}" = "pull_request" ] && echo "origin/${{ github.base_ref }}" || echo "HEAD~1")
+          if [ "$EVENT" = "pull_request" ]; then base="origin/$BASE_REF"; else base="HEAD~1"; fi
           if git cat-file -e "$base:backend/openapi.yaml" 2>/dev/null; then
             git show "$base:backend/openapi.yaml" > /tmp/base.yaml
             cp openapi.yaml /tmp/new.yaml
