@@ -87,6 +87,21 @@ def test_what_ops_changed_since_the_last_sync(ienv, booking):
     assert sync(ienv.expert).json()["changes"] == []                     # no "since": nothing
 
 
+def test_changes_hide_fields_the_expert_may_not_see(ienv, booking):
+    from apps.bookings import activity
+    from apps.bookings.models import Booking as B
+    from apps.forms.models import Field
+
+    assign(ienv, booking)
+    since = timezone.now().isoformat()
+    Field.objects.filter(key="customer_phone", version__form__type="booking").update(
+        access={"expert": {"assigned": "hidden"}})
+    activity.log(B.objects.get(pk=booking["id"]), ienv.ops_user, "edited",
+                 keys=["customer_phone", "address"])
+    (change,) = sync(ienv.expert, since=since).json()["changes"]
+    assert change["keys"] == ["address"]                                 # the hidden one is gone
+
+
 @pytest.mark.parametrize("query", [{"since": "yesterday"}, {"have": "1,x"}])
 def test_bad_query_values_are_refused(ienv, query):
     r = sync(ienv.expert, **query)

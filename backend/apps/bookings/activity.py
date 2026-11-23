@@ -18,10 +18,11 @@ def log(b, actor, kind: str, changes: dict | None = None, keys: list[str] | None
         keys=sorted(keys if keys is not None else changes), inspection=inspection)
 
 
-def for_user(b, user) -> list[dict]:
+def for_user(b, user, since=None) -> list[dict]:
     """The timeline as this person may see it. Fail closed: a key (and its value) is shown only
     when the person may see that field at the booking's current stage; rows about an inspection
-    form whose submissions they may not see are left out."""
+    form whose submissions they may not see are left out. ``since``: only what others did after it
+    (the phone's "what Ops changed" banner)."""
     from apps.forms.access import hidden_inspection_forms
 
     from .services import booking_form_version
@@ -46,6 +47,8 @@ def for_user(b, user) -> list[dict]:
 
     rows = b.activity.select_related("actor", "inspection__form_version",
                                      "inspection__start_version", "inspection__end_version")
+    if since is not None:
+        rows = rows.filter(at__gt=since).exclude(actor=user)
     out = []
     for row in rows[:200]:
         if row.inspection_id and row.inspection.form_version.form_id in hidden_forms:

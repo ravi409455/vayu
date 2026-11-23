@@ -9,7 +9,8 @@ from django.utils import timezone
 from apps.core.errors import CodedError
 from apps.forms.models import MasterList
 
-from .models import Booking, BookingActivity
+from . import activity
+from .models import Booking
 from .serializers import BookingSerializer
 from .submissions import current_versions, form_for_role, own_filter
 
@@ -26,7 +27,8 @@ def jobs_for(user):
 
 def payload(user, have: set[int], since, context) -> dict:
     jobs, versions = [], {}
-    for b in jobs_for(user):
+    bookings = list(jobs_for(user))
+    for b in bookings:
         try:
             pinned = current_versions(b)
         except CodedError:       # no published form for its type: listed, but nothing to fill yet
@@ -39,13 +41,11 @@ def payload(user, have: set[int], since, context) -> dict:
                      "assigned_to_me": b.assigned_expert_id == user.pk,
                      "my_draft": str(draft.id) if draft else None,
                      "versions": {part: v.id if v else None for part, v in pinned.items()}})
-    changes = []
-    if since is not None:
-        rows = (BookingActivity.objects.filter(booking_id__in=[j["id"] for j in jobs], at__gt=since)
-                .exclude(actor=user).select_related("actor", "booking").order_by("at"))
-        changes = [{"booking": str(a.booking_id), "booking_id": a.booking.booking_id, "at": a.at,
-                    "by": a.actor.username if a.actor else None, "kind": a.kind,
-                    "changes": a.changes, "keys": a.keys} for a in rows]
+    # what others changed, filtered exactly like the booking's history (fields the expert may not
+    # see are left out, values included only for safe keys)
+    changes = [{"booking": str(b.id), "booking_id": b.booking_id, **row}
+               for b in bookings if since is not None
+               for row in activity.for_user(b, user, since=since)]
     lists = {ml.key: [{"key": i.key, "label": i.label}
                       for i in sorted(ml.items.all(), key=lambda i: (i.order, i.label))
                       if not i.archived]
