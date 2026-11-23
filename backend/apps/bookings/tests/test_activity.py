@@ -94,3 +94,45 @@ def test_the_list_can_be_ordered_by_schedule(env):
     ids = [b["booking_id"] for b in rows]
     assert ids == ["B3", "B2", "B1"]
     assert env.ops.get("/api/v1/bookings?order=nope").status_code == 400
+
+
+def test_schedule_values_of_a_hidden_field_are_not_shown(env):
+    from apps.forms.models import Form
+
+    from .test_submissions import publish_form
+
+    form = Form.objects.get(type="booking")
+    d = env.admin.post(f"/api/v1/forms/{form.id}/drafts").json()["id"]
+    tree = env.admin.get(f"/api/v1/form-versions/{d}").json()
+    field = next(f for p in tree["pages"] for s in p["sections"] for f in s["fields"]
+                 if f["key"] == "inspection_time")
+    hidden = {s: "hidden" for s in ("draft", "assigned", "in_progress", "submitted",
+                                    "completed", "cancelled")}
+    r = env.admin.patch(f"/api/v1/fields/{field['id']}", {"access": {"ops": hidden}},
+                        format="json")
+    assert r.status_code == 200, r.json()
+    publish_form(env.admin, form.id)
+    from apps.bookings import activity
+    from apps.bookings.models import Booking
+
+    b = create(env.admin).json()
+    booking = Booking.objects.get(pk=b["id"])
+    activity.log(booking, env.admin_user, "changed",
+                 {"inspection_time": ["15:30", "11:00"], "stage": ["draft", "draft"]})
+    top = timeline(env.ops, b)[0]
+    assert top["changes"] == {"stage": ["draft", "draft"]} and top["keys"] == ["stage"]
+    assert "inspection_time" in timeline(env.admin, b)[0]["changes"]
+
+
+def test_rows_about_a_form_whose_submissions_are_hidden_are_left_out(started):
+    from apps.forms.models import Form
+
+    ienv, booking, _ = started
+    submit(ienv.expert, booking)
+    insp = Inspection.objects.get(status="submitted")
+    ienv.ops.patch(f"/api/v1/inspections/{insp.id}",
+                   {"answers": {"inspection": {"odometer": 51}}, "row_version": 0}, format="json")
+    assert timeline(ienv.ops, booking)[0]["kind"] == "inspection_edited"
+    Form.objects.filter(pk=insp.form_version.form_id).update(submission_roles=["admin"])
+    kinds = [r["kind"] for r in timeline(ienv.ops, booking)]
+    assert "inspection_edited" not in kinds and "created" in kinds

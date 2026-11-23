@@ -224,3 +224,70 @@ def test_chassis_is_unsearchable_for_non_admins_when_no_inspection_form_describe
     Booking.objects.filter(booking_id="SA10001").update(chassis_no="MA3SECRETCHASSIS1")
     assert ids(many.admin, "search=SECRETCHASSIS") == ["SA10001"]
     assert ids(many.ops, "search=SECRETCHASSIS") == []       # no active inspection form here
+
+
+# ---------------------------------------------------------------- summary (headline numbers)
+
+def _visit(b, started, submitted, stage):
+    from apps.bookings.models import Booking, Inspection
+    from apps.forms.models import FormVersion
+
+    booking = Booking.objects.get(booking_id=b)
+    Booking.objects.filter(pk=booking.pk).update(stage=stage)
+    Inspection.objects.create(booking=booking, expert=booking.assigned_expert or _expert(),
+                              form_version=FormVersion.objects.filter(status="published")[0],
+                              status="submitted", client_started_at=started, submitted_at=submitted)
+
+
+def _expert():
+    from apps.accounts.models import User
+
+    return User.objects.filter(role="expert").first()
+
+
+def test_summary_counts_rates_time_on_site_and_on_time(many):
+    from datetime import datetime
+
+    from django.utils import timezone
+
+    from apps.bookings.models import Booking
+
+    def at(day, hh, mm):
+        return timezone.make_aware(datetime(2026, 10, day, hh, mm))
+
+    e = _expert()
+    Booking.objects.filter(booking_id__in=["SA10001", "VI20002"]).update(assigned_expert=e)
+    _visit("SA10001", at(14, 15, 40), at(14, 17, 10), "completed")      # slot 15:30: 10 min late, 90 min
+    _visit("VI20002", at(14, 16, 0), at(14, 16, 30), "completed")       # 30 min late, 30 min
+    Booking.objects.filter(booking_id="AD30003").update(stage="cancelled")
+    r = many.ops.get("/api/v1/dashboards/summary?date_from=2026-10-01&date_to=2026-10-31")
+    assert r.status_code == 200, r.json()
+    p = r.json()["period"]
+    assert p == {"bookings": 3, "completed": 2, "cancelled": 1, "completion_rate": 100.0,
+                 "avg_minutes": 60, "on_time": 50}
+    prev = r.json()["previous"]                                         # September: nothing
+    assert prev["bookings"] == 0 and prev["completion_rate"] is None and prev["avg_minutes"] is None
+    row = r.json()["by_expert"][0]
+    assert row["expert"] == e.id and row["bookings"] == 2 and row["on_time"] == 50
+    nov = many.ops.get("/api/v1/dashboards/summary?date_from=2026-11-01&date_to=2026-11-30").json()
+    assert nov["previous"]["bookings"] == 3 and nov["period"]["bookings"] == 1
+
+
+def test_summary_defaults_to_the_last_30_days_and_checks_dates(many):
+    r = many.ops.get("/api/v1/dashboards/summary")
+    assert r.status_code == 200 and r.json()["period"]["bookings"] >= 0
+    assert many.ops.get("/api/v1/dashboards/summary?date_from=x").status_code == 400
+    bad = "/api/v1/dashboards/summary?date_from=2026-11-02&date_to=2026-11-01"
+    assert many.ops.get(bad).status_code == 400
+    assert many.expert.get("/api/v1/dashboards/summary").status_code == 403
+
+
+def test_a_booking_without_a_time_is_left_out_of_on_time(many):
+    from apps.bookings.dashboards import _slot
+    from apps.bookings.models import Booking
+
+    b = Booking.objects.get(booking_id="SA10001")
+    b.answers = {**b.answers, "inspection_time": None}
+    assert _slot(b) is None
+    b.inspection_date = None
+    assert _slot(b) is None

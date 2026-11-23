@@ -355,3 +355,12 @@ a.card.kpi:hover { text-decoration: none; border-color: var(--line-strong); }
 .record-head > .grow { flex: 1 1 320px; }
 button.icon-only { border-color: transparent; background: transparent; color: var(--ink-2); }
 button.icon-only:hover, button.icon-only[aria-expanded="true"] { background: var(--hover); border-color: var(--line); }
+.legend-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.legend-key { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+.legend-key > span { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.chart { height: 240px; display: flex; gap: 3px; align-items: flex-end; border-bottom: 1px solid var(--line-strong); background: repeating-linear-gradient(to top, transparent 0 59px, var(--line) 59px 60px); }
+.bar-col { flex: 1 1 0; height: 100%; display: flex; align-items: flex-end; min-width: 0; }
+.bar-stack { width: 100%; display: flex; flex-direction: column-reverse; gap: 1px; border-radius: 3px 3px 0 0; overflow: hidden; min-height: 2px; }
+.chart-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 6px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.kpi-sub.ok { color: var(--ok); }

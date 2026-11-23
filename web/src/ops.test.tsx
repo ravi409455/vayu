@@ -245,7 +245,7 @@ describe("picture, automatic and manual fields", () => {
 });
 
 describe("who sees what", () => {
-  it("Ops see exactly Bookings, Job board, Problems and Dashboards", () => {
+  it("Ops see exactly Today, Bookings, Problems and Dashboard", () => {
     const everything = () => true;
     const titles = visibleNav("ops", everything).flatMap((g) => g.items.map((i) => i.to));
     expect(titles.sort()).toEqual([...OPS_PAGES].sort());

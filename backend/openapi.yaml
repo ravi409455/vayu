@@ -752,6 +752,18 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/dashboards/summary:
+    get:
+      operationId: dashboards_summary_retrieve
+      description: Headline numbers for a period and the period just before it, and
+        per expert.
+      tags:
+      - dashboards
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/dashboards/volume:
     get:
       operationId: dashboards_volume_retrieve

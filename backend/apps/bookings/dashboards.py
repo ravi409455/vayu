@@ -1,16 +1,17 @@
 """Volume dashboards: bookings per period x dimension, with CSV export."""
 import csv
-from collections import Counter
-from datetime import date
+from collections import Counter, defaultdict
+from datetime import date, datetime, timedelta
 
 from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import perm, scope_for
 
-from .models import Booking
+from .models import Booking, Inspection
 
 GROUPS = ("day", "week", "month")
 DIMENSIONS = {"type": "inspection_type", "city": "city", "expert": "assigned_expert_id",
@@ -69,3 +70,81 @@ class DashboardVolume(APIView):
             writer.writerows({**r, "key": csv_safe(r["key"])} for r in rows)
             return response
         return Response({"rows": rows})
+
+
+ON_TIME_GRACE = timedelta(minutes=15)   # started up to 15 minutes after the slot counts as on time
+
+
+def _bounds(q) -> tuple[date, date]:
+    """date_from / date_to (inclusive); the last 30 days when not given."""
+    try:
+        end = date.fromisoformat(q["date_to"]) if q.get("date_to") else timezone.localdate()
+        start = (date.fromisoformat(q["date_from"]) if q.get("date_from")
+                 else end - timedelta(days=29))
+    except ValueError as e:
+        raise ValidationError({"detail": "Use YYYY-MM-DD for date_from and date_to."}) from e
+    if start > end:
+        raise ValidationError({"detail": "date_from must not be after date_to."})
+    return start, end
+
+
+def _slot(b: Booking) -> datetime | None:
+    """The booked start as an aware datetime (local time), or None when it is not set."""
+    t = b.answers.get("inspection_time")
+    if b.inspection_date is None or not isinstance(t, str) or ":" not in t:
+        return None
+    h, m = (int(x) for x in t.split(":")[:2])
+    naive = datetime(b.inspection_date.year, b.inspection_date.month, b.inspection_date.day, h, m)
+    return timezone.make_aware(naive)
+
+
+def _stats(bookings: list[Booking], visits: dict) -> dict:
+    """Headline numbers for one set of bookings. visits: booking id -> (started, submitted)."""
+    total = len(bookings)
+    done = sum(b.stage == "completed" for b in bookings)
+    cancelled = sum(b.stage == "cancelled" for b in bookings)
+    minutes, on_time, timed = [], 0, 0
+    for b in bookings:
+        started, submitted = visits.get(b.pk, (None, None))
+        if started and submitted:
+            minutes.append((submitted - started).total_seconds() / 60)
+        slot = _slot(b)
+        if started and slot:
+            timed += 1
+            on_time += started <= slot + ON_TIME_GRACE
+    live = total - cancelled
+    return {"bookings": total, "completed": done, "cancelled": cancelled,
+            "completion_rate": round(100 * done / live, 1) if live else None,
+            "avg_minutes": round(sum(minutes) / len(minutes)) if minutes else None,
+            "on_time": round(100 * on_time / timed) if timed else None}
+
+
+def summary(start: date, end: date) -> dict:
+    days = (end - start).days + 1
+    prev_start = start - timedelta(days=days)
+    qs = list(Booking.objects.filter(inspection_date__gte=prev_start, inspection_date__lte=end))
+    visits: dict = {}
+    insps = Inspection.objects.filter(booking__in=qs).exclude(status="superseded")
+    for i in insps.order_by("created_at"):
+        visits[i.booking_id] = (i.client_started_at or i.created_at, i.submitted_at)
+    now = [b for b in qs if b.inspection_date and b.inspection_date >= start]
+    before = [b for b in qs if b.inspection_date and b.inspection_date < start]
+    by_expert: dict = defaultdict(list)
+    for b in now:
+        if b.assigned_expert_id and b.stage != "cancelled":
+            by_expert[b.assigned_expert_id].append(b)
+    experts = [{"expert": eid, **_stats(rows, visits)} for eid, rows in by_expert.items()]
+    experts.sort(key=lambda r: -r["bookings"])
+    return {"date_from": start.isoformat(), "date_to": end.isoformat(),
+            "period": _stats(now, visits), "previous": _stats(before, visits),
+            "by_expert": experts}
+
+
+class DashboardSummary(APIView):
+    """Headline numbers for a period and the period just before it, and per expert."""
+
+    permission_classes = [perm("dashboards.view")]
+    declared_permissions = ("dashboards.view",)
+
+    def get(self, request):
+        return Response(summary(*_bounds(request.query_params)))

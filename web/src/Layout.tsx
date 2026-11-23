@@ -18,7 +18,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     { to: "/today", label: "Today", icon: Home, perm: "bookings.view", role: "ops-admin" },
     { to: "/bookings", label: "Bookings", icon: ClipboardList, perm: "bookings.view", role: "ops-admin" },
     { to: "/problems", label: "Problems", icon: AlertTriangle, perm: "bookings.view", role: "ops-admin" },
-    { to: "/dashboards", label: "Dashboards", icon: BarChart3, perm: "dashboards.view" },
+    { to: "/dashboards", label: "Dashboard", icon: BarChart3, perm: "dashboards.view" },
   ] },
   { title: "Templates", items: [
     { to: "/forms", label: "Forms", icon: FileText, perm: "forms.view" },

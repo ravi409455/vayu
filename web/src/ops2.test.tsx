@@ -68,3 +68,22 @@ describe("defects in the review sheet", () => {
     expect(defectOf(f("short_text"), "dent")).toBeNull();
   });
 });
+
+describe("dashboard", () => {
+  it("presets cover the right dates and pick a sensible bar size", async () => {
+    const { presetRange, groupFor, delta } = await import("./pages/ops/Dashboards");
+    expect(presetRange("today", NOW)).toEqual(["2026-11-23", "2026-11-23"]);
+    expect(presetRange("7", NOW)).toEqual(["2026-11-17", "2026-11-23"]);
+    expect(presetRange("month", NOW)).toEqual(["2026-11-01", "2026-11-23"]);
+    expect(groupFor("2026-11-01", "2026-11-30")).toBe("day");
+    expect(groupFor("2026-09-01", "2026-11-30")).toBe("week");
+    expect(groupFor("2026-01-01", "2026-11-30")).toBe("month");
+    expect(delta(110, 100, "count")).toEqual({ text: "+10%", good: true });
+    expect(delta(95.5, 96.7, "pct")).toEqual({ text: "−1.2 pts", good: false });
+    expect(delta(100, 110, "minutes", false)).toEqual({ text: "−10 min", good: true });
+    expect(delta(3, 0, "count").text).toBe("");
+    const { daysBetween } = await import("./pages/ops/Dashboards");
+    expect(daysBetween("2026-11-29", "2026-12-02")).toEqual(["2026-11-29", "2026-11-30", "2026-12-01", "2026-12-02"]);
+    expect(delta(null, 5, "count").text).toBe("");
+  });
+});
