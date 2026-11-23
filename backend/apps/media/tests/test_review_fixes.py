@@ -251,3 +251,12 @@ def test_a_failed_upload_cannot_be_restarted_on_a_closed_booking(job, settings):
     Booking.objects.filter(pk=b["id"]).update(stage="cancelled")
     assert env.expert.post("/api/v1/media/initiate", body, format="json").status_code == 409
     assert MediaAsset.objects.get(pk=init["id"]).status == "failed"
+
+
+def test_a_long_upload_id_fits_and_other_data_errors_are_not_hidden(job, monkeypatch):
+    """Cloudflare R2 upload ids are ~343 characters (the column once held 300)."""
+    env, b = job
+    monkeypatch.setattr("apps.media.storage.create_multipart", lambda key, ct: "U" * 400)
+    r = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()), format="json")
+    assert r.status_code == 201
+    assert len(MediaAsset.objects.get().upload_id) == 400

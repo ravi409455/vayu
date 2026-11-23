@@ -26,7 +26,7 @@ class MediaAsset(models.Model):
     status = models.CharField(max_length=10, default="pending")  # pending | verified
     key = models.CharField(max_length=200)
     preview_key = models.CharField(max_length=200, blank=True)
-    upload_id = models.CharField(max_length=300, blank=True)
+    upload_id = models.TextField(blank=True)   # R2 ids are ~343 characters
     stuck_alerted = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
     verified_at = models.DateTimeField(null=True, blank=True)

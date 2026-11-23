@@ -1,5 +1,6 @@
 import hashlib
 import io
+import os
 import uuid
 
 import pytest
@@ -12,6 +13,9 @@ from apps.media import storage
 
 @pytest.fixture(autouse=True)
 def s3(settings):
+    if os.environ.get("VAYU_REAL_S3") == "1":   # manual run against a real bucket (docs/r2-check.md)
+        yield
+        return
     with mock_aws():
         storage.client().create_bucket(Bucket=settings.S3_BUCKET)
         yield
