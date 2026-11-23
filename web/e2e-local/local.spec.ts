@@ -14,8 +14,9 @@ async function signIn(page: import("@playwright/test").Page, user: string) {
 
 test("the demo is there for each role", async ({ page }) => {
   await signIn(page, "ops");
-  await expect(page.getByRole("link", { name: "DEMO-1" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "DEMO-3" })).toBeVisible();
+  await page.goto("/bookings?view=all");                                     // Ops land on Today; every booking is here
+  await expect(page.getByRole("link", { name: "DEMO-1", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "DEMO-3", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Account menu" }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await signIn(page, "admin");
@@ -33,10 +34,13 @@ test("a new user must choose their own password first", async ({ page }) => {
 
 test("the demo completed booking already has a PDF and a public check page", async ({ page }) => {
   await signIn(page, "ops");
-  await page.getByRole("link", { name: "DEMO-3" }).click();
+  await page.goto("/bookings?view=all");
+  await page.getByRole("link", { name: "DEMO-3", exact: true }).click();
   await page.getByRole("tab", { name: "Report" }).click();
-  await expect(page.getByRole("link", { name: /Download DEMO-3PDI\.pdf/ })).toBeVisible();
-  const verify = await page.getByRole("link", { name: /\/verify\// }).getAttribute("href");
+  await expect(page.getByRole("link", { name: /Download PDF/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy check link" })).toBeVisible();
+  const id = page.url().split("/booking/")[1];
+  const verify = (await page.evaluate(async (b) => (await fetch(`/api/v1/bookings/${b}/report`)).json(), id)).verify_url as string;
   await page.goto(verify!);
   await expect(page.getByText("genuine")).toBeVisible();
 });
