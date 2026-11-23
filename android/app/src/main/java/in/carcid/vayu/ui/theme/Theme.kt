@@ -17,7 +17,7 @@ data class VayuColors(
     val line: Color, val line2: Color, val brand: Color, val brandTint: Color,
     val ok: Color, val okTint: Color, val warn: Color, val warnTint: Color,
     val bad: Color, val badTint: Color, val info: Color, val infoTint: Color,
-    val primary: Color, val onPrimary: Color, val raised: Color,
+    val primary: Color, val onPrimary: Color, val raised: Color, val onWarn: Color,
 )
 
 val LightColors = VayuColors(
@@ -27,6 +27,7 @@ val LightColors = VayuColors(
     ok = Color(0xFF15703F), okTint = Color(0xFFE6F4EC), warn = Color(0xFFB54708), warnTint = Color(0xFFFDF0E1),
     bad = Color(0xFFB3261E), badTint = Color(0xFFFBE9E7), info = Color(0xFF1D5FD1), infoTint = Color(0xFFE7EFFC),
     primary = Color(0xFF1C2330), onPrimary = Color(0xFFFFFFFF), raised = Color(0xFFFFFFFF),
+    onWarn = Color(0xFFFFFFFF),
 )
 
 val DarkColors = VayuColors(
@@ -36,6 +37,7 @@ val DarkColors = VayuColors(
     ok = Color(0xFF4CC283), okTint = Color(0xFF123524), warn = Color(0xFFF0994A), warnTint = Color(0xFF3B2A12),
     bad = Color(0xFFF2776F), badTint = Color(0xFF3D1D1A), info = Color(0xFF7AAAFF), infoTint = Color(0xFF16264A),
     primary = Color(0xFFE6EAF2), onPrimary = Color(0xFF0B1220), raised = Color(0xFF1B2538),
+    onWarn = Color(0xFF0B1220),
 )
 
 /** Light, Dark or Match phone: the same choice the person makes on the web profile. */

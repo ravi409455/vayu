@@ -17,7 +17,7 @@ class ThemeTest {
     private fun check(c: VayuColors, name: String) {
         // text pairs used on every screen must be readable (WCAG AA 4.5:1)
         listOf("ink on bg" to (c.ink to c.bg), "muted on bg" to (c.muted to c.bg),
-            "ink on soft" to (c.ink to c.soft), "button text" to (c.onPrimary to c.primary),
+            "ink on soft" to (c.ink to c.soft), "button text" to (c.onPrimary to c.primary), "chosen defect" to (c.onWarn to c.warn),
             "bad on bg" to (c.bad to c.bg), "info on bg" to (c.info to c.bg))
             .forEach { (pair, colors) ->
                 val ratio = contrast(colors.first, colors.second)
