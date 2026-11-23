@@ -15,7 +15,7 @@ type Summary = { date_from: string; date_to: string; period: Stats; previous: St
 const BY = { type: "Type", city: "City", expert: "Expert", stage: "Stage", lead_owner: "Lead owner" } as const;
 type Preset = "today" | "7" | "30" | "month" | "custom";
 // blue steps of different lightness (told apart without colour vision), then neutrals
-const PALETTE = ["#1f3a6e", "#4f7fd9", "#a9c2f2", "#0f766e", "#7dd3c0", "#98a2b3", "#667085", "#d0d5dd"];
+const PALETTE = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)", "var(--muted)", "var(--line-strong)"];
 
 /** Rows -> one line per period with a count per key, for a simple table and bars. */
 export function pivot(rows: Row[]): { periods: string[]; keys: string[]; cell: (p: string, k: string) => number } {

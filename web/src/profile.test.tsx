@@ -40,7 +40,7 @@ describe("the profile page", () => {
     shell(<Profile />);
     const details = within(await screen.findByRole("region", { name: "Details" }));
     expect(details.getByText("Ravi Expert")).toBeInTheDocument();
-    expect(details.getByText("+919876500111")).toBeInTheDocument();
+    expect(details.getByText("+91 98765 00111")).toBeInTheDocument();          // shown grouped
     expect(details.getByText("Expert")).toBeInTheDocument();
     expect(details.getByText(/ask an Admin/)).toBeInTheDocument();
     expect(details.queryByRole("textbox")).toBeNull();                       // nothing to edit

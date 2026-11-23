@@ -57,7 +57,7 @@ export function Today() {
     { id: 0, name: "Unassigned", user: null as User | null, jobs: all.filter((b) => !b.assigned_expert) },
     ...[...new Set(all.map((b) => b.assigned_expert).filter((x): x is number => !!x))].map((id) => ({
       id, user: experts.data?.find((u) => u.id === id) ?? null, name: experts.data?.find((u) => u.id === id)?.name ?? `#${id}`, jobs: all.filter((b) => b.assigned_expert === id) })),
-  ].filter((l) => l.jobs.length > 0 || l.id === 0);
+  ].filter((l) => l.jobs.length > 0);
   const now = new Date();
   const nowAt = now.getHours() + now.getMinutes() / 60;
   const needs = [

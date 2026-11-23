@@ -68,7 +68,7 @@ test("theme: dark at once, kept after a reload without a flash, Light when signe
   await page.addInitScript(() => { document.addEventListener("DOMContentLoaded", () => { (window as unknown as { __first: string }).__first = document.documentElement.dataset.theme ?? ""; }); });
   await signIn(page, "expert2");
   await page.goto("/profile");
-  await page.getByRole("radio", { name: /Dark/ }).click();
+  await page.locator("label.theme-tile", { hasText: "Dark" }).click();          // the picture tile picks it
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   expect(await contrast(page, ".main h1")).toBeGreaterThan(4.5);
   await expect(page.getByRole("radio", { name: /Dark/ })).toBeChecked();
@@ -90,7 +90,7 @@ test("theme: 'match my device' follows the device's light or dark setting", asyn
   await page.emulateMedia({ colorScheme: "dark" });
   await signIn(page, "expert2");
   await page.goto("/profile");
-  await page.getByRole("radio", { name: /Match my device/ }).click();
+  await page.locator("label.theme-tile", { hasText: "Match my device" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.emulateMedia({ colorScheme: "light" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
@@ -178,7 +178,7 @@ test("an Admin edits a phone and removes a picture; the expert falls back to ini
   const p = await ctx.newPage();
   await signIn(p, "expert");
   await p.goto("/profile");
-  await expect(p.getByRole("region", { name: "Details" }).getByText("+919876543210")).toBeVisible();
+  await expect(p.getByRole("region", { name: "Details" }).getByText("+91 98765 43210")).toBeVisible();
   await expect(p.getByRole("region", { name: "Picture" }).locator("img.avatar")).toHaveCount(0);        // initials now
   await expect(p.getByRole("region", { name: "Picture" }).getByRole("img", { name: /Ravi Expert/ })).toBeVisible();
   await ctx.close();

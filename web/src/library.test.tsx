@@ -117,7 +117,7 @@ describe("the library item editor", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();            // nothing changed
     await u.clear(title);
     await u.type(title, "Tyre set");
-    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    expect(screen.getByText(/^Unsaved changes/)).toBeInTheDocument();
     await u.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(calls.some((c) => c.init?.method === "PATCH")).toBe(true));
     const body = JSON.parse(String(calls.find((c) => c.init?.method === "PATCH")!.init!.body));

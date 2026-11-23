@@ -180,3 +180,19 @@ tile until an official mark exists, Today as the Ops home. Mockups: the "Vayu UI
 Left out on purpose (small, can follow): a calendar view of bookings; drag-to-assign on the
 board; drag ordering of master-list items; a city filter on the dashboard; the Promote page
 is unchanged.
+
+### Second pass (every page and dialog, light and dark, 1440 and 1024 px)
+63 screens captured per theme (all pages, every booking tab, booking dialogs, builder sub-screens,
+field editor panes, library editor tabs, admin dialogs, expert job and inspection steps, change
+password, public check page), plus an automated text-contrast check on every page in both themes.
+Fixed: Profile in two columns with theme picture tiles and a formatted phone; Change password with
+the logo; Forms list as two tidy tables (inspection forms first); Library editor with settings and
+preview side by side, a clean header and a save bar; Ratings categories picked with toggle chips
+(no Ctrl-click list); integration dialog in two columns; Promote import as a drop zone; PDF block
+rows stacked so labels are readable; the booking read view names the inspection type and hides
+"Page 1 / Section 1"; the public check page as a details list with a human date; quieter but
+readable access grid; disabled delete buttons no longer pink; contrast fixes (green text, muted
+grey, the bell count in dark mode); chart colours and date pickers follow dark mode; tablet:
+booking side panel becomes a row of cards, smaller media preview.
+Not covered on screen: inspection steps after the gated check-in step (they need a real selfie);
+the in-page PDF preview (blank in the headless test browser, which has no PDF viewer).

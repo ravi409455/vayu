@@ -5,6 +5,7 @@ import { applyTheme, type ThemeChoice } from "../lib/theme";
 import { Avatar } from "../ui/Avatar";
 import { PageHeader, useToast } from "../ui/kit";
 import { PasswordForm } from "../ui/PasswordForm";
+import { fmtPhone } from "../lib/format";
 
 export const MAX_PICTURE = 5 * 1024 * 1024;
 const ROLE: Record<string, string> = { admin: "Admin", ops: "Ops", expert: "Expert" };
@@ -47,46 +48,56 @@ export function Profile() {
   }
   const theme = me.theme ?? "light";
   return (
-    <div style={{ maxWidth: 720 }}>
+    <>
       <PageHeader title="Your profile" />
-      <section className="card" aria-label="Picture">
-        <h2>Picture</h2>
-        <div className="bar" style={{ gap: 16 }}>
-          <Avatar who={me} size={96} />
-          <div>
-            <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Upload a picture" hidden onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ""; }} />
-            <button onClick={() => file.current?.click()} disabled={busy}>{me.avatar_url ? "Change picture" : "Upload a picture"}</button>{" "}
-            {me.avatar_url && <button onClick={remove} disabled={busy}>Remove picture</button>}
-            <p className="muted small">It is cropped to a square from the middle. JPEG, PNG or WebP, up to 5 MB.</p>
-          </div>
+      <div className="profile-grid">
+        <div className="stack">
+          <section className="card" aria-label="Picture">
+            <h2 style={{ marginTop: 0 }}>Picture</h2>
+            <div className="bar" style={{ gap: 16, marginBottom: 0 }}>
+              <Avatar who={me} size={88} />
+              <div className="grow">
+                <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Upload a picture" hidden onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ""; }} />
+                <div className="bar" style={{ margin: 0 }}>
+                  <button onClick={() => file.current?.click()} disabled={busy}>{me.avatar_url ? "Change picture" : "Upload a picture"}</button>
+                  {me.avatar_url && <button onClick={remove} disabled={busy}>Remove picture</button>}
+                </div>
+                <p className="muted small" style={{ marginBottom: 0 }}>Cropped to a square from the middle. JPEG, PNG or WebP, up to 5 MB.</p>
+              </div>
+            </div>
+            {pictureError && <p className="error" role="alert">{pictureError}</p>}
+          </section>
+          <section className="card" aria-label="Look">
+            <h2 style={{ marginTop: 0 }}>How the app looks</h2>
+            <div role="radiogroup" aria-label="Theme" className="theme-tiles">
+              {THEMES.map((t) => (
+                <label key={t.id} className="theme-tile" aria-checked={theme === t.id}>
+                  <input className="sr-only" type="radio" name="theme" checked={theme === t.id} onChange={() => void chooseTheme(t.id)} />
+                  <span className="swatch" aria-hidden="true" style={{ background: t.id === "dark" ? "#0a0f1a" : t.id === "light" ? "#f6f7f9" : "linear-gradient(90deg, #f6f7f9 50%, #0a0f1a 50%)" }}>
+                    <span style={{ width: 18, background: t.id === "dark" ? "#121a2a" : "#fff" }} /><span style={{ flex: 1, background: t.id === "dark" ? "#1b2538" : "#fff", border: "1px solid rgba(127,127,127,.25)" }} />
+                  </span>
+                  <span><strong>{t.label}</strong><br /><span className="muted small">{t.note}</span></span>
+                </label>))}
+            </div>
+          </section>
+          <section className="card" aria-label="Details">
+            <h2 style={{ marginTop: 0 }}>Your details</h2>
+            <dl className="details">
+              <dt>Name</dt><dd>{me.name || "—"}</dd>
+              <dt>Username</dt><dd>{me.username}</dd>
+              <dt>Email</dt><dd>{me.email || "—"}</dd>
+              <dt>Role</dt><dd>{ROLE[me.role] ?? me.role}</dd>
+              <dt>Phone</dt><dd>{me.phone ? fmtPhone(me.phone) : "—"}</dd>
+            </dl>
+            <p className="muted small" style={{ marginBottom: 0 }}>To change these, ask an Admin.</p>
+          </section>
         </div>
-        {pictureError && <p className="error" role="alert">{pictureError}</p>}
-      </section>
-      <section className="card" aria-label="Look">
-        <h2>How the app looks</h2>
-        <div role="radiogroup" aria-label="Theme">
-          {THEMES.map((t) => (
-            <label className="check" key={t.id} style={{ alignItems: "flex-start" }}>
-              <input type="radio" name="theme" checked={theme === t.id} onChange={() => void chooseTheme(t.id)} />
-              <span><strong>{t.label}</strong><br /><span className="muted small">{t.note}</span></span>
-            </label>))}
-        </div>
-      </section>
-      <section className="card" aria-label="Details">
-        <h2>Your details</h2>
-        <dl className="details">
-          <dt>Name</dt><dd>{me.name || "—"}</dd>
-          <dt>Username</dt><dd>{me.username}</dd>
-          <dt>Email</dt><dd>{me.email || "—"}</dd>
-          <dt>Role</dt><dd>{ROLE[me.role] ?? me.role}</dd>
-          <dt>Phone</dt><dd>{me.phone || "—"}</dd>
-        </dl>
-        <p className="muted small">To change these, ask an Admin.</p>
-      </section>
-      <section className="card" aria-label="Password">
-        <h2>Password</h2>
-        <PasswordForm onDone={() => { say("Password changed. Other devices were signed out."); }} />
-      </section>
-    </div>
+        <section className="card" aria-label="Password">
+          <h2 style={{ marginTop: 0 }}>Password</h2>
+          <p className="muted small">Changing it signs you out on your other devices.</p>
+          <PasswordForm onDone={() => { say("Password changed. Other devices were signed out."); }} />
+        </section>
+      </div>
+    </>
   );
 }

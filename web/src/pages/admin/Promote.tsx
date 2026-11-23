@@ -32,13 +32,16 @@ export function Promote() {
       <div className="grid2">
         <div className="card">
           <h2>Export from this server</h2>
-          <table><tbody>{(forms.data ?? []).filter((f) => f.published_version).map((f) => (
+          <table className="rows"><tbody>{(forms.data ?? []).filter((f) => f.published_version).map((f) => (
             <tr key={f.id}><td>{f.name} <Pill tone="ok">v{f.published_version!.number}</Pill></td>
-              <td style={{ textAlign: "right" }}><a className="btn" href={`/api/v1/promote/export?version=${f.published_version!.id}`} download={`${f.key}-v${f.published_version!.number}.json`}>Download bundle</a></td></tr>))}</tbody></table>
+              <td style={{ textAlign: "right" }}><a className="btn sm" href={`/api/v1/promote/export?version=${f.published_version!.id}`} download={`${f.key}-v${f.published_version!.number}.json`}>Download bundle</a></td></tr>))}</tbody></table>
         </div>
         <div className="card">
           <h2>Import into this server</h2>
-          <input ref={file} type="file" accept="application/json,.json" aria-label="Bundle file" onChange={(e) => onFile(e.target.files?.[0])} />
+          <input ref={file} type="file" accept="application/json,.json" aria-label="Bundle file" hidden onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = ""; }} />
+          <button type="button" className="drop-zone" style={{ width: "100%", background: "none" }} onClick={() => file.current?.click()}
+            onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void onFile(e.dataTransfer.files?.[0]); }}>
+            <strong style={{ color: "var(--ink)" }}>Choose a bundle file</strong><span className="small">or drop it here. It arrives as a draft; nothing goes live until you publish.</span></button>
           {conflicts.length > 0 && <><h3 className="error">Nothing was imported</h3>{conflicts.map((c, i) => <p key={i} className="error" role="alert">{c}</p>)}</>}
           {result && <div className="ok" role="status"><p>Draft created{result.created.form ? " (new form)" : ""}. <a href={`/forms/${result.form}`}>Open it</a></p>
             <p className="small">{result.created.library_items} library items and {result.created.master_list_items} list items added.</p>

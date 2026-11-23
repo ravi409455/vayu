@@ -77,18 +77,20 @@ function Editor({ value, onChange, events, forms, onSave, onClose, fail }: { val
   }
   const toggle = (e: string) => set({ events: value.events?.includes(e) ? value.events.filter((x) => x !== e) : [...(value.events ?? []), e] });
   return (
-    <Modal title={value.id ? "Edit integration" : "New integration"} onClose={onClose}
+    <Modal wide title={value.id ? "Edit integration" : "New integration"} onClose={onClose}
       actions={<><button onClick={onClose}>Cancel</button><button className="primary" disabled={!value.name || !value.url || !(value.events?.length)} onClick={onSave}>Save</button></>}>
       <Field label="Name"><input aria-label="Name" value={value.name ?? ""} onChange={(e) => set({ name: e.target.value })} /></Field>
       <Field label="Form"><select aria-label="Form" value={value.form} disabled={!!value.id} onChange={(e) => set({ form: Number(e.target.value) })}>{forms.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></Field>
       <Field label="Webhook URL" help="Must be https and reachable from the internet."><input aria-label="Webhook URL" value={value.url ?? ""} onChange={(e) => set({ url: e.target.value })} /></Field>
-      <h3>Send when…</h3>
-      {events.map((e) => <label className="check" key={e}><input type="checkbox" checked={!!value.events?.includes(e)} onChange={() => toggle(e)} /> {EVENT_LABEL[e] ?? e}</label>)}
-      <h3>What to include</h3>
-      <label className="check"><input type="checkbox" checked={!!value.include_data} onChange={(e) => set({ include_data: e.target.checked })} /> Full data (booking and inspection answers)</label>
-      <label className="check"><input type="checkbox" checked={!!value.include_pdf} onChange={(e) => set({ include_pdf: e.target.checked })} /> PDF link (valid 7 days)</label>
-      <label className="check"><input type="checkbox" checked={!!value.include_image_zip} onChange={(e) => set({ include_image_zip: e.target.checked })} /> Image ZIP link</label>
-      <label className="check"><input type="checkbox" checked={!!value.include_video_zip} onChange={(e) => set({ include_video_zip: e.target.checked })} /> Video ZIP link</label>
+      <div className="grid2">
+        <fieldset className="plain"><legend>Send when…</legend>
+          {events.map((e) => <label className="check" key={e}><input type="checkbox" checked={!!value.events?.includes(e)} onChange={() => toggle(e)} /> {EVENT_LABEL[e] ?? e}</label>)}</fieldset>
+        <fieldset className="plain"><legend>What to include</legend>
+          <label className="check"><input type="checkbox" checked={!!value.include_data} onChange={(e) => set({ include_data: e.target.checked })} /> Full data (booking and inspection answers)</label>
+          <label className="check"><input type="checkbox" checked={!!value.include_pdf} onChange={(e) => set({ include_pdf: e.target.checked })} /> PDF link (valid 7 days)</label>
+          <label className="check"><input type="checkbox" checked={!!value.include_image_zip} onChange={(e) => set({ include_image_zip: e.target.checked })} /> Image ZIP link</label>
+          <label className="check"><input type="checkbox" checked={!!value.include_video_zip} onChange={(e) => set({ include_video_zip: e.target.checked })} /> Video ZIP link</label></fieldset>
+      </div>
       <Field label="Only these field keys (empty = all)" help="Comma separated."><input value={(value.fields ?? []).join(", ")} onChange={(e) => set({ fields: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) })} /></Field>
       <Field label="Custom body template (optional)" help="Use {{ field.customer_name }}, {{ booking.booking_id }}, {{ event }}, {{ pdf_url }}. Leave empty to send the standard JSON.">
         <textarea value={value.template ?? ""} onChange={(e) => set({ template: e.target.value })} /></Field>

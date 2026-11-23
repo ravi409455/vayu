@@ -11,7 +11,7 @@ import { addFieldTo, asField, isSection, moveField, newFieldDef, previewTree, re
 import { AccessEditor } from "../../ui/AccessEditor";
 import { ConditionBuilder } from "../../ui/ConditionBuilder";
 import { FormRenderer } from "../../ui/FormRenderer";
-import { Field, Modal, PageHeader, Pill, Tabs, useToast } from "../../ui/kit";
+import { Empty, Field, Modal, PageHeader, Pill, Tabs, useToast, when } from "../../ui/kit";
 import { FieldEditor, type FieldDraft } from "./FieldEditor";
 import { PushReview } from "./library/PushReview";
 import { useCrumb } from "../../ui/crumb";
@@ -68,10 +68,8 @@ export function LibraryEditor() {
 
   return (
     <>
-      <PageHeader title={<>{it.name} <span className="muted mono small">{it.kind} · {it.key}</span></>}
-        subtitle={`Revision ${it.revision}. Everything inside the item is decided here; each form only decides where it sits.`}>
-        <Link className="btn" to="/library">← Library</Link>
-        {it.archived && <Pill tone="warn">Archived</Pill>}
+      <PageHeader title={<>{it.name} <span className="pill">{it.kind === "section" ? "Section" : "Field"}</span>{it.archived && <> <Pill tone="warn">Archived</Pill></>}</>}
+        subtitle={<>Revision {it.revision} · key <span className="mono">{it.key}</span>. Everything inside the item is decided here; each form only decides where it sits.</>}>
         {edit && <button onClick={() => archive.mutate()}>{it.archived ? "Restore" : "Archive"}</button>}
       </PageHeader>
       {stale && (
@@ -93,7 +91,7 @@ export function LibraryEditor() {
                 <h3>Fields in this section</h3>
                 <ul className="lib-fields">{section.fields.map((f) => (
                   <li key={f.key} className={pick === f.key ? "on" : ""}>
-                    <button className="link grow" onClick={() => setPick(f.key)}>{f.label || f.key} <span className="muted mono small">{f.key}</span></button>
+                    <button className="link grow" title={f.key} onClick={() => setPick(f.key)}>{f.label || f.key}</button>
                     {edit && <>
                       <button className="icon-btn" aria-label={`Move ${f.label || f.key} up`} onClick={() => setDef(moveField(section, f.key, -1))}><ArrowUp size={14} aria-hidden /></button>
                       <button className="icon-btn" aria-label={`Move ${f.label || f.key} down`} onClick={() => setDef(moveField(section, f.key, 1))}><ArrowDown size={14} aria-hidden /></button>
@@ -114,27 +112,27 @@ export function LibraryEditor() {
         </div>
       )}
       {tab === "used" && (
-        <div className="card">
-          {it.usages.length === 0 ? <p className="muted">Not used in any form yet.</p> : (
-            <table><thead><tr><th>Form</th><th>Version</th><th>State</th></tr></thead>
-              <tbody>{it.usages.map((u, i) => <tr key={i}><td>{u.form}</td><td>v{u.version}</td><td><Pill tone={u.status === "draft" ? "info" : "ok"}>{u.status}</Pill></td></tr>)}</tbody></table>)}
+        <div className="table-card">
+          {it.usages.length === 0 ? <Empty title="Not used yet">Add it to a form from the builder: Add question › From the library.</Empty> : (
+            <table className="rows"><thead><tr><th>Form</th><th>Version</th><th>State</th></tr></thead>
+              <tbody>{it.usages.map((u, i) => <tr key={i}><td>{u.form}</td><td>v{u.version}</td><td><Pill tone={u.status === "draft" ? "warn" : "ok"}>{u.status === "draft" ? "Draft" : "Live"}</Pill></td></tr>)}</tbody></table>)}
         </div>
       )}
       {tab === "history" && (
-        <div className="card">
-          <table><thead><tr><th>Revision</th><th>Who</th><th>When</th><th>What changed</th><th /></tr></thead>
+        <div className="table-card">
+          <table className="rows"><thead><tr><th>Revision</th><th>Who</th><th>When</th><th>What changed</th><th /></tr></thead>
             <tbody>{(history.data ?? []).map((h) => (
-              <tr key={h.revision}><td>r{h.revision}{h.revision === it.revision && <> <Pill tone="ok">current</Pill></>}</td><td>{h.by || "—"}</td><td>{new Date(h.at).toLocaleString()}</td>
+              <tr key={h.revision}><td>r{h.revision}{h.revision === it.revision && <> <Pill tone="ok">current</Pill></>}</td><td>{h.by || "—"}</td><td>{when(h.at)}</td>
                 <td>{h.changed_keys.length ? h.changed_keys.join(", ") : "created"}</td>
                 <td>{edit && h.revision !== it.revision && <button aria-label={`Restore revision ${h.revision}`} onClick={() => { setDef(h.definition); setName(h.name); setTab("settings"); say(`Revision ${h.revision} is loaded. Save to make it the newest.`); }}>Restore</button>}</td></tr>))}</tbody></table>
         </div>
       )}
       {error && <p className="error" role="alert">{error}</p>}
       {edit && (
-        <div className="bar" style={{ marginTop: 14 }}>
-          <button className="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>Save</button>
+        <div className={dirty ? "save-bar" : "bar"} style={{ marginTop: 14 }}>
+          <span className="grow muted small">{dirty ? "Unsaved changes. Forms using this item show “update available” after you save." : `Used in ${it.usages.length} form${it.usages.length === 1 ? "" : "s"}.`}</span>
           <button disabled={save.isPending || (it.usages.length === 0 && !dirty)} onClick={() => (dirty ? void saveThen() : setReview(it.revision))}>Save and update everywhere…</button>
-          {dirty && <span className="muted small">Unsaved changes</span>}
+          <button className="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>Save</button>
         </div>
       )}
       {adding && section && <AddFieldHere onClose={() => setAdding(false)} existing={section.fields.map((f) => f.key)} onAdd={(f) => { setDef(addFieldTo(section, f)); setPick(f.key); setAdding(false); }} />}

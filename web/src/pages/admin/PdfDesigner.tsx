@@ -203,11 +203,11 @@ function BlockEditor({ block, ok, choices, onChange, onDelete }: { block: Block;
           <>
             <strong>Rows (what the report calls each value)</strong>
             {rows.map((r, i) => (
-              <div className="cond-row" key={i}>
+              <div className="pdf-row" key={i}>
                 <input aria-label="Report label" placeholder="Label on the report" value={r.label} onChange={(e) => setRow(i, { label: e.target.value })} />
+                <button className="link" aria-label="Remove row" onClick={() => onChange({ rows: rows.filter((_, j) => j !== i) })}>✕</button>
                 <select aria-label="Field" value={r.field} onChange={(e) => setRow(i, { field: e.target.value, label: r.label || (choices.find((c) => c.value === e.target.value)?.label.split(": ")[1] ?? "") })}>
                   <option value="">Choose a field…</option>{choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select>
-                <button className="link" aria-label="Remove row" onClick={() => onChange({ rows: rows.filter((_, j) => j !== i) })}>✕</button>
               </div>))}
             <button className="link" onClick={() => onChange({ rows: [...rows, { label: "", field: "" }] })}>+ Add row</button>
           </>

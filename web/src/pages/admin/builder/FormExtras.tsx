@@ -43,9 +43,13 @@ export function Ratings({ version, sections, edit, run }: { version: FormVersion
             <Field label="Category label"><input value={c.label} disabled={!edit} onChange={(e) => setCat(i, { label: e.target.value, key: c.key || slugKey(e.target.value) })} /></Field>
             <Field label="Key"><input value={c.key} disabled={!edit} onChange={(e) => setCat(i, { key: e.target.value })} /></Field>
           </div>
-          <Field label="Sections counted in this category" help="Hold Ctrl/Cmd to pick several.">
-            <select multiple disabled={!edit} value={c.sections} onChange={(e) => setCat(i, { sections: [...e.target.selectedOptions].map((o) => o.value) })} style={{ minHeight: 110 }}>
-              {sections.map((s) => <option key={s}>{s}</option>)}</select></Field>
+          <div className="field"><span className="label-row">Sections counted in this category</span>
+            <div className="chip-row" role="group" aria-label={`Sections counted in ${c.label || "this category"}`}>
+              {sections.map((s) => { const on = c.sections.includes(s); return (
+                <button key={s} type="button" className="chip-toggle" aria-pressed={on} disabled={!edit}
+                  onClick={() => setCat(i, { sections: on ? c.sections.filter((x) => x !== s) : [...c.sections, s] })}>{on ? "✓ " : ""}{s}</button>); })}
+            </div>
+            <span className="help">{c.sections.length ? `${c.sections.length} section${c.sections.length === 1 ? "" : "s"}` : "Pick the sections whose defects count here."}</span></div>
           {edit && <button className="link" onClick={() => setCfg({ ...cfg, categories: cats.filter((_, j) => j !== i) })}>Remove category</button>}
         </div>
       ))}

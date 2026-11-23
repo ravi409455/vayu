@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { api } from "../api/client";
 import { asList } from "../api/hooks";
-import { useLabels } from "../api/labels";
+import { useLabels, useTypeLabels } from "../api/labels";
 import type { FormField, FormPage, FormSection, FormVersion, Option, User } from "../api/types";
 import { evaluateTree, type Answers, type Ctx, type Kind } from "../lib/formSpec";
 import { fmtDay, fmtPhone, fmtStamp, fmtTime, mapsUrl } from "../lib/format";
@@ -41,8 +41,16 @@ function UserName({ role, id }: { role: string; id: unknown }) {
 }
 
 /** One answer, as a person reads it. */
+function TypeName({ v }: { v: unknown }) {
+  return <>{useTypeLabels()(v)}</>;
+}
+
+/** Names the Admin never changed ("Page 1", "Section 1") say nothing to a reader. */
+export const generic = (title: string) => /^(page|section)\s*\d+$/i.test(title.trim());
+
 export function AnswerValue({ f, v }: { f: FormField; v: unknown }) {
   if (empty(v)) return <span className="muted">Not answered</span>;
+  if (f.key === "inspection_type") return <TypeName v={v} />;
   const opts = (f.config.options as Option[] | undefined) ?? [];
   const opt = (k: unknown) => opts.find((o) => o.key === k)?.label ?? String(k);
   switch (f.type) {
@@ -112,7 +120,7 @@ export function AnswerSheet({ part, filter = "all", edited, onEdit, editing, anc
             return (
               <section className="card sheet" key={s.id} aria-label={s.title}>
                 <div className="sheet-head">
-                  <h3>{s.title} <span className="muted">· {page.title}</span></h3>
+                  <h3>{generic(s.title) ? (generic(page.title) ? "Details" : page.title) : s.title}{!generic(page.title) && !generic(s.title) && s.title !== page.title && <span className="muted"> · {page.title}</span>}</h3>
                   <span className="muted small">{answered} of {all.length} answered{defects ? ` · ${defects} defect${defects > 1 ? "s" : ""}` : ""}</span>
                   {onEdit && !isEditing && <button className="sm" onClick={() => onEdit(page, s)}>Edit</button>}
                 </div>
