@@ -17,6 +17,11 @@ export const SYSTEM_TYPE_LABELS: Record<string, string> = { form_choice: "Pick o
 export const CHOICE_TYPES = ["single_choice", "multi_choice"];
 export const MEDIA_TYPES = ["photo", "video", "file", "signature"];
 
+/** What a new photo shows: the nearest check above it in its section (not a remark or another photo). */
+export function photoOfDefault(fields: { key: string; type: string }[]): string | undefined {
+  return [...fields].reverse().find((f) => ![...MEDIA_TYPES, "image", "short_text", "long_text"].includes(f.type))?.key;
+}
+
 /** A sensible starting config for a new field of this type. */
 export function defaultConfig(type: string): Record<string, unknown> {
   switch (type) {

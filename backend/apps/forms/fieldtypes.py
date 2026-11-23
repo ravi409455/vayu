@@ -17,7 +17,7 @@ from django.core.exceptions import ValidationError
 from apps.core.phone import InvalidPhone
 from apps.core.phone import normalize as normalize_phone
 
-from .models import LIST_KEY_RE, MasterList, MasterListItem
+from .models import KEY_RE, LIST_KEY_RE, MasterList, MasterListItem
 
 IST = ZoneInfo("Asia/Kolkata")
 SEVERITIES = ("minor", "major", "critical")
@@ -25,6 +25,7 @@ ROLES = ("expert", "ops", "admin")
 REGEX_TIMEOUT_S = 0.1
 DEFAULT_MAX_LENGTH = {"short_text": 200, "long_text": 5000}
 CAPTURE_MODES = ("both", "camera", "upload")   # how an expert may add a photo or video
+TONES = ("ok", "warn", "bad", "muted")           # print colour of a choice: green, amber, red, grey
 DEFAULT_MAX_COUNT = {"photo": 10, "video": 3, "file": 5}
 
 ALLOWED_KEYS: dict[str, set[str]] = {
@@ -39,7 +40,8 @@ ALLOWED_KEYS: dict[str, set[str]] = {
     "short_text": {"max_length", "pattern", "pattern_message"},
     "long_text": {"max_length"},
     "number": {"unit", "min", "max", "decimals"},
-    "photo": {"min_count", "max_count", "capture"},
+    # issue_photo: always an issue photo when filled; photo_of: the check this photo shows
+    "photo": {"min_count", "max_count", "capture", "issue_photo", "photo_of"},
     "video": {"min_count", "max_count", "capture"},
     "file": {"max_count", "allowed"},
     "derived": {"rule", "true_label", "false_label"},
@@ -91,8 +93,10 @@ def validate_config(type: str, config: Any) -> None:
             if o["key"] in seen:
                 raise ConfigError(f"Duplicate option key '{o['key']}'.")
             seen.add(o["key"])
-            if set(o) - {"key", "label", "is_defect", "severity"}:
+            if set(o) - {"key", "label", "is_defect", "severity", "tone"}:
                 raise ConfigError(f"Option '{o['key']}' has unknown properties.")
+            if o.get("tone", "ok") not in TONES:
+                raise ConfigError(f"Option '{o['key']}': tone must be one of {', '.join(TONES)}.")
             defect, severity = o.get("is_defect", False), o.get("severity")
             if not isinstance(defect, bool):
                 raise ConfigError("is_defect must be true or false.")
@@ -138,6 +142,11 @@ def validate_config(type: str, config: Any) -> None:
     elif type in ("photo", "video"):
         if config.get("capture", "both") not in CAPTURE_MODES:
             raise ConfigError(f"capture must be one of {', '.join(CAPTURE_MODES)}.")
+        if not isinstance(config.get("issue_photo", False), bool):
+            raise ConfigError("issue_photo must be true or false.")
+        if "photo_of" in config and not (isinstance(config["photo_of"], str)
+                                         and KEY_RE.fullmatch(config["photo_of"])):
+            raise ConfigError("photo_of must be the key of a field.")
         _int_in(config, "min_count", 0, 30)
         _int_in(config, "max_count", 1, 30)
         if config.get("min_count", 0) > config.get("max_count", DEFAULT_MAX_COUNT[type]):

@@ -9,7 +9,8 @@ export type User = {
   is_active: boolean; must_change_password: boolean; avatar_url?: string | null; last_login?: string | null;
 };
 export type Access = Record<string, Record<string, "hidden" | "view" | "edit">>;
-export type Option = { key: string; label: string; is_defect?: boolean; severity?: string | null };
+/** tone: the colour of this answer in the PDF report (green, amber, red, grey); unset = from the meaning. */
+export type Option = { key: string; label: string; is_defect?: boolean; severity?: string | null; tone?: "ok" | "warn" | "bad" | "muted" };
 export type FormField = {
   id: number; section: number; key: string; label: string; helper_text: string; type: string;
   config: Record<string, unknown>; required: boolean; required_if: unknown; show_if: unknown;
@@ -18,7 +19,7 @@ export type FormField = {
   level?: "view" | "edit";
 };
 export type FormSection = {
-  id: number; page: number; title: string; order: number; visible: boolean; show_if: unknown;
+  id: number; page: number; key?: string; title: string; order: number; visible: boolean; show_if: unknown;
   access: Access; fields: FormField[]; locked: boolean;
   library: { item: number; revision: number | null; update_available: boolean } | null;
 };

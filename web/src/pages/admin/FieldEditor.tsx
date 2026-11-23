@@ -14,8 +14,10 @@ type Pane = "settings" | "logic" | "access";
 
 /** The settings of one field, in three tabs. The key and type are fixed once a field exists
  *  (answers, PDFs and integrations rely on them); everything else can change while the version is a draft. */
-export function FieldEditor({ field, choices, lists, categories, onSave, onDelete, readOnly, kind = "inspection", parents, extra, outside }: {
+export function FieldEditor({ field, choices, lists, categories, onSave, onDelete, readOnly, kind = "inspection", parents, extra, outside, siblings }: {
   field: FormField; choices: FieldChoice[]; lists: { key: string; name: string }[]; categories: string[];
+  /** the other fields of this field's section (a photo can show one of them) */
+  siblings?: { key: string; label: string; type: string }[];
   onSave: (d: FieldDraft) => void; onDelete: () => void; readOnly: boolean; kind?: string;
   parents?: { section?: Access; page?: Access }; extra?: React.ReactNode; outside?: React.ReactNode;
 }) {
@@ -114,6 +116,21 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
                 <Field label="At most"><input type="number" min={1} value={String(cfg.max_count ?? 1)} onChange={(e) => setCfg({ max_count: Number(e.target.value) })} /></Field>
               </div>
             )}
+            {!locked && field.type === "photo" && (
+              <>
+                <label className="check" style={{ alignItems: "flex-start" }}>
+                  <input type="checkbox" checked={cfg.issue_photo === true} onChange={(e) => setCfg({ issue_photo: e.target.checked || undefined })} />
+                  <span><strong>Issue photo</strong><br /><span className="muted small">Counts as a photo of a problem whenever it is taken. The report can show only these.</span></span>
+                </label>
+                {siblings && (
+                  <Field label="Photo of" tip="The check this photo shows. The report can caption it with that check and its answer, and counts it as an issue photo when the answer is a problem.">
+                    <select aria-label="Photo of" value={String(cfg.photo_of ?? "")} onChange={(e) => setCfg({ photo_of: e.target.value || undefined })}>
+                      <option value="">No particular check</option>
+                      {siblings.filter((x) => !["photo", "video", "file", "signature", "image"].includes(x.type)).map((x) => <option key={x.key} value={x.key}>{x.label || x.key}</option>)}
+                    </select>
+                  </Field>)}
+              </>
+            )}
             {!locked && field.type === "rating" && (
               <Field label="Rating category" tip="Which category's rating this field shows. Categories are set on the Ratings tab.">
                 <select value={String(cfg.category ?? "")} onChange={(e) => setCfg({ category: e.target.value })}>
@@ -163,6 +180,9 @@ const OUTCOMES = [
  *  (answers, rules and reports point at it) however its label changes. */
 export const followsLabel = (o: Option, saved: Set<string>) => !saved.has(o.key) && (!o.key || o.key === slugKey(o.label));
 const outcomeOf = (o: Option) => (o.is_defect ? (o.severity ?? "minor") : "fine");
+const TONES = [{ id: "", label: "Report colour: automatic" }, { id: "ok", label: "Green" }, { id: "warn", label: "Amber" }, { id: "bad", label: "Red" }, { id: "muted", label: "Grey" }] as const;
+/** The colour an answer prints in: the one chosen, else from its meaning (fine green, minor amber, worse red). */
+export const toneOf = (o: Option) => o.tone ?? (!o.is_defect ? "ok" : (o.severity ?? "minor") === "minor" ? "warn" : "bad");
 
 /** The answers people can pick: label, what it means for the rating, the order. The key (used by the
  *  API, rules and reports) follows the label until someone types their own. */
@@ -188,7 +208,9 @@ function OptionsEditor({ options, onChange, display, onDisplay, savedKeys }: { o
           return (
             <li key={i} className={`opt-row ${out}`}>
               <div className="opt-main">
-                <span className="opt-dot" aria-hidden="true" />
+                <select aria-label={`Colour of ${o.label || "this choice"} in the report`} title="Colour in the report" className={`opt-tone tone-${toneOf(o)}`}
+                  value={o.tone ?? ""} onChange={(e) => set(i, { tone: (e.target.value || undefined) as Option["tone"] })}>
+                  {TONES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select>
                 <input aria-label="Choice label" value={o.label} placeholder="Answer"
                   onChange={(e) => set(i, { label: e.target.value, ...(followsLabel(o, savedKeys) ? { key: slugKey(e.target.value) } : {}) })} />
                 <select aria-label="What this choice means" value={out} onChange={(e) => {

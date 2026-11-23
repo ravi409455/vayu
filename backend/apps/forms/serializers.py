@@ -197,8 +197,9 @@ class SectionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Section
-        fields = ["id", "page", "title", "order", "visible", "show_if", "access", "fields",
-                  "library", "locked"]
+        fields = ["id", "page", "key", "title", "order", "visible", "show_if", "access",
+                  "fields", "library", "locked"]
+        read_only_fields = ["key"]
         extra_kwargs = {"page": {"required": False}}
 
     def get_library(self, obj):

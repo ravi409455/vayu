@@ -3777,6 +3777,9 @@ components:
           readOnly: true
         page:
           type: integer
+        key:
+          type: string
+          readOnly: true
         title:
           type: string
           maxLength: 150
@@ -3892,6 +3895,9 @@ components:
           readOnly: true
         page:
           type: integer
+        key:
+          type: string
+          readOnly: true
         title:
           type: string
           maxLength: 150
@@ -3918,6 +3924,7 @@ components:
       required:
       - fields
       - id
+      - key
       - library
       - locked
       - title

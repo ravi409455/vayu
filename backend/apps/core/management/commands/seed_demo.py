@@ -2,7 +2,8 @@
 few bookings in different states, so every screen has something to look at.
 
 The inspection forms (PDI, Used car, EV...) are meant to be built by hand in the form builder;
-the PDI form here is a small stand-in so the flow can be tried straight away."""
+the PDI form here is the full one from the sample report (apps/core/demo_pdi.py), so the flow and
+the report can be tried straight away."""
 import uuid
 from datetime import timedelta
 from typing import Any
@@ -34,7 +35,8 @@ USERS = [("admin", Role.ADMIN, "Asha Admin", False), ("ops", Role.OPS, "Priya Op
          ("newuser", Role.OPS, "Nina New (must change password)", True)]
 LISTS = {"city": [("delhi", "Delhi"), ("pune", "Pune"), ("mumbai", "Mumbai")],
          "car_make_model": [("maruti_victoris", "Maruti Victoris"), ("tata_nexon", "Tata Nexon"),
-                            ("hyundai_creta", "Hyundai Creta")]}
+                            ("hyundai_creta", "Hyundai Creta"),
+                            ("mahindra_xuv_3xo", "Mahindra XUV 3XO AX5")]}
 DEFECT = {"options": [{"key": "ok", "label": "OK"},
                       {"key": "dent", "label": "Dent", "is_defect": True, "severity": "minor"},
                       {"key": "crack", "label": "Crack", "is_defect": True, "severity": "major"}]}
@@ -124,12 +126,18 @@ class Command(BaseCommand):
 
     def _inspection_forms(self, admin):
         from apps.core import demo_forms as d
+        from apps.core import demo_pdi
         from apps.reports import service as reports
 
         d.library_items(admin)
+        form, made = demo_pdi.build_pdi(admin)
+        template = reports.create_template(admin, form)
+        draft = template.versions.get(status="draft")
+        labels = dict(Field.objects.filter(version__form=form).values_list("key", "label"))
+        saved = reports.save_definition(admin, draft, demo_pdi.pdf_definition(made, labels),
+                                        draft.row_version)
+        reports.publish(admin, saved, saved.row_version)
         for key, name, itype, pages, code, title in (
-                ("pdi", "PDI", "pdi", d.pdi_pages(), "PDI",
-                 "PRE DELIVERY CAR INSPECTION REPORT"),
                 ("used_car", "Used car", "used_car", d.used_pages(), "UC",
                  "USED CAR INSPECTION REPORT"),
                 ("ev", "EV", "ev", d.ev_pages(), "EV", "ELECTRIC CAR INSPECTION REPORT")):
@@ -142,19 +150,26 @@ class Command(BaseCommand):
 
     def _selfie(self, booking, expert) -> str:
         """A real (tiny) verified picture, so the completed demo booking has its selfie."""
+        return self._photo(booking, expert, "selfie", "Selfie")
+
+    def _photo(self, booking, expert, field_key: str, caption: str) -> str:
+        """A small verified picture with its caption written on it."""
         import hashlib
         import io
 
-        from PIL import Image
+        from PIL import Image, ImageDraw
 
         from apps.media import storage
         from apps.media.models import MediaAsset
 
+        shade = 90 + (sum(map(ord, field_key)) % 90)
+        img = Image.new("RGB", (320, 240), (shade, shade + 10, shade + 25))
+        ImageDraw.Draw(img).text((12, 108), caption[:48], fill=(255, 255, 255))
         buf = io.BytesIO()
-        Image.new("RGB", (120, 90), (166, 40, 48)).save(buf, "JPEG")
+        img.save(buf, "JPEG", quality=70)
         data = buf.getvalue()
         a = MediaAsset(client_uuid=uuid.uuid4(), booking=booking, uploaded_by=expert,
-                       field_key="selfie", kind="photo", content_type="image/jpeg",
+                       field_key=field_key, kind="photo", content_type="image/jpeg",
                        size=len(data), sha256=hashlib.sha256(data).hexdigest(), status="verified")
         a.key = f"bookings/{booking.id}/{a.id}"
         storage.put(a.key, data, "image/jpeg")
@@ -176,16 +191,14 @@ class Command(BaseCommand):
         make("DEMO-1", "Kavya Rao (not assigned)", "delhi", "maruti_victoris", "2026-12-01")
         b2 = make("DEMO-2", "Arjun Mehta (assigned to Ravi)", "pune", "tata_nexon", "2026-12-01")
         services.assign(ops, b2, expert.id)
-        b3 = make("DEMO-3", "Sunita Iyer (completed, has a PDF)", "delhi", "hyundai_creta",
+        b3 = make("DEMO-3", "Sunita Iyer (completed, has a PDF)", "delhi", "mahindra_xuv_3xo",
                   "2026-11-24")
         services.assign(ops, b3, expert.id)
         selfie = self._selfie(b3, expert)          # the check-in selfie: the job starts with it
         submissions.start(expert, b3, uuid.uuid4(), None, "pdi", None, {"selfie": [selfie]})
         b3.refresh_from_db()
-        submissions.submit(expert, b3, uuid.uuid4(), {
-            "inspection": {"chassis_no": "MA3YPKCSKTJ273129", "registration_no": "DL1CAB1234",
-                           "odometer": 4200, "bonnet": "ok", "door_fl": "minor",
-                           "remarks": "Clean car."},
+        submissions.submit(expert, b3, uuid.uuid4(), {   # the sample report AV66022, in full
+            "inspection": self._pdi_answers(b3, expert, "MA1NS2NP1T2H75335", 39),
             "start": {"selfie": [selfie]}, "end": {"taking_payment": False}})
         check_completion(b3.id)        # Completed: the PDF is made by the worker
 
@@ -207,9 +220,16 @@ class Command(BaseCommand):
             created_at=timezone.now() - timedelta(days=days_old))
         return str(a.id)
 
-    def _pdi_answers(self, chassis, odometer, door="ok", remarks="Looks fine."):
-        return {"chassis_no": chassis, "registration_no": f"MH12AB{odometer % 9000 + 1000}",
-                "odometer": odometer, "bonnet": "ok", "door_fl": door, "remarks": remarks}
+    def _pdi_answers(self, booking, expert, chassis, odometer, **overrides):
+        """Every check answered like the sample report, with a picture for every photo needed."""
+        from apps.core.demo_pdi import sample_answers
+
+        version = Form.objects.get(key="pdi").versions.get(status="published")
+        answers, photos = sample_answers(version, chassis, odometer=odometer, **overrides)
+        labels = dict(Field.objects.filter(version=version).values_list("key", "label"))
+        for key in photos:
+            answers[key] = [self._photo(booking, expert, key, labels[key])]
+        return answers
 
     def _more_bookings(self):
         """Bookings in every stage, plus the situations that fill the Problems page."""
@@ -233,11 +253,11 @@ class Command(BaseCommand):
             b.refresh_from_db()
             return selfie
 
-        def submit(b, expert, answers):
+        def submit(b, expert, chassis, km, **overrides):
             selfie = self._selfie(b, expert)
             submissions.submit(expert, b, uuid.uuid4(), {
-                "inspection": answers, "start": {"selfie": [selfie]},
-                "end": {"taking_payment": False}})
+                "inspection": self._pdi_answers(b, expert, chassis, km, **overrides),
+                "start": {"selfie": [selfie]}, "end": {"taking_payment": False}})
 
         # waiting to be assigned
         make("DEMO-4", "Rohit Sharma", "delhi", "hyundai_creta", "2026-12-02", "ev")
@@ -262,8 +282,9 @@ class Command(BaseCommand):
         start(b, e1)
         late = self._pending_asset(b, e1, "selfie", "pending", 3)
         submissions.submit(e1, b, uuid.uuid4(), {
-            "inspection": self._pdi_answers("MA3IMRANQ0000010", 31800, "minor",
-                                            "Small scratch on the door."),
+            "inspection": self._pdi_answers(b, e1, "MA3IMRANQ0000010", 31800,
+                                            door_driver_front="minor_scratches",
+                                            expert_comments="Small scratch on the door."),
             "start": {"selfie": [late]}, "end": {"taking_payment": False}})
         from apps.reports.models import Report
 
@@ -278,7 +299,7 @@ class Command(BaseCommand):
             b = make(ref, name, city, car, day)
             services.assign(ops, b, expert.id)
             start(b, expert)
-            submit(b, expert, self._pdi_answers(chassis, km))
+            submit(b, expert, chassis, km)
             check_completion(b.id)
         # cancelled
         b = make("DEMO-13", "Lata Joshi", "delhi", "hyundai_creta", "2026-11-25")
@@ -291,9 +312,8 @@ class Command(BaseCommand):
         services.force_release(ops, b)
         services.assign(ops, b, e2.id)
         start(b, e2)
-        submit(b, e2, self._pdi_answers("MA3MANOJP0000014", 22000, remarks="Second expert."))
-        submit(b, e1, self._pdi_answers("MA3MANOJP0000014", 22010,
-                                        remarks="First expert, offline."))
+        submit(b, e2, "MA3MANOJP0000014", 22000, expert_comments="Second expert.")
+        submit(b, e1, "MA3MANOJP0000014", 22010, expert_comments="First expert, offline.")
         # Ops changed the type while the expert had already started another one
         b = make("DEMO-15", "Neha Bhat", "pune", "maruti_victoris", "2026-11-23", at="17:00")
         services.assign(ops, b, e1.id)
@@ -319,20 +339,16 @@ class Command(BaseCommand):
             "ERP: booking changes": (forms["booking"], "booking.updated", {
                 "method": "PUT", "url": host + "/erp/{{job.booking_id}}",
                 "query": [{"key": "src", "value": "vayu"}], "headers": token,
-                "body_mode": "custom", "body": {"rows": [
-                    {"key": "ref", "value": "{{job.booking_id}}"},
-                    {"key": "customer", "rows": [
-                        {"key": "name", "value": "{{booking.customer_name}}"},
-                        {"key": "city", "value": "{{booking.city}}"}]},
-                    {"key": "changed", "value": "{{event.changed_fields}}"}]}}),
+                "body_mode": "custom", "body": {
+                    "ref": "{{job.booking_id}}",
+                    "customer": {"name": "{{booking.customer_name}}", "city": "{{booking.city}}"},
+                    "changed": "{{event.changed_fields}}"}}),
             "WhatsApp: inspection done": (forms["pdi"], "inspection.submitted",
                                           {"url": f"{host}/whatsapp"}),
             "WhatsApp: PDF ready": (forms["pdi"], "pdf.ready", {
-                "url": f"{host}/whatsapp", "body_mode": "custom", "body": {"rows": [
-                    {"key": "ref", "value": "{{job.booking_id}}"},
-                    {"key": "chassis", "value": "{{inspection.chassis_no}}"},
-                    {"key": "overall", "value": "{{result.overall}}"},
-                    {"key": "report", "value": "{{link.pdf}}"}]}}),
+                "url": f"{host}/whatsapp", "body_mode": "custom", "body": {
+                    "ref": "{{job.booking_id}}", "chassis": "{{inspection.chassis_no}}",
+                    "overall": "{{result.overall}}", "report": "{{link.pdf}}"}}),
             "Alerts: conflict": (forms["pdi"], "alert.conflict", {"url": f"{host}/alerts"}),
             "Alerts: stuck upload": (forms["pdi"], "alert.stuck_upload", {"url": f"{host}/alerts"}),
             "Old CRM (switched off)": (forms["booking"], "booking.created",

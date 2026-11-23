@@ -101,6 +101,7 @@ def build_old_data(apps):
 def test_an_old_database_comes_across_with_forms_rules_answers_and_pdf_rows(old_world):
     build_old_data(old_world)
     migrate(AFTER)
+    migrate(MigrationExecutor(connection).loader.graph.leaf_nodes())  # the models below are today's
     from apps.bookings.models import Inspection
     from apps.forms.models import Field, Form, LibraryItem, MasterList, Page, VersionCheck
     from apps.reports.models import PdfTemplateVersion

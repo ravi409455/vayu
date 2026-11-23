@@ -20,6 +20,7 @@ ITERATING_OPS = {"some", "all", "none", "filter", "reduce"}
 CHOICE_TYPES = {"single_choice", "multi_choice"}
 SYSTEM_FILLED = {"derived", "rating"}
 SPECIAL_VARS = {"_today", "_defects"}
+MEDIA = {"photo", "video", "file", "signature", "image"}   # not checks: a photo cannot show one
 
 
 # ------------------------------------------------------------------ evaluation
@@ -395,6 +396,12 @@ def validate_version(version) -> list[Issue]:
         check_rule(f.required_if, f"fields.{f.key}.required_if")
         if f.type == "derived":
             check_rule(f.config.get("rule"), f"fields.{f.key}.config.rule")
+        if f.type == "photo" and f.config.get("photo_of"):
+            target = Field.objects.filter(version=version, key=f.config["photo_of"]).first()
+            if target is None or target.section_id != f.section_id or target.type in MEDIA:
+                issues.append(Issue(f"fields.{f.key}.config.photo_of", "UNKNOWN_FIELD",
+                                    f"'{f.config['photo_of']}' is not a check in the same "
+                                    "section as this photo."))
     for c in VersionCheck.objects.filter(version=version):
         check_rule(c.rule, f"checks.{c.id}.rule")
         for k in c.fields:

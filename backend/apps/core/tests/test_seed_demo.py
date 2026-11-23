@@ -67,4 +67,31 @@ def test_the_demo_forms_are_large_and_the_library_is_not_empty():
         assert v.rating_config["categories"]
     assert LibraryItem.objects.count() >= 7
     assert Page.objects.filter(version__form__key="pdi", gate=True).exists()
-    assert Section.objects.filter(version__form__key="pdi", library_item__isnull=False).exists()
+    assert Section.objects.filter(version__form__key="used_car", library_item__isnull=False).exists()
+
+
+def test_the_pdi_form_is_the_full_one_from_the_sample_report():
+    from apps.bookings.models import Booking
+    from apps.forms.models import Field, Form, Section
+    from apps.forms.rules import validate_version
+
+    call_command("seed_demo")
+    v = Form.objects.get(key="pdi").versions.get(status="published")
+    assert validate_version(v) == []
+    titles = list(Section.objects.filter(version=v).values_list("title", flat=True))
+    assert {"Vehicle details", "CNG", "Documents", "Front", "Driver side", "Body frame", "Tyres",
+            "Underbody", "Car pictures", "Summary"} <= set(titles)
+    assert Section.objects.get(version=v, title="Glass and mirrors").key == "glass_and_mirrors"
+    door = Field.objects.get(version=v, key="door_driver_front")
+    tones = {o["key"]: o["tone"] for o in door.config["options"]}
+    assert tones["ok"] == "ok" and tones["major_dents"] == "bad"
+    photo = Field.objects.get(version=v, key="door_driver_front_photo")
+    assert photo.config["photo_of"] == "door_driver_front" and photo.show_if
+    assert Field.objects.get(version=v, key="issue_photos").config["issue_photo"] is True
+    assert Field.objects.filter(version=v, type="derived").count() == 9
+    assert Field.objects.filter(version=v).count() >= 300
+    # the sample booking is answered in full, with its pictures
+    answers = Booking.objects.get(booking_id="DEMO-3").inspections.get().answers["inspection"]
+    assert answers["window_driver_front"] == "loose" and answers["odometer"] == 39
+    assert len(answers["picture_front"]) == 1 and "door_driver_front_photo" not in answers
+    assert "cng_fitting" not in answers                            # petrol: no CNG section

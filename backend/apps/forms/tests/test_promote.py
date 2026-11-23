@@ -338,6 +338,9 @@ def _first_field(b):
     lambda b: b["version"]["checks"].append({"rule": {"a": 1, "b": 2}, "message": "m",
                                              "fields": [], "order": 9}),
     lambda b: b["library"][0].__setitem__("definition", {"type": "bogus"}),
+    lambda b: b["version"]["pages"][0]["sections"][0].__setitem__("key", "Bad Key"),
+    lambda b: b["version"]["pages"][0]["sections"].append(
+        {**b["version"]["pages"][0]["sections"][0], "fields": []}),
 ])
 def test_invalid_content_is_refused_and_nothing_is_written(admin, staging, mutate):
     bundle = export(admin, staging["version"])
@@ -366,3 +369,15 @@ def test_a_non_object_bundle_is_refused_by_the_checker_itself():
     with pytest.raises(CodedError) as e:
         promote._check_shape([])
     assert e.value.detail == {"code": "INVALID_BUNDLE", "detail": mock.ANY}
+
+
+def test_section_keys_travel_and_an_older_bundle_gets_them_from_titles(admin, staging):
+    bundle = export(admin, staging["version"])
+    keys = [s["key"] for p in bundle["version"]["pages"] for s in p["sections"]]
+    assert keys and all(keys)
+    wipe()
+    for p in bundle["version"]["pages"]:
+        for s in p["sections"]:
+            s.pop("key")
+    assert admin.post("/api/v1/promote/import", bundle, format="json").status_code == 201
+    assert sorted(Section.objects.values_list("key", flat=True)) == sorted(keys)

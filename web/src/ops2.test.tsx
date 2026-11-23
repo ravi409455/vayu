@@ -174,6 +174,49 @@ describe("choice keys stay put once saved", () => {
   });
 });
 
+describe("report support in the field editor", () => {
+  const base = { id: 1, section: 1, helper_text: "", required: false, required_if: null, show_if: null, visible: true, order: 0, is_system: false, access: {}, locked: false, library: null };
+  it("an answer prints in the colour chosen, else one that follows its meaning", async () => {
+    const { toneOf } = await import("./pages/admin/FieldEditor");
+    expect(toneOf({ key: "ok", label: "Ok" })).toBe("ok");
+    expect(toneOf({ key: "s", label: "Scratch", is_defect: true, severity: "minor" })).toBe("warn");
+    expect(toneOf({ key: "d", label: "Damaged", is_defect: true, severity: "major" })).toBe("bad");
+    expect(toneOf({ key: "na", label: "Not available", tone: "muted" })).toBe("muted");
+  });
+  it("picks a report colour for an answer", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    const onSave = vi.fn();
+    const f = { ...base, key: "plate", label: "Number plate", type: "single_choice", config: { options: [{ key: "na", label: "Not available" }] } };
+    const u = userEvent.setup();
+    render(<FieldEditor field={f as never} choices={[]} lists={[]} categories={[]} onSave={onSave} onDelete={() => {}} readOnly={false} />);
+    await u.selectOptions(screen.getByLabelText("Colour of Not available in the report"), "muted");
+    await u.click(screen.getByRole("button", { name: "Save field" }));
+    expect(onSave.mock.calls[0]![0].config.options).toEqual([{ key: "na", label: "Not available", tone: "muted" }]);
+  });
+  it("a photo can be an issue photo and show one of the checks of its section", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    const onSave = vi.fn();
+    const f = { ...base, key: "door_photo", label: "Door photo", type: "photo", config: { max_count: 3 } };
+    const siblings = [{ key: "door", label: "Door", type: "single_choice" }, { key: "other_photo", label: "Other photo", type: "photo" }];
+    const u = userEvent.setup();
+    render(<FieldEditor field={f as never} choices={[]} lists={[]} categories={[]} onSave={onSave} onDelete={() => {}} readOnly={false} siblings={siblings} />);
+    expect(screen.queryByRole("option", { name: "Other photo" })).toBeNull();          // a photo cannot show a photo
+    await u.click(screen.getByRole("checkbox", { name: /Issue photo/ }));
+    await u.selectOptions(screen.getByLabelText("Photo of"), "door");
+    await u.click(screen.getByRole("button", { name: "Save field" }));
+    expect(onSave.mock.calls[0]![0].config).toEqual({ max_count: 3, issue_photo: true, photo_of: "door" });
+  });
+  it("a new photo shows the nearest check above it", async () => {
+    const { photoOfDefault } = await import("./lib/fieldTypes");
+    expect(photoOfDefault([{ key: "door", type: "single_choice" }, { key: "door_remark", type: "short_text" }, { key: "x", type: "photo" }])).toBe("door");
+    expect(photoOfDefault([{ key: "x", type: "photo" }])).toBeUndefined();
+  });
+});
+
 describe("row menus", () => {
   it("open below the button, or above it near the bottom, and stay inside the window", async () => {
     const { placeMenu } = await import("./ui/Menu");

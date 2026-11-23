@@ -78,7 +78,8 @@ def vehicle(extra=()):
             *extra]
 
 
-def pdi_pages():
+def base_pages():
+    """A generic car inspection (Used car and EV start from it; the PDI has its own: demo_pdi)."""
     return [("Vehicle", [("Vehicle details", vehicle())]),
             ("Exterior", [("Body panels", BODY), ("Paint and glass", PAINT), ("Lights", LIGHTS)]),
             ("Interior", [("Seats and trim", SEATS), ("Controls", CONTROLS)]),
@@ -94,7 +95,7 @@ def pdi_pages():
 
 
 def used_pages():
-    pages = pdi_pages()
+    pages = base_pages()
     pages[0] = ("Vehicle", [("Vehicle details", vehicle([
         ("n", "owner_count", "Previous owners", "", 0, 10),
         ("y", "accident_history", "Accident history declared"),

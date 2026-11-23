@@ -211,9 +211,24 @@ class Page(DraftOnly):
             raise CodedError("SYSTEM_FIELD", "This page holds system fields; move them first.", 400)
 
 
+def section_key(version_id: int, title: str) -> str:
+    """A key made from the title, unique in the version: 'Driver side' -> 'driver_side'."""
+    base = re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")[:55] or "section"
+    base = base if base[0].isalpha() else f"s_{base}"[:55]
+    taken = set(Section.objects.filter(version_id=version_id, key__startswith=base)
+                .values_list("key", flat=True))
+    key, n = base, 2
+    while key in taken:
+        key, n = f"{base}_{n}", n + 1
+    return key
+
+
 class Section(DraftOnly):
     page = models.ForeignKey(Page, on_delete=models.CASCADE, related_name="sections")
     title = models.CharField(max_length=150)
+    # a permanent name: kept when the title changes and when a version is copied, so a report can
+    # point at "all checks in this section" (made from the title once, never shown in the builder)
+    key = models.CharField(max_length=63, blank=True)
     order = models.IntegerField(default=0)
     visible = models.BooleanField(default=True)
     show_if = models.JSONField(null=True, blank=True)
@@ -224,6 +239,12 @@ class Section(DraftOnly):
 
     class Meta:
         ordering = ["order", "id"]
+        constraints = [models.UniqueConstraint(fields=["version", "key"],
+                                               name="section_key_per_version")]
+
+    def _before_save(self):
+        if not self.key:
+            self.key = section_key(self.version_id, self.title)
 
     def _before_delete(self):
         if self.fields.filter(is_system=True).exists():

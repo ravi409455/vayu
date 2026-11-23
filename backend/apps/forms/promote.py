@@ -76,7 +76,8 @@ def export_bundle(version: FormVersion) -> dict:
                 items[(s.library_item.kind, s.library_item.key)] = s.library_item
             link = s.library_item
             sections.append({
-                "title": s.title, "order": s.order, "visible": s.visible, "show_if": s.show_if,
+                "key": s.key, "title": s.title, "order": s.order, "visible": s.visible,
+                "show_if": s.show_if,
                 "access": s.access,
                 "library": {"key": link.key, "revision": s.library_revision} if link else None,
                 "fields": [_field(f) for f in fields]})
@@ -208,12 +209,19 @@ def _check_content(b: dict) -> None:
             raise ValueError("submission_roles may only name expert and ops.")
         if not all(isinstance(b["version"].get(k, True), bool) for k in ("use_start", "use_end")):
             raise ValueError("use_start and use_end must be true or false.")
+        seen_sections: set = set()
         for p in b["version"]["pages"]:
             if not isinstance(p.get("gate", False), bool):
                 raise ValueError("A page's gate must be true or false.")
             validate_access(p["access"])
             rules(("page.show_if", p["show_if"]))
             for s in p["sections"]:
+                if s.get("key") and not KEY_RE.fullmatch(s["key"]):
+                    raise ValueError(f"Section '{s['title']}' has an invalid key.")
+                if s.get("key"):
+                    if s["key"] in seen_sections:
+                        raise ValueError(f"Two sections share the key '{s['key']}'.")
+                    seen_sections.add(s["key"])
                 validate_access(s["access"])
                 rules(("section.show_if", s["show_if"]))
                 for f in s["fields"]:
@@ -375,6 +383,7 @@ def import_bundle(actor, b: Any, as_new: dict | None = None) -> dict:
                 link = s.get("library")
                 section = Section.objects.create(
                     version=version, page=page, title=s["title"], order=s["order"],
+                    key=s.get("key", ""),                     # older bundles: made from the title
                     visible=s["visible"], show_if=s["show_if"], access=s["access"],
                     library_item=items[("section", link["key"])] if link else None,
                     library_revision=link["revision"] if link else None)

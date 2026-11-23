@@ -6,6 +6,7 @@ import { api, ApiError, uploadFile } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { FormField, FormPage, FormSummary, FormVersion, MasterList } from "../../api/types";
 import { useAuth } from "../../auth";
+import { photoOfDefault } from "../../lib/fieldTypes";
 import { applyDrag, isEmptyBody, reorderBody, type Ref } from "../../lib/tree";
 import { type FieldChoice } from "../../ui/ConditionBuilder";
 import { Confirm, Field, InfoTip, Modal, NameDialog, PageHeader, Pill, Tabs, useToast } from "../../ui/kit";
@@ -156,6 +157,7 @@ export function FormBuilder() {
                   </div>)}
                 {found?.field && (
                   <FieldEditor field={found.field} choices={choices} readOnly={!edit || !!found.field.library || found.section!.locked} kind={f.type}
+                    siblings={found.section!.fields.filter((x) => x.id !== found.field!.id)}
                     parents={{ section: found.section!.access, page: found.page.access }}
                     lists={(lists.data ?? []).map((l) => ({ key: l.key, name: l.name }))} categories={categories}
                     onSave={(d: FieldDraft) => run(() => api(`fields/${found.field!.id}`, { method: "PATCH", body: d }), "Saved.")}
@@ -194,6 +196,10 @@ export function FormBuilder() {
         onAdd={(body) => { const sid = adding.id; setAdding(null); void run(async () => {
           const { __file, ...rest } = body as { __file?: File } & Record<string, unknown>;
           if (__file) { const up = await uploadFile<{ id: string }>("form-assets", __file); rest.config = { asset: up.id }; }
+          if (rest.type === "photo") {                // a photo added under a check shows that check
+            const of = photoOfDefault(pages.flatMap((p) => p.sections).find((s) => s.id === sid)?.fields ?? []);
+            if (of) rest.config = { ...(rest.config as Record<string, unknown>), photo_of: of };
+          }
           const r = await api<FormField>(`sections/${sid}/fields`, { body: rest }); setSel({ kind: "field", id: r.id });
         }); }}
         onLibrary={(item, link) => { const sid = adding.id; setAdding(null); void run(async () => { const r = await api<FormField>(`sections/${sid}/fields/from-library`, { body: { library_item: item, link } }); setSel({ kind: "field", id: r.id }); }); }} />}
