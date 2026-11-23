@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import login as django_login
 from django.contrib.auth import logout as django_logout
 from django.contrib.auth import update_session_auth_hash
@@ -48,6 +49,10 @@ class LoginView(APIView):
             django_login(request._request, user,
                          backend="django.contrib.auth.backends.ModelBackend")
             get_token(request._request)  # make sure the CSRF cookie is set
+        elif user.role == Role.ADMIN:
+            # the app is for Ops and experts; Admin tools are web-only
+            raise CodedError("ADMIN_USE_WEB", "The app is for Ops and experts. Admins use the web.",
+                             403)
         else:
             data.update(services.register_device_and_tokens(user, s.validated_data["device_name"]))
         return Response(data)
@@ -130,6 +135,27 @@ class LogoutView(APIView):
         else:
             django_logout(request._request)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class HeartbeatView(APIView):
+    """A phone says what it still holds (unsent drafts and files). Used to stop a second phone
+    from signing in while this one could lose work, and to show the person's phone status."""
+
+    allow_password_change_pending = True
+
+    def post(self, request):
+        token = request.auth
+        device_id = token.get("device_id") if hasattr(token, "get") else None
+        if not device_id:
+            raise CodedError("NOT_A_DEVICE", "Only the app sends a heartbeat.", 400)
+        body = request.data if isinstance(request.data, dict) else {}
+        counts = {k: body.get(k) for k in ("drafts", "files")}
+        if any(type(v) is not int or v < 0 for v in counts.values()):
+            raise CodedError("INVALID_COUNTS", "drafts and files must be whole numbers, 0 or more.",
+                             400)
+        Device.objects.filter(pk=device_id).update(unsynced=counts, last_seen_at=timezone.now())
+        return Response({"server_time": timezone.now(),
+                         "min_app_version": settings.MIN_APP_VERSION})
 
 
 class ChangePasswordView(APIView):

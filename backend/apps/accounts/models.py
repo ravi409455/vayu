@@ -68,6 +68,13 @@ class Device(models.Model):
     name = models.CharField(max_length=150, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     revoked_at = models.DateTimeField(null=True, blank=True)
+    # what the phone last said it still holds: {"drafts": n, "files": n}; null = never reported
+    unsynced = models.JSONField(null=True, blank=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+
+    def holds_work(self) -> bool:
+        """True when this phone may still hold answers or files the server doesn't have."""
+        return self.unsynced is None or any(self.unsynced.values())
 
 
 class RolePermission(models.Model):

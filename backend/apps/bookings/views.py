@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from apps.accounts.permissions import perm, scope_for
 from apps.forms.access import hidden_inspection_forms
 
-from . import services, submissions
+from . import services, submissions, sync
 from .models import Booking, Inspection
 from .serializers import BookingSerializer, InspectionSerializer
 
@@ -245,3 +245,21 @@ class InspectionOverrides(generics.GenericAPIView):
         body = {k: v for k, v in request.data.items() if k != "row_version"}
         insp = submissions.set_overrides(request.user, insp, body, request.data["row_version"])
         return Response(InspectionSerializer(insp, context=self.get_serializer_context()).data)
+
+
+class SyncJobs(generics.GenericAPIView):
+    """The expert's jobs and everything needed to inspect them offline (see apps/bookings/sync.py).
+    ``have`` lists form version ids the phone already holds; ``since`` is the last sync's
+    ``server_time`` (returns what Ops changed after it)."""
+
+    permission_classes = [perm("submissions.fill")]
+
+    def get(self, request):
+        have_raw = request.query_params.get("have", "")
+        since_raw = request.query_params.get("since")
+        since = parse_datetime(since_raw) if since_raw else None
+        parts = [p for p in have_raw.split(",") if p]
+        if (since_raw and since is None) or not all(p.isdigit() for p in parts):
+            raise services.err("INVALID_QUERY", "have must be version ids, since a date-time.")
+        return Response(sync.payload(request.user, {int(p) for p in parts}, since,
+                                     self.get_serializer_context()))

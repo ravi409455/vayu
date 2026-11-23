@@ -833,6 +833,19 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/devices/heartbeat:
+    post:
+      operationId: devices_heartbeat_create
+      description: |-
+        A phone says what it still holds (unsent drafts and files). Used to stop a second phone
+        from signing in while this one could lose work, and to show the person's phone status.
+      tags:
+      - devices
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/ext/bookings:
     get:
       operationId: ext_bookings_retrieve
@@ -2635,6 +2648,20 @@ paths:
         required: true
       tags:
       - sections
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/sync/jobs:
+    get:
+      operationId: sync_jobs_retrieve
+      description: |-
+        The expert's jobs and everything needed to inspect them offline (see apps/bookings/sync.py).
+        ``have`` lists form version ids the phone already holds; ``since`` is the last sync's
+        ``server_time`` (returns what Ops changed after it).
+      tags:
+      - sync
       security:
       - cookieAuth: []
       responses:

@@ -62,9 +62,17 @@ def revoke_devices(user: User) -> int:
 
 
 def register_device_and_tokens(user: User, device_name: str) -> dict:
-    """New device replaces the old one (unsynced-data protection arrives with the heartbeat in
-    Phase 13)."""
+    """A new phone replaces the old one, unless the old one may still hold work that hasn't
+    reached the server (then the person syncs it first, or Ops sign that phone out)."""
     with transaction.atomic():
+        busy = next((d for d in Device.objects.select_for_update().filter(
+            user=user, revoked_at__isnull=True) if d.holds_work()), None)
+        if busy is not None:
+            counts = busy.unsynced or {}
+            raise CodedError("DEVICE_HAS_UNSYNCED_DATA",
+                             "Your other phone still has work that hasn't been sent. Open the app "
+                             "there and let it sync, or ask Ops to sign that phone out.", 409,
+                             drafts=counts.get("drafts"), files=counts.get("files"))
         revoke_devices(user)
         device = Device.objects.create(user=user, name=device_name)
     refresh = RefreshToken.for_user(user)

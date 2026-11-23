@@ -2,6 +2,8 @@ import pytest
 from freezegun import freeze_time
 from rest_framework.test import APIClient
 
+from apps.accounts.models import Device
+
 pytestmark = pytest.mark.django_db
 
 
@@ -39,5 +41,6 @@ def test_success_resets_the_counter(make_user, login):
     make_user(username="asha")
     fail(login, 4)
     assert login(APIClient(), "asha").status_code == 200
+    Device.objects.update(unsynced={"drafts": 0, "files": 0})   # that phone has nothing pending
     fail(login, 4)
     assert login(APIClient(), "asha").status_code == 200

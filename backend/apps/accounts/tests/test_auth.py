@@ -66,6 +66,7 @@ def test_change_password_clears_flag_and_replaces_password(make_user, login):
         format="json",
     )
     assert r.status_code == 200
+    Device.objects.update(unsynced={"drafts": 0, "files": 0})       # the phone has nothing pending
     assert login(APIClient(), "asha", password=PASSWORD).status_code == 401
     ok = login(APIClient(), "asha", password="Brand-new-pw-9")
     assert ok.status_code == 200 and ok.json()["must_change_password"] is False
@@ -149,8 +150,9 @@ def test_mobile_session_survives_long_offline_via_refresh(make_user, login):
 def test_forced_change_applies_to_views_with_their_own_permissions(make_user, login, path):
     """Regression: views that override permission_classes must not bypass the rule."""
     make_user(Role.ADMIN, username="boss", must_change_password=True)
-    client = APIClient()
-    client.credentials(HTTP_AUTHORIZATION=f"Bearer {login(client, 'boss').json()['access']}")
+    client = APIClient()                         # Admins sign in on the web (the app refuses them)
+    assert client.post("/api/v1/auth/login", {"username": "boss", "password": "Str0ng-pass-1",
+                                              "client": "web"}, format="json").status_code == 200
     r = client.get(path)
     assert r.status_code == 403 and r.json()["code"] == "PASSWORD_CHANGE_REQUIRED"
 
