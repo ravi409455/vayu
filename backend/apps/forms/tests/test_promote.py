@@ -374,3 +374,13 @@ def test_a_bundle_cannot_make_a_field_a_system_field(admin, staging):
     _first_field(bundle)["key"] = "not_a_system_key"
     assert admin.post("/api/v1/promote/import", bundle, format="json").status_code == 201
     assert not Field.objects.filter(key="not_a_system_key", is_system=True).exists()
+
+
+def test_a_non_object_bundle_is_refused_by_the_checker_itself():
+    """The JSON parser already stops a bare list at the door; the checker still guards its callers."""
+    from apps.core.errors import CodedError
+    from apps.forms import promote
+
+    with pytest.raises(CodedError) as e:
+        promote._check_shape([])
+    assert e.value.detail["code"] == "INVALID_BUNDLE"

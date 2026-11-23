@@ -227,3 +227,27 @@ def test_changing_the_password_signs_out_the_other_phones(make_user, login):
     assert b_dev.revoked_at is not None                            # the other phone is out
     assert Device.objects.get(pk=a["device_id"]).revoked_at is None  # this phone stays in
     assert phone_b is not None and build_zip is not None
+
+
+def test_hidden_fields_fail_closed_when_no_form_describes_the_booking(job, settings):
+    from apps.forms.models import Form
+    from apps.media.services import hidden_fields
+
+    env, b = job
+    asset = upload(env.expert, b["id"], jpeg(), settings).json()["id"]
+    booking = Booking.objects.get(pk=b["id"])
+    booking.inspections.all().delete()                      # no inspection yet ...
+    Form.objects.filter(kind="inspection").update(is_active=False)   # ... and no active form
+    assert hidden_fields(env.ops_user, booking) == {MediaAsset.objects.get(pk=asset).field_key}
+    assert hidden_fields(env.admin_user, booking) == set()
+
+
+def test_a_failed_upload_cannot_be_restarted_on_a_closed_booking(job, settings):
+    env, b = job
+    data = jpeg()
+    body = initiate_body(b["id"], data)
+    init = env.expert.post("/api/v1/media/initiate", body, format="json").json()
+    MediaAsset.objects.filter(pk=init["id"]).update(status="failed", upload_id="")
+    Booking.objects.filter(pk=b["id"]).update(stage="cancelled")
+    assert env.expert.post("/api/v1/media/initiate", body, format="json").status_code == 409
+    assert MediaAsset.objects.get(pk=init["id"]).status == "failed"

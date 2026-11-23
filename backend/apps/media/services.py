@@ -14,6 +14,7 @@ from apps.bookings.services import err
 from apps.bookings.submissions import inspection_version, ops_version, own_filter
 from apps.core import events
 from apps.core import tasks as core_tasks
+from apps.core.errors import CodedError
 from apps.forms.access import levels_for
 from apps.forms.fieldtypes import DEFAULT_MAX_COUNT
 from apps.forms.models import Field
@@ -73,7 +74,11 @@ def hidden_fields(user, booking: Booking) -> set[str]:
     if user.role == "admin":
         return set()
     insp = booking.inspections.order_by("-created_at").first()
-    versions = [insp.form_version if insp else None, ops_version()]
+    try:
+        main = insp.form_version if insp else inspection_version(booking.inspection_type)
+    except CodedError:       # no form says what this user may see: fail closed, hide every file
+        return set(MediaAsset.objects.filter(booking=booking).values_list("field_key", flat=True))
+    versions = [main, ops_version()]
     out: set[str] = set()
     for v in versions:
         if v is not None:
@@ -100,6 +105,9 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
     """Returns (body, created). Retrying with the same client_uuid returns the same asset."""
     user = request.user
     booking = writable_booking(request, data.get("booking"))
+    if booking.stage == "cancelled" or (
+            booking.stage == "completed" and scope_for(user, "media.manage", request) is None):
+        raise err("BOOKING_CLOSED", f"A {booking.stage} booking takes no new files.", 409)
     kind, ctype = data.get("kind"), data.get("content_type")
     size, sha = data.get("size"), data.get("sha256")
     if kind not in KINDS:
@@ -130,9 +138,6 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
             existing.sha256, existing.size = sha, size
             existing.save()
         return _body(existing, existing.status == "pending"), False
-    if booking.stage == "cancelled" or (
-            booking.stage == "completed" and scope_for(user, "media.manage", request) is None):
-        raise err("BOOKING_CLOSED", f"A {booking.stage} booking takes no new files.", 409)
     field = field_for(booking, data.get("field_key", ""))
     if field.type != kind:
         raise err("WRONG_KIND", f"'{field.key}' takes {field.type}, not {kind}.")
