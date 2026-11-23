@@ -55,8 +55,8 @@ test("J5: a designed request reaches the receiver, the ZIP downloads and the ver
     await expect(preview).toContainText("X-Token: abc123");
     await expect(preview).toContainText('"customer"');
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("link", { name: "Integrations" }).first()).toBeVisible();
-    await expect(page.getByText("Receiver")).toBeVisible();
+    await page.waitForURL((u) => u.pathname === "/integrations");              // a refused save stays here (and shows why)
+    await expect(page.getByText("Receiver", { exact: true })).toBeVisible({ timeout: 15_000 });
 
     // a real job with a photo, completed
     const id = await submittedJob({ bookingId: "J5-1", door: "dent", photo: true });

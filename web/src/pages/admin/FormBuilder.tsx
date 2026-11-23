@@ -132,7 +132,7 @@ export function FormBuilder() {
           { label: "Discard draft", danger: true, onClick: () => setDiscard(true), hidden: !(draft && can("forms.edit")) },
         ]} />
         {!draft && can("forms.edit") && <button className="primary" onClick={startDraft}>Start a new draft</button>}
-        {draft && can("forms.publish") && <button className="primary" onClick={checkAndPublish}><Rocket size={15} aria-hidden /> Check &amp; publish…</button>}
+        {draft && can("forms.publish") && <button className="primary" disabled={!v} onClick={checkAndPublish}><Rocket size={15} aria-hidden /> Check &amp; publish…</button>}
       </PageHeader>
       {!v ? <p className="muted">No version yet.</p> : (
         <>

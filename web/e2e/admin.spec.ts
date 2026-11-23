@@ -77,7 +77,11 @@ test.describe("admin screens", () => {
     await signIn(page, "admin");
     const admin = await apiAs("admin");
     const forms = await json(await admin.get("forms"));
-    const pdi = (forms.results ?? forms).find((f: { key: string }) => f.key === "pdi");
+    let pdi = (forms.results ?? forms).find((f: { key: string }) => f.key === "pdi");
+    if (!pdi.draft_version) {            // do not depend on an earlier test having started a draft
+      await json(await admin.post(`forms/${pdi.id}/drafts`, { data: {} }));
+      pdi = await json(await admin.get(`forms/${pdi.id}`));
+    }
     // a rating field pointing at a category that does not exist
     const v = await json(await admin.get(`form-versions/${pdi.draft_version.id}`));
     const fld = v.pages[0].sections[0].fields.find((f: { key: string }) => f.key === "engine_rating");
