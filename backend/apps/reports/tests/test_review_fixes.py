@@ -187,3 +187,15 @@ def test_a_role_left_off_a_forms_submission_list_cannot_open_its_reports(report_
     assert env.ops.get(url).status_code == 404
     assert env.ops.get("/api/v1/problems/reports").status_code == 200
     assert env.admin.get(url).status_code == 200
+
+
+def test_a_switched_off_form_still_hides_its_reports(report_env):
+    from apps.forms.models import Form
+
+    env, b = report_env
+    url = f"/api/v1/bookings/{b['id']}/report"
+    env.admin.patch(f"/api/v1/forms/{env.form_id}", {"submission_roles": ["expert"]},
+                    format="json")
+    Form.objects.filter(pk=env.form_id).update(is_active=False)
+    assert env.ops.get(url).status_code == 404
+    assert env.admin.get(url).status_code == 200

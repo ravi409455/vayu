@@ -57,6 +57,15 @@ def test_the_chassis_number_of_a_hidden_form_cannot_be_searched(done):
     assert env.admin.get("/api/v1/bookings?search=273129").json()["count"] == 1
 
 
+def test_a_switched_off_hidden_form_stays_hidden_from_search(done):
+    from apps.forms.models import Form
+
+    env, b = done
+    hide_from(env, "ops")
+    Form.objects.filter(kind="inspection").update(is_active=False)         # hiding must not depend on it being live
+    assert env.ops.get("/api/v1/bookings?search=273129").json()["count"] == 0
+
+
 def test_the_experts_own_submit_response_is_blank_when_the_expert_may_not_see_it(ienv, booking):
     assign(ienv, booking)
     start(ienv.expert, booking)

@@ -294,7 +294,7 @@ def searchable_stages(role: str) -> dict[str, list[str]]:
                or ["hidden"] for s in STAGES}                    # no form to say: closed
     out["chassis_no"] = [s for s in STAGES if "hidden" not in chassis[s]]
     if any(not may_see_submissions(_Role(role), f) for f in Form.objects.filter(
-            kind=FormKind.INSPECTION, is_active=True)):
+            kind=FormKind.INSPECTION)):
         out["chassis_no"] = []                  # a hidden submission must not be searchable
     return out
 

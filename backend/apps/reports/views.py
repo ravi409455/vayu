@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -106,10 +107,13 @@ def _report_booking(request, pk) -> Booking:
     if scope_for(request.user, "reports.view", request) == "own":
         qs = qs.filter(own_filter(request.user)).distinct()
     b = get_object_or_404(qs, pk=pk)
-    form = Form.objects.filter(kind="inspection", is_active=True,
-                               inspection_type=b.inspection_type).first()
-    if form is not None and not may_see_submissions(request.user, form):
-        raise err("NOT_FOUND", "Booking not found.", 404)      # the report is the submission
+    # the report is the submission: judged by every form it could come from (the form of any
+    # inspection actually on this booking, and any form of its type, switched off or not)
+    forms = Form.objects.filter(kind="inspection").filter(
+        Q(inspection_type=b.inspection_type)
+        | Q(pk__in=b.inspections.values("form_version__form_id")))
+    if any(not may_see_submissions(request.user, f) for f in forms):
+        raise err("NOT_FOUND", "Booking not found.", 404)
     return b
 
 
