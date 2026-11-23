@@ -18,7 +18,7 @@ export function ApiKeys() {
   const refresh = useRefresh();
   const keys = useList<ApiKeyRow>("api-keys", "api-keys");
   const forms = useList<FormSummary>("forms", "forms");
-  const eligible = (forms.data ?? []).filter((f) => f.kind !== "ops");
+  const eligible = (forms.data ?? []).filter((f) => f.type === "booking" || f.type === "custom");
   const [edit, setEdit] = useState<{ id?: string; name: string; allow_delete: boolean; scope: Record<string, string> } | null>(null);
   const [shown, setShown] = useState<string | null>(null);
   const save = useMutation({

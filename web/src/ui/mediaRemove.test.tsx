@@ -15,7 +15,7 @@ const selfie: FormField = {
 const page = { id: 1, title: "P", order: 0, visible: true, gate: false, show_if: null, access: {}, sections: [{ id: 1, page: 1, title: "S", order: 0, visible: true, show_if: null, access: {}, fields: [selfie], locked: false, library: null }] } as unknown as FormPage;
 
 const show = (values: Record<string, unknown>, extra: Record<string, unknown> = {}, onChange = vi.fn()) =>
-  render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="ops" tree={{ pages: [page], checks: [] }} values={values} onChange={onChange} bookingId="b1" {...extra} /></QueryClientProvider>);
+  render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="end" tree={{ pages: [page], checks: [] }} values={values} onChange={onChange} bookingId="b1" {...extra} /></QueryClientProvider>);
 
 describe("taking a photo back", () => {
   beforeEach(() => discard.mockClear());

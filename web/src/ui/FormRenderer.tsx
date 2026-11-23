@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "../api/client";
 import { asList } from "../api/hooks";
+import { useInspectionTypes } from "../api/labels";
 import type { FormField, FormPage, FormVersion, MasterListItem, Option, User } from "../api/types";
 import { addFile, discardFile, useUploads } from "../lib/uploadManager";
 import { evaluateTree, type Answers, type Ctx, type Kind } from "../lib/formSpec";
@@ -99,6 +100,7 @@ function FieldInput({ f, value, derived, required, error, readOnly, onChange, p 
           onChange={(e) => onChange(e.target.checked ? [...chosen, o.key] : chosen.filter((x) => x !== o.key))} /> {o.label}</label>))}</div>;
       break;
     }
+    case "form_choice": input = <TypeSelect value={String(str)} disabled={readOnly} label={f.label} onChange={(v) => onChange(v || null)} />; break;
     case "master_list": input = <ListSelect list={String(f.config.list ?? "")} value={String(str)} disabled={readOnly} label={f.label} onChange={(v) => onChange(v || null)} />; break;
     case "user_picker": input = <UserSelect role={String(f.config.role ?? "expert")} value={value as number | null} disabled={readOnly} label={f.label} onChange={onChange} />; break;
     case "gps": input = <Gps value={value as { lat: number; lng: number } | undefined} disabled={readOnly} onChange={onChange} preview={p.preview} auto={f.config.auto !== false} />; break;
@@ -127,6 +129,11 @@ function ListSelect({ list, value, onChange, disabled, label }: { list: string; 
   const q = useQuery({ queryKey: ["list-items", list], enabled: !!list, staleTime: 300_000, queryFn: async () => asList<MasterListItem>(await api(`master-lists/${list}/items`)) });
   const items = (q.data ?? []).filter((i) => !i.archived || i.key === value);
   return <select aria-label={label} disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Choose…</option>{items.map((i) => <option key={i.key} value={i.key}>{i.label}</option>)}</select>;
+}
+
+function TypeSelect({ value, onChange, disabled, label }: { value: string; onChange: (v: string) => void; disabled: boolean; label: string }) {
+  const types = useInspectionTypes().filter((t) => t.available || t.key === value);
+  return <select aria-label={label} disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Choose…</option>{types.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select>;
 }
 
 function UserSelect({ role, value, onChange, disabled, label }: { role: string; value: number | null | undefined; onChange: (v: unknown) => void; disabled: boolean; label: string }) {

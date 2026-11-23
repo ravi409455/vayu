@@ -13,14 +13,13 @@ export function ContainerEditor({ kind, item, pages, choices, formKind, parentAc
   kind: "page" | "section"; item: FormPage | FormSection; pages: FormPage[]; choices: FieldChoice[]; formKind: string; parentAccess?: Access;
   readOnly: boolean; onSave: (b: Record<string, unknown>) => void; onDelete: () => void; onMove: (pageId: number) => void; onChanged: () => void;
 }) {
-  const make = () => ({ title: item.title, visible: item.visible, show_if: item.show_if, access: item.access, gate: "gate" in item ? item.gate : false, slot: "slot" in item ? (item.slot ?? "") : "" });
+  const make = () => ({ title: item.title, visible: item.visible, show_if: item.show_if, access: item.access, gate: "gate" in item ? item.gate : false });
   const [d, setD] = useState(make);
   const [pane, setPane] = useState<Pane>("settings");
-  useEffect(() => setD(make()), [item.id, item.title, item.visible, item.show_if, item.access, "gate" in item && item.gate, "slot" in item && item.slot]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setD(make()), [item.id, item.title, item.visible, item.show_if, item.access, "gate" in item && item.gate]); // eslint-disable-line react-hooks/exhaustive-deps
   const locked = "locked" in item && item.locked;
   const dirty = JSON.stringify(d) !== JSON.stringify(make());
   const section = kind === "section" ? (item as FormSection) : null;
-  const holdsSystem = kind === "page" && (item as FormPage).sections.some((x) => x.fields.some((f) => f.is_system));
   return (
     <div>
       <div className="insp-head"><div className="grow"><h2>{item.title}</h2><p className="muted small">{kind === "page" ? "Page" : "Section"}</p></div></div>
@@ -34,13 +33,6 @@ export function ContainerEditor({ kind, item, pages, choices, formKind, parentAc
                 <input type="checkbox" checked={d.gate} onChange={(e) => setD({ ...d, gate: e.target.checked })} />
                 <span><strong>Must be finished before moving on</strong><br /><span className="muted small">People cannot go to the next page until every required field here is filled. Use it for steps like check-in that must be done first.</span></span>
               </label>
-            )}
-            {kind === "page" && formKind === "ops" && (
-              <Field label="Where it appears" tip="The check-in/wrap-up form is shown to the expert around the inspection: pages marked “before” come first (check-in), pages marked “after” come last (wrap-up).">
-                <select aria-label="Where it appears" value={d.slot} disabled={holdsSystem} onChange={(e) => setD({ ...d, slot: e.target.value })}>
-                  <option value="before">Before the inspection (check-in)</option><option value="after">After the inspection (wrap-up)</option></select>
-                {holdsSystem && <span className="help">This page holds the required system fields, so it stays where it is.</span>}
-              </Field>
             )}
             {section && (
               <Field label="Move to page"><select aria-label="Move to page" value={section.page} onChange={(e) => onMove(Number(e.target.value))}>

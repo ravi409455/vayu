@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useList } from "../../api/hooks";
-import { STAGE_LABEL, STAGE_TONE, useLabels } from "../../api/labels";
+import { STAGE_LABEL, STAGE_TONE, useLabels, useTypeLabels } from "../../api/labels";
 import type { Booking } from "../../api/types";
 import { Empty, Pill, PageHeader } from "../../ui/kit";
 
@@ -9,7 +9,7 @@ const OPEN = ["assigned", "in_progress", "submitted"];
 export function MyJobs() {
   const jobs = useList<Booking>("my-jobs", "bookings");
   const car = useLabels("car_make_model");
-  const type = useLabels("inspection_type");
+  const type = useTypeLabels();
   const all = jobs.data ?? [];
   const open = all.filter((b) => OPEN.includes(b.stage)).sort((a, b) => `${a.answers.inspection_date}${a.answers.inspection_time}`.localeCompare(`${b.answers.inspection_date}${b.answers.inspection_time}`));
   const done = all.filter((b) => !OPEN.includes(b.stage));

@@ -33,7 +33,7 @@ export function Promote() {
       <div className="grid2">
         <div className="card">
           <h2>Export from this server</h2>
-          <table><tbody>{(forms.data ?? []).filter((f) => f.kind === "inspection" && f.published_version).map((f) => (
+          <table><tbody>{(forms.data ?? []).filter((f) => f.published_version).map((f) => (
             <tr key={f.id}><td>{f.name} <Pill tone="ok">v{f.published_version!.number}</Pill></td>
               <td style={{ textAlign: "right" }}><a className="btn" href={`/api/v1/promote/export?version=${f.published_version!.id}`} download={`${f.key}-v${f.published_version!.number}.json`}>Download bundle</a></td></tr>))}</tbody></table>
         </div>

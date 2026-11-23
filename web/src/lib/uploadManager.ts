@@ -39,6 +39,7 @@ function track(job: PendingUpload): void {
 /** Called when someone picks or takes a file: shrink, checksum, register, and upload in the
  *  background. Resolves with the server's media id so the answer can point at it at once. */
 export async function addFile(args: { bookingId: string; fieldKey: string; kind: PendingUpload["kind"]; file: Blob; name: string; source: "camera" | "gallery" }): Promise<string> {
+  await Promise.all([...discarding]);          // a retake right after Remove must not meet the old file at the limit
   const blob = args.kind === "photo" ? await shrinkImage(args.file) : args.file;
   const spec = { clientUuid: crypto.randomUUID(), bookingId: args.bookingId, fieldKey: args.fieldKey, kind: args.kind, contentType: blob.type || "application/octet-stream", sha256: await hashBlob(blob), source: args.source, blob };
   const init = await initiate(spec);
@@ -50,7 +51,15 @@ export async function addFile(args: { bookingId: string; fieldKey: string; kind:
 
 /** Takes back a file the person removed: stop sending it, forget it, and tell the server so it no
  *  longer counts towards the field's limit (a retake would otherwise be refused). */
-export async function discardFile(assetId: string): Promise<void> {
+const discarding = new Set<Promise<void>>();       // removals the server has not confirmed yet
+
+export function discardFile(assetId: string): Promise<void> {
+  const p = doDiscard(assetId).finally(() => discarding.delete(p));
+  discarding.add(p);
+  return p;
+}
+
+async function doDiscard(assetId: string): Promise<void> {
   const i = queue.findIndex((j) => j.assetId === assetId);
   const job = i >= 0 ? queue.splice(i, 1)[0] : undefined;
   const st = states.get(assetId);

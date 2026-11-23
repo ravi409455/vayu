@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type Page } from "../../api/client";
 import { asList, useList } from "../../api/hooks";
-import { STAGE_LABEL, STAGE_TONE, useLabels } from "../../api/labels";
+import { STAGE_LABEL, STAGE_TONE, useInspectionTypes, useLabels, useTypeLabels } from "../../api/labels";
 import type { Booking, MasterListItem, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { loadJSON, saveJSON } from "../../lib/store";
@@ -24,9 +24,9 @@ export function JobBoard() {
   const q = useQuery({ queryKey: ["board", f, page], queryFn: () => api<Page<Booking>>("bookings", { query: { ...f, page } }) });
   const experts = useList<User>("experts", "users", { role: "expert" });
   const cities = useQuery({ queryKey: ["list-items", "city"], queryFn: async () => asList<MasterListItem>(await api("master-lists/city/items")) });
-  const types = useQuery({ queryKey: ["list-items", "inspection_type"], queryFn: async () => asList<MasterListItem>(await api("master-lists/inspection_type/items")) });
+  const types = useInspectionTypes();
   const car = useLabels("car_make_model");
-  const type = useLabels("inspection_type");
+  const type = useTypeLabels();
   const nameOf = new Map((experts.data ?? []).map((u) => [u.id, u.name || u.username]));
   return (
     <>
@@ -38,7 +38,7 @@ export function JobBoard() {
         <input aria-label="Search" placeholder="Search booking ID, customer, phone, chassis, car" value={f.search} onChange={(e) => set({ search: e.target.value })} />
         <select aria-label="City" value={f.city} onChange={(e) => set({ city: e.target.value })}><option value="">All cities</option>{(cities.data ?? []).map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select>
         <select aria-label="Expert" value={f.expert} onChange={(e) => set({ expert: e.target.value })}><option value="">All experts</option>{(experts.data ?? []).map((u) => <option key={u.id} value={u.id}>{u.name || u.username}</option>)}</select>
-        <select aria-label="Type" value={f.type} onChange={(e) => set({ type: e.target.value })}><option value="">All types</option>{(types.data ?? []).map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select>
+        <select aria-label="Type" value={f.type} onChange={(e) => set({ type: e.target.value })}><option value="">All types</option>{types.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select>
         <select aria-label="Stage" value={f.stage} onChange={(e) => set({ stage: e.target.value })}><option value="">All stages</option>{Object.entries(STAGE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
         <div className="bar" style={{ margin: 0 }}><input aria-label="From" type="date" value={f.date_from} onChange={(e) => set({ date_from: e.target.value })} /><input aria-label="To" type="date" value={f.date_to} onChange={(e) => set({ date_to: e.target.value })} /></div>
       </div></div>

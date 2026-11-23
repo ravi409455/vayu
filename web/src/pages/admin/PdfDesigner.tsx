@@ -52,7 +52,7 @@ export function PdfDesigner() {
   const [tid, setTid] = useState<number | null>(null);
   const t = (templates.data ?? []).find((x) => x.id === tid) ?? null;
   const editable = can("pdf_templates.edit");
-  const withoutTemplate = (forms.data ?? []).filter((f) => f.kind === "inspection" && !(templates.data ?? []).some((x) => x.form === f.id));
+  const withoutTemplate = (forms.data ?? []).filter((f) => f.type === "custom" && !(templates.data ?? []).some((x) => x.form === f.id));
   const make = useMutation({ mutationFn: (form: number) => api<Template>("pdf-templates", { body: { form } }), onSuccess: (r) => { void refresh("pdf-templates"); setTid(r.id); }, onError: fail });
   return (
     <>

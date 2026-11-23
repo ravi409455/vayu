@@ -1302,6 +1302,19 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/inspection-types:
+    get:
+      operationId: inspection_types_retrieve
+      description: |-
+        The custom forms by name: what Ops pick when they book, and what labels show everywhere.
+        `available` is true while a form is on and has a published version.
+      tags:
+      - inspection-types
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/inspections/{id}:
     get:
       operationId: inspections_retrieve
@@ -2898,6 +2911,12 @@ components:
           minimum: 0
         form_version:
           type: integer
+        start_version:
+          type: integer
+          nullable: true
+        end_version:
+          type: integer
+          nullable: true
         submitted_at:
           type: string
           format: date-time
@@ -2913,9 +2932,11 @@ components:
           format: date-time
       required:
       - booking
+      - end_version
       - expert
       - form_version
       - id
+      - start_version
     KindEnum:
       enum:
       - field
@@ -3355,6 +3376,12 @@ components:
           minimum: 0
         form_version:
           type: integer
+        start_version:
+          type: integer
+          nullable: true
+        end_version:
+          type: integer
+          nullable: true
         submitted_at:
           type: string
           format: date-time

@@ -51,10 +51,9 @@ test.describe("form builder", () => {
     expect((await json(await admin.get(`forms/${form.id}`))).draft_version).toBeNull();
     // a brand-new form has nothing to go back to
     await page.goto("/forms");
-    await page.getByRole("button", { name: "New form" }).click();
+    await page.getByRole("button", { name: "New custom form" }).click();
     await page.getByLabel("Name", { exact: true }).fill("Scratch");
-    await page.getByLabel("Inspection type").selectOption("ev");
-    await page.getByRole("button", { name: "Create" }).click();
+      await page.getByRole("button", { name: "Create" }).click();
     await page.getByRole("button", { name: "Discard draft" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Discard draft" }).click();
     await expect(page.getByRole("status").filter({ hasText: /never been published/ })).toBeVisible();

@@ -6,7 +6,7 @@ import { iconFor } from "../../lib/typeIcons";
 import { AccessEditor } from "../../ui/AccessEditor";
 import { ConditionBuilder, type FieldChoice } from "../../ui/ConditionBuilder";
 import { Field, Pill, Tabs, useToast } from "../../ui/kit";
-import { CHOICE_TYPES, FIELD_TYPES } from "../../lib/fieldTypes";
+import { CHOICE_TYPES, FIELD_TYPES, SYSTEM_TYPE_LABELS } from "../../lib/fieldTypes";
 
 export type FieldDraft = Pick<FormField, "label" | "helper_text" | "type" | "config" | "required" | "required_if" | "show_if" | "visible" | "access">;
 type Pane = "settings" | "logic" | "access";
@@ -26,7 +26,7 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
   const cfg = d.config as Record<string, unknown>;
   const setCfg = (p: Record<string, unknown>) => set({ config: { ...cfg, ...p } });
   const dirty = JSON.stringify(d) !== JSON.stringify({ ...field, level: undefined });
-  const type = FIELD_TYPES.find((t) => t.id === field.type)?.label ?? field.type;
+  const type = FIELD_TYPES.find((t) => t.id === field.type)?.label ?? SYSTEM_TYPE_LABELS[field.type] ?? field.type;
   const locked = field.locked || field.is_system;
   const Icon = iconFor(field.type);
   const media = field.type === "photo" || field.type === "video";

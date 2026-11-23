@@ -1,15 +1,22 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { api, type Page } from "../../api/client";
-import { asList, useList, useRefresh } from "../../api/hooks";
-import type { FormSummary, MasterListItem } from "../../api/types";
+import { api } from "../../api/client";
+import { useList, useRefresh } from "../../api/hooks";
+import type { FormSummary, FormType } from "../../api/types";
 import { useAuth } from "../../auth";
 import { Field, Modal, Pill, useToast, PageHeader } from "../../ui/kit";
 import { slugKey } from "../../lib/fieldTypes";
-import { useQuery } from "@tanstack/react-query";
 
-const KIND: Record<string, string> = { booking: "Booking form", ops: "Check-in & wrap-up form", inspection: "Inspection form" };
+export const TYPE_LABEL: Record<FormType, string> = { booking: "Booking form", start: "Start form (check-in)", end: "End form (wrap-up)", custom: "Custom form" };
+const SYSTEM_ORDER: FormType[] = ["booking", "start", "end"];
+
+function Versions({ x }: { x: FormSummary }) {
+  return (<>
+    <td>{x.published_version ? <Pill tone="ok">v{x.published_version.number}</Pill> : <Pill tone="warn">Not published</Pill>}</td>
+    <td>{x.draft_version ? <Pill tone="info">v{x.draft_version.number} draft</Pill> : "—"}</td>
+  </>);
+}
 
 export function Forms() {
   const { can } = useAuth();
@@ -18,41 +25,44 @@ export function Forms() {
   const refresh = useRefresh();
   const forms = useList<FormSummary>("forms", "forms");
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ name: "", key: "", kind: "inspection", inspection_type: "" });
-  const types = useQuery({ queryKey: ["types"], queryFn: async () => asList<MasterListItem>(await api<Page<MasterListItem>>("master-lists/inspection_type/items")) });
+  const [f, setF] = useState({ name: "", key: "" });
+  const [keyEdited, setKeyEdited] = useState(false);     // until the Admin types a key, it follows the name
   const create = useMutation({
-    mutationFn: () => api<FormSummary>("forms", { body: { ...f, inspection_type: f.kind === "inspection" ? f.inspection_type : "" } }),
+    mutationFn: () => api<FormSummary>("forms", { body: f }),
     onSuccess: (r) => { void refresh("forms"); nav(`/forms/${r.id}`); },
     onError: fail,
   });
+  const system = SYSTEM_ORDER.map((t) => (forms.data ?? []).find((x) => x.type === t)).filter((x): x is FormSummary => !!x);
+  const custom = (forms.data ?? []).filter((x) => x.type === "custom");
   return (
     <>
-      <PageHeader title="Forms" subtitle="The booking form, the check-in and wrap-up form, and one inspection form per type."
-        tip="The booking form is what Ops fill to create a booking. The check-in and wrap-up form is filled by experts before and after the inspection (location, payment, review). Each inspection type (PDI, Used car, EV) has its own inspection form.">
-        {can("forms.edit") && <button className="primary" onClick={() => setOpen(true)}>New form</button>}</PageHeader>
-      <table>
-        <thead><tr><th>Name</th><th>Kind</th><th>Type</th><th>Live version</th><th>Draft</th></tr></thead>
-        <tbody>{(forms.data ?? []).map((x) => (
+      <PageHeader title="Forms" subtitle="Three forms that are always there, and a custom form for each kind of inspection."
+        tip="The booking form is what Ops fill to create a booking. The start form is the check-in an expert does before the inspection (location, time, selfie); the end form is the wrap-up after it (payment). Custom forms (PDI, Used car, EV...) are the inspections themselves; each can choose whether it begins with the start form and ends with the end form.">
+        {can("forms.edit") && <button className="primary" onClick={() => setOpen(true)}>New custom form</button>}</PageHeader>
+      <h2>System forms</h2>
+      <table aria-label="System forms">
+        <thead><tr><th>Name</th><th>What it is</th><th>Live version</th><th>Draft</th></tr></thead>
+        <tbody>{system.map((x) => (
           <tr key={x.id}>
             <td><Link to={`/forms/${x.id}`}>{x.name}</Link> <span className="muted mono">{x.key}</span></td>
-            <td>{KIND[x.kind]}</td><td>{x.inspection_type || "—"}</td>
-            <td>{x.published_version ? <Pill tone="ok">v{x.published_version.number}</Pill> : <Pill tone="warn">Not published</Pill>}</td>
-            <td>{x.draft_version ? <Pill tone="info">v{x.draft_version.number} draft</Pill> : "—"}</td>
+            <td>{TYPE_LABEL[x.type]}</td><Versions x={x} />
           </tr>))}</tbody>
       </table>
+      <h2>Custom forms</h2>
+      <table aria-label="Custom forms">
+        <thead><tr><th>Name</th><th>Live version</th><th>Draft</th></tr></thead>
+        <tbody>{custom.map((x) => (
+          <tr key={x.id}>
+            <td><Link to={`/forms/${x.id}`}>{x.name}</Link> <span className="muted mono">{x.key}</span>{!x.is_active && <> <Pill>Switched off</Pill></>}</td>
+            <Versions x={x} />
+          </tr>))}</tbody>
+      </table>
+      {custom.length === 0 && <p className="muted pad">No custom forms yet. Create one for each kind of inspection.</p>}
       {open && (
-        <Modal title="New form" onClose={() => setOpen(false)}
-          actions={<><button onClick={() => setOpen(false)}>Cancel</button><button className="primary" disabled={!f.name || !f.key || (f.kind === "inspection" && !f.inspection_type)} onClick={() => create.mutate()}>Create</button></>}>
-          <Field label="Kind"><select aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
-            <option value="inspection">Inspection form (one per inspection type)</option>
-            <option value="booking">Booking form (only one)</option>
-            <option value="ops">Check-in &amp; wrap-up form (only one)</option></select></Field>
-          <Field label="Name"><input aria-label="Name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value, key: f.key || slugKey(e.target.value) })} /></Field>
-          <Field label="Key" help="Used by the API and reports. It can never change."><input value={f.key} onChange={(e) => setF({ ...f, key: e.target.value })} /></Field>
-          {f.kind === "inspection" && (
-            <Field label="Inspection type"><select aria-label="Inspection type" value={f.inspection_type} onChange={(e) => setF({ ...f, inspection_type: e.target.value })}>
-              <option value="">Choose…</option>{(types.data ?? []).filter((t) => !t.archived).map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select></Field>
-          )}
+        <Modal title="New custom form" onClose={() => setOpen(false)}
+          actions={<><button onClick={() => setOpen(false)}>Cancel</button><button className="primary" disabled={!f.name || !f.key} onClick={() => create.mutate()}>Create</button></>}>
+          <Field label="Name" help="This is what Ops pick from when they create a booking."><input aria-label="Name" value={f.name} onChange={(e) => setF({ name: e.target.value, key: keyEdited ? f.key : slugKey(e.target.value) })} /></Field>
+          <Field label="Key" help="Used by the API and reports. It can never change."><input aria-label="Key" value={f.key} onChange={(e) => { setKeyEdited(true); setF({ ...f, key: e.target.value }); }} /></Field>
         </Modal>
       )}
     </>

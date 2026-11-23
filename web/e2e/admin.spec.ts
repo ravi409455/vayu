@@ -116,7 +116,7 @@ test.describe("admin screens", () => {
     const pdi = (forms.results ?? forms).find((f: { key: string }) => f.key === "pdi");
     // drop the open draft the rating test left, so the import has room
     await page.goto("/promote");
-    const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "Download bundle" }).first().click()]);
+    const [download] = await Promise.all([page.waitForEvent("download"), page.locator("tr", { hasText: "PDI" }).getByRole("link", { name: "Download bundle" }).click()]);
     const path = await download.path();
     const bundle = JSON.parse(await (await import("node:fs/promises")).readFile(path!, "utf8"));
     expect(bundle.form.key).toBe("pdi");

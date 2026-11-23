@@ -3,9 +3,10 @@
 import type { FormPage, FormVersion } from "../api/types";
 import { evaluateForm, isEmpty, type FieldSpec, type FormSpec, type Result } from "../rules/rules";
 
-export type Kind = "booking" | "ops" | "inspection";
+/** The name a form's answers go by in rules: the custom form is "inspection". */
+export type Kind = "booking" | "start" | "end" | "inspection";
 export type Answers = Record<string, unknown>;
-export type Ctx = { booking?: Answers; ops?: Answers; inspection?: Answers };
+export type Ctx = { booking?: Answers; start?: Answers; end?: Answers; inspection?: Answers };
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -30,7 +31,7 @@ export function specFromTree(kind: Kind, tree: Pick<FormVersion, "pages" | "chec
 
 /** Evaluate one form given its own answers and the other forms' answers. */
 export function evaluateTree(kind: Kind, tree: Pick<FormVersion, "pages" | "checks">, values: Answers, ctx: Ctx = {}): Result {
-  return evaluateForm(specFromTree(kind, tree), { booking: ctx.booking, ops: ctx.ops, inspection: ctx.inspection, [kind]: values }, today());
+  return evaluateForm(specFromTree(kind, tree), { booking: ctx.booking, start: ctx.start, end: ctx.end, inspection: ctx.inspection, [kind]: values }, today());
 }
 
 export type Gap = { key: string; label: string; page: number; pageTitle: string };
@@ -53,13 +54,6 @@ export function missingFields(kind: Kind, tree: Pick<FormVersion, "pages" | "che
 export function visiblePages(kind: Kind, tree: Pick<FormVersion, "pages" | "checks">, values: Answers, ctx: Ctx = {}): FormPage[] {
   const r = evaluateTree(kind, tree, values, ctx);
   return tree.pages.filter((p) => p.sections.some((s) => s.fields.some((f) => r.visible[f.key])));
-}
-
-/** The check-in/wrap-up form's pages split by where the Admin put them: "before" the inspection
- *  (check-in) and "after" it (wrap-up). A page with no slot counts as wrap-up. */
-export function splitOpsPages(pages: FormPage[]): { checkIn: FormPage[]; wrapUp: FormPage[] } {
-  const checkIn = pages.filter((p) => p.slot === "before");
-  return { checkIn, wrapUp: pages.filter((p) => p.slot !== "before") };
 }
 
 /** Only the answers of fields that exist, are visible, and are not system-computed. */

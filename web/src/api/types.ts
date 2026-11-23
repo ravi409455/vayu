@@ -22,23 +22,27 @@ export type FormSection = {
   library: { item: number; revision: number | null; update_available: boolean } | null;
 };
 export type FormPage = {
-  id: number; title: string; order: number; visible: boolean; gate: boolean; slot?: string; show_if: unknown; access: Access;
+  id: number; title: string; order: number; visible: boolean; gate: boolean; show_if: unknown; access: Access;
   sections: FormSection[];
 };
 export type Check = { id: number; rule: unknown; message: string; fields: string[]; order: number };
 export type FormVersion = {
   id: number; form: number; number: number; status: "draft" | "published"; published_at: string | null;
   row_version: number; pages: FormPage[]; checks: Check[]; rating_config?: RatingConfig;
+  use_start?: boolean; use_end?: boolean;
 };
 export type RatingConfig = {
   categories?: { key: string; label: string; sections: string[]; cap?: number | null }[];
   deductions?: { minor: number; major: number; critical: number };
   thresholds?: Record<string, number>;
 };
+/** booking, start (check-in) and end (wrap-up) always exist once; custom forms are what Admins build. */
+export type FormType = "booking" | "start" | "end" | "custom";
 export type FormSummary = {
-  id: number; key: string; kind: "booking" | "ops" | "inspection"; name: string; is_active: boolean;
-  inspection_type: string; submission_roles?: string[]; draft_version: { id: number; number: number } | null;
-  published_version: { id: number; number: number } | null;
+  id: number; key: string; type: FormType; name: string; is_active: boolean;
+  inspection_type: string; submission_roles?: string[];
+  draft_version: { id: number; number: number; use_start?: boolean; use_end?: boolean } | null;
+  published_version: { id: number; number: number; use_start?: boolean; use_end?: boolean } | null;
 };
 export type MasterList = { id: number; key: string; name: string; items?: MasterListItem[] };
 export type MasterListItem = { id: number; list: number; key: string; label: string; order: number; archived: boolean };
@@ -49,8 +53,8 @@ export type Booking = {
   last_edited_at: string | null; created_at: string; conflict?: string; alerts?: { code: string; detail: string; at: string }[];
 };
 export type Inspection = {
-  id: string; booking: string; expert: number; status: string; answers: { inspection?: Record<string, unknown>; ops?: Record<string, unknown> };
-  scores?: Scores; overrides?: Record<string, unknown>; row_version: number; form_version: number;
+  id: string; booking: string; expert: number; status: string; answers: { inspection?: Record<string, unknown>; start?: Record<string, unknown>; end?: Record<string, unknown> };
+  scores?: Scores; overrides?: Record<string, unknown>; row_version: number; form_version: number; start_version?: number | null; end_version?: number | null;
   submitted_at: string | null; last_edited_by?: string | null; last_edited_at?: string | null;
 };
 export type Scores = {

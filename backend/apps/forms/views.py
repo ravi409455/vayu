@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts import audit
-from apps.accounts.permissions import perm
+from apps.accounts.permissions import perm, perm_any
 from apps.core.errors import CodedError
 
 from . import assets, library, promote, services
@@ -455,6 +455,19 @@ class FormAssetUpload(generics.GenericAPIView):
         asset = assets.create_asset(request.user, file.read(assets.MAX_BYTES + 1))
         return Response({"id": str(asset.id), "url": f"/api/v1/form-assets/{asset.id}"},
                         status=status.HTTP_201_CREATED)
+
+
+class InspectionTypes(APIView):
+    """The custom forms by name: what Ops pick when they book, and what labels show everywhere.
+    `available` is true while a form is on and has a published version."""
+    permission_classes = [perm_any("forms.view", "bookings.view", "submissions.fill")]
+
+    def get(self, request):
+        rows = Form.objects.filter(type="custom").exclude(inspection_type="").order_by("name")
+        live = set(FormVersion.objects.filter(status="published").values_list("form_id",
+                                                                              flat=True))
+        return Response([{"key": f.inspection_type, "label": f.name,
+                          "available": f.is_active and f.id in live} for f in rows])
 
 
 class FormAssetShow(APIView):

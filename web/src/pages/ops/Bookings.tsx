@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type Page } from "../../api/client";
 import { asList, useList, useRefresh } from "../../api/hooks";
-import { STAGE_LABEL, STAGE_TONE, useLabels } from "../../api/labels";
+import { STAGE_LABEL, STAGE_TONE, useInspectionTypes, useLabels, useTypeLabels } from "../../api/labels";
 import type { Booking, MasterListItem, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { Confirm, PageHeader, Pill, useToast } from "../../ui/kit";
@@ -29,9 +29,9 @@ export function Bookings() {
   const q = useQuery({ queryKey: ["bookings-page", f, page], queryFn: () => api<Page<Booking>>("bookings", { query: { ...f, page } }) });
   const experts = useList<User>("experts", "users", { role: "expert" });
   const cities = useQuery({ queryKey: ["list-items", "city"], queryFn: async () => asList<MasterListItem>(await api("master-lists/city/items")) });
-  const types = useQuery({ queryKey: ["list-items", "inspection_type"], queryFn: async () => asList<MasterListItem>(await api("master-lists/inspection_type/items")) });
+  const types = useInspectionTypes();
   const car = useLabels("car_make_model");
-  const type = useLabels("inspection_type");
+  const type = useTypeLabels();
   const nameOf = new Map((experts.data ?? []).map((u) => [u.id, u.name || u.username]));
   const remove = useMutation({
     mutationFn: (b: Booking) => api(`bookings/${b.id}`, { method: "DELETE" }),
@@ -48,7 +48,7 @@ export function Bookings() {
         <input aria-label="Search" placeholder="Search booking ID, customer, phone, chassis, car" value={f.search} onChange={(e) => set({ search: e.target.value })} />
         <select aria-label="Stage" value={f.stage} onChange={(e) => set({ stage: e.target.value })}><option value="">All stages</option>{Object.entries(STAGE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
         <select aria-label="City" value={f.city} onChange={(e) => set({ city: e.target.value })}><option value="">All cities</option>{(cities.data ?? []).map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select>
-        <select aria-label="Type" value={f.type} onChange={(e) => set({ type: e.target.value })}><option value="">All types</option>{(types.data ?? []).map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select>
+        <select aria-label="Type" value={f.type} onChange={(e) => set({ type: e.target.value })}><option value="">All types</option>{types.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select>
       </div></div>
       <table>
         <thead><tr><th>Booking</th><th>Customer</th><th>Car</th><th>Type</th><th>When</th><th>Expert</th><th>Status</th><th /></tr></thead>

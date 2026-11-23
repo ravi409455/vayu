@@ -48,6 +48,11 @@ export function FormBuilder() {
     try { await fn(); if (done) say(done); await reload(); } catch (e) { setLocal(null); fail(e); await reload(); }
   };
   const choices = useFieldChoices(f, v);
+  const setSwitch = useMutation({
+    mutationFn: (body: { use_start?: boolean; use_end?: boolean }) => api(`form-versions/${vid}/settings`, { method: "PATCH", body }),
+    onSuccess: () => { void reload(); },
+    onError: fail,
+  });
   const categories = (v?.rating_config?.categories ?? []).map((c) => c.key);
 
   const found = useMemo(() => {
@@ -105,6 +110,7 @@ export function FormBuilder() {
     }
   }
   const publishedExists = !!f.published_version;
+  const ns = nsOf(f.type);
   const sectionOptions = pages.flatMap((p) => p.sections.filter((s) => !s.locked).map((s) => ({ id: s.id, label: `${p.title} › ${s.title}` })));
 
   return (
@@ -115,8 +121,8 @@ export function FormBuilder() {
         {f.published_version && <Pill tone="ok">Live: v{f.published_version.number}</Pill>}
         {draft && <Pill tone="info">Draft v{f.draft_version!.number}</Pill>}
         {v && <button onClick={() => setPreview(true)}><Eye size={15} aria-hidden /> Preview</button>}
-        {f.kind === "inspection" && <button onClick={() => setVisibility(f.submission_roles ?? ["expert", "ops"])}><Users size={15} aria-hidden /> Who sees submissions</button>}
-        {f.kind === "inspection" && f.published_version && can("forms.promote") && (
+        {f.type === "custom" && <button onClick={() => setVisibility(f.submission_roles ?? ["expert", "ops"])}><Users size={15} aria-hidden /> Who sees submissions</button>}
+        {f.published_version && can("forms.promote") && (
           <a className="btn" href={`/api/v1/promote/export?version=${f.published_version.id}`} download><Download size={15} aria-hidden /> Export</a>)}
         {draft && can("forms.edit") && <button className="danger" onClick={() => setDiscard(true)}><Trash2 size={15} aria-hidden /> Discard draft</button>}
         {!draft && can("forms.edit") && <button className="primary" onClick={startDraft}>Start a new draft</button>}
@@ -124,6 +130,12 @@ export function FormBuilder() {
       </PageHeader>
       {!v ? <p className="muted">No version yet.</p> : (
         <>
+          {f.type === "custom" && (
+            <div className="card form-switches" aria-label="Form settings">
+              <label className="check"><input type="checkbox" checked={v.use_start !== false} disabled={!edit || setSwitch.isPending} onChange={(e) => setSwitch.mutate({ use_start: e.target.checked })} /> Begins with the start form (check-in)</label>
+              <label className="check"><input type="checkbox" checked={v.use_end !== false} disabled={!edit || setSwitch.isPending} onChange={(e) => setSwitch.mutate({ use_end: e.target.checked })} /> Ends with the end form (wrap-up)
+                <InfoTip>When on, the expert fills in the start form first and the end form last, and rules here may use start.* and end.* answers. When off, those steps are skipped for this form. Changes apply to this draft and are frozen when you publish.</InfoTip></label>
+            </div>)}
           <Tabs tabs={[{ id: "structure", label: "Questions" }, { id: "checks", label: "Key Checks" }, { id: "ratings", label: "Ratings" }]} value={tab} onChange={setTab} />
           {tab === "structure" && (
             <div className="builder">
@@ -132,7 +144,7 @@ export function FormBuilder() {
               <aside className="card inspector" aria-label="Settings">
                 {!found && <div className="empty-state"><p><strong>Nothing selected</strong></p><p>Click a page, a section or a field to change its settings. Drag the grips to reorder.</p></div>}
                 {found?.field && (
-                  <FieldEditor field={found.field} choices={choices} readOnly={!edit} kind={f.kind}
+                  <FieldEditor field={found.field} choices={choices} readOnly={!edit} kind={f.type}
                     parents={{ section: found.section!.access, page: found.page.access }}
                     lists={(lists.data ?? []).map((l) => ({ key: l.key, name: l.name }))} categories={categories}
                     onSave={(d: FieldDraft) => run(() => api(`fields/${found.field!.id}`, { method: "PATCH", body: d }), "Saved.")}
@@ -146,13 +158,13 @@ export function FormBuilder() {
                     </>} />
                 )}
                 {found?.section && !found.field && (
-                  <ContainerEditor kind="section" item={found.section} pages={pages} choices={choices} formKind={f.kind} parentAccess={found.page.access} readOnly={!edit}
+                  <ContainerEditor kind="section" item={found.section} pages={pages} choices={choices} formKind={f.type} parentAccess={found.page.access} readOnly={!edit}
                     onSave={(b) => run(() => api(`sections/${found.section!.id}`, { method: "PATCH", body: b }), "Saved.")}
                     onMove={(pid) => move({ kind: "section", id: found.section!.id }, { kind: "page", id: pid })} onChanged={reload}
                     onDelete={() => setConfirmDel(() => () => run(async () => { await api(`sections/${found.section!.id}`, { method: "DELETE" }); setSel(null); }))} />
                 )}
                 {found?.page && !found.section && (
-                  <ContainerEditor kind="page" item={found.page} pages={pages} choices={choices} formKind={f.kind} readOnly={!edit}
+                  <ContainerEditor kind="page" item={found.page} pages={pages} choices={choices} formKind={f.type} readOnly={!edit}
                     onSave={(b) => run(() => api(`pages/${found.page.id}`, { method: "PATCH", body: b }), "Saved.")} onMove={() => {}} onChanged={reload}
                     onDelete={() => setConfirmDel(() => () => run(async () => { await api(`pages/${found.page.id}`, { method: "DELETE" }); setSel(null); }))} />
                 )}
@@ -187,7 +199,7 @@ export function FormBuilder() {
           ))}
         </Modal>
       )}
-      {preview && v && <PreviewDialog tree={{ pages, checks: v.checks }} kind={f.kind} onClose={() => setPreview(false)} />}
+      {preview && v && <PreviewDialog tree={{ pages, checks: v.checks }} kind={ns} onClose={() => setPreview(false)} />}
       {discard && (
         <Confirm title="Discard this draft?" danger confirmLabel="Discard draft" onCancel={() => setDiscard(false)} onConfirm={() => discardDraft.mutate()}>
           <p>Everything changed since the last published version is thrown away. {publishedExists ? "The live version is not affected." : "This form was never published, so there is nothing to go back to: publish it or keep editing."}</p>
@@ -218,22 +230,26 @@ export function PublishDialog({ state, onClose, onPublish }: { state: { issues: 
 }
 
 
-/** Field names a condition can point at: this form's fields plus the other forms' (booking, ops). */
+/** Field names a condition can point at: this form's fields plus the other forms' (booking, start,
+ *  end). A custom form only offers start / end while it begins / ends with them. */
 export function useFieldChoices(f: FormSummary | undefined, v: FormVersion | undefined): FieldChoice[] {
   const forms = useList<FormSummary>("forms", "forms");
-  const others = (forms.data ?? []).filter((x) => x.kind !== f?.kind && x.kind !== "inspection" && x.published_version);
+  const wanted = (x: FormSummary) => x.type !== "custom" && x.type !== f?.type && !!x.published_version
+    && !(f?.type === "custom" && ((x.type === "start" && v?.use_start === false) || (x.type === "end" && v?.use_end === false)));
+  const others = (forms.data ?? []).filter(wanted);
   const tree = useQuery({
     queryKey: ["choice-trees", others.map((o) => o.published_version!.id).join(",")],
     enabled: others.length > 0,
-    queryFn: async () => Promise.all(others.map(async (o) => ({ kind: o.kind, v: await api<FormVersion>(`form-versions/${o.published_version!.id}`) }))),
+    queryFn: async () => Promise.all(others.map(async (o) => ({ ns: o.type as string, v: await api<FormVersion>(`form-versions/${o.published_version!.id}`) }))),
   });
   return useMemo(() => {
     const out: FieldChoice[] = [];
-    const add = (kind: string, ver: FormVersion | undefined) => ver?.pages.forEach((p) => p.sections.forEach((s) => s.fields.forEach((fl: FormField) => out.push({ value: `${kind}.${fl.key}`, label: `${kind}: ${fl.label || fl.key}` }))));
-    add(f?.kind ?? "inspection", v);
-    (tree.data ?? []).forEach((t) => add(t.kind, t.v));
+    const add = (ns: string, ver: FormVersion | undefined) => ver?.pages.forEach((p) => p.sections.forEach((s) => s.fields.forEach((fl: FormField) => out.push({ value: `${ns}.${fl.key}`, label: `${ns}: ${fl.label || fl.key}` }))));
+    add(f ? nsOf(f.type) : "inspection", v);
+    (tree.data ?? []).filter((t) => others.some((o) => o.type === t.ns)).forEach((t) => add(t.ns, t.v));
     return out;
-  }, [f?.kind, v, tree.data]);
+  }, [f?.type, v, tree.data, others.length]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-
+/** The name a form's answers go by in rules: the custom form is "inspection". */
+export const nsOf = (type: string) => (type === "custom" ? "inspection" : type) as "booking" | "start" | "end" | "inspection";

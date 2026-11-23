@@ -3,6 +3,20 @@ import { api } from "./client";
 import { asList } from "./hooks";
 import type { MasterListItem } from "./types";
 
+export type InspectionType = { key: string; label: string; available: boolean };
+
+/** The custom forms by name: what Ops pick when they book. `available` = switched on and published. */
+export function useInspectionTypes(): InspectionType[] {
+  const q = useQuery({ queryKey: ["inspection-types"], staleTime: 60_000, queryFn: () => api<InspectionType[]>("inspection-types") });
+  return q.data ?? [];
+}
+
+/** key -> the custom form's name (what used to be the inspection type's label). */
+export function useTypeLabels(): (key: unknown) => string {
+  const map = new Map(useInspectionTypes().map((t) => [t.key, t.label]));
+  return (key) => (key === undefined || key === null || key === "" ? "" : map.get(String(key)) ?? String(key));
+}
+
 /** key -> label for a master list (cities, car models, inspection types...). */
 export function useLabels(list: string): (key: unknown) => string {
   const q = useQuery({ queryKey: ["list-items", list], staleTime: 300_000, queryFn: async () => asList<MasterListItem>(await api(`master-lists/${list}/items`)) });

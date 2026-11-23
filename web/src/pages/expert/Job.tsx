@@ -2,18 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiError, explain } from "../../api/client";
-import { STAGE_LABEL, STAGE_TONE, useLabels } from "../../api/labels";
-import type { Booking, FormVersion } from "../../api/types";
+import { STAGE_LABEL, STAGE_TONE, useLabels, useTypeLabels } from "../../api/labels";
+import type { Booking } from "../../api/types";
 import { useRefresh } from "../../api/hooks";
-import { missingFields, pageGaps, splitOpsPages, submittable, visiblePages, type Answers } from "../../lib/formSpec";
+import { missingFields, pageGaps, submittable, type Answers } from "../../lib/formSpec";
+import { wizardSteps, type Part, type Tree } from "../../lib/wizard";
 import { loadJSON, removeKey, saveJSON } from "../../lib/store";
 import { resumeUploads, summary, useUploads, retryFailed } from "../../lib/uploadManager";
 import { FormRenderer } from "../../ui/FormRenderer";
 import { Pill } from "../../ui/kit";
 
-type Tree = Pick<FormVersion, "pages" | "checks"> & { id: number };
-type Session = { startUuid: string; submitUuid: string; inspectionId: string; form: Tree; opsForm: Tree | null; versionId: number };
-type Draft = { inspection: Answers; ops: Answers; step: number };
+type Session = { startUuid: string; submitUuid: string; inspectionId: string; form: Tree; startForm: Tree | null; endForm: Tree | null; versionId: number };
+type Draft = { inspection: Answers; start: Answers; end: Answers; step: number };
+const EMPTY_DRAFT: Draft = { inspection: {}, start: {}, end: {}, step: 0 };
 const sKey = (id: string) => `vayu:job:${id}`;
 const dKey = (id: string) => `vayu:draft:${id}`;
 
@@ -26,14 +27,14 @@ export function Job() {
   const [error, setError] = useState("");
   const car = useLabels("car_make_model");
   const city = useLabels("city");
-  const type = useLabels("inspection_type");
+  const type = useTypeLabels();
 
   const start = useMutation({
     mutationFn: async () => {
       const startUuid = session?.startUuid ?? crypto.randomUUID();
-      const r = await api<{ inspection: { id: string; form_version: number }; form: Tree; ops_form: Tree | null }>(`bookings/${id}/start`, {
+      const r = await api<{ inspection: { id: string; form_version: number }; form: Tree; start_form: Tree | null; end_form: Tree | null }>(`bookings/${id}/start`, {
         body: { client_uuid: startUuid, client_started_at: new Date().toISOString(), inspection_type: b?.inspection_type } });
-      const s: Session = { startUuid, submitUuid: session?.submitUuid ?? crypto.randomUUID(), inspectionId: r.inspection.id, form: r.form, opsForm: r.ops_form, versionId: r.inspection.form_version };
+      const s: Session = { startUuid, submitUuid: session?.submitUuid ?? crypto.randomUUID(), inspectionId: r.inspection.id, form: r.form, startForm: r.start_form, endForm: r.end_form, versionId: r.inspection.form_version };
       saveJSON(sKey(id), s);
       return s;
     },
@@ -84,7 +85,7 @@ function Finished({ booking }: { booking: Booking }) {
 
 function Wizard({ booking, session, onSubmitted }: { booking: Booking; session: Session; onSubmitted: () => void }) {
   const id = booking.id;
-  const [draft, setDraft] = useState<Draft>(() => loadJSON<Draft>(dKey(id), { inspection: {}, ops: {}, step: 0 }));
+  const [draft, setDraft] = useState<Draft>(() => ({ ...EMPTY_DRAFT, ...loadJSON<Partial<Draft>>(dKey(id), {}) }));
   const [errors, setErrors] = useState<Record<string, Record<string, string>>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -93,36 +94,28 @@ function Wizard({ booking, session, onSubmitted }: { booking: Booking; session: 
   useEffect(() => { saveJSON(dKey(id), draft); }, [id, draft]);
 
   const insp = session.form;
-  const ops = session.opsForm;
-  const ctx = { booking: booking.answers, inspection: draft.inspection, ops: draft.ops };
-  const steps = useMemo(() => {
-    const out: { id: string; title: string; kind: "ops" | "inspection" | "review"; page?: Tree["pages"][number] }[] = [];
-    const split = ops ? splitOpsPages(visiblePages("ops", ops, draft.ops, ctx)) : { checkIn: [], wrapUp: [] };
-    split.checkIn.forEach((p) => out.push({ id: `o${p.id}`, title: p.title, kind: "ops", page: p }));
-    visiblePages("inspection", insp, draft.inspection, ctx).forEach((p) => out.push({ id: `i${p.id}`, title: p.title, kind: "inspection", page: p }));
-    split.wrapUp.forEach((p) => out.push({ id: `o${p.id}`, title: p.title, kind: "ops", page: p }));
-    out.push({ id: "review", title: "Review & submit", kind: "review" });
-    return out;
-  }, [insp, ops, draft.inspection, draft.ops, booking.answers]); // eslint-disable-line react-hooks/exhaustive-deps
+  const trees = useMemo(() => ({ start: session.startForm ?? null, inspection: insp, end: session.endForm ?? null }), [session, insp]);
+  const ctx = { booking: booking.answers, inspection: draft.inspection, start: draft.start, end: draft.end };
+  const steps = useMemo(
+    () => wizardSteps(trees, { inspection: draft.inspection, start: draft.start, end: draft.end }, ctx),
+    [trees, draft.inspection, draft.start, draft.end, booking.answers]); // eslint-disable-line react-hooks/exhaustive-deps
   const step = Math.min(draft.step, steps.length - 1);
   const cur = steps[step]!;
-  const set = (kind: "ops" | "inspection") => (key: string, v: unknown) => setDraft((d) => ({ ...d, [kind]: { ...d[kind], [key]: v } }));
+  const set = (kind: Part) => (key: string, v: unknown) => setDraft((d) => ({ ...d, [kind]: { ...d[kind], [key]: v } }));
   const [blocked, setBlocked] = useState<string[]>([]);
   const go = (n: number) => { setMsg(""); setBlocked([]); setDraft((d) => ({ ...d, step: Math.max(0, Math.min(steps.length - 1, n)) })); window.scrollTo?.(0, 0); };
   /** Next: a page the Admin marked "must be finished" holds the person until its required fields are filled. */
   function next() {
     if (cur.kind !== "review" && cur.page?.gate) {
-      const gaps = pageGaps(cur.kind, cur.kind === "ops" ? ops! : insp, cur.page, draft[cur.kind], ctx);
+      const gaps = pageGaps(cur.kind, trees[cur.kind]!, cur.page, draft[cur.kind], ctx);
       if (gaps.length > 0) { setBlocked(gaps.map((g) => g.label)); return; }
     }
     go(step + 1);
   }
 
-  const gaps = [
-    ...missingFields("inspection", insp, draft.inspection, ctx).map((g) => ({ ...g, kind: "inspection" as const })),
-    ...(ops ? missingFields("ops", ops, draft.ops, ctx).map((g) => ({ ...g, kind: "ops" as const })) : []),
-  ];
-  const stepOf = (g: (typeof gaps)[number]) => steps.findIndex((s) => s.kind === g.kind && s.page && (g.kind === "inspection" ? insp : ops!).pages[g.page]?.id === s.page.id);
+  const gaps = (["start", "inspection", "end"] as const).flatMap((part) =>
+    trees[part] ? missingFields(part, trees[part]!, draft[part], ctx).map((g) => ({ ...g, kind: part })) : []);
+  const stepOf = (g: (typeof gaps)[number]) => steps.findIndex((s) => s.kind === g.kind && s.page && trees[g.kind]!.pages[g.page]?.id === s.page.id);
 
   async function submit() {
     setBusy(true);
@@ -130,12 +123,15 @@ function Wizard({ booking, session, onSubmitted }: { booking: Booking; session: 
     try {
       await api(`bookings/${id}/submit`, { body: {
         client_submission_uuid: session.submitUuid, form_version: session.versionId,
-        answers: { inspection: submittable("inspection", insp, draft.inspection, ctx), ops: ops ? submittable("ops", ops, draft.ops, ctx) : {} } } });
+        answers: {
+          inspection: submittable("inspection", insp, draft.inspection, ctx),
+          start: trees.start ? submittable("start", trees.start, draft.start, ctx) : {},
+          end: trees.end ? submittable("end", trees.end, draft.end, ctx) : {} } } });
       onSubmitted();
     } catch (e) {
       if (e instanceof ApiError && e.code === "INVALID_ANSWERS") {
         const errs = (e.body.errors ?? {}) as Record<string, string>;
-        setErrors({ inspection: errs, ops: errs });
+        setErrors({ inspection: errs, start: errs, end: errs });
         setMsg("Some answers need another look: " + Object.keys(errs).join(", "));
       } else setMsg(explain(e));
     } finally { setBusy(false); }
@@ -149,7 +145,7 @@ function Wizard({ booking, session, onSubmitted }: { booking: Booking; session: 
       <div className="progress" aria-label={`Step ${step + 1} of ${steps.length}`}><div style={{ width: `${progress}%` }} /></div>
       <p className="muted small" style={{ margin: "6px 0 14px" }}>Step {step + 1} of {steps.length}: {cur.title}{total > 0 && ` · files ${done}/${total} sent`}</p>
       {cur.kind !== "review" && cur.page && (
-        <FormRenderer kind={cur.kind} tree={cur.kind === "ops" ? ops! : insp} values={draft[cur.kind]} ctx={ctx} pages={[cur.page]} role="expert"
+        <FormRenderer kind={cur.kind} tree={trees[cur.kind]!} values={draft[cur.kind]} ctx={ctx} pages={[cur.page]} role="expert"
           bookingId={id} errors={errors[cur.kind]} onChange={set(cur.kind)} />
       )}
       {cur.kind === "review" && (

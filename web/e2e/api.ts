@@ -27,7 +27,7 @@ export async function signIn(page: Page, username: string): Promise<void> {
   await page.waitForURL((u) => !u.pathname.startsWith("/login"));
 }
 
-export type Pdi = { formId: number; bookingFormId: number; opsFormId: number; templateId: number };
+export type Pdi = { formId: number; bookingFormId: number; startFormId: number; endFormId: number; templateId: number };
 
 async function publish(api: APIRequestContext, formId: number): Promise<void> {
   const f = await json(await api.get(`forms/${formId}`));
@@ -39,15 +39,18 @@ async function addFields(api: APIRequestContext, sectionId: number, fields: Reco
   for (const f of fields) await json(await api.post(`sections/${sectionId}/fields`, { data: f }));
 }
 
-/** Booking form, check-in & wrap-up form, and a PDI inspection form with a PDF template. */
+/** The booking, start and end forms (they exist from the start) and a PDI custom form with a PDF template. */
 export async function seedForms(): Promise<Pdi> {
   const admin = await apiAs("admin");
   const mk = async (body: Record<string, unknown>) => json(await admin.post("forms", { data: body }));
-  const booking = await mk({ key: "booking", kind: "booking", name: "Booking" });
+  const system = async (type: string) => (await json(await admin.get(`forms?type=${type}`))).results[0] as { id: number };
+  const booking = await system("booking");
   await publish(admin, booking.id);
-  const ops = await mk({ key: "checkin", kind: "ops", name: "Check-in and wrap-up" });
-  await publish(admin, ops.id);
-  const pdi = await mk({ key: "pdi", kind: "inspection", name: "PDI", inspection_type: "pdi" });
+  const start = await system("start");
+  await publish(admin, start.id);
+  const end = await system("end");
+  await publish(admin, end.id);
+  const pdi = await mk({ key: "pdi", name: "PDI" });
   const v = await json(await admin.get(`form-versions/${pdi.draft_version.id}`));
   const exterior = v.pages[0];
   await json(await admin.patch(`pages/${exterior.id}`, { data: { title: "Exterior" } }));
@@ -74,7 +77,7 @@ export async function seedForms(): Promise<Pdi> {
   ] };
   const saved = await json(await admin.patch(`pdf-template-versions/${tv.id}`, { data: { definition, row_version: tv.row_version } }));
   await json(await admin.post(`pdf-template-versions/${tv.id}/publish`, { data: { row_version: saved.row_version } }));
-  return { formId: pdi.id, bookingFormId: booking.id, opsFormId: ops.id, templateId: t.id };
+  return { formId: pdi.id, bookingFormId: booking.id, startFormId: start.id, endFormId: end.id, templateId: t.id };
 }
 
 // a valid small JPEG
@@ -120,7 +123,7 @@ export async function submittedJob(o: JobOptions): Promise<string> {
   const selfie = await uploadFile(expert, b.id, "selfie", "photo", "image/jpeg", JPEG);
   const inspection: Record<string, unknown> = { chassis_no: "MA3YPKCSKTJ273129", door: o.door ?? "ok", odometer: o.odometer ?? 100 };
   if (o.photo) inspection.door_photo = [await uploadFile(expert, b.id, "door_photo", "photo", "image/jpeg", JPEG)];
-  await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection, ops: { taking_payment: false, selfie: [selfie] } } } }));
+  await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection, start: { selfie: [selfie] }, end: { taking_payment: false } } } }));
   return b.id as string;
 }
 

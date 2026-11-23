@@ -46,12 +46,15 @@ class BookingSerializer(serializers.ModelSerializer):
 class InspectionSerializer(serializers.ModelSerializer):
     last_edited_by = serializers.CharField(source="last_edited_by.username", default=None)
     form_version = serializers.IntegerField(source="form_version_id")
+    start_version = serializers.IntegerField(source="start_version_id", allow_null=True)
+    end_version = serializers.IntegerField(source="end_version_id", allow_null=True)
     booking = serializers.UUIDField(source="booking_id")
 
     class Meta:
         model = Inspection
         fields = ["id", "booking", "expert", "status", "answers", "scores", "overrides",
-                  "row_version", "form_version", "submitted_at", "last_edited_by",
+                  "row_version", "form_version", "start_version", "end_version", "submitted_at",
+                  "last_edited_by",
                   "last_edited_at", "created_at"]
 
     def to_representation(self, instance):

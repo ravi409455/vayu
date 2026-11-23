@@ -178,7 +178,7 @@ import { OPS_PAGES, visibleNav } from "./Layout";
 
 describe("picture, automatic and manual fields", () => {
   const render1 = (fields: FormField[], props: Record<string, unknown> = {}) =>
-    render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="ops" tree={{ pages: [pageOf(fields)], checks: [] }} values={{}} onChange={(props.onChange as () => void) ?? (() => {})} {...props} /></QueryClientProvider>);
+    render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="end" tree={{ pages: [pageOf(fields)], checks: [] }} values={{}} onChange={(props.onChange as () => void) ?? (() => {})} {...props} /></QueryClientProvider>);
 
   it("a picture field shows its image to the expert, read-only, and nowhere else", () => {
     const qr = fld("qr", "image", { label: "Scan to pay", config: { asset: "abc-123" } });
@@ -206,7 +206,7 @@ describe("picture, automatic and manual fields", () => {
     const t = [fld("d", "date", { config: { auto: true } })];
     render1(t, { onChange, preview: true });
     render1(t, { onChange, readOnly: true });
-    render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="ops" tree={{ pages: [pageOf(t)], checks: [] }} values={{ d: "2026-01-02" }} onChange={onChange} /></QueryClientProvider>);
+    render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="end" tree={{ pages: [pageOf(t)], checks: [] }} values={{ d: "2026-01-02" }} onChange={onChange} /></QueryClientProvider>);
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByText("2026-01-02")).toBeInTheDocument();
   });

@@ -3,11 +3,11 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError, explain } from "../../api/client";
 import { asList, useList, useRefresh } from "../../api/hooks";
-import { STAGE_LABEL, STAGE_TONE, useLabels } from "../../api/labels";
+import { STAGE_LABEL, STAGE_TONE, useInspectionTypes, useLabels, useTypeLabels } from "../../api/labels";
 import type { Booking, Inspection, MasterListItem, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { saveDirty } from "../../lib/saveDirty";
-import { useTrees } from "../../lib/useTrees";
+import { usePinnedTrees, useTrees } from "../../lib/useTrees";
 import { addFile } from "../../lib/uploadManager";
 import { FormRenderer } from "../../ui/FormRenderer";
 import { Confirm, Field, Modal, Pill, Tabs, useToast, when } from "../../ui/kit";
@@ -58,8 +58,9 @@ function Detail({ id }: { id: string }) {
   const experts = useList<User>("experts", "users", { role: "expert" });
   const trees = useTrees(booking?.inspection_type);
   const reload = () => Promise.all([refresh("booking"), refresh("inspections"), refresh("board"), refresh("report")]);
-  if (!booking) return <p className="muted pad">Loading…</p>;
   const insp = (insps.data ?? []).filter((i) => i.status === "submitted").sort((a, c) => (c.submitted_at ?? "").localeCompare(a.submitted_at ?? ""))[0] ?? (insps.data ?? [])[0];
+  const pinned = usePinnedTrees(insp);                   // the exact versions this inspection was started on
+  if (!booking) return <p className="muted pad">Loading…</p>;
   const expert = experts.data?.find((u) => u.id === booking.assigned_expert);
   const open = booking.stage === "draft" || booking.stage === "assigned";
   return (
@@ -80,9 +81,9 @@ function Detail({ id }: { id: string }) {
       {booking.alerts?.map((a, i) => <p key={i} className="error" role="alert">⚠ {a.detail} <span className="muted small">{when(a.at)}</span></p>)}
       <Tabs value={tab} onChange={setTab} tabs={[{ id: "booking", label: "Booking" }, { id: "inspection", label: "Inspection" }, { id: "media", label: "Media" }, { id: "ratings", label: "Ratings" }, { id: "report", label: "Report" }, { id: "history", label: "History" }]} />
       {tab === "booking" && trees.booking && <BookingTab booking={booking} tree={trees.booking} onSaved={reload} />}
-      {tab === "inspection" && <InspectionTab booking={booking} insp={insp} trees={trees} onSaved={reload} />}
-      {tab === "media" && <MediaTab booking={booking} insp={insp} trees={trees} onChanged={reload} />}
-      {tab === "ratings" && <RatingsTab insp={insp} trees={trees} onSaved={reload} />}
+      {tab === "inspection" && <InspectionTab booking={booking} insp={insp} trees={pinned} onSaved={reload} />}
+      {tab === "media" && <MediaTab booking={booking} insp={insp} trees={pinned} onChanged={reload} />}
+      {tab === "ratings" && <RatingsTab insp={insp} trees={pinned} onSaved={reload} />}
       {tab === "report" && <ReportTab booking={booking} />}
       {tab === "history" && <HistoryTab booking={booking} insps={insps.data ?? []} experts={experts.data ?? []} onResolved={reload} />}
       {action && <Actions kind={action} booking={booking} experts={experts.data ?? []} onClose={() => setAction(null)} onDone={() => { setAction(null); say("Done."); void reload(); }} fail={fail} />}
@@ -120,25 +121,28 @@ function BookingTab({ booking, tree, onSaved }: { booking: Booking; tree: NonNul
   );
 }
 
-type Trees = ReturnType<typeof useTrees>;
+type Trees = ReturnType<typeof usePinnedTrees>;
+type Part = "inspection" | "start" | "end";
+type Parts = Record<Part, Answers>;
+const NO_ANSWERS: Parts = { inspection: {}, start: {}, end: {} };
 
 function InspectionTab({ booking, insp, trees, onSaved }: { booking: Booking; insp?: Inspection; trees: Trees; onSaved: () => void }) {
   const { can } = useAuth();
   const { say, fail } = useToast();
-  const [vals, setVals] = useState<{ inspection: Answers; ops: Answers }>({ inspection: {}, ops: {} });
-  const [dirty, setDirty] = useState<{ inspection: Answers; ops: Answers }>({ inspection: {}, ops: {} });
+  const [vals, setVals] = useState<Parts>(NO_ANSWERS);
+  const [dirty, setDirty] = useState<Parts>(NO_ANSWERS);
   const [stale, setStale] = useState<Stale | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const rv = insp?.row_version;
-  useEffect(() => { if (insp) setVals({ inspection: { ...(insp.answers.inspection ?? {}), ...dirty.inspection }, ops: { ...(insp.answers.ops ?? {}), ...dirty.ops } }); }, [insp?.id, rv]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (insp) setVals({ inspection: { ...(insp.answers.inspection ?? {}), ...dirty.inspection }, start: { ...(insp.answers.start ?? {}), ...dirty.start }, end: { ...(insp.answers.end ?? {}), ...dirty.end } }); }, [insp?.id, rv]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!insp) return <p className="muted">No inspection has been submitted yet.</p>;
-  const mineKeys = [...Object.keys(dirty.inspection), ...Object.keys(dirty.ops)];
-  const change = (part: "inspection" | "ops") => (k: string, v: unknown) => { setVals({ ...vals, [part]: { ...vals[part], [k]: v } }); setDirty({ ...dirty, [part]: { ...dirty[part], [k]: v } }); };
+  const mineKeys = [...Object.keys(dirty.inspection), ...Object.keys(dirty.start), ...Object.keys(dirty.end)];
+  const change = (part: Part) => (k: string, v: unknown) => { setVals({ ...vals, [part]: { ...vals[part], [k]: v } }); setDirty({ ...dirty, [part]: { ...dirty[part], [k]: v } }); };
   async function save(rowVersion = insp!.row_version) {
     try {
       const r = await saveDirty((v, ch) => api(`inspections/${insp!.id}`, { method: "PATCH", body: { row_version: v, answers: ch } }), rowVersion, dirty);
       if (!r.ok) return setStale(r.stale);
-      setDirty({ inspection: {}, ops: {} }); setStale(null); say("Saved. Ratings and Key Checks were recalculated."); onSaved();
+      setDirty(NO_ANSWERS); setStale(null); say("Saved. Ratings and Key Checks were recalculated."); onSaved();
     } catch (e) {
       if (e instanceof ApiError && e.body.errors) setErrors(e.body.errors as Record<string, string>);
       else if (e instanceof ApiError && e.code === "FIELD_ACCESS") setErrors(Object.fromEntries(((e.body.keys as string[]) ?? []).map((k) => [k, "You cannot change this now."])));
@@ -149,17 +153,18 @@ function InspectionTab({ booking, insp, trees, onSaved }: { booking: Booking; in
   return (
     <div style={{ maxWidth: 760 }}>
       {insp.last_edited_by && <p className="muted small">Last edited by {insp.last_edited_by} {when(insp.last_edited_at)}</p>}
-      {trees.inspection && <FormRenderer kind="inspection" tree={trees.inspection} values={vals.inspection} ctx={{ booking: booking.answers, ops: vals.ops }} errors={errors} readOnly={!canEdit} bookingId={booking.id} onChange={change("inspection")} />}
-      {trees.ops && <><h2>Check-in &amp; wrap-up</h2><FormRenderer kind="ops" tree={trees.ops} values={vals.ops} ctx={{ booking: booking.answers, inspection: vals.inspection }} errors={errors} readOnly={!canEdit} bookingId={booking.id} onChange={change("ops")} /></>}
+      {trees.start && <><h2>Check-in</h2><FormRenderer kind="start" tree={trees.start} values={vals.start} ctx={{ booking: booking.answers, inspection: vals.inspection, end: vals.end }} errors={errors} readOnly={!canEdit} bookingId={booking.id} onChange={change("start")} /></>}
+      {trees.inspection && <FormRenderer kind="inspection" tree={trees.inspection} values={vals.inspection} ctx={{ booking: booking.answers, start: vals.start, end: vals.end }} errors={errors} readOnly={!canEdit} bookingId={booking.id} onChange={change("inspection")} />}
+      {trees.end && <><h2>Wrap-up</h2><FormRenderer kind="end" tree={trees.end} values={vals.end} ctx={{ booking: booking.answers, inspection: vals.inspection, start: vals.start }} errors={errors} readOnly={!canEdit} bookingId={booking.id} onChange={change("end")} /></>}
       {canEdit && <button className="primary" disabled={mineKeys.length === 0} onClick={() => save()}>Save changes</button>}
-      {stale && <StaleDialog info={stale} mine={mineKeys} onRetry={() => save(stale.rowVersion)} onReload={() => { setDirty({ inspection: {}, ops: {} }); setStale(null); onSaved(); }} />}
+      {stale && <StaleDialog info={stale} mine={mineKeys} onRetry={() => save(stale.rowVersion)} onReload={() => { setDirty(NO_ANSWERS); setStale(null); onSaved(); }} />}
     </div>
   );
 }
 
-function mediaFields(trees: Trees): { key: string; label: string; type: string; part: "inspection" | "ops" }[] {
-  const out: { key: string; label: string; type: string; part: "inspection" | "ops" }[] = [];
-  for (const [part, tree] of [["inspection", trees.inspection], ["ops", trees.ops]] as const)
+function mediaFields(trees: Trees): { key: string; label: string; type: string; part: Part }[] {
+  const out: { key: string; label: string; type: string; part: Part }[] = [];
+  for (const [part, tree] of [["start", trees.start], ["inspection", trees.inspection], ["end", trees.end]] as const)
     tree?.pages.forEach((p) => p.sections.forEach((s) => s.fields.forEach((f) => { if (["photo", "video", "file", "signature"].includes(f.type)) out.push({ key: f.key, label: f.label || f.key, type: f.type, part }); })));
   return out;
 }
@@ -173,7 +178,7 @@ function MediaTab({ booking, insp, trees, onChanged }: { booking: Booking; insp?
   const [confirm, setConfirm] = useState<null | { id: string }>(null);
   const fields = useMemo(() => mediaFields(trees), [trees]);
   if (!insp) return <p className="muted">No inspection yet.</p>;
-  const ids = (part: "inspection" | "ops", key: string): string[] => { const v = (insp.answers[part] ?? {})[key]; return Array.isArray(v) ? (v as string[]) : v ? [String(v)] : []; };
+  const ids = (part: Part, key: string): string[] => { const v = (insp.answers[part] ?? {})[key]; return Array.isArray(v) ? (v as string[]) : v ? [String(v)] : []; };
   async function add(f: (typeof fields)[number], files: FileList | null) {
     if (!files || !insp) return;
     try {
@@ -308,8 +313,8 @@ export function Actions({ kind, booking, experts, onClose, onDone, fail }: { kin
   const [reason, setReason] = useState("");
   const [type, setType] = useState(booking.inspection_type);
   const reasons = useQuery({ queryKey: ["list-items", kind === "cancel" ? "cancel_reason" : "reschedule_reason"], enabled: kind === "cancel" || kind === "reschedule", queryFn: async () => asList<MasterListItem>(await api(`master-lists/${kind === "cancel" ? "cancel_reason" : "reschedule_reason"}/items`)) });
-  const types = useQuery({ queryKey: ["list-items", "inspection_type"], enabled: kind === "type", queryFn: async () => asList<MasterListItem>(await api("master-lists/inspection_type/items")) });
-  const typeLabel = useLabels("inspection_type");
+  const types = useInspectionTypes();
+  const typeLabel = useTypeLabels();
   const go = async (path: string, body: unknown) => { try { await api(`bookings/${booking.id}/${path}`, { body }); onDone(); } catch (e) { fail(e); } };
   if (kind === "release") return <Confirm title="Force release this job?" danger confirmLabel="Force release" onCancel={onClose} onConfirm={() => go("force-release", {})}><p>The expert is taken off the job. If they still have a draft on their phone and submit it later, Ops will see a conflict to resolve.</p></Confirm>;
   const title = { assign: "Assign an expert", reschedule: "Reschedule", cancel: "Cancel this booking", type: "Change inspection type" }[kind];
@@ -320,7 +325,7 @@ export function Actions({ kind, booking, experts, onClose, onDone, fail }: { kin
       {kind === "assign" && <Field label="Expert"><select aria-label="Expert" value={expert} onChange={(e) => setExpert(e.target.value)}><option value="">Choose…</option>{experts.filter((u) => u.is_active).map((u) => <option key={u.id} value={u.id}>{u.name || u.username}</option>)}</select></Field>}
       {kind === "reschedule" && <><Field label="New date"><input aria-label="New date" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field><Field label="New time"><input aria-label="New time" type="time" value={time} onChange={(e) => setTime(e.target.value)} /></Field></>}
       {(kind === "reschedule" || kind === "cancel") && <Field label="Reason"><select aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)}><option value="">Choose…</option>{(reasons.data ?? []).filter((r) => !r.archived).map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}</select></Field>}
-      {kind === "type" && <Field label="Inspection type"><select aria-label="Inspection type" value={type} onChange={(e) => setType(e.target.value)}>{(types.data ?? []).filter((t) => !t.archived).map((t) => <option key={t.key} value={t.key}>{typeLabel(t.key)}</option>)}</select></Field>}
+      {kind === "type" && <Field label="Inspection type"><select aria-label="Inspection type" value={type} onChange={(e) => setType(e.target.value)}>{types.filter((t) => t.available).map((t) => <option key={t.key} value={t.key}>{typeLabel(t.key)}</option>)}</select></Field>}
     </Modal>
   );
 }

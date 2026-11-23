@@ -5,9 +5,8 @@ import { apiAs, JPEG, json, signIn, uploadFile } from "./api";
 test("J1: admin builds, publishes and maps a form, then previews its PDF", async ({ page }) => {
   await signIn(page, "admin");
   await page.goto("/forms");
-  await page.getByRole("button", { name: "New form" }).click();
+  await page.getByRole("button", { name: "New custom form" }).click();
   await page.getByLabel("Name", { exact: true }).fill("Used car");
-  await page.getByLabel("Inspection type").selectOption("used_car");
   await page.getByRole("button", { name: "Create" }).click();
   await expect(page.getByText("Draft v1")).toBeVisible();
 
@@ -104,7 +103,7 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
     inspection_date: "2026-11-24", inspection_time: "10:00", inspection_type: "used_car", car_make_model: "tata_nexon" } } }));
   await json(await ops.post(`bookings/${b.id}/assign`, { data: { expert: expertId } }));
   await json(await expert.post(`bookings/${b.id}/start`, { data: { client_uuid: crypto.randomUUID(), inspection_type: "used_car" } }));
-  await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection: { chassis_no: "MA3ABCDEFG123456", odometer: 12345 }, ops: { taking_payment: false, selfie: [await uploadFile(expert, b.id, "selfie", "photo", "image/jpeg", JPEG)] } } } }));
+  await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection: { chassis_no: "MA3ABCDEFG123456", odometer: 12345 }, start: { selfie: [await uploadFile(expert, b.id, "selfie", "photo", "image/jpeg", JPEG)] }, end: { taking_payment: false } } } }));
 
   await page.getByPlaceholder("Booking (internal id) for the preview").fill(b.id);
   const pdf = page.waitForResponse((r) => r.url().includes("/preview") && r.request().method() === "POST");

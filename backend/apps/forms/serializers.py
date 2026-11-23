@@ -73,7 +73,8 @@ def _check_access(attrs: dict) -> None:
 
 
 def _version_ref(v: FormVersion | None):
-    return {"id": v.id, "number": v.number} if v else None
+    return ({"id": v.id, "number": v.number, "use_start": v.use_start, "use_end": v.use_end}
+            if v else None)
 
 
 class FormSerializer(serializers.ModelSerializer):

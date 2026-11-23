@@ -25,7 +25,7 @@ export function Integrations() {
   const [edit, setEdit] = useState<Partial<Integration> | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
   const [log, setLog] = useState<Integration | null>(null);
-  const eligible = (forms.data ?? []).filter((f) => f.kind !== "ops");
+  const eligible = (forms.data ?? []).filter((f) => f.type === "booking" || f.type === "custom");
 
   const save = useMutation({
     mutationFn: (i: Partial<Integration>) => i.id ? api<Integration>(`integrations/${i.id}`, { method: "PATCH", body: i }) : api<Integration>("integrations", { body: i }),

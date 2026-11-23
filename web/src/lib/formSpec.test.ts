@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FormField, FormPage } from "../api/types";
-import { evaluateTree, missingFields, pageGaps, splitOpsPages, submittable, visiblePages } from "./formSpec";
+import { evaluateTree, missingFields, pageGaps, submittable, visiblePages } from "./formSpec";
 
 let n = 0;
 const field = (key: string, over: Partial<FormField> = {}): FormField => ({
@@ -11,22 +11,22 @@ const page = (title: string, fields: FormField[], over: Partial<FormPage> = {}):
   id: ++n, title, order: 0, visible: true, gate: false, show_if: null, access: {}, sections: [{ id: ++n, page: 1, title: "S", order: 0, visible: true, show_if: null, access: {}, fields, locked: false, library: null }], ...over,
 });
 
-// the payment rule: slot 1 amount is needed unless "pay later" was chosen
+// the payment rule: the amount is needed unless "pay later" was chosen
 const wrap = page("Wrap-up", [
   field("payment_status", { type: "single_choice", required: true, config: { options: [{ key: "paid", label: "Paid" }, { key: "pay_later", label: "Pay later" }] } }),
-  field("amount", { type: "currency", required_if: { "==": [{ var: "ops.payment_status" }, "paid"] }, show_if: { "==": [{ var: "ops.payment_status" }, "paid"] } }),
+  field("amount", { type: "currency", required_if: { "==": [{ var: "end.payment_status" }, "paid"] }, show_if: { "==": [{ var: "end.payment_status" }, "paid"] } }),
 ]);
 const tree = { pages: [wrap], checks: [] };
 
 describe("wizard gap review", () => {
   it("lists every missing required field, with its page", () => {
-    const gaps = missingFields("ops", tree, {});
+    const gaps = missingFields("end", tree, {});
     expect(gaps).toEqual([{ key: "payment_status", label: "payment_status", page: 0, pageTitle: "Wrap-up" }]);
   });
   it("payment rule: paid needs an amount, pay later does not", () => {
-    expect(missingFields("ops", tree, { payment_status: "paid" }).map((g) => g.key)).toEqual(["amount"]);
-    expect(missingFields("ops", tree, { payment_status: "paid", amount: 500 })).toEqual([]);
-    expect(missingFields("ops", tree, { payment_status: "pay_later" })).toEqual([]);
+    expect(missingFields("end", tree, { payment_status: "paid" }).map((g) => g.key)).toEqual(["amount"]);
+    expect(missingFields("end", tree, { payment_status: "paid", amount: 500 })).toEqual([]);
+    expect(missingFields("end", tree, { payment_status: "pay_later" })).toEqual([]);
   });
   it("a field hidden by a rule is never a gap, and every gap across pages is listed", () => {
     const p1 = page("Body", [field("door", { required: true }), field("photo", { type: "photo", required_if: { "==": [{ var: "inspection.door" }, "dent"] }, show_if: { "==": [{ var: "inspection.door" }, "dent"] } })]);
@@ -68,20 +68,11 @@ describe("what gets sent", () => {
   });
 });
 
-describe("check-in and wrap-up pages", () => {
-  const mk = (t: string, slot?: string) => ({ ...page(t, [field("x")]), slot });
-  it("splits by the slot the Admin chose, not by the title", () => {
-    const { checkIn, wrapUp } = splitOpsPages([mk("Wrap-up", "after"), mk("Welcome", "before"), mk("Pay", "after")]);
-    expect([checkIn.map((p) => p.title), wrapUp.map((p) => p.title)]).toEqual([["Welcome"], ["Wrap-up", "Pay"]]);
-  });
-  it("a page without a slot is part of the wrap-up", () => {
-    expect(splitOpsPages([mk("Old")])).toEqual({ checkIn: [], wrapUp: [expect.objectContaining({ title: "Old" })] });
-    expect(splitOpsPages([])).toEqual({ checkIn: [], wrapUp: [] });
-  });
+describe("start and end pages", () => {
   it("picture fields never count as missing and are never sent", () => {
     const t = { pages: [page("P", [field("qr", { type: "image", required: true, config: { asset: "x" } }), field("a")])], checks: [] };
-    expect(missingFields("ops", t, {})).toEqual([]);
-    expect(submittable("ops", t, { qr: "something", a: "y" })).toEqual({ a: "y" });
+    expect(missingFields("end", t, {})).toEqual([]);
+    expect(submittable("end", t, { qr: "something", a: "y" })).toEqual({ a: "y" });
   });
 });
 
@@ -90,8 +81,8 @@ describe("page gate", () => {
     const p1 = page("Check-in", [field("gps", { required: true })]);
     const p2 = page("Body", [field("door", { required: true })]);
     const t = { pages: [p1, p2], checks: [] };
-    expect(pageGaps("ops", t, p1, {}).map((g) => g.key)).toEqual(["gps"]);
-    expect(pageGaps("ops", t, p2, {}).map((g) => g.key)).toEqual(["door"]);
-    expect(pageGaps("ops", t, p1, { gps: { lat: 1, lng: 2 } })).toEqual([]);
+    expect(pageGaps("start", t, p1, {}).map((g) => g.key)).toEqual(["gps"]);
+    expect(pageGaps("start", t, p2, {}).map((g) => g.key)).toEqual(["door"]);
+    expect(pageGaps("start", t, p1, { gps: { lat: 1, lng: 2 } })).toEqual([]);
   });
 });

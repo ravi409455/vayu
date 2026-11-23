@@ -27,6 +27,7 @@ urlpatterns = [
     path("promote/export", views.PromoteExport.as_view()),
     path("promote/import", views.PromoteImport.as_view()),
     path("form-versions/<int:pk>/rating-config", views.RatingConfigView.as_view()),
+    path("inspection-types", views.InspectionTypes.as_view()),
     path("form-versions/<int:pk>/settings", views.VersionSettings.as_view()),
     path("sections/<int:pk>/fields/from-library", views.FieldFromLibrary.as_view()),
     path("pages/<int:pk>/sections/from-library", views.SectionFromLibrary.as_view()),

@@ -278,3 +278,21 @@ def test_ops_references_in_stored_rules_are_renamed_by_which_form_owns_the_key()
     assert m.rewrite_strings({"rows": [{"field": "ops.selfie"}, "x"]}, owner) == {
         "rows": [{"field": "start.selfie"}, "x"]}
     assert m.free_key(Form, "start") == "start2"
+
+
+# ---------------------------------------------------------------- inspection types by name
+
+def test_inspection_types_list_the_custom_forms_by_name_for_everyone_who_works_bookings(
+        admin, make_form, api_as):
+    from apps.accounts.models import Role
+
+    publish(admin, make_form(key="pdi", name="PDI (new car)")["draft_version"]["id"])
+    make_form(key="ev", name="EV")                              # not published yet
+    for role in (Role.OPS, Role.EXPERT, Role.ADMIN):
+        client, _ = api_as(role)
+        got = client.get("/api/v1/inspection-types").json()
+        assert got == [{"key": "ev", "label": "EV", "available": False},
+                       {"key": "pdi", "label": "PDI (new car)", "available": True}]
+    Form.objects.filter(key="pdi").update(is_active=False)
+    assert {r["key"]: r["available"] for r in admin.get("/api/v1/inspection-types").json()}[
+        "pdi"] is False

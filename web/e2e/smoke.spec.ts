@@ -4,7 +4,7 @@ import { signIn } from "./api";
 test("an admin signs in and sees the forms", async ({ page }) => {
   await signIn(page, "admin");
   await page.goto("/forms");
-  await expect(page.getByRole("heading", { name: "Forms" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Forms/ })).toBeVisible();
   await expect(page.getByRole("link", { name: "PDI" })).toBeVisible();
 });
 

@@ -12,6 +12,8 @@ export const FIELD_TYPES: { id: string; label: string; group: string }[] = [
   { id: "image", label: "Picture (shown to the expert)", group: "Display" },
   { id: "derived", label: "Key Check (automatic)", group: "Automatic" }, { id: "rating", label: "Rating (automatic)", group: "Automatic" },
 ];
+/** Types the system makes (not offered when adding a field) with the name to show for them. */
+export const SYSTEM_TYPE_LABELS: Record<string, string> = { form_choice: "Pick of a custom form" };
 export const CHOICE_TYPES = ["single_choice", "multi_choice"];
 export const MEDIA_TYPES = ["photo", "video", "file", "signature"];
 
