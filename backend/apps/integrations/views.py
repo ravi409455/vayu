@@ -1,7 +1,6 @@
 """Admin screens' API: webhook integrations, their delivery log, API keys, API docs."""
 import json
 import uuid
-from typing import Any
 
 from django.shortcuts import get_object_or_404
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
@@ -40,35 +39,27 @@ def _text(value, what: str, allowed: set[str], *, one_line: bool = False) -> str
     return value
 
 
-def _rows(rows, allowed: set[str], depth: int, count: list) -> list:
-    if not isinstance(rows, list) or depth > values.MAX_DEPTH:
-        raise err("INVALID_BODY", "The body is nested too deeply or is not a list of rows.")
-    out: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for r in rows:
-        count[0] += 1
-        if count[0] > values.MAX_ROWS:
-            raise err("INVALID_BODY", f"The body can have up to {values.MAX_ROWS} rows.")
-        key = r.get("key") if isinstance(r, dict) else None
-        if not isinstance(key, str) or not key.strip() or len(key) > 100 or key in seen:
-            raise err("INVALID_BODY", "Every row needs its own key of up to 100 characters.")
-        seen.add(key)
-        kinds = [k for k in ("rows", "value", "fixed") if k in r]
-        if len(kinds) != 1:
-            raise err("INVALID_BODY", f"Row '{key}' needs exactly one of rows, value or fixed.")
-        if kinds[0] == "rows":
-            out.append({"key": key, "rows": _rows(r["rows"], allowed, depth + 1, count)})
-        elif kinds[0] == "fixed":
-            if not isinstance(r["fixed"], (str, int, float, bool)):
-                raise err("INVALID_BODY",
-                          f"Row '{key}': a fixed value is text, a number or yes/no.")
-            out.append({"key": key, "fixed": r["fixed"]})
-        else:
-            row: dict[str, Any] = {"key": key, "value": _text(r["value"], f"Row '{key}'", allowed)}
-            if r.get("as_text"):
-                row["as_text"] = True
-            out.append(row)
-    return out
+def _json(node, allowed: set[str], depth: int, count: list):
+    """A custom body: any JSON object or list; strings may hold {{ref}} values the form offers."""
+    count[0] += 1
+    if count[0] > values.MAX_NODES or depth > values.MAX_DEPTH:
+        raise err("INVALID_BODY", f"The body is too big or nested too deeply (up to "
+                  f"{values.MAX_NODES} values, {values.MAX_DEPTH} levels).")
+    if isinstance(node, str):
+        return _text(node, "A body value", allowed)
+    if isinstance(node, dict):
+        out = {}
+        for k, v in node.items():
+            if not k.strip() or len(k) > 100 or "{{" in k:
+                raise err("INVALID_BODY", "A name in the body is plain text of up to 100 "
+                          "characters.")
+            out[k] = _json(v, allowed, depth + 1, count)
+        return out
+    if isinstance(node, list):
+        return [_json(v, allowed, depth + 1, count) for v in node]
+    if node is None or isinstance(node, (bool, int, float)):
+        return node
+    raise err("INVALID_BODY", "The body is JSON.")           # pragma: no cover - JSON has no more
 
 
 def _clean_integration(data: dict, current: Integration | None = None, *,
@@ -161,9 +152,9 @@ def _clean_integration(data: dict, current: Integration | None = None, *,
     out["body_mode"] = mode
     body = data.get("body", current.body if current else {})
     if mode == "custom":
-        if not isinstance(body, dict):
-            raise err("INVALID_BODY", "The body is a set of rows.")
-        out["body"] = {"rows": _rows(body.get("rows", []), allowed, 1, [0])}
+        if not isinstance(body, (dict, list)):
+            raise err("INVALID_BODY", "The body is a JSON object or list.")
+        out["body"] = _json(body, allowed, 1, [0])
     else:
         out["body"] = {}
     return out
@@ -274,7 +265,7 @@ class TestSend(APIView):
 
 
 class Catalogue(APIView):
-    """The picker's list of values for a form and an event."""
+    """The picker's list of values for a form and an event (without an event: all of them)."""
 
     permission_classes = [perm("integrations.manage")]
 
@@ -283,7 +274,7 @@ class Catalogue(APIView):
         event = request.query_params.get("event")
         if form is None or form.type not in (FormType.BOOKING, FormType.CUSTOM):
             raise err("INVALID_FORM", "Choose a booking or inspection form.")
-        if event not in webhooks.EVENTS:
+        if event is not None and event not in webhooks.EVENTS:
             raise err("INVALID_EVENT", "Pick one event.", allowed=webhooks.EVENTS)
         return Response(values.catalogue(form, event))
 

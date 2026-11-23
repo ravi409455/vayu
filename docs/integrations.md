@@ -39,8 +39,12 @@ that does not exist is `null`. Nothing of a **deleted** booking leaves except it
 
 **Body.** *Standard*: `event`, `delivery`, `occurred_at`, `booking: {id, booking_id}`; the toggles add
 `data` (booking + inspection answers, limited to the ticked fields when set), `pdf_url`,
-`image_zip_url`, `video_zip_url`. *Custom*: only the rows you built, nested objects allowed, e.g.
-`{"ref": "{{job.booking_id}}", "customer": {"name": "{{booking.customer_name}}"}}`.
+`image_zip_url`, `video_zip_url`. *Custom*: a JSON document you write in the editor (any object or
+list, nested as deep as you like), e.g.
+`{"ref": "{{job.booking_id}}", "customer": {"name": "{{booking.customer_name}}"}}`. Type `{{` inside
+a string and the values of this form and event are suggested. A string that is exactly one
+`{{value}}` keeps the value's type; `{{value | text}}` sends it as text; other JSON (numbers,
+true/false, null) is sent as written. Only strings are filled in, names are plain text.
 
 **Authentication.** There is no signature. Put the token your receiver expects in a header (for
 example `Authorization: Bearer …`); always use HTTPS.

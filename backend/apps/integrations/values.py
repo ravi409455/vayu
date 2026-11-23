@@ -10,8 +10,9 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote
 
-TOKEN = re.compile(r"\{\{\s*([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_\-]+)+)\s*\}\}")
-MAX_ROWS, MAX_HEADERS, MAX_QUERY, MAX_DEPTH = 200, 20, 30, 6
+# {{ref}}, or {{ref | text}} to send the value as text
+TOKEN = re.compile(r"\{\{\s*([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_\-]+)+)(\s*\|\s*text)?\s*\}\}")
+MAX_NODES, MAX_HEADERS, MAX_QUERY, MAX_DEPTH = 500, 20, 30, 8
 
 GROUPS = {"booking": "Booking form", "start": "Check-in (start)", "inspection": "Inspection",
           "end": "Wrap-up (end)", "job": "Job", "result": "Results", "link": "Links",
@@ -141,7 +142,7 @@ def check_syntax(text: str) -> bool:
 
 
 def refs_in(text: str) -> list[str]:
-    return TOKEN.findall(text)
+    return [m.group(1) for m in TOKEN.finditer(text)]
 
 
 def text_of(v: Any, sep: str = ", ") -> str:
@@ -162,6 +163,7 @@ def render(text: str, get: Callable[[str], Any], *, as_text: bool = False, sep: 
     empty) unless `as_text`. `encode` is for the URL path: values are percent-encoded and an empty
     one is an error."""
     one = TOKEN.fullmatch(text)
+    as_text = as_text or bool(one and one.group(2))
     if one and not as_text and not encode:
         v = get(one.group(1))
         return None if v == "" else v
@@ -180,30 +182,33 @@ def render(text: str, get: Callable[[str], Any], *, as_text: bool = False, sep: 
     return out
 
 
-def build_tree(rows: list, get: Callable[[str], Any]) -> dict:
-    out: dict = {}
-    for r in rows:
-        if "rows" in r:
-            out[r["key"]] = build_tree(r["rows"], get)
-        elif "fixed" in r:
-            out[r["key"]] = r["fixed"]
-        else:
-            out[r["key"]] = render(r["value"], get, as_text=bool(r.get("as_text")))
-    return out
+def render_json(node: Any, get: Callable[[str], Any]) -> Any:
+    """A custom body is a JSON document: every string in it is filled like any other text (a
+    string that is exactly one {{ref}} becomes the value itself); other JSON stays as it is."""
+    if isinstance(node, str):
+        return render(node, get)
+    if isinstance(node, dict):
+        return {k: render_json(v, get) for k, v in node.items()}
+    if isinstance(node, list):
+        return [render_json(v, get) for v in node]
+    return node
 
 
-def tree_values(rows: list) -> list[str]:
-    out: list[str] = []
-    for r in rows:
-        out += tree_values(r["rows"]) if "rows" in r else ([r["value"]] if "value" in r else [])
-    return out
+def json_strings(node: Any) -> list[str]:
+    if isinstance(node, str):
+        return [node]
+    if isinstance(node, dict):
+        return [s for v in node.values() for s in json_strings(v)]
+    if isinstance(node, list):
+        return [s for v in node for s in json_strings(v)]
+    return []
 
 
 def used_refs(integ) -> set[str]:
     texts = [integ.url, *(q.get("value", "") for q in integ.query),
              *(h.get("value", "") for h in integ.headers)]
     if integ.body_mode == "custom":
-        texts += tree_values((integ.body or {}).get("rows", []))
+        texts += json_strings(integ.body)
     return {r for t in texts for r in refs_in(t)}
 
 

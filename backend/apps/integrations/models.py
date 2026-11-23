@@ -16,7 +16,7 @@ class Integration(models.Model):
     query = models.JSONField(default=list)         # [{"key": "src", "value": "{{job.city}}"}]
     headers = models.JSONField(default=list)       # [{"key": "X-Token", "value": "abc"}]
     body_mode = models.CharField(max_length=10, default="standard")   # standard | custom
-    body = models.JSONField(default=dict)          # custom: {"rows": [...]}, see values.build_tree
+    body = models.JSONField(default=dict)          # custom: a JSON document with {{ref}} strings
     include_data = models.BooleanField(default=True)
     include_pdf = models.BooleanField(default=False)
     include_image_zip = models.BooleanField(default=False)

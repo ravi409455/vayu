@@ -35,20 +35,13 @@ test("J5: a designed request reaches the receiver, the ZIP downloads and the ver
     await page.getByRole("textbox", { name: "Header name 1" }).fill("X-Token");
     await page.getByRole("textbox", { name: "Header value 1" }).fill("abc123");
     await page.getByRole("button", { name: "Custom" }).click();
-    await page.getByRole("button", { name: "Add row" }).click();
-    await page.getByRole("textbox", { name: "Key 1", exact: true }).fill("ref");
-    await pick(page, "Value 1", "job.booking_id");
-    await page.getByRole("button", { name: "Add row" }).click();
-    await page.getByRole("textbox", { name: "Key 2", exact: true }).fill("report");
-    await pick(page, "Value 2", "link.pdf");
-    await page.getByRole("button", { name: "Add row" }).click();
-    await page.getByRole("textbox", { name: "Key 3", exact: true }).fill("images");
-    await pick(page, "Value 3", "link.image_zip");
-    await page.getByRole("button", { name: "Add group" }).click();
-    await page.getByRole("textbox", { name: "Key 4", exact: true }).fill("customer");
-    await page.locator(".brow", { has: page.getByRole("textbox", { name: "Key 4", exact: true }) }).getByRole("button", { name: "Add row" }).click();
-    await page.getByRole("textbox", { name: "Key 4.1", exact: true }).fill("name");
-    await pick(page, "Value 4.1", "booking.customer_name");
+    const json = page.getByRole("textbox", { name: "Body (JSON)" });
+    await json.fill('{\n  "ref": "{{job.booking_id}}",\n  "report": "{{link.pdf}}",\n  "images": "{{link.image_zip}}",\n  "customer": {\n    "name": "');
+    await json.press("End");
+    await json.pressSequentially("{{cust");                                           // typing {{ suggests the values of this form
+    await page.getByRole("option", { name: /Customer name/ }).click();
+    await json.pressSequentially('"\n  }\n}');
+    await expect(page.getByText("Valid JSON.")).toBeVisible();
     // the preview shows the request that will be sent
     const preview = page.getByTestId("preview-request");
     await expect(preview).toContainText("PUT http://127.0.0.1:9099/hook/");
@@ -110,6 +103,8 @@ test("a GET or DELETE integration has no body, and the editor says what a bookin
   await signIn(page, "admin");
   await page.goto("/integrations/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill("Lookup");
+  await expect(page.getByRole("combobox", { name: "Form", exact: true }).locator("option:checked")).toHaveText("PDI");   // an inspection form first
+  await page.getByRole("combobox", { name: "Form", exact: true }).selectOption({ label: "Booking" });
   await expect(page.getByRole("combobox", { name: "Send when" }).locator("option")).toHaveCount(3);   // the booking form: booking events only
   await page.getByRole("combobox", { name: "Method" }).selectOption("GET");
   await expect(page.getByText("No body is sent with GET.")).toBeVisible();
@@ -118,6 +113,12 @@ test("a GET or DELETE integration has no body, and the editor says what a bookin
   await expect(page.getByTestId("preview-request")).toContainText("GET http://127.0.0.1:9099/lookup/");
   await page.getByRole("combobox", { name: "Method" }).selectOption("DELETE");
   await expect(page.getByText("No body is sent with DELETE.")).toBeVisible();
+
+  // the form can be changed, and the field checklist of the standard body lists the inspection's fields
+  await page.getByRole("combobox", { name: "Method" }).selectOption("POST");
+  await page.getByRole("combobox", { name: "Form", exact: true }).selectOption({ label: "PDI" });
+  await page.getByRole("button", { name: "Only these" }).click();
+  await expect(page.getByRole("checkbox", { name: /Odometer/ })).toBeVisible();
 });
 
 test("verify page for a made-up token says so plainly", async ({ page }) => {

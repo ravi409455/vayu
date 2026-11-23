@@ -140,26 +140,24 @@ def test_a_single_value_keeps_its_type_and_mixed_text_is_text():
 
 
 def test_a_custom_body_is_built_from_the_job(ienv, http, booking):
-    make(ienv, ienv.form_id, event="inspection.submitted", body_mode="custom", body={"rows": [
-        {"key": "ref", "value": "{{job.booking_id}}"},
-        {"key": "odo", "value": "{{inspection.odometer}}"},
-        {"key": "odo_text", "value": "{{inspection.odometer}}", "as_text": True},
-        {"key": "line", "value": "{{booking.customer_name}} drove {{inspection.odometer}} km"},
-        {"key": "earlier", "value": "{{job.previous_booking_id}}"},
-        {"key": "fixed_n", "fixed": 7}, {"key": "fixed_b", "fixed": True},
-        {"key": "fixed_t", "fixed": "x"},
-        {"key": "car", "rows": [{"key": "city", "value": "{{booking.city}}"},
-                                {"key": "door", "value": "{{inspection.door}}"}]},
-        {"key": "overall", "value": "{{result.overall}}"},
-        {"key": "ratings", "value": "{{result.ratings}}"},
-        {"key": "checks", "value": "{{result.key_checks}}"},
-        {"key": "event", "value": "{{event.name}}"}, {"key": "id", "value": "{{event.delivery}}"},
-    ]})
+    make(ienv, ienv.form_id, event="inspection.submitted", body_mode="custom", body={
+        "ref": "{{job.booking_id}}", "odo": "{{inspection.odometer}}",
+        "odo_text": "{{ inspection.odometer | text }}",
+        "line": "{{booking.customer_name}} drove {{inspection.odometer}} km",
+        "earlier": "{{job.previous_booking_id}}",
+        "fixed_n": 7, "fixed_b": True, "fixed_t": "x", "fixed_null": None,
+        "car": {"city": "{{booking.city}}", "door": "{{inspection.door}}"},
+        "list": ["{{booking.city}}", 3, {"deep": "{{event.name}}"}],
+        "overall": "{{result.overall}}", "ratings": "{{result.ratings}}",
+        "checks": "{{result.key_checks}}", "event": "{{event.name}}",
+        "id": "{{event.delivery}}"})
     submitted(ienv, booking)
     body = json.loads(calls(http)[-1].request.body)
     assert body["ref"] == "SA37926" and body["odo"] == 45 and body["odo_text"] == "45"
     assert body["line"] == "Asha drove 45 km" and body["earlier"] is None
     assert body["fixed_n"] == 7 and body["fixed_b"] is True and body["fixed_t"] == "x"
+    assert body["fixed_null"] is None
+    assert body["list"] == ["delhi", 3, {"deep": "inspection.submitted"}]
     assert body["car"] == {"city": "delhi", "door": "ok"}
     assert body["overall"] and isinstance(body["ratings"], list) and body["checks"] == []
     assert body["event"] == "inspection.submitted" and body["id"]
@@ -167,9 +165,8 @@ def test_a_custom_body_is_built_from_the_job(ienv, http, booking):
 
 
 def test_results_use_the_final_ratings_after_ops_changes(ienv, http, booking):
-    make(ienv, ienv.form_id, event="inspection.submitted", body_mode="custom", body={"rows": [
-        {"key": "engine", "value": "{{result.rating.engine}}"},
-        {"key": "ratings", "value": "{{result.ratings}}"}]})
+    make(ienv, ienv.form_id, event="inspection.submitted", body_mode="custom", body={
+        "engine": "{{result.rating.engine}}", "ratings": "{{result.ratings}}"})
     submitted(ienv, booking)
     insp = booking_inspection(booking)
     insp.overrides = {"ratings": {"engine": 2}}
@@ -217,9 +214,8 @@ def test_a_deleted_booking_sends_only_its_id_and_the_event(ienv, anyhttp, bookin
     Integration.objects.create(
         form_id=booking_form_id(), name="body", event="booking.deleted", url=HOOK,
         headers=[{"key": "X-City", "value": "{{booking.city}}"}], body_mode="custom",
-        body={"rows": [{"key": "ref", "value": "{{job.booking_id}}"},
-                       {"key": "city", "value": "{{booking.city}}"},
-                       {"key": "event", "value": "{{event.name}}"}]})
+        body={"ref": "{{job.booking_id}}", "city": "{{booking.city}}",
+              "event": "{{event.name}}"})
     ienv.admin.delete(f"/api/v1/bookings/{booking['id']}")
     by_method = {c.request.method: c.request for c in calls(anyhttp)}
     assert by_method["DELETE"].url == "https://hooks.example.com/leads/SA37926"
@@ -357,7 +353,7 @@ def test_the_test_button_marks_its_request_and_sends_real_values(ienv, anyhttp, 
 
 def test_editing_keeps_valid_values_and_a_toggle_never_needs_a_recheck(ienv):
     i = make(ienv, ienv.form_id, event="pdf.ready", body_mode="custom",
-             body={"rows": [{"key": "pdf", "value": "{{link.pdf}}"}]},
+             body={"pdf": "{{link.pdf}}"},
              query=[{"key": "a", "value": "{{booking.city}}"}])
     # changing the event re-checks every value against the new event's list
     r = ienv.admin.patch(f"/api/v1/integrations/{i['id']}", {"event": "booking.updated"},
@@ -382,8 +378,7 @@ def test_the_preview_shows_the_whole_request_for_a_real_job(ienv, booking):
                 url="https://hooks.example.com/leads/{{job.booking_id}}",
                 query=[{"key": "c", "value": "{{booking.city}}"}],
                 headers=[{"key": "Authorization", "value": "Bearer abc"}],
-                body_mode="custom", body={"rows": [{"key": "ref", "value": "{{job.booking_id}}"},
-                                                   {"key": "n", "fixed": 3}]})
+                body_mode="custom", body={"ref": "{{job.booking_id}}", "n": 3})
     out = r.json()
     assert r.status_code == 200 and out["sample"] is False and out["booking"] == booking["id"]
     assert out["method"] == "PATCH"
@@ -405,7 +400,7 @@ def test_the_preview_sends_nothing_saves_nothing_and_builds_no_zip(ienv, booking
                 include_video_zip=True)
     assert "/zip/" in r.json()["body"]
     r = preview(ienv.admin, ienv.form_id, event="media.completed", body_mode="custom",
-                body={"rows": [{"key": "z", "value": "{{link.image_zip}}"}]})
+                body={"z": "{{link.image_zip}}"})
     assert "/zip/" in r.json()["body"]
     assert Delivery.objects.count() == before and MediaZip.objects.count() == 0
     assert calls(anyhttp) == []
@@ -427,8 +422,7 @@ def test_the_preview_needs_no_dns_and_is_admin_only(ienv, booking, monkeypatch):
 def test_the_preview_works_for_every_event_with_a_job_or_without(ienv, booking, event, mode):
     from apps.bookings.models import Booking
 
-    body = {"rows": [{"key": "ref", "value": "{{job.booking_id}}"},
-                     {"key": "name", "value": "{{event.name}}"}]}
+    body = {"ref": "{{job.booking_id}}", "name": "{{event.name}}"}
     for have_job in (True, False):
         if not have_job:
             Booking.objects.all().delete()
@@ -445,11 +439,9 @@ def test_the_preview_works_for_every_event_with_a_job_or_without(ienv, booking, 
 
 
 def test_a_form_without_jobs_previews_with_sample_values(ienv):
-    out = preview(ienv.admin, ienv.form_id, event="pdf.ready", body_mode="custom", body={"rows": [
-        {"key": "odo", "value": "{{inspection.odometer}}"},
-        {"key": "name", "value": "{{booking.customer_name}}"},
-        {"key": "ok", "value": "{{inspection.grade}}"},
-        {"key": "links", "value": "{{link.photos.door_photo}}"}]}).json()
+    out = preview(ienv.admin, ienv.form_id, event="pdf.ready", body_mode="custom", body={
+        "odo": "{{inspection.odometer}}", "name": "{{booking.customer_name}}",
+        "ok": "{{inspection.grade}}", "links": "{{link.photos.door_photo}}"}).json()
     assert out["sample"] is True and out["booking"] is None
     assert json.loads(out["body"]) == {"odo": 42, "name": "sample", "ok": 42,
                                        "links": ["sample 1", "sample 2"]}
@@ -499,8 +491,8 @@ def drop_field_and_publish(ienv, key):
 def test_a_removed_field_is_warned_on_publish_listed_on_the_integration_and_sends_null(
         ienv, http, booking):
     i = make(ienv, ienv.form_id, event="inspection.submitted", fields=["odometer"],
-             body_mode="custom", body={"rows": [{"key": "odo", "value": "{{inspection.odometer}}"},
-                                                {"key": "city", "value": "{{booking.city}}"}]})
+             body_mode="custom", body={"odo": "{{inspection.odometer}}",
+                                       "city": "{{booking.city}}"})
     assert i["broken_refs"] == []
     standard = make(ienv, ienv.form_id, name="std", event="inspection.submitted",
                     fields=["odometer"])
@@ -533,7 +525,7 @@ def calls_to(http):
 
 def test_publishing_without_breaking_anything_warns_about_nothing(ienv):
     make(ienv, ienv.form_id, event="pdf.ready", body_mode="custom",
-         body={"rows": [{"key": "odo", "value": "{{inspection.odometer}}"}]})
+         body={"odo": "{{inspection.odometer}}"})
     published = drop_field_and_publish(ienv, "door_photo")
     assert [w for w in published["warnings"] if w["code"] == "INTEGRATION_FIELD_MISSING"] == []
 
@@ -542,7 +534,7 @@ def test_an_already_broken_integration_is_not_blamed_on_the_next_publish(ienv):
     from apps.integrations.models import Integration
 
     i = make(ienv, ienv.form_id, event="pdf.ready", body_mode="custom",
-             body={"rows": [{"key": "odo", "value": "{{inspection.odometer}}"}]})
+             body={"odo": "{{inspection.odometer}}"})
     drop_field_and_publish(ienv, "odometer")
     assert values.broken_refs(Integration.objects.get(pk=i["id"])) == ["inspection.odometer"]
     again = drop_field_and_publish(ienv, "door_photo")
@@ -554,14 +546,14 @@ def test_an_already_broken_integration_is_not_blamed_on_the_next_publish(ienv):
 def test_every_kind_of_value_resolves_for_a_finished_job(renv, http, settings):
     from apps.reports.tests.test_reports import complete_job, set_template
 
-    rows = [{"key": ref.replace(".", "_"), "value": "{{" + ref + "}}"} for ref in (
+    rows = {ref.replace(".", "_"): "{{" + ref + "}}" for ref in (
         "link.pdf", "link.image_zip", "link.video_zip", "link.photos.photo_a",
         "result.overall", "result.average", "result.defects", "result.ratings",
         "result.key_checks", "result.rating.engine", "inspection.engine_rating",
         "inspection.dents", "inspection.door", "inspection.odometer", "job.id", "job.type",
         "job.stage", "job.city", "job.expert", "job.created_at", "job.submitted_at",
-        "job.revision", "event.time", "booking.customer_name")]
-    make(renv, renv.form_id, event="pdf.ready", body_mode="custom", body={"rows": rows})
+        "job.revision", "event.time", "booking.customer_name")}
+    make(renv, renv.form_id, event="pdf.ready", body_mode="custom", body=rows)
     set_template(renv)
     b = complete_job(renv, settings=settings)
     body = json.loads(calls_to(http)[-1].request.body)
@@ -584,11 +576,9 @@ def test_every_kind_of_value_resolves_for_a_finished_job(renv, http, settings):
 
 
 def test_values_that_do_not_exist_yet_are_null(ienv, anyhttp, booking):
-    make(ienv, ienv.form_id, event="booking.updated", body_mode="custom", body={"rows": [
-        {"key": "odo", "value": "{{inspection.odometer}}"},
-        {"key": "overall", "value": "{{result.overall}}"},
-        {"key": "pdf", "value": "{{link.pdf}}"}, {"key": "who", "value": "{{job.expert}}"},
-        {"key": "at", "value": "{{job.submitted_at}}"}]})
+    make(ienv, ienv.form_id, event="booking.updated", body_mode="custom", body={
+        "odo": "{{inspection.odometer}}", "overall": "{{result.overall}}",
+        "pdf": "{{link.pdf}}", "who": "{{job.expert}}", "at": "{{job.submitted_at}}"})
     assign(ienv, booking)
     body = json.loads(calls_to(anyhttp)[-1].request.body)
     assert body["odo"] is None and body["overall"] is None and body["pdf"] is None
@@ -615,9 +605,9 @@ def test_a_gps_answer_becomes_text_and_unknown_refs_give_nothing(ienv, anyhttp, 
 
 def test_the_preview_makes_a_sample_for_every_kind_of_value(ienv):
     entries = refs(ienv.admin, ienv.form_id, "pdf.ready")
-    rows = [{"key": ref.replace(".", "_"), "value": "{{" + ref + "}}"} for ref in entries]
+    rows = {ref.replace(".", "_"): "{{" + ref + "}}" for ref in entries}
     out = preview(ienv.admin, ienv.form_id, event="pdf.ready", body_mode="custom",
-                  body={"rows": rows}).json()
+                  body=rows).json()
     got = json.loads(out["body"])
     assert out["sample"] is True and len(got) == len(entries)
     types = {e["type"] for e in entries.values()}
@@ -636,9 +626,8 @@ def test_the_standard_sample_body_without_data_has_only_the_basics(ienv):
 
 @pytest.mark.parametrize("change", [
     {"url": "https://hooks.example.com/{{job.booking_id}}", "query": [{"key": "a", "value": 5}]},
-    {"body_mode": "custom", "body": {"rows": "x"}},
-    {"body_mode": "custom", "body": []},
-    {"body_mode": "custom", "body": {"rows": [{"key": f"k{i}", "fixed": 1} for i in range(201)]}},
+    {"body_mode": "custom", "body": "x"},
+    {"body_mode": "custom", "body": {f"k{i}": 1 for i in range(values.MAX_NODES + 1)}},
     {"headers": [{"key": f"H{i}", "value": "x"} for i in range(21)]},
     {"headers": "x"},
 ])
@@ -650,10 +639,69 @@ def test_oversized_or_malformed_designs_are_refused(ienv, change):
 
 
 def test_a_body_nested_too_deeply_is_refused(ienv):
-    rows: list = [{"key": "leaf", "fixed": 1}]
-    for i in range(values.MAX_DEPTH + 1):
-        rows = [{"key": f"n{i}", "rows": rows}]
+    body: dict | list = {"leaf": 1}
+    for _ in range(values.MAX_DEPTH + 1):
+        body = [body]
     r = ienv.admin.post("/api/v1/integrations", {
         "form": booking_form_id(), "name": "x", "url": HOOK, "event": "booking.created",
-        "body_mode": "custom", "body": {"rows": rows}}, format="json")
+        "body_mode": "custom", "body": body}, format="json")
     assert r.status_code == 400 and r.json()["code"] == "INVALID_BODY"
+
+
+# ---------------------------------------------------------------- the JSON body, the form, the checklist
+
+def test_an_old_row_body_becomes_the_json_it_described():
+    import importlib
+
+    m = importlib.import_module("apps.integrations.migrations.0003_json_body")
+    rows = [{"key": "ref", "value": "{{job.booking_id}}"},
+            {"key": "odo", "value": " {{ inspection.odometer }} ", "as_text": True},
+            {"key": "mixed", "value": "a {{x.y}} b", "as_text": True}, {"key": "n", "fixed": 3},
+            {"key": "car", "rows": [{"key": "city", "value": "{{booking.city}}"}]}]
+    assert m.rows_to_json(rows) == {
+        "ref": "{{job.booking_id}}", "odo": "{{ inspection.odometer | text}}",
+        "mixed": "a {{x.y}} b", "n": 3, "car": {"city": "{{booking.city}}"}}
+    from django.apps import apps
+
+    old = Integration.objects.create(form_id=booking_form_id(), name="old", event="booking.created",
+                                     url=HOOK, body_mode="custom", body={"rows": rows[:1]})
+    std = Integration.objects.create(form_id=booking_form_id(), name="std", event="booking.created",
+                                     url=HOOK, body_mode="standard", body={})
+    m.to_json(apps, None)
+    old.refresh_from_db()
+    std.refresh_from_db()
+    assert old.body == {"ref": "{{job.booking_id}}"} and std.body == {}
+
+
+def test_a_body_can_be_any_json_list_or_object_and_text_can_be_forced(ienv, anyhttp):
+    make(ienv, booking_form_id(), method="PUT", body_mode="custom",
+         body=[{"city": "{{booking.city | text}}"}, "{{booking.city}}", 5, None])
+    create(ienv.ops, booking_id="J1")
+    assert json.loads(calls(anyhttp)[-1].request.body) == [{"city": "delhi"}, "delhi", 5, None]
+
+
+def test_the_catalogue_without_an_event_lists_everything_for_the_checklist(ienv):
+    got = set(refs_all(ienv.admin, ienv.form_id))
+    assert {"booking.city", "inspection.odometer", "link.pdf", "event.alert"} <= got
+    assert "inspection.odometer" not in refs(ienv.admin, ienv.form_id, "booking.created")
+
+
+def refs_all(client, form_id):
+    r = client.get(f"/api/v1/integrations/catalogue?form={form_id}")
+    assert r.status_code == 200, r.json()
+    return {e["ref"]: e for e in r.json()}
+
+
+def test_the_form_of_an_integration_can_be_changed_with_its_event(ienv):
+    i = make(ienv, ienv.form_id, event="pdf.ready", body_mode="custom",
+             body={"pdf": "{{link.pdf}}"})
+    bad = ienv.admin.patch(f"/api/v1/integrations/{i['id']}", {"form": booking_form_id()},
+                           format="json")
+    assert bad.json()["code"] == "INVALID_EVENT"                 # a booking form has no pdf.ready
+    bad = ienv.admin.patch(f"/api/v1/integrations/{i['id']}", {
+        "form": booking_form_id(), "event": "booking.updated"}, format="json")
+    assert bad.json()["code"] == "UNKNOWN_VALUE"                 # and no PDF link: the body is checked
+    ok = ienv.admin.patch(f"/api/v1/integrations/{i['id']}", {
+        "form": booking_form_id(), "event": "booking.updated", "body": {"c": "{{booking.city}}"}},
+        format="json")
+    assert ok.status_code == 200 and ok.json()["form"] == booking_form_id()

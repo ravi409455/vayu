@@ -472,8 +472,7 @@ def test_the_push_preview_warns_about_integrations_that_use_a_removed_field(
     publish(admin, v)
     Integration.objects.create(
         form_id=f["id"], name="CRM", event="pdf.ready", url="https://hooks.example.com/x",
-        body_mode="custom", body={"rows": [{"key": "fl", "value": "{{inspection.depth_fl}}"},
-                                           {"key": "fr", "value": "{{inspection.depth_fr}}"}]})
+        body_mode="custom", body={"fl": "{{inspection.depth_fl}}", "fr": "{{inspection.depth_fr}}"})
     edit(admin, item, fields=[TYRES["fields"][1]])           # depth_fl leaves the section
     form = push_preview(admin, item)["forms"][0]
     assert [(w["name"], w["keys"]) for w in form["warnings"]] == [("CRM", ["inspection.depth_fl"])]

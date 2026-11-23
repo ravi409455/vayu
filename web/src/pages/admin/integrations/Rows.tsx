@@ -21,7 +21,7 @@ export function PairRows({ rows, onChange, catalogue, what, namePlaceholder }: {
 
 /** The standard body's field filter: everything, or only the ticked fields of the booking and inspection forms. */
 export function FieldChecklist({ fields, onChange, catalogue }: { fields: string[]; onChange: (f: string[]) => void; catalogue: CatalogueEntry[] }) {
-  const all = fields.length === 0;
+  const [only, setOnly] = useState(fields.length > 0);        // "only these", even before the first tick
   const [q, setQ] = useState("");
   const options = catalogue.filter((e) => e.group === "booking" || e.group === "inspection");
   const keys = [...new Map(options.map((e) => [e.ref.split(".")[1]!, e])).entries()]
@@ -31,11 +31,12 @@ export function FieldChecklist({ fields, onChange, catalogue }: { fields: string
     <fieldset className="plain">
       <legend>Fields to send</legend>
       <div className="seg" role="group" aria-label="Which fields">
-        <button type="button" aria-pressed={all} onClick={() => onChange([])}>All fields</button>
-        <button type="button" aria-pressed={!all} onClick={() => { if (all && keys[0]) onChange([keys[0][0]]); }}>Only these</button>
+        <button type="button" aria-pressed={!only} onClick={() => { setOnly(false); onChange([]); }}>All fields</button>
+        <button type="button" aria-pressed={only} onClick={() => setOnly(true)}>Only these</button>
       </div>
-      {!all && <input role="searchbox" aria-label="Search fields" placeholder="Search fields…" value={q} onChange={(e) => setQ(e.target.value)} />}
-      {!all && <div className="checklist" role="group" aria-label="Fields">
+      {only && fields.length === 0 && <p className="muted small">Tick the fields to send. With none ticked, all are sent.</p>}
+      {only && <input role="searchbox" aria-label="Search fields" placeholder="Search fields…" value={q} onChange={(e) => setQ(e.target.value)} />}
+      {only && <div className="checklist" role="group" aria-label="Fields">
         {keys.map(([k, e]) => <label className="check" key={k}><input type="checkbox" checked={fields.includes(k)} onChange={() => toggle(k)} /> {e.label} <span className="muted small mono">{k}</span></label>)}</div>}
     </fieldset>
   );

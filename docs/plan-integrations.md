@@ -2,6 +2,8 @@
 
 Status: **built (P1 backend and P2 web), not committed.** The browser journey (`web/e2e/j5-integration.spec.ts`) was updated but could not be run next to the local stack (it needs ports 8000 and 5173); the editor was checked by hand in a real browser against an isolated stack (path value, header, custom body, preview, Test, Duplicate).
 
+**Change after first use (2026-11-24):** the Custom body is a **JSON editor** (suggestions on `{{`, `{{ref | text}}` forces text, any JSON object or list) instead of a row builder; the form of a saved integration can be changed; the standard body's field checklist lists every field of the form whatever the event. Migration `0003_json_body` converts old row bodies.
+
 Changes found while building P1:
 - **`result.defects`** (fields with defect answers) replaces "failed Key Checks": a Key Check is a rule that is true or false, and which one counts as failed depends on the check, so `result.key_checks` sends `[{name, result: true|false}]` as the rule decided (Ops changes included).
 - A deleted booking's picker offers the Booking ID and the event values only (not the internal id).

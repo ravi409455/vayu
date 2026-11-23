@@ -1,12 +1,16 @@
 import { X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { GROUP_LABEL, insertValue, joinParts, labelFor, parseParts, removeValue, type CatalogueEntry } from "../../../lib/integrationDef";
+
+/** Why the list holds what it holds (set by the editor for its form and event). */
+export const PickerHint = createContext("");
 
 const TYPE_WORD: Record<string, string> = { text: "text", number: "number", boolean: "yes/no", date: "date", datetime: "date and time", list: "list" };
 
 /** The searchable list of values a text can hold. Pick with the mouse or type and press Enter. */
 export function ValuePicker({ catalogue, onPick, onClose }: { catalogue: CatalogueEntry[]; onPick: (ref: string) => void; onClose: () => void }) {
   const [q, setQ] = useState("");
+  const hint = useContext(PickerHint);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const away = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) onClose(); };
@@ -30,6 +34,7 @@ export function ValuePicker({ catalogue, onPick, onClose }: { catalogue: Catalog
           </div>))}
         {shown.length === 0 && <p className="muted small pad">Nothing matches. This form and event do not offer it.</p>}
       </div>
+      {hint && <p className="muted small vhint">{hint}</p>}
     </div>
   );
 }
@@ -39,9 +44,9 @@ export function ValuePicker({ catalogue, onPick, onClose }: { catalogue: Catalog
 export function ValueInput({ value, onChange, catalogue, label, placeholder }: { value: string; onChange: (v: string) => void; catalogue: CatalogueEntry[]; label: string; placeholder?: string }) {
   const parts = parseParts(value);
   const [at, setAt] = useState<{ part: number; caret: number } | null>(null);
-  const [focus, setFocus] = useState<number | null>(null);
+  const focus = useRef<number | null>(null);                       // which text gets the caret after an edit
   const inputs = useRef<Record<number, HTMLInputElement | null>>({});
-  useEffect(() => { if (focus !== null) { inputs.current[focus]?.focus(); setFocus(null); } }, [focus, value]);
+  useLayoutEffect(() => { if (focus.current !== null) { inputs.current[focus.current]?.focus(); focus.current = null; } });
   const last = parts.length - 1;
 
   /** `{{` just typed before the caret opens the list (and is not kept); a pasted {{value}} stays and becomes a chip. */
@@ -55,7 +60,7 @@ export function ValueInput({ value, onChange, catalogue, label, placeholder }: {
     if (!at) return;
     const r = insertValue(value, at.part, at.caret, ref);
     onChange(r.value);
-    setFocus(r.focus);
+    focus.current = r.focus;
     setAt(null);
   };
   const key = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -63,7 +68,7 @@ export function ValueInput({ value, onChange, catalogue, label, placeholder }: {
     if (e.key === "Backspace" && i > 0 && el.selectionStart === 0 && el.selectionEnd === 0) {
       e.preventDefault();
       onChange(removeValue(value, i - 1));
-      setFocus(i - 2);
+      focus.current = i - 2;
     }
   };
   /** At the caret of the text being edited, else at the end. */

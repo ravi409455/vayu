@@ -6,10 +6,10 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "./auth";
 import type { FormSummary, Integration } from "./api/types";
-import { asKind, blankRow, cleanRows, eventsFor, insertValue, joinParts, parseParts, removeValue, typedFixed, type CatalogueEntry } from "./lib/integrationDef";
+import { bodyText, eventsFor, insertValue, jsonOpenToken, matchValues, parseBody, parseParts, joinParts, pickerHint, removeValue, STARTER_BODY, type CatalogueEntry } from "./lib/integrationDef";
 import { Integrations } from "./pages/admin/Integrations";
-import { BodyBuilder } from "./pages/admin/integrations/BodyBuilder";
 import { IntegrationEditor } from "./pages/admin/integrations/IntegrationEditor";
+import { JsonEditor } from "./pages/admin/integrations/JsonEditor";
 import { FieldChecklist } from "./pages/admin/integrations/Rows";
 import { ValueInput } from "./pages/admin/integrations/ValueInput";
 import { ToastProvider } from "./ui/kit";
@@ -52,7 +52,7 @@ const FORMS: FormSummary[] = [
 const INTEGRATION: Integration = {
   id: "i1", form: 2, form_key: "pdi", name: "CRM", event: "pdf.ready", method: "PUT", url: "https://crm.example.com/leads/{{job.booking_id}}",
   query: [{ key: "src", value: "vayu" }], headers: [{ key: "Authorization", value: "Bearer abc" }], body_mode: "custom",
-  body: { rows: [{ key: "ref", value: "{{job.booking_id}}" }, { key: "n", fixed: 3 }] },
+  body: { ref: "{{job.booking_id}}", n: 3 },
   include_data: true, include_pdf: false, include_image_zip: false, include_video_zip: false, fields: [], is_active: true, broken_refs: [],
 };
 const PREVIEW = { method: "PUT", url: "https://crm.example.com/leads/SA1?src=vayu", headers: [{ name: "Authorization", value: "Bearer abc" }, { name: "Content-Type", value: "application/json" }], body: '{\n  "ref": "SA1"\n}', sample: false, booking: "b1", broken_refs: [] };
@@ -68,19 +68,42 @@ describe("values inside a text", () => {
     expect(removeValue("a{{job.booking_id}}b", 1)).toBe("ab");
     expect(removeValue("a{{job.booking_id}}b", 0)).toBe("a{{job.booking_id}}b");
   });
+  it("explains each event's values", () => {
+    expect(pickerHint("booking", "booking.created")).toMatch(/choose an inspection form/);
+    expect(pickerHint("custom", "booking.created")).toMatch(/Pick one of those events/);
+    expect(pickerHint("custom", "booking.deleted")).toMatch(/Booking ID/);
+    expect(pickerHint("custom", "inspection.started")).toMatch(/Check-in/);
+    expect(pickerHint("custom", "inspection.submitted")).toMatch(/PDF link comes with/);
+    expect(pickerHint("custom", "pdf.ready")).toBe("");
+  });
   it("offers the booking events to a booking form and all nine to an inspection form", () => {
     expect(eventsFor("booking")).toEqual(["booking.created", "booking.updated", "booking.deleted"]);
     expect(eventsFor("custom")).toHaveLength(9);
   });
-  it("types a fixed value, leaves half-built rows out, and changes a row's kind", () => {
-    expect(typedFixed("number", "")).toBe(0);
-    expect(typedFixed("number", "12")).toBe(12);
-    expect(typedFixed("yesno", "true")).toBe(true);
-    expect(typedFixed("text", "x")).toBe("x");
-    expect(cleanRows([{ key: " ", value: "x" }, { key: "a", value: "{{x.y}}", as_text: true }, { key: "g", rows: [{ key: "", fixed: 1 }, { key: "n", fixed: 2 }] }]))
-      .toEqual([{ key: "a", value: "{{x.y}}", as_text: true }, { key: "g", rows: [{ key: "n", fixed: 2 }] }]);
-    expect(asKind({ key: "k", value: "v" }, "group")).toEqual({ key: "k", rows: [] });
-    expect(blankRow("fixed")).toEqual({ key: "", fixed: "" });
+  it("finds the {{ the caret is in and the values that fit what was typed after it", () => {
+    expect(jsonOpenToken('{ "a": "{{', 10)).toEqual({ start: 8, fragment: "" });
+    expect(jsonOpenToken('{ "a": "x {{ inspection.odo', 27)).toEqual({ start: 10, fragment: "inspection.odo" });
+    expect(jsonOpenToken('"{{job.booking_id | te', 22)).toEqual({ start: 1, fragment: "job.booking_id" });
+    expect(jsonOpenToken('"{{job.booking_id}}" ', 21)).toBeNull();                       // closed
+    expect(jsonOpenToken('"{{ab" x', 8)).toBeNull();                                    // left the string
+    expect(jsonOpenToken("{{a\nb", 5)).toBeNull();                                      // a new line
+    expect(jsonOpenToken("no braces", 4)).toBeNull();
+    expect(matchValues(CAT, "").length).toBe(CAT.length);
+    expect(matchValues(CAT, "odo meter").map((e) => e.ref)).toEqual(["inspection.odometer"]);
+    expect(matchValues(CAT, "booking id").map((e) => e.ref)).toEqual(["job.booking_id"]);
+    expect(matchValues(CAT, "zzz")).toEqual([]);
+  });
+  it("tells valid JSON bodies from the rest, and shows a saved body as text", () => {
+    expect(parseBody('{"a": 1}')).toEqual({ ok: true, body: { a: 1 } });
+    expect(parseBody("[1, 2]")).toEqual({ ok: true, body: [1, 2] });
+    expect(parseBody("5")).toMatchObject({ ok: false, error: expect.stringContaining("object") });
+    expect(parseBody("null")).toMatchObject({ ok: false });
+    expect(parseBody("{ nope")).toMatchObject({ ok: false });
+    expect(parseBody("{ nope")).toHaveProperty("error");
+    expect(bodyText({})).toBe("");
+    expect(bodyText(null)).toBe("");
+    expect(bodyText({ a: "{{job.id}}" })).toBe('{\n  "a": "{{job.id}}"\n}');
+    expect(parseBody(STARTER_BODY).ok).toBe(true);
   });
 });
 
@@ -152,44 +175,84 @@ describe("the value input", () => {
   });
 });
 
-function Rows({ start = [] as ReturnType<typeof blankRow>[], onRows }: { start?: ReturnType<typeof blankRow>[]; onRows?: (r: unknown) => void }) {
-  const [rows, setRows] = useState(start);
-  return <BodyBuilder rows={rows} catalogue={CAT} onChange={(r) => { setRows(r); onRows?.(r); }} />;
+function Json({ start = "", onText }: { start?: string; onText?: (v: string) => void }) {
+  const [v, setV] = useState(start);
+  const p = parseBody(v);
+  return <JsonEditor value={v} catalogue={CAT} error={p.ok ? "" : p.error} onChange={(x) => { setV(x); onText?.(x); }} />;
 }
 
-describe("the body builder", () => {
-  it("builds named rows from values, fixed values and nested groups", async () => {
+describe("the JSON editor", () => {
+  it("suggests the values of the form as {{ is typed, narrows them, and Enter picks", async () => {
     const u = userEvent.setup();
     const seen = vi.fn();
-    render(<Rows onRows={seen} />);
-    await u.click(screen.getByRole("button", { name: /Add row/ }));
-    await u.type(screen.getByRole("textbox", { name: "Key 1" }), "ref");
-    await u.click(screen.getByRole("button", { name: "Insert a value into Value 1" }));
-    await u.click(screen.getByRole("option", { name: /Booking ID/ }));
-    await u.click(screen.getByRole("checkbox", { name: "Send as text 1" }));
-    await u.click(screen.getByRole("button", { name: /Add group/ }));
-    await u.type(screen.getByRole("textbox", { name: "Key 2" }), "car");
-    const group = screen.getByRole("textbox", { name: "Key 2" }).closest(".brow") as HTMLElement;
-    await u.click(within(group).getByRole("button", { name: /Add row/ }));
-    await u.type(screen.getByRole("textbox", { name: "Key 2.1" }), "n");
-    await u.selectOptions(screen.getByRole("combobox", { name: "Row type 2.1" }), "fixed");
-    await u.selectOptions(screen.getByRole("combobox", { name: "Fixed type 2.1" }), "number");
-    await u.type(screen.getByRole("spinbutton", { name: "Fixed value 2.1" }), "7");
-    expect(cleanRows(seen.mock.lastCall![0])).toEqual([
-      { key: "ref", value: "{{job.booking_id}}", as_text: true },
-      { key: "car", rows: [{ key: "n", fixed: 7 }] }]);
-    await u.selectOptions(screen.getByRole("combobox", { name: "Fixed type 2.1" }), "yesno");
-    await u.selectOptions(screen.getByRole("combobox", { name: "Fixed value 2.1" }), "No");
-    expect(cleanRows(seen.mock.lastCall![0])[1]).toEqual({ key: "car", rows: [{ key: "n", fixed: false }] });
-    await u.click(screen.getByRole("button", { name: "Remove row 2.1" }));
-    await u.click(screen.getByRole("button", { name: "Remove row 1" }));
-    expect(cleanRows(seen.mock.lastCall![0])).toEqual([{ key: "car", rows: [] }]);
+    render(<Json start={'{\n  "x": "'} onText={seen} />);
+    const box = screen.getByRole("textbox", { name: "Body (JSON)" });
+    await u.click(box);
+    await u.keyboard("{End}");
+    await u.keyboard("{{{{");
+    expect(await screen.findByRole("listbox", { name: "Suggestions" })).toBeInTheDocument();
+    expect(screen.getAllByRole("option")).toHaveLength(CAT.length);
+    await u.keyboard("odo");
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    await u.keyboard("{Enter}");
+    expect(seen).toHaveBeenLastCalledWith('{\n  "x": "{{inspection.odometer}}');
+    expect(screen.queryByRole("listbox", { name: "Suggestions" })).toBeNull();
   });
-  it("stops nesting at the deepest level", () => {
-    let rows: ReturnType<typeof blankRow>[] = [{ key: "leaf", fixed: 1 }];
-    for (let i = 0; i < 5; i++) rows = [{ key: `n${i}`, rows }];
-    render(<Rows start={rows} />);
-    expect(screen.getAllByRole("button", { name: /Add group/ })).toHaveLength(5);                 // the sixth level has none
+  it("lists every value that fits, grouped, not just the first few", async () => {
+    const u = userEvent.setup();
+    const big: CatalogueEntry[] = [
+      ...Array.from({ length: 20 }, (_, i) => ({ group: "booking", ref: `booking.f${i}`, label: `Field ${i}`, type: "text" })),
+      ...Array.from({ length: 12 }, (_, i) => ({ group: "inspection", ref: `inspection.g${i}`, label: `Check ${i}`, type: "number" })),
+    ];
+    function Big() {
+      const [v, setV] = useState('"');
+      return <JsonEditor value={v} catalogue={big} error="" onChange={setV} />;
+    }
+    render(<Big />);
+    await u.click(screen.getByRole("textbox", { name: "Body (JSON)" }));
+    await u.keyboard("{End}{{{{");
+    expect(screen.getAllByRole("option")).toHaveLength(32);
+    expect(screen.getByText("Booking form")).toBeInTheDocument();
+    expect(screen.getByText("Inspection")).toBeInTheDocument();
+    await u.keyboard("check 1");                                                              // narrows to Check 1, Check 10, Check 11
+    expect(screen.getAllByRole("option").map((o) => o.getAttribute("title"))).toEqual(["inspection.g1", "inspection.g10", "inspection.g11"]);
+  });
+  it("moves with the arrows, picks with Tab or a click, and Escape closes the suggestions", async () => {
+    const u = userEvent.setup();
+    const seen = vi.fn();
+    render(<Json start={'"'} onText={seen} />);
+    await u.click(screen.getByRole("textbox", { name: "Body (JSON)" }));
+    await u.keyboard("{End}{{{{");
+    await u.keyboard("{ArrowDown}{ArrowDown}{ArrowUp}{Tab}");
+    expect(seen).toHaveBeenLastCalledWith('"{{booking.city}}');
+    await u.keyboard("{{{{");
+    await u.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox", { name: "Suggestions" })).toBeNull();
+    await u.keyboard("{Backspace}{Backspace}{{{{job");
+    await u.click(await screen.findByRole("option", { name: /Booking ID/ }));
+    expect(seen).toHaveBeenLastCalledWith('"{{booking.city}}{{job.booking_id}}');
+  });
+  it("adds a value at the caret with + value, quoting it when it is not inside a string", async () => {
+    const u = userEvent.setup();
+    const seen = vi.fn();
+    render(<Json start={'{ "a": '} onText={seen} />);
+    await u.click(screen.getByRole("textbox", { name: "Body (JSON)" }));
+    await u.keyboard("{End}");
+    await u.click(screen.getByRole("button", { name: "+ value" }));
+    await u.click(await screen.findByRole("option", { name: /Customer name/ }));
+    expect(seen).toHaveBeenLastCalledWith('{ "a": "{{booking.customer_name}}"');
+  });
+  it("says what is wrong with the JSON, and Format tidies valid JSON", async () => {
+    const u = userEvent.setup();
+    const seen = vi.fn();
+    render(<Json start={'{"a":1'} onText={seen} />);
+    expect(screen.getByTestId("json-error")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Format" })).toBeDisabled();
+    await u.click(screen.getByRole("textbox", { name: "Body (JSON)" }));
+    await u.keyboard("{End}}");
+    expect(screen.queryByTestId("json-error")).toBeNull();
+    await u.click(screen.getByRole("button", { name: "Format" }));
+    expect(seen).toHaveBeenLastCalledWith('{\n  "a": 1\n}');
   });
 });
 
@@ -204,8 +267,9 @@ describe("the field checklist", () => {
     render(<Host />);
     expect(screen.queryByRole("group", { name: "Fields" })).toBeNull();
     await u.click(screen.getByRole("button", { name: "Only these" }));
-    expect(seen).toHaveBeenLastCalledWith(["customer_name"]);
+    expect(screen.getByText(/With none ticked, all are sent/)).toBeInTheDocument();
     expect(screen.queryByText("Booking ID")).toBeNull();                                           // job facts are not fields
+    await u.click(screen.getByRole("checkbox", { name: /Customer name/ }));
     await u.click(screen.getByRole("checkbox", { name: /Odometer/ }));
     expect(seen).toHaveBeenLastCalledWith(["customer_name", "odometer"]);
     await u.type(screen.getByRole("searchbox", { name: "Search fields" }), "city");
@@ -240,12 +304,14 @@ describe("the integration editor", () => {
     await u.type(screen.getByRole("textbox", { name: "Parameter value 1" }), "vayu");
     await u.click(screen.getByRole("button", { name: /Add header/ }));                              // left half-built: not sent
     await u.click(screen.getByRole("button", { name: "Custom" }));
-    await u.click(screen.getByRole("button", { name: /Add row/ }));
-    await u.type(screen.getByRole("textbox", { name: "Key 1" }), "ref");
-    await u.type(screen.getByRole("textbox", { name: "Value 1" }), "x");
+    const json = screen.getByRole("textbox", { name: "Body (JSON)" });
+    expect(json).toHaveValue(STARTER_BODY);                                                          // a new custom body starts with an example
+    await u.clear(json);
+    await u.click(json);
+    await u.paste('{"ref": "x", "n": [1, {"deep": "{{job.booking_id}}"}]}');
     expect(await screen.findByTestId("preview-request")).toHaveTextContent("PUT https://crm.example.com/leads/SA1?src=vayu");
     const previews = sent(calls, "integrations/preview");
-    expect(previews.at(-1)).toMatchObject({ form: 1, event: "booking.created", method: "PUT", url: "https://crm.example.com/leads/{{job.booking_id}}", query: [{ key: "src", value: "vayu" }], headers: [], body_mode: "custom", body: { rows: [{ key: "ref", value: "x" }] } });
+    expect(previews.at(-1)).toMatchObject({ form: 2, event: "pdf.ready", method: "PUT", url: "https://crm.example.com/leads/{{job.booking_id}}", query: [{ key: "src", value: "vayu" }], headers: [], body_mode: "custom", body: { ref: "x", n: [1, { deep: "{{job.booking_id}}" }] } });
     await u.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText("the list")).toBeInTheDocument();
     const saved = calls.filter((c) => c.url.endsWith("/integrations") && c.init?.method === "POST");
@@ -258,6 +324,9 @@ describe("the integration editor", () => {
     editor("/integrations/new");
     await screen.findByRole("textbox", { name: "Name" });
     const when = screen.getByRole("combobox", { name: "Send when" });
+    expect(screen.getByRole("combobox", { name: "Form" })).toHaveValue("2");                      // an inspection form first: it offers the most values
+    expect(within(when).getAllByRole("option")).toHaveLength(9);
+    await u.selectOptions(screen.getByRole("combobox", { name: "Form" }), "Booking");
     expect(within(when).getAllByRole("option")).toHaveLength(3);
     await u.selectOptions(screen.getByRole("combobox", { name: "Form" }), "PDI");
     expect(within(when).getAllByRole("option")).toHaveLength(9);
@@ -269,6 +338,22 @@ describe("the integration editor", () => {
     expect(screen.getByText("No body is sent with DELETE.")).toBeInTheDocument();
     await u.selectOptions(screen.getByRole("combobox", { name: "Form" }), "Booking");
     expect(screen.getByRole("combobox", { name: "Send when" })).toHaveValue("booking.created");   // pdf.ready is not a booking event
+  });
+
+  it("says in the value list why it is short: the form and the event decide what exists", async () => {
+    const u = userEvent.setup();
+    editor("/integrations/new");
+    await screen.findByRole("textbox", { name: "Name" });
+    await u.click(screen.getByRole("button", { name: "Insert a value into URL" }));
+    expect(screen.queryByText(/only booking values/)).toBeNull();                                  // PDF ready: everything exists
+    await u.keyboard("{Escape}");
+    await u.selectOptions(screen.getByRole("combobox", { name: "Send when" }), "booking.created");
+    await u.click(screen.getByRole("button", { name: "Insert a value into URL" }));
+    expect(screen.getByText(/only booking values, job facts and event details exist yet/)).toBeInTheDocument();
+    await u.keyboard("{Escape}");
+    await u.selectOptions(screen.getByRole("combobox", { name: "Form" }), "Booking");
+    await u.click(screen.getByRole("button", { name: "Insert a value into URL" }));
+    expect(screen.getByText(/choose an inspection form/)).toBeInTheDocument();
   });
 
   it("explains a refused value next to the preview instead of showing a blank", async () => {
@@ -312,14 +397,48 @@ describe("the integration editor", () => {
       "integrations/i1": (init) => (init?.method === "PATCH" ? { status: 400, body: { code: "LOCKED_HEADER", detail: "Host is set by the system and cannot be changed." } } : ok(INTEGRATION)),
     });
     expect(await screen.findByRole("textbox", { name: "Name" })).toHaveValue("CRM");
-    expect(screen.getByRole("combobox", { name: "Form" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Form" })).not.toBeDisabled();                     // the form can be changed
     expect(screen.getByRole("combobox", { name: "Method" })).toHaveValue("PUT");
     expect(screen.getByRole("textbox", { name: "Parameter value 1" })).toHaveValue("vayu");
-    expect(screen.getByRole("textbox", { name: "Key 1" })).toHaveValue("ref");
+    expect((screen.getByRole("textbox", { name: "Body (JSON)" }) as HTMLTextAreaElement).value).toContain('"ref": "{{job.booking_id}}"');
     await u.click(screen.getByRole("checkbox", { name: "Active" }));
     await u.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Host is set by the system");
     expect(calls.some((c) => c.init?.method === "PATCH" && JSON.parse(String(c.init.body)).is_active === false)).toBe(true);
+  });
+
+  it("blocks Save and says why while the JSON is broken, and the preview keeps the last good body", async () => {
+    const u = userEvent.setup();
+    const calls = editor("/integrations/new");
+    await screen.findByRole("textbox", { name: "Name" });
+    await u.type(screen.getByRole("textbox", { name: "Name" }), "CRM");
+    await u.type(screen.getByRole("textbox", { name: "URL" }), "https://crm.example.com/");
+    await u.click(screen.getByRole("button", { name: "Custom" }));
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    const json = screen.getByRole("textbox", { name: "Body (JSON)" });
+    await u.clear(json);
+    await u.click(json);
+    await u.paste('{"a": ');
+    expect(screen.getByTestId("json-error")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    await waitFor(() => expect(sent(calls, "integrations/preview").length).toBeGreaterThan(0));
+    await u.paste("1}");
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    await u.selectOptions(screen.getByRole("combobox", { name: "Method" }), "GET");
+    expect(screen.queryByTestId("json-error")).toBeNull();                                         // no body is sent, so no body to check
+  });
+
+  it("changes the form of a saved integration, and the checklist lists every field of the form", async () => {
+    const u = userEvent.setup();
+    const calls = editor("/integrations/i1", { "integrations/i1": (init) => (init?.method === "PATCH" ? ok(INTEGRATION) : ok({ ...INTEGRATION, body_mode: "standard", body: {} })) });
+    await screen.findByRole("textbox", { name: "Name" });
+    await u.click(screen.getByRole("button", { name: "Only these" }));
+    expect(await screen.findByRole("checkbox", { name: /Odometer/ })).toBeInTheDocument();      // an inspection field, though the event is pdf.ready... and any event
+    expect(calls.some((c) => c.url.includes("integrations/catalogue?form=2") && !c.url.includes("event="))).toBe(true);
+    await u.selectOptions(screen.getByRole("combobox", { name: "Form" }), "Booking");
+    expect(screen.getByRole("combobox", { name: "Send when" })).toHaveValue("booking.created");
+    await u.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(sent(calls, "integrations/i1").at(-1)).toMatchObject({ form: 1, event: "booking.created" }));
   });
 
   it("copies an integration into a new one that starts switched off", async () => {
@@ -335,6 +454,7 @@ describe("the integration editor", () => {
     const calls = editor("/integrations/new");
     await screen.findByRole("textbox", { name: "Name" });
     await u.click(screen.getByRole("button", { name: "Only these" }));
+    await u.click(await screen.findByRole("checkbox", { name: /Customer name/ }));
     await u.click(screen.getByRole("checkbox", { name: /City/ }));
     await u.type(screen.getByRole("textbox", { name: "URL" }), "https://crm.example.com/");
     await waitFor(() => expect(sent(calls, "integrations/preview").at(-1)).toMatchObject({ body_mode: "standard", fields: ["customer_name", "city"], include_data: true }));

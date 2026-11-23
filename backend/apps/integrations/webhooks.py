@@ -286,7 +286,7 @@ def build_request(d: Delivery, mode: str = "send", types: dict[str, str] | None 
     raw: bytes | None = None
     if integ.method in BODY_METHODS:
         if integ.body_mode == "custom":
-            data: dict = values.build_tree((integ.body or {}).get("rows", []), get)
+            data = values.render_json(integ.body, get)
         elif mode == "sample":
             data = build_sample_payload(d, types or {})
         else:

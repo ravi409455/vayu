@@ -571,3 +571,8 @@ button.link.danger-link, .link.danger-link { color: var(--bad); }
 .brow-line > input:first-child { width: 160px; }
 .brow-group { margin: 6px 0 0 18px; padding-left: 12px; border-left: 2px solid var(--line); }
 .checklist { max-height: 220px; overflow: auto; margin-top: 6px; }
+.json-editor .json-wrap { position: relative; }
+.json-editor textarea { width: 100%; min-height: 240px; resize: vertical; tab-size: 2; white-space: pre; overflow: auto; }
+.json-suggest { width: 440px; max-width: calc(100% - 8px); max-height: 280px; overflow: auto; }
+.vhint { margin: 6px 4px 0; padding-top: 6px; border-top: 1px solid var(--line); }
+.json-suggest [role="option"].on { background: var(--hover); }
