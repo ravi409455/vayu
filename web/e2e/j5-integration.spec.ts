@@ -52,7 +52,7 @@ test("J5: webhook with a valid signature, ZIP download and the verify page", asy
     // the delivery log shows it
     await page.getByRole("button", { name: /^Actions for / }).first().click();
     await page.getByRole("menuitem", { name: "Deliveries" }).click();
-    await expect(page.getByRole("dialog").locator("tr", { hasText: "pdf.ready" })).toContainText("success");
+    await expect(page.getByRole("dialog").locator("tr", { hasText: "PDF ready" })).toContainText("Delivered");
     await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
 
     // the ZIP link: "Preparing…" then the download starts by itself

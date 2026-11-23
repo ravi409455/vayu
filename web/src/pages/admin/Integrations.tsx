@@ -11,6 +11,16 @@ const EVENT_LABEL: Record<string, string> = {
   "inspection.started": "Inspection started", "inspection.submitted": "Inspection submitted", "media.completed": "All media verified (Completed)",
   "pdf.ready": "PDF ready (also on regenerate)", "alert.conflict": "Conflict alert", "alert.stuck_upload": "Stuck upload alert",
 };
+/** The event in a few words, for lists (the dialog uses the longer labels). */
+export const eventWord = (e: string) => (EVENT_LABEL[e] ?? e).replace(/ \(.*\)$/, "");
+const ERROR_WORD: Record<string, string> = {
+  integration_disabled: "Integration switched off", template_failed: "The body template could not be filled",
+  timeout: "No answer in time", blocked_address: "Address not allowed (private network)", connection_error: "Could not connect",
+  retries_exhausted: "Gave up after the last retry",
+};
+/** A delivery error as words ("http_503" -> "Server answered 503"). */
+export const errorWord = (e: string) => ERROR_WORD[e] ?? (/^http_\d+$/.test(e) ? `Server answered ${e.slice(5)}` : e);
+const STATUS_WORD: Record<string, string> = { success: "Delivered", failed: "Failed", retrying: "Retrying", pending: "Waiting" };
 const blank = (form: number): Partial<Integration> => ({ form, name: "", url: "", events: ["pdf.ready"], include_data: true, include_pdf: true, include_image_zip: false, include_video_zip: false, fields: [], template: "" });
 
 export function tone(status: string): "ok" | "warn" | "bad" | "info" {
@@ -50,10 +60,12 @@ export function Integrations() {
       <PageHeader title="Integrations" subtitle="Send events to other systems the moment they happen.">
         <button className="primary" disabled={eligible.length === 0} onClick={() => setEdit(blank(eligible[0]!.id))}>New integration</button></PageHeader>
       {list.data && list.data.length === 0 ? <Empty title="No integrations yet">Send bookings, PDFs and changes to another system the moment they happen.</Empty> :
-      <table><thead><tr><th>Name</th><th>Form</th><th>URL</th><th>Events</th><th /></tr></thead>
+      <div className="table-card"><table className="rows"><thead><tr><th>Name</th><th>Form</th><th>Sends when</th><th /></tr></thead>
         <tbody>{(list.data ?? []).map((i) => (
           <tr key={i.id}>
-            <td>{i.name} {!i.is_active && <Pill tone="warn">Off</Pill>}</td><td className="mono">{i.form_key}</td><td className="mono small">{i.url}</td><td className="small">{i.events.join(", ")}</td>
+            <td><span className="cell-main">{i.name}</span> {!i.is_active && <Pill tone="warn">Off</Pill>}<div className="cell-sub mono ellipsis" style={{ maxWidth: 360 }} title={i.url}>{i.url}</div></td>
+            <td>{(forms.data ?? []).find((f) => f.id === i.form)?.name ?? i.form_key}</td>
+            <td><div className="chips">{i.events.map((e) => <span key={e} className="chip">{eventWord(e)}</span>)}</div></td>
             <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
               <button className="sm" onClick={() => test.mutate(i)}>Test</button>{" "}
               <MoreMenu label={`Actions for ${i.name}`} items={[
@@ -61,9 +73,12 @@ export function Integrations() {
                 { label: "Deliveries", onClick: () => setLog(i) },
                 { label: "New secret", onClick: () => rotate.mutate(i) },
                 { label: "Delete…", danger: true, onClick: () => { if (confirm(`Delete ${i.name}?`)) remove.mutate(i); } },
-              ]} /></td></tr>))}</tbody></table>}
+              ]} /></td></tr>))}</tbody></table></div>}
       {edit && <Editor value={edit} onChange={setEdit} events={events.data ?? []} forms={eligible} onSave={() => save.mutate(edit)} onClose={() => setEdit(null)} fail={fail} />}
-      {secret && <Modal title="Signing secret" onClose={() => setSecret(null)}><p>Copy it now. It is shown only once.</p><pre className="mono card" data-testid="secret">{secret}</pre></Modal>}
+      {secret && <Modal title="Signing secret" onClose={() => setSecret(null)}
+        actions={<><button onClick={() => { void navigator.clipboard?.writeText(secret); say("Secret copied."); }}>Copy</button><button className="primary" onClick={() => setSecret(null)}>Close</button></>}>
+        <div className="banner warn">Copy it now: it is shown only this once. Give it to the receiving system so it can check the signature on every message.</div>
+        <pre className="mono secret-box" data-testid="secret">{secret}</pre></Modal>}
       {log && <DeliveryLog integration={log} onClose={() => setLog(null)} />}
     </>
   );
@@ -108,15 +123,21 @@ function DeliveryLog({ integration, onClose }: { integration: Integration; onClo
   const q = useQuery({ queryKey: ["deliveries", integration.id, status], queryFn: () => api<Page<Delivery>>(`integrations/${integration.id}/deliveries`, { query: { status } }) });
   const resend = useMutation({ mutationFn: (d: Delivery) => api(`deliveries/${d.id}/resend`, { body: {} }), onSuccess: () => { say("Re-sent."); void refresh("deliveries"); }, onError: fail });
   return (
-    <Modal title={`Deliveries: ${integration.name}`} onClose={onClose}>
-      <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)} style={{ maxWidth: 180 }}>
-        <option value="">All</option><option value="success">Delivered</option><option value="retrying">Retrying</option><option value="failed">Failed</option></select>
-      <table><thead><tr><th>When</th><th>Event</th><th>Booking</th><th>Result</th><th /></tr></thead>
-        <tbody>{(q.data?.results ?? []).map((d) => (
-          <tr key={d.id}><td>{when(d.created_at)}</td><td className="small">{d.event}</td><td>{d.booking_id}</td>
-            <td><Pill tone={tone(d.status)}>{d.status}</Pill> <span className="small muted">{d.response_status ?? ""} {d.error} {d.attempts > 1 ? `· ${d.attempts} tries` : ""}</span></td>
-            <td><button className="link" onClick={() => resend.mutate(d)}>Re-send</button></td></tr>))}</tbody></table>
-      {q.data && q.data.results.length === 0 && <Empty>No deliveries yet.</Empty>}
+    <Modal wide title={`Deliveries: ${integration.name}`} onClose={onClose}>
+      <div className="bar">
+        <div className="seg" role="group" aria-label="Status">
+          {([["", "All"], ["success", "Delivered"], ["retrying", "Retrying"], ["failed", "Failed"]] as const).map(([k, l]) => <button key={k} aria-pressed={status === k} onClick={() => setStatus(k)}>{l}</button>)}
+        </div>
+        <span className="grow muted small" style={{ textAlign: "right" }}>{q.data ? `${q.data.count} message${q.data.count === 1 ? "" : "s"}` : ""}</span>
+      </div>
+      {q.data && q.data.results.length > 0 && (
+        <div className="table-card"><table className="rows"><thead><tr><th>When</th><th>Event</th><th>Booking</th><th>Result</th><th /></tr></thead>
+          <tbody>{q.data.results.map((d) => (
+            <tr key={d.id}><td className="nowrap">{when(d.created_at)}</td><td>{eventWord(d.event)}</td><td>{d.booking_id || "—"}</td>
+              <td><Pill tone={tone(d.status)}>{STATUS_WORD[d.status] ?? d.status}</Pill>
+                <div className="cell-sub">{[d.response_status && !/^http_/.test(d.error) ? `HTTP ${d.response_status}` : "", d.error ? errorWord(d.error) : "", d.attempts > 1 ? `${d.attempts} tries` : "", d.status === "retrying" && d.next_retry_at ? `next try ${when(d.next_retry_at)}` : ""].filter(Boolean).join(" · ")}</div></td>
+              <td style={{ textAlign: "right" }}><button className="sm" onClick={() => resend.mutate(d)}>Re-send</button></td></tr>))}</tbody></table></div>)}
+      {q.data && q.data.results.length === 0 && <Empty>{status ? "No deliveries with this result." : "No deliveries yet. Use Test to send one."}</Empty>}
     </Modal>
   );
 }

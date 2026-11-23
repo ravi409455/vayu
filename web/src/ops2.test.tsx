@@ -99,3 +99,25 @@ describe("my jobs", () => {
     expect(groupOf(j("completed", "2026-11-23"), NOW)).toBe("Earlier");
   });
 });
+
+describe("audit log links", () => {
+  it("opens what an entry is about, and nothing for deleted things", async () => {
+    const { targetLink } = await import("./pages/admin/Audit");
+    expect(targetLink({ target_type: "booking", target_id: "b1", action: "booking.force_release" })).toBe("/booking/b1");
+    expect(targetLink({ target_type: "booking", target_id: "b1", action: "booking.delete" })).toBeNull();
+    expect(targetLink({ target_type: "library_item", target_id: "7", action: "library.update" })).toBe("/library/7");
+    expect(targetLink({ target_type: "form_version", target_id: "3", action: "form.publish" })).toBe("/forms");
+    expect(targetLink({ target_type: "something_new", target_id: "1", action: "x.y" })).toBeNull();
+  });
+});
+
+describe("integration words", () => {
+  it("names events and delivery errors in words", async () => {
+    const { eventWord, errorWord } = await import("./pages/admin/Integrations");
+    expect(eventWord("booking.updated")).toBe("Booking updated");
+    expect(eventWord("pdf.ready")).toBe("PDF ready");
+    expect(errorWord("blocked_address")).toMatch(/not allowed/);
+    expect(errorWord("http_503")).toBe("Server answered 503");
+    expect(errorWord("something_new")).toBe("something_new");
+  });
+});

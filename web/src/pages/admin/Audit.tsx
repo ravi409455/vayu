@@ -1,12 +1,31 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { api, type Page } from "../../api/client";
 import { useList } from "../../api/hooks";
 import type { User } from "../../api/types";
 import { fmtStamp } from "../../lib/format";
 import { Empty, PageHeader } from "../../ui/kit";
 
-type Row = { id: number; actor_username: string | null; action: string; target_type: string; summary: string; created_at: string };
+type Row = { id: number; actor_username: string | null; action: string; target_type: string; target_id: string; summary: string; created_at: string };
+
+/** Where the thing an entry is about can be opened (null: nowhere, e.g. it was deleted). */
+export function targetLink(r: Pick<Row, "target_type" | "target_id" | "action">): string | null {
+  if (/\.delete$/.test(r.action)) return null;
+  switch (r.target_type) {
+    case "booking": return `/booking/${r.target_id}`;
+    case "form": return `/forms/${r.target_id}`;
+    case "library_item": return `/library/${r.target_id}`;
+    case "form_version": case "field": case "form_asset": return "/forms";
+    case "pdf_template": return "/pdf";
+    case "user": return "/users";
+    case "role": return "/roles";
+    case "integration": return "/integrations";
+    case "api_key": return "/api-keys";
+    case "master_list": case "master_list_item": return "/lists";
+    default: return null;
+  }
+}
 const AREAS: [string, string][] = [["", "Everything"], ["form", "Forms"], ["library", "Library"], ["pdf_template", "PDF templates"], ["user", "Users"],
   ["role", "Roles"], ["integration", "Integrations"], ["api_key", "API keys"], ["booking", "Bookings"], ["master_list", "Master lists"]];
 
@@ -28,7 +47,7 @@ export function Audit() {
       <div className="table-card">
         <table className="rows"><thead><tr><th>When</th><th>Who</th><th>What happened</th><th>Action</th></tr></thead>
           <tbody>{rows.map((r) => (
-            <tr key={r.id}><td className="nowrap">{fmtStamp(r.created_at)}</td><td>{r.actor_username ?? "system"}</td><td>{r.summary}</td><td className="mono small muted">{r.action}</td></tr>))}</tbody></table>
+            <tr key={r.id}><td className="nowrap">{fmtStamp(r.created_at)}</td><td>{r.actor_username ?? "system"}</td><td>{targetLink(r) ? <Link to={targetLink(r)!}>{r.summary}</Link> : r.summary}</td><td className="mono small muted">{r.action}</td></tr>))}</tbody></table>
         {q.data && rows.length === 0 && <Empty>Nothing matches these filters.</Empty>}
         {q.data && (q.data.next || q.data.previous) && <div className="table-foot"><span className="grow muted">{q.data.count} entries</span>
           <button className="sm" disabled={!q.data.previous} onClick={() => setPage(page - 1)}>Newer</button>
