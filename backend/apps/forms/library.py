@@ -18,16 +18,21 @@ from .models import (
     FieldType,
     LibraryItem,
     LibraryKind,
+    LibraryRevision,
     Page,
     Section,
     ensure_draft,
 )
-from .rules import rule_syntax_issues
+from .rules import SPECIAL_VARS, rule_syntax_issues, rule_vars
+from .system_fields import SYSTEM_FIELDS
 
 FIELD_KEYS = {"key", "label", "helper_text", "type", "config", "required", "required_if",
               "show_if", "visible", "access"}
-CONTENT = ("label", "helper_text", "config")  # owned by the library once linked
-OVERRIDES = ("required", "required_if", "show_if", "visible", "access")  # per-form, kept on update
+SECTION_KEYS = {"title", "show_if", "visible", "access", "fields"}
+# a library item owns everything inside it; a form decides only where it is placed. Rules inside
+# an item may point only at the item's own fields and at fields every custom form has:
+OUTSIDE_OK = {f"booking.{spec['key']}" for spec in SYSTEM_FIELDS["booking"]} | {
+    "inspection.chassis_no"}
 
 
 def bad(code: str, message: str, status: int = 400) -> CodedError:
@@ -72,8 +77,7 @@ def validate_field_definition(d: Any, *, expect_key: str | None = None) -> dict:
 
 
 def validate_section_definition(d: Any) -> dict:
-    if (not isinstance(d, dict) or set(d) - {"title", "show_if", "visible", "fields"}
-            or not isinstance(d.get("fields"), list)):
+    if (not isinstance(d, dict) or set(d) - SECTION_KEYS or not isinstance(d.get("fields"), list)):
         raise bad("INVALID_DEFINITION", "A section definition needs a title and a fields list.")
     if not isinstance(d.get("title"), str) or not d["title"].strip():
         raise bad("INVALID_DEFINITION", "A section needs a title.")
@@ -81,6 +85,12 @@ def validate_section_definition(d: Any) -> dict:
         issues = rule_syntax_issues(d["show_if"], "show_if")
         if issues:
             raise bad("INVALID_RULE", "; ".join(f"{i.path}: {i.message}" for i in issues))
+    try:
+        validate_access(d.get("access", {}))
+    except ValueError as e:
+        raise bad("INVALID_ACCESS", str(e)) from e
+    if not isinstance(d.get("visible", True), bool):
+        raise bad("INVALID_DEFINITION", "visible must be true or false.")
     keys = []
     for f in d["fields"]:
         validate_field_definition(f)
@@ -88,6 +98,34 @@ def validate_section_definition(d: Any) -> dict:
     if len(set(keys)) != len(keys):
         raise bad("INVALID_DEFINITION", "Field keys must be unique within the section.")
     return d
+
+
+def _rules_of(field: dict) -> list[Any]:
+    rules = [field.get("show_if"), field.get("required_if")]
+    if field.get("type") == "derived":
+        rules.append((field.get("config") or {}).get("rule"))
+    return rules
+
+
+def check_self_contained(kind: str, definition: dict) -> None:
+    """Rules in a library item may use only the item's own fields and the system fields every
+    custom form has, so the item behaves the same in every form."""
+    fields = [definition] if kind == LibraryKind.FIELD else definition["fields"]
+    rules = [r for f in fields for r in _rules_of(f)]
+    if kind == LibraryKind.SECTION:
+        rules.append(definition.get("show_if"))
+    own = {f"inspection.{f['key']}" for f in fields}
+    for rule in rules:
+        for name in sorted(rule_vars(rule) if rule is not None else ()):
+            if name in SPECIAL_VARS:
+                continue
+            form, _, rest = name.partition(".")
+            ref = f"{form}.{rest.split('.')[0]}"
+            if ref not in own and ref not in OUTSIDE_OK:
+                raise bad("RULE_NOT_SELF_CONTAINED",
+                          f"A rule uses '{ref}', which is not part of this library item. Put that "
+                          "field in the same library section, or keep this item out of the "
+                          "library.")
 
 
 def _check_immutable(kind: str, old: dict, new: dict) -> None:
@@ -103,38 +141,83 @@ def _check_immutable(kind: str, old: dict, new: dict) -> None:
 
 # ------------------------------------------------------------------ items
 
-def create_item(actor, *, kind: str, key: str, name: str | None, definition: Any) -> LibraryItem:
+def _settings_changed(old: dict, new: dict) -> list[str]:
+    return sorted(k for k in (set(old) | set(new)) if old.get(k) != new.get(k))
+
+
+def changed_keys(kind: str, old: dict | None, new: dict) -> list[str]:
+    """What a save changed: setting names for a field, field keys (and section settings) for a
+    section. Shown in the history."""
+    if old is None:
+        return []
+    if kind == LibraryKind.FIELD:
+        return _settings_changed(old, new)
+    out = [f"section.{k}" for k in _settings_changed(
+        {k: v for k, v in old.items() if k != "fields"}, {k: v for k, v in new.items()
+                                                          if k != "fields"})]
+    before = {f["key"]: f for f in old["fields"]}
+    after = {f["key"]: f for f in new["fields"]}
+    out += [k for k in sorted(set(before) | set(after)) if before.get(k) != after.get(k)]
+    if [f["key"] for f in old["fields"]] != [f["key"] for f in new["fields"]] and not out:
+        out.append("order")
+    return out
+
+
+def _record(actor, item: LibraryItem, old: dict | None) -> None:
+    LibraryRevision.objects.create(
+        item=item, revision=item.revision, name=item.name, definition=item.definition,
+        changed_keys=changed_keys(item.kind, old, item.definition),
+        by=actor.username if actor is not None else "")
+
+
+def _validate(kind: str, key: str, definition: Any) -> None:
     if kind == LibraryKind.FIELD:
         validate_field_definition(definition, expect_key=key)
-    elif kind == LibraryKind.SECTION:
-        if not LIST_KEY_RE.fullmatch(key or ""):
-            raise bad("INVALID_KEY", "Use lowercase letters, digits and _; start with a letter.")
-        validate_section_definition(definition)
     else:
+        validate_section_definition(definition)
+    check_self_contained(kind, definition)
+
+
+@transaction.atomic
+def create_item(actor, *, kind: str, key: str, name: str | None, definition: Any) -> LibraryItem:
+    if kind not in (LibraryKind.FIELD, LibraryKind.SECTION):
         raise bad("INVALID_DEFINITION", "kind must be 'field' or 'section'.")
+    if kind == LibraryKind.SECTION and not LIST_KEY_RE.fullmatch(key or ""):
+        raise bad("INVALID_KEY", "Use lowercase letters, digits and _; start with a letter.")
+    _validate(kind, key, definition)
     if LibraryItem.objects.filter(kind=kind, key=key).exists():
         raise bad("DUPLICATE_KEY", f"A library {kind} with key '{key}' already exists.")
     default_name = definition["label"] if kind == LibraryKind.FIELD else definition["title"]
     item = LibraryItem.objects.create(kind=kind, key=key, name=name or default_name,
                                       definition=definition)
+    _record(actor, item, None)
     audit.record(actor, "library.create", "library_item", item.id, f"{kind} {key}")
     return item
 
 
 @transaction.atomic
 def update_item(actor, item: LibraryItem, *, definition: Any = None, archived: bool | None = None,
-                name: str | None = None) -> LibraryItem:
+                name: str | None = None, revision: int | None = None) -> LibraryItem:
+    item = LibraryItem.objects.select_for_update().get(pk=item.pk)
     if definition is not None:
+        if revision is None:
+            raise bad("REVISION_REQUIRED", "Send the revision you started from.")
+        if revision != item.revision:
+            raise CodedError("STALE_LIBRARY_ITEM", "Someone saved this item after you opened it; "
+                             "reload to see their changes.", 409, revision=item.revision)
         if item.kind == LibraryKind.FIELD:
             if isinstance(definition, dict) and definition.get("key", item.key) != item.key:
                 raise bad("KEY_IMMUTABLE", "A library field's key can never change.")
-            validate_field_definition(definition, expect_key=item.key)
-        else:
-            validate_section_definition(definition)
+        _validate(item.kind, item.key, definition)
         _check_immutable(item.kind, item.definition, definition)
         if definition != item.definition:
+            old = item.definition
             item.definition = definition
             item.revision += 1
+            if name is not None:
+                item.name = name
+            item.save()
+            _record(actor, item, old)
             audit.record(actor, "library.update", "library_item", item.id,
                          f"{item.kind} {item.key} -> revision {item.revision}")
     if name is not None:
@@ -222,7 +305,7 @@ def add_section(actor, page: Page, item: LibraryItem, link: bool) -> Section:
     d = item.definition
     section = Section(version_id=page.version_id, page=page, title=d["title"],
                       order=_next_order(page.sections.all()), visible=d.get("visible", True),
-                      show_if=d.get("show_if"))
+                      show_if=d.get("show_if"), access=d.get("access", {}))
     if link:
         section.library_item, section.library_revision = item, item.revision
     section.save()
@@ -232,8 +315,19 @@ def add_section(actor, page: Page, item: LibraryItem, link: bool) -> Section:
     return section
 
 
+def _apply(field: Field, fd: dict, order: int) -> None:
+    for attr, value in _field_attrs(fd).items():
+        setattr(field, attr, value)
+    field.order = order
+
+
 @transaction.atomic
 def accept_update(actor, obj: Field | Section) -> Field | Section:
+    """Bring a linked field or section to the library's current revision. The library owns
+    everything inside the item (content, rules, required, visible, access, and for a section its
+    fields and their order); the form keeps only where the item sits."""
+    from .ratings import rename_section_title
+
     ensure_draft(obj.version_id)
     item = obj.library_item
     if item is None:
@@ -242,26 +336,30 @@ def accept_update(actor, obj: Field | Section) -> Field | Section:
         return obj
     d = item.definition
     if isinstance(obj, Field):
-        for attr in CONTENT:
-            setattr(obj, attr, _field_attrs(d)[attr])
+        _apply(obj, d, obj.order)
         obj.library_revision = item.revision
         obj.save()
     else:
-        obj.title, obj.library_revision = d["title"], item.revision
+        old_title = obj.title
+        obj.title, obj.visible = d["title"], d.get("visible", True)
+        obj.show_if, obj.access = d.get("show_if"), d.get("access", {})
+        obj.library_revision = item.revision
         obj.save()
+        if old_title != obj.title:
+            rename_section_title(obj.version_id, old_title, obj.title)
         existing = {f.key: f for f in obj.fields.all()}
-        wanted = {fd["key"]: fd for fd in d["fields"]}
+        wanted = {fd["key"] for fd in d["fields"]}
         for key, f in existing.items():
             if key not in wanted:
                 f.delete()
-        for fd in d["fields"]:
+        for i, fd in enumerate(d["fields"]):
             if fd["key"] in existing:
                 f = existing[fd["key"]]
-                for attr in CONTENT:
-                    setattr(f, attr, _field_attrs(fd)[attr])
+                _apply(f, fd, i)
                 f.save()
-        new = [fd for fd in d["fields"] if fd["key"] not in existing]
-        _build_section_fields(obj, {"fields": new}, start=_next_order(obj.fields.all()))
+            else:
+                Field(version_id=obj.version_id, section=obj, key=fd["key"], order=i,
+                      **_field_attrs(fd)).save()
     audit.record(actor, "form.accept_library_update", "field" if isinstance(obj, Field)
                  else "section", obj.id, f"{item.key} -> r{item.revision}")
     return obj
@@ -301,6 +399,7 @@ def save_to_library(actor, obj: Field | Section, *, key: str | None, name: str |
         if any(f.is_system for f in fields):
             raise CodedError("SYSTEM_FIELD", "This section holds system fields.", 400)
         definition = {"title": obj.title, "visible": obj.visible, "show_if": obj.show_if,
+                      "access": obj.access,
                       "fields": [{"key": f.key, "label": f.label, "type": f.type,
                                   "helper_text": f.helper_text, "config": f.config,
                                   "required": f.required, "required_if": f.required_if,

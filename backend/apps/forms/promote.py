@@ -311,7 +311,21 @@ def _build_field(version, section, f: dict, items: dict) -> None:
           library_revision=link["revision"] if link else None).save()
 
 
-def import_bundle(actor, b: Any) -> dict:
+def _as_new(b: dict, as_new: dict) -> dict:
+    """The bundle as a brand-new custom form with this key and name (a copy, never an overwrite)."""
+    key, name = as_new.get("key"), as_new.get("name")
+    if b["form"]["type"] != FormType.CUSTOM:
+        raise bad("NOT_DUPLICABLE", "Only custom forms can be copied; the booking, start and "
+                  "end forms are the only ones of their kind.")
+    if not isinstance(key, str) or not KEY_RE.fullmatch(key) \
+            or not isinstance(name, str) or not name.strip():
+        raise bad("INVALID_BUNDLE", "A new form needs a name and a key (a-z, 0-9, _).")
+    if Form.objects.filter(key=key).exists():
+        raise bad("KEY_TAKEN", f"A form with the key '{key}' already exists.", 409)
+    return {**b, "form": {**b["form"], "key": key, "name": name.strip(), "inspection_type": key}}
+
+
+def import_bundle(actor, b: Any, as_new: dict | None = None) -> dict:
     _check_shape(b)
     if b["schema"] == 1:
         try:
@@ -320,6 +334,8 @@ def import_bundle(actor, b: Any) -> dict:
             raise bad("OLD_BUNDLE", str(e)) from e
     from apps.reports.models import PdfTemplate, PdfTemplateVersion
 
+    if as_new is not None:
+        b = _as_new(b, as_new)
     form_data = b["form"]
     # the booking, start and end forms are found by type; custom forms by key
     existing = (Form.objects.filter(type=form_data["type"]).first()

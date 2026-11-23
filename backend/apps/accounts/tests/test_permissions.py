@@ -215,7 +215,7 @@ def test_forms_are_readable_by_ops_never_by_experts_and_editable_only_when_grant
                     format="json").status_code != 403  # allowed through (stale draft -> 409)
 
 
-def test_saving_to_the_library_needs_both_forms_edit_and_library_edit(api_as):
+def test_saving_to_the_library_is_admin_only_even_for_a_role_that_may_edit_forms(api_as):
     admin, _ = api_as(Role.ADMIN)
     ops, _ = api_as(Role.OPS)
     form = admin.post("/api/v1/forms", {"key": "pdi", "name": "PDI"},
@@ -227,8 +227,10 @@ def test_saving_to_the_library_needs_both_forms_edit_and_library_edit(api_as):
     url = f"/api/v1/fields/{f['id']}/save-to-library"
     put_perms(admin, "ops", dict(DEFAULTS["ops"], **{"forms.edit": "all"}))
     assert ops.post(url, {}, format="json").status_code == 403  # library.edit missing
-    put_perms(admin, "ops", dict(DEFAULTS["ops"], **{"forms.edit": "all", "library.edit": "all"}))
-    assert ops.post(url, {}, format="json").status_code == 201
+    refused = put_perms(admin, "ops", dict(DEFAULTS["ops"], **{"forms.edit": "all",
+                                                               "library.edit": "all"}))
+    assert refused.status_code == 400 and refused.json()["code"] == "NOT_GRANTABLE"
+    assert admin.post(url, {}, format="json").status_code == 201
 
 
 def test_master_lists_readable_by_everyone_writable_only_when_granted(api_as):

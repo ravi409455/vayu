@@ -75,6 +75,26 @@ def _known_keys(template: PdfTemplate) -> dict[str, set[str]]:
             "end": keys(system_version("end")) if use_end else set()}
 
 
+def definition_issues(template: PdfTemplate, definition: dict) -> list[dict]:
+    """Rows of a layout that point at fields the form (as it is now, draft or live) lacks."""
+    known = _known_keys(template)
+    return [{"path": "definition", "code": "UNKNOWN_FIELD",
+             "message": (f"'{form}.{key}' needs the {form} form, which this form does not "
+                         "include (see its form settings)."
+                         if form in ("start", "end") and not known.get(form)
+                         else f"'{form}.{key}' is not a field of the {form} form.")}
+            for form, key in sorted(referenced_fields(definition))
+            if key not in known.get(form, set())]
+
+
+def latest_layout_issues(form: Form) -> list[dict]:
+    """The form's newest PDF layout against the form's newest version (used before a library
+    push goes live)."""
+    template = PdfTemplate.objects.filter(form=form).first()
+    last = template.versions.order_by("-number").first() if template else None
+    return definition_issues(template, last.definition) if template and last else []
+
+
 def publish(actor, v: PdfTemplateVersion, row_version: int) -> PdfTemplateVersion:
     with transaction.atomic():
         v = PdfTemplateVersion.objects.select_for_update().select_related(
@@ -84,14 +104,7 @@ def publish(actor, v: PdfTemplateVersion, row_version: int) -> PdfTemplateVersio
         if row_version != v.row_version:
             raise err("STALE_DRAFT", "The draft changed since you opened it.", 409,
                       row_version=v.row_version)
-        known = _known_keys(v.template)
-        issues = [{"path": "definition", "code": "UNKNOWN_FIELD",
-                   "message": (f"'{form}.{key}' needs the {form} form, which this form does not "
-                               "include (see its form settings)."
-                               if form in ("start", "end") and not known.get(form)
-                               else f"'{form}.{key}' is not a field of the {form} form.")}
-                  for form, key in sorted(referenced_fields(v.definition))
-                  if key not in known.get(form, set())]
+        issues = definition_issues(v.template, v.definition)
         if issues:
             raise err("PUBLISH_BLOCKED", "Fix these problems before publishing.", issues=issues)
         v.status, v.published_at, v.row_version = "published", timezone.now(), v.row_version + 1

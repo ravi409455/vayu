@@ -31,7 +31,7 @@ CATALOG: list[Perm] = [
     Perm("forms.publish", "Templates", "Publish form versions"),
     Perm("forms.promote", "Templates", "Promote forms from staging to production"),
     Perm("library.view", "Templates", "View the shared library"),
-    Perm("library.edit", "Templates", "Edit the shared library"),
+    Perm("library.edit", "Templates", "Edit the shared library", grantable=False),
     Perm("pdf_templates.view", "Templates", "View PDF report templates"),
     Perm("pdf_templates.edit", "Templates", "Edit and publish PDF report templates"),
     Perm("bookings.view", "Bookings", "View bookings", scoped=True),

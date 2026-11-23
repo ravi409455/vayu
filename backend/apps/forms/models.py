@@ -125,6 +125,23 @@ class LibraryItem(models.Model):
         ordering = ["kind", "key"]
 
 
+class LibraryRevision(models.Model):
+    """Every save of a library item, kept: who changed what, and the definition as it was."""
+
+    item = models.ForeignKey(LibraryItem, on_delete=models.CASCADE, related_name="revisions")
+    revision = models.PositiveIntegerField()
+    name = models.CharField(max_length=200)
+    definition = models.JSONField()
+    changed_keys = models.JSONField(default=list)    # which field keys / settings changed
+    by = models.CharField(max_length=150, blank=True)
+    at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["item", "revision"],
+                                               name="one_row_per_item_revision")]
+        ordering = ["-revision"]
+
+
 def ensure_draft(version_id: int) -> None:
     """Fast pre-check for views. DraftOnly below is the authoritative (locking) guard."""
     status = FormVersion.objects.filter(pk=version_id).values_list("status", flat=True).first()

@@ -35,7 +35,8 @@ def test_publish_freezes_the_version(admin, form_v, tree):
     t = tree(v)
     assert t["status"] == "published" and t["published_at"] is not None
     listed = admin.get(f"/api/v1/forms/{form['id']}").json()
-    assert listed["published_version"] == {"id": v, "number": 1}
+    assert listed["published_version"] == {"id": v, "number": 1, "use_start": True,
+                                           "use_end": True}
     assert listed["draft_version"] is None
 
 

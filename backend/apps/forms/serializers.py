@@ -219,6 +219,18 @@ class SectionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Sections can only move within the same version.")
         return page
 
+    def update(self, instance, validated_data):
+        from django.db import transaction
+
+        from .ratings import rename_section_title
+
+        old = instance.title
+        with transaction.atomic():
+            section = super().update(instance, validated_data)
+            if section.title != old:
+                rename_section_title(section.version_id, old, section.title)
+        return section
+
 
 class PageSerializer(serializers.ModelSerializer):
     sections = SectionSerializer(many=True, read_only=True)

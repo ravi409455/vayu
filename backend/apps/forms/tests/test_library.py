@@ -242,9 +242,16 @@ def test_deleting_a_linked_field_or_section_removes_it_from_the_form(admin, draf
 
 # ---------------------------------------------------------------- edits and updates
 
+def rev(item) -> int:
+    from apps.forms.models import LibraryItem
+
+    return LibraryItem.objects.get(pk=item["id"]).revision
+
+
 def edit(admin, item, **definition):
     r = admin.patch(f"/api/v1/library/{item['id']}",
-                    {"definition": {**item["definition"], **definition}}, format="json")
+                    {"definition": {**item["definition"], **definition}, "revision": rev(item)},
+                    format="json")
     assert r.status_code == 200, r.json()
     return r.json()
 
@@ -253,8 +260,8 @@ def test_edit_bumps_revision_and_noop_does_not(admin):
     item = lib_field(admin)
     assert edit(admin, item, label="Tread depth")["revision"] == 2
     again = admin.patch(f"/api/v1/library/{item['id']}",
-                        {"definition": {**item["definition"], "label": "Tread depth"}},
-                        format="json").json()
+                        {"definition": {**item["definition"], "label": "Tread depth"},
+                         "revision": rev(item)}, format="json").json()
     assert again["revision"] == 2
 
 
@@ -263,12 +270,14 @@ def test_key_and_type_are_immutable_in_the_library(admin):
     for change, code in (({"key": "other"}, "KEY_IMMUTABLE"),
                          ({"type": "short_text", "config": {}}, "TYPE_IMMUTABLE")):
         r = admin.patch(f"/api/v1/library/{item['id']}",
-                        {"definition": {**item["definition"], **change}}, format="json")
+                        {"definition": {**item["definition"], **change}, "revision": rev(item)},
+                        format="json")
         assert r.status_code == 400 and r.json()["code"] == code
     sec = lib_section(admin)
     changed = {**TYRES, "fields": [{**TYRES["fields"][0], "type": "short_text", "config": {}},
                                    TYRES["fields"][1]]}
-    r = admin.patch(f"/api/v1/library/{sec['id']}", {"definition": changed}, format="json")
+    r = admin.patch(f"/api/v1/library/{sec['id']}", {"definition": changed, "revision": rev(sec)},
+                    format="json")
     assert r.status_code == 400 and r.json()["code"] == "TYPE_IMMUTABLE"
 
 
@@ -292,7 +301,7 @@ def test_published_versions_never_change_and_report_no_update(admin, draft, tree
     assert f["label"] == "Tyre depth" and f["library"]["update_available"] is False
 
 
-def test_accept_update_on_a_field_keeps_per_form_settings(admin, draft, tree):
+def test_accept_update_on_a_field_takes_everything_from_the_library_but_keeps_its_place(admin, draft, tree):
     v, _, s = draft
     item = lib_field(admin)
     add_linked_field(admin, s, item)
@@ -303,11 +312,12 @@ def test_accept_update_on_a_field_keeps_per_form_settings(admin, draft, tree):
     assert r.status_code == 200
     g = find(tree(v), "tyre_depth")
     assert (g["label"], g["helper_text"]) == ("Tread depth", "Gauge on the groove")
-    assert g["required"] is True and g["order"] == 9
+    assert g["required"] is False                     # the library owns the settings
+    assert g["order"] == 9                            # the form owns where it sits
     assert g["library"] == {"item": item["id"], "revision": 2, "update_available": False}
 
 
-def test_accept_update_on_a_section_adds_removes_and_keeps_overrides(admin, draft, tree):
+def test_accept_update_on_a_section_adds_removes_reorders_and_overwrites_settings(admin, draft, tree):
     v, page, _ = draft
     item = lib_section(admin)
     add_linked_section(admin, page, item)
@@ -324,7 +334,8 @@ def test_accept_update_on_a_section_adds_removes_and_keeps_overrides(admin, draf
     sec = section_of(t, "Tyre set")
     assert sorted(f["key"] for f in sec["fields"]) == ["depth_fl", "depth_rl"]
     assert find(t, "depth_fl")["label"] == "FL tread"
-    assert find(t, "depth_fl")["required"] is False  # per-form override survived
+    assert find(t, "depth_fl")["required"] is True   # the library's setting wins (form had False)
+    assert [f["key"] for f in sec["fields"]] == ["depth_fl", "depth_rl"]
     assert sec["library"]["revision"] == 2 and sec["library"]["update_available"] is False
 
 
@@ -380,7 +391,8 @@ def test_delete_in_use_is_409_and_archive_hides_without_breaking(admin, draft, t
     assert len(admin.get("/api/v1/library?include_archived=1").json()["results"]) == 1
     assert find(tree(v), "tyre_depth")["library"]["item"] == item["id"]  # still linked
     edit_r = admin.patch(f"/api/v1/library/{item['id']}",
-                         {"definition": {**item["definition"], "label": "Z"}}, format="json")
+                         {"definition": {**item["definition"], "label": "Z"},
+                          "revision": rev(item)}, format="json")
     assert edit_r.status_code == 200  # archived items can still be edited
     f = find(tree(v), "tyre_depth")
     assert admin.post(f"/api/v1/fields/{f['id']}/accept-update").status_code == 200

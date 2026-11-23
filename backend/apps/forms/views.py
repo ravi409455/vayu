@@ -10,7 +10,7 @@ from apps.accounts import audit
 from apps.accounts.permissions import perm, perm_any
 from apps.core.errors import CodedError
 
-from . import assets, library, promote, services
+from . import assets, library, library_push, promote, services
 from .models import (
     Field,
     Form,
@@ -112,6 +112,20 @@ class FormViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
     def discard_draft(self, request, pk=None):
         services.discard_draft(request.user, self.get_object())
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"], permission_classes=[perm("forms.edit")])
+    def duplicate(self, request, pk=None):
+        """A copy of this custom form (newest version) as a new form with its own key and name:
+        library links, ratings, Key Checks and PDF template come along; it starts as a draft."""
+        form = self.get_object()
+        latest = form.versions.order_by("-number").first()
+        assert latest is not None
+        d = request.data if isinstance(request.data, dict) else {}
+        out = promote.import_bundle(request.user, promote.export_bundle(latest),
+                                    as_new={"key": d.get("key"), "name": d.get("name")})
+        audit.record(request.user, "form.duplicate", "form", out["form"],
+                     f"Copied {form.key} as {d.get('key')}")
+        return Response(out, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"])
     def drafts(self, request, pk=None):
@@ -246,12 +260,33 @@ class LibraryViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
     def partial_update(self, request, *args, **kwargs):
         d = request.data
         item = library.update_item(request.user, self.get_object(), definition=d.get("definition"),
-                                   archived=d.get("archived"), name=d.get("name"))
+                                   archived=d.get("archived"), name=d.get("name"),
+                                   revision=d.get("revision"))
         return Response(LibraryItemSerializer(item).data)
 
     def destroy(self, request, *args, **kwargs):
         library.delete_item(request.user, self.get_object())
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"], url_path="push-preview",
+            permission_classes=[perm("library.edit")])
+    def push_preview(self, request, pk=None):
+        return Response(library_push.preview(request.user, self.get_object()))
+
+    @action(detail=True, methods=["post"], url_path="push",
+            permission_classes=[perm("library.edit")])
+    def push(self, request, pk=None):
+        d = request.data
+        return Response(library_push.push(
+            request.user, self.get_object(), revision=d.get("revision"),
+            publish=d.get("publish") is True, confirm=d.get("confirm") is True))
+
+    @action(detail=True, methods=["get"])
+    def history(self, request, pk=None):
+        item = self.get_object()
+        return Response([{"revision": r.revision, "name": r.name, "definition": r.definition,
+                          "changed_keys": r.changed_keys, "by": r.by, "at": r.at}
+                         for r in item.revisions.all()])
 
 
 class _FromLibraryBody(serializers.Serializer):
@@ -439,7 +474,9 @@ class PromoteImport(generics.GenericAPIView):
     serializer_class = serializers.Serializer
 
     def post(self, request):
-        return Response(promote.import_bundle(request.user, request.data),
+        key, name = request.query_params.get("as_new_key"), request.query_params.get("as_new_name")
+        as_new = {"key": key, "name": name} if key is not None or name is not None else None
+        return Response(promote.import_bundle(request.user, request.data, as_new=as_new),
                         status=status.HTTP_201_CREATED)
 
 

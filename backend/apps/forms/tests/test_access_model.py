@@ -92,10 +92,11 @@ def test_library_definitions_carry_access_and_linked_fields_keep_their_own(admin
     assert f["access"] == GOOD
     mine = {"ops": {"draft": "view"}}
     assert admin.patch(f"/api/v1/fields/{f['id']}", {"access": mine}, format="json").status_code == 200
-    admin.patch(f"/api/v1/library/{item['id']}", {"definition": {**d, "label": "Tread"}}, format="json")
+    admin.patch(f"/api/v1/library/{item['id']}", {"definition": {**d, "label": "Tread"},
+                                                  "revision": 1}, format="json")
     admin.post(f"/api/v1/fields/{f['id']}/accept-update")
     g = [x for x in tree(v)["pages"][0]["sections"][0]["fields"] if x["key"] == "tyre_depth"][0]
-    assert g["label"] == "Tread" and g["access"] == mine  # per-form override survives
+    assert g["label"] == "Tread" and g["access"] == GOOD  # the library owns the access too
     bad = {**d, "key": "other_one", "access": {"boss": {}}}
     r = admin.post("/api/v1/library", {"kind": "field", "key": "other_one", "definition": bad},
                    format="json")
