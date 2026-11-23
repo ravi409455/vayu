@@ -155,13 +155,13 @@ Reference report: `SA37926PDI.pdf` (PDI, 35 pp). Clappia (garuda) was reviewed r
 - **Access:** Ops + Admin (web), plus the webhook link.
 
 ## 8. Integrations
-- **Webhooks:** multiple integrations per form. Each integration **subscribes to the events Admin picks** and fires on every occurrence (no condition filters).
+- **Webhooks:** multiple integrations per form. **One integration = one event** (a booking form integration: booking events only); to react to several events, make several (a Duplicate button copies one). It fires on every occurrence (no condition filters).
   - **Events:** booking created/updated/deleted (incl. stage changes); inspection started/submitted; media complete + PDF ready (also on each regenerate); conflict and stuck-upload alerts.
-  - API writes fire webhooks too, including bulk updates. Spam is avoided by subscription choice, not by a silent flag.
-  - **Payload config per integration:**
-    - Toggles: full data, PDF link, image ZIP link, video ZIP link.
-    - **Payload templating** with `{{field}}` placeholders, rendered in a **sandbox** (in v1).
-  - HMAC-signed, retried with backoff, delivery log with re-send, test button.
+  - API writes fire webhooks too, including bulk updates. Spam is avoided by choosing the event, not by a silent flag.
+  - **The request is designed in a visual editor:** method (POST, PUT, PATCH, GET, DELETE), URL (values allowed in the path only), query parameters, headers, and a body. Every text can hold **values picked from a searchable list** (form answers by form, job facts, results, links, event); nothing is typed as a raw key.
+  - **Body:** *Standard* (the fixed JSON with toggles for data, PDF link, image ZIP link, video ZIP link, and a field checklist) or *Custom* (rows of name → value, nested objects, system-made lists such as photo links, Key Checks and ratings; a value picked alone keeps its type, mixed text is text, missing is `null`).
+  - **Preview** shows the whole request live (method, final URL, headers, body) for the latest job, a job picked by Booking ID, or sample values when the form has no job; it never sends anything or builds a ZIP.
+  - **No HMAC signing:** the receiving system is authenticated by a token Admin puts in a header (over https). Retried with backoff, delivery log with re-send, test button (sends the designed request, marked `X-Vayu-Test`).
   - **Links:** PDF links are signed with 7-day expiry. **ZIP links open a "Preparing… x%" page**, which builds the ZIP once, caches it for 7 days, then downloads automatically.
 - **REST API:** full CRUD via **API keys scoped to forms and fields**.
   - **Delete is off by default** per key; Admin must grant it explicitly.

@@ -6,19 +6,22 @@ from django.utils import timezone
 
 
 class Integration(models.Model):
-    """One webhook target of one form. It gets exactly the events Admin subscribed it to."""
+    """One webhook of one form: one event, one request (method, URL, query, headers, body)."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     form = models.ForeignKey("forms.Form", on_delete=models.CASCADE, related_name="integrations")
     name = models.CharField(max_length=100)
-    url = models.URLField(max_length=500)
-    secret = models.CharField(max_length=80)       # signs every body (HMAC-SHA256); shown once
-    events = models.JSONField(default=list)
+    event = models.CharField(max_length=40)
+    method = models.CharField(max_length=6, default="POST")
+    url = models.CharField(max_length=500)         # may hold {{ref}} after the host
+    query = models.JSONField(default=list)         # [{"key": "src", "value": "{{job.city}}"}]
+    headers = models.JSONField(default=list)       # [{"key": "X-Token", "value": "abc"}]
+    body_mode = models.CharField(max_length=10, default="standard")   # standard | custom
+    body = models.JSONField(default=dict)          # custom: {"rows": [...]}, see values.build_tree
     include_data = models.BooleanField(default=True)
     include_pdf = models.BooleanField(default=False)
     include_image_zip = models.BooleanField(default=False)
     include_video_zip = models.BooleanField(default=False)
-    fields = models.JSONField(default=list)        # field keys that may leave; empty = all
-    template = models.TextField(blank=True)        # optional {{ field.key }} body template
+    fields = models.JSONField(default=list)        # standard body: field keys that may leave
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True,
                                    on_delete=models.SET_NULL, related_name="+")

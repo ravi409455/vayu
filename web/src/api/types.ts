@@ -68,10 +68,13 @@ export type Delivery = {
   id: string; event: string; booking_id: string; status: string; attempts: number;
   response_status: number | null; error: string; next_retry_at: string | null; created_at: string;
 };
+export type BodyRow = { key: string; value?: string; as_text?: boolean; fixed?: string | number | boolean; rows?: BodyRow[] };
 export type Integration = {
-  id: string; form: number; form_key: string; name: string; url: string; events: string[];
+  id: string; form: number; form_key: string; name: string; event: string; method: string; url: string;
+  query: { key: string; value: string }[]; headers: { key: string; value: string }[];
+  body_mode: "standard" | "custom"; body: { rows?: BodyRow[] };
   include_data: boolean; include_pdf: boolean; include_image_zip: boolean; include_video_zip: boolean;
-  fields: string[]; template: string; is_active: boolean; secret_last4: string; secret?: string;
+  fields: string[]; is_active: boolean; broken_refs: string[];
 };
 export type ApiKeyRow = {
   id: string; name: string; prefix: string; scope: { forms: Record<string, string[]> };

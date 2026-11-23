@@ -1630,23 +1630,6 @@ paths:
       responses:
         '200':
           description: No response body
-  /api/v1/integrations/{id}/rotate-secret:
-    post:
-      operationId: integrations_rotate_secret_create
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - integrations
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          description: No response body
   /api/v1/integrations/{id}/test:
     post:
       operationId: integrations_test_create
@@ -1666,6 +1649,17 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/integrations/catalogue:
+    get:
+      operationId: integrations_catalogue_retrieve
+      description: The picker's list of values for a form and an event.
+      tags:
+      - integrations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/integrations/events:
     get:
       operationId: integrations_events_retrieve
@@ -1676,11 +1670,12 @@ paths:
       responses:
         '200':
           description: No response body
-  /api/v1/integrations/render-sample:
+  /api/v1/integrations/preview:
     post:
-      operationId: integrations_render_sample_create
-      description: 'Template preview for the editor: render an unsaved template with
-        a real booking.'
+      operationId: integrations_preview_create
+      description: |-
+        The whole request an unsaved integration would send, for a real job or sample values.
+        Nothing is sent and no ZIP is built.
       tags:
       - integrations
       security:

@@ -1,10 +1,10 @@
 """Admin screens' API: webhook integrations, their delivery log, API keys, API docs."""
+import json
 import uuid
+from typing import Any
 
 from django.shortcuts import get_object_or_404
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-from jinja2 import TemplateError
-from jinja2.sandbox import ImmutableSandboxedEnvironment
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
@@ -17,38 +17,89 @@ from apps.bookings.models import Booking
 from apps.bookings.services import err
 from apps.forms.models import Field, Form, FormType
 
-from . import apikeys, webhooks
+from . import apikeys, values, webhooks
 from .models import ApiKey, Delivery, Integration
 
 TOGGLES = ("include_data", "include_pdf", "include_image_zip", "include_video_zip", "is_active")
+DESIGN = ("form", "event", "url", "query", "headers", "body_mode", "body")   # need a fresh check
+MAX_TEXT = 1000
 
 
-def _clean_integration(data: dict, current: Integration | None = None) -> dict:
+def _text(value, what: str, allowed: set[str], *, one_line: bool = False) -> str:
+    """A string that may hold {{ref}} tokens; every token must be one the form offers."""
+    if not isinstance(value, str) or len(value) > MAX_TEXT:
+        raise err("INVALID_VALUE", f"{what} must be text of up to {MAX_TEXT} characters.")
+    if not values.check_syntax(value):
+        raise err("INVALID_VALUE", f"{what} has a '{{{{' or '}}}}' that is not a whole value.")
+    if one_line and ("\r" in value or "\n" in value):
+        raise err("INVALID_VALUE", f"{what} cannot hold a line break.")
+    bad = [r for r in values.refs_in(value) if r not in allowed]
+    if bad:
+        raise err("UNKNOWN_VALUE", f"{what} uses {bad[0]}, which this form and event do not "
+                  "offer.", ref=bad[0])
+    return value
+
+
+def _rows(rows, allowed: set[str], depth: int, count: list) -> list:
+    if not isinstance(rows, list) or depth > values.MAX_DEPTH:
+        raise err("INVALID_BODY", "The body is nested too deeply or is not a list of rows.")
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for r in rows:
+        count[0] += 1
+        if count[0] > values.MAX_ROWS:
+            raise err("INVALID_BODY", f"The body can have up to {values.MAX_ROWS} rows.")
+        key = r.get("key") if isinstance(r, dict) else None
+        if not isinstance(key, str) or not key.strip() or len(key) > 100 or key in seen:
+            raise err("INVALID_BODY", "Every row needs its own key of up to 100 characters.")
+        seen.add(key)
+        kinds = [k for k in ("rows", "value", "fixed") if k in r]
+        if len(kinds) != 1:
+            raise err("INVALID_BODY", f"Row '{key}' needs exactly one of rows, value or fixed.")
+        if kinds[0] == "rows":
+            out.append({"key": key, "rows": _rows(r["rows"], allowed, depth + 1, count)})
+        elif kinds[0] == "fixed":
+            if not isinstance(r["fixed"], (str, int, float, bool)):
+                raise err("INVALID_BODY",
+                          f"Row '{key}': a fixed value is text, a number or yes/no.")
+            out.append({"key": key, "fixed": r["fixed"]})
+        else:
+            row: dict[str, Any] = {"key": key, "value": _text(r["value"], f"Row '{key}'", allowed)}
+            if r.get("as_text"):
+                row["as_text"] = True
+            out.append(row)
+    return out
+
+
+def _clean_integration(data: dict, current: Integration | None = None, *,
+                       check_address: bool = True) -> dict:
     """Validated column values from a request body (only what the body carries)."""
     out: dict = {}
     if "form" in data or current is None:
         form_id = data.get("form")
-        form = Form.objects.filter(pk=form_id).first() if isinstance(form_id, int) else None
-        if form is None or form.type not in (FormType.BOOKING, FormType.CUSTOM):
+        chosen = Form.objects.filter(pk=form_id).first() if isinstance(form_id, int) else None
+        if chosen is None or chosen.type not in (FormType.BOOKING, FormType.CUSTOM):
             raise err("INVALID_FORM", "Choose a booking or inspection form.")
-        out["form"] = form
+        out["form"] = chosen
     if "name" in data or current is None:
         name = data.get("name")
         if not isinstance(name, str) or not name.strip() or len(name) > 100:
             raise err("INVALID_NAME", "Give the integration a name (up to 100 characters).")
         out["name"] = name.strip()
-    if "url" in data or current is None:
-        url = data.get("url")
-        reason = webhooks.check_url(url) if isinstance(url, str) and len(url) <= 500 else "bad_url"
-        if reason:
-            raise err("INVALID_URL", f"This URL cannot be used ({reason}).", reason=reason)
-        out["url"] = url
-    if "events" in data or current is None:
-        events = data.get("events")
-        if (not isinstance(events, list) or not events
-                or any(e not in webhooks.EVENTS for e in events)):
-            raise err("INVALID_EVENTS", "Pick at least one event.", allowed=webhooks.EVENTS)
-        out["events"] = [e for e in webhooks.EVENTS if e in events]
+    if "event" in data or current is None:
+        if data.get("event") not in webhooks.EVENTS:
+            raise err("INVALID_EVENT", "Pick one event.", allowed=webhooks.EVENTS)
+        out["event"] = data["event"]
+    form: Form = out["form"] if "form" in out else current.form        # type: ignore[union-attr]
+    event = out.get("event") or (current.event if current else "")
+    if form.type == FormType.BOOKING and not event.startswith("booking."):
+        raise err("INVALID_EVENT", "A booking form integration can only use booking events.")
+    if "method" in data or current is None:
+        method = data.get("method", "POST")
+        if method not in webhooks.METHODS:
+            raise err("INVALID_METHOD", "Pick POST, PUT, PATCH, GET or DELETE.",
+                      allowed=webhooks.METHODS)
+        out["method"] = method
     for key in TOGGLES:
         if key in data:
             if not isinstance(data[key], bool):
@@ -59,28 +110,73 @@ def _clean_integration(data: dict, current: Integration | None = None) -> dict:
         if not isinstance(fields, list) or not all(isinstance(f, str) for f in fields):
             raise err("INVALID_FIELDS", "fields must be a list of field keys.")
         out["fields"] = sorted(set(fields))
-    if "template" in data:
-        template = data["template"]
-        if not isinstance(template, str) or len(template) > webhooks.MAX_TEMPLATE:
-            raise err("INVALID_TEMPLATE", "The template must be text of up to 10,000 characters.")
-        try:
-            ImmutableSandboxedEnvironment().from_string(template)
-        except TemplateError as e:
-            raise err("INVALID_TEMPLATE", f"The template has an error: {e}") from e
-        out["template"] = template
+    if "body_mode" in data and data["body_mode"] not in ("standard", "custom"):
+        raise err("INVALID_BODY", "The body is standard or custom.")
+    if not any(k in data for k in DESIGN) and current is not None:
+        return out                                   # a toggle or a rename: nothing to re-check
+    allowed = {e["ref"] for e in values.catalogue(form, event)}
+    url = data["url"] if "url" in data or current is None else current.url
+    if not isinstance(url, str) or len(url) > 500 or not url.startswith(("http://", "https://")):
+        raise err("INVALID_URL", "This URL cannot be used (bad_url).", reason="bad_url")
+    base = "/".join(url.split("/", 3)[:3])
+    after = url[len(base):]
+    if "{{" in base or any("{{" in part for part in after.replace("#", "?").split("?")[1:]):
+        raise err("INVALID_URL", "Values can go in the path only, not in the address or the "
+                  "query (use the query rows).", reason="value_outside_path")
+    _text(url, "The URL", allowed)
+    if check_address:
+        reason = webhooks.check_url(values.TOKEN.sub("x", url))
+        if reason:
+            raise err("INVALID_URL", f"This URL cannot be used ({reason}).", reason=reason)
+    out["url"] = url
+    query = data.get("query", current.query if current else [])
+    if (not isinstance(query, list) or len(query) > values.MAX_QUERY
+            or not all(isinstance(q, dict) for q in query)):
+        raise err("INVALID_QUERY", f"Query parameters are a list of up to {values.MAX_QUERY}.")
+    out["query"] = []
+    for q in query:
+        key = q.get("key")
+        if not isinstance(key, str) or not key.strip() or len(key) > 100 or "{{" in key:
+            raise err("INVALID_QUERY", "A query parameter needs a plain name.")
+        out["query"].append({"key": key.strip(),
+                             "value": _text(q.get("value", ""), f"Query '{key}'", allowed)})
+    headers = data.get("headers", current.headers if current else [])
+    if (not isinstance(headers, list) or len(headers) > values.MAX_HEADERS
+            or not all(isinstance(h, dict) for h in headers)):
+        raise err("INVALID_HEADERS", f"Headers are a list of up to {values.MAX_HEADERS}.")
+    out["headers"], names = [], set()
+    for h in headers:
+        name = h.get("key")
+        if not isinstance(name, str) or not webhooks.HEADER_NAME.fullmatch(name) or len(name) > 100:
+            raise err("INVALID_HEADERS", "A header name is letters, digits and - only.")
+        if name.lower() in webhooks.LOCKED_HEADERS or name.lower().startswith("x-vayu-"):
+            raise err("LOCKED_HEADER", f"{name} is set by the system and cannot be changed.")
+        if name.lower() in names:
+            raise err("INVALID_HEADERS", f"{name} is listed twice.")
+        names.add(name.lower())
+        out["headers"].append({"key": name, "value": _text(h.get("value", ""), f"Header {name}",
+                                                          allowed, one_line=True)})
+    mode = out.get("body_mode") or data.get("body_mode") or (current.body_mode if current
+                                                             else "standard")
+    out["body_mode"] = mode
+    body = data.get("body", current.body if current else {})
+    if mode == "custom":
+        if not isinstance(body, dict):
+            raise err("INVALID_BODY", "The body is a set of rows.")
+        out["body"] = {"rows": _rows(body.get("rows", []), allowed, 1, [0])}
+    else:
+        out["body"] = {}
     return out
 
 
-def body(i: Integration, secret: str | None = None) -> dict:
-    out = {"id": str(i.id), "form": i.form_id, "form_key": i.form.key, "name": i.name,
-           "url": i.url, "events": i.events, "include_data": i.include_data,
-           "include_pdf": i.include_pdf, "include_image_zip": i.include_image_zip,
-           "include_video_zip": i.include_video_zip, "fields": i.fields,
-           "template": i.template, "is_active": i.is_active,
-           "secret_last4": i.secret[-4:], "created_at": i.created_at}
-    if secret:
-        out["secret"] = secret                  # shown once, when created or rotated
-    return out
+def body(i: Integration) -> dict:
+    return {"id": str(i.id), "form": i.form_id, "form_key": i.form.key, "name": i.name,
+            "event": i.event, "method": i.method, "url": i.url, "query": i.query,
+            "headers": i.headers, "body_mode": i.body_mode, "body": i.body,
+            "include_data": i.include_data, "include_pdf": i.include_pdf,
+            "include_image_zip": i.include_image_zip, "include_video_zip": i.include_video_zip,
+            "fields": i.fields, "is_active": i.is_active, "broken_refs": values.broken_refs(i),
+            "created_at": i.created_at}
 
 
 def delivery_body(d: Delivery) -> dict:
@@ -102,12 +198,11 @@ class IntegrationList(APIView):
         return Response([body(i) for i in qs])
 
     def post(self, request):
-        i = Integration(secret=webhooks.new_secret(), created_by=request.user,
-                        **_clean_integration(request.data))
+        i = Integration(created_by=request.user, **_clean_integration(request.data))
         i.save()
         audit.record(request.user, "integration.create", "integration", i.id,
                      f"Created integration {i.name} for form {i.form.key}")
-        return Response(body(i, i.secret), status=status.HTTP_201_CREATED)
+        return Response(body(i), status=status.HTTP_201_CREATED)
 
 
 class IntegrationDetail(APIView):
@@ -136,18 +231,6 @@ class IntegrationDetail(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class RotateSecret(APIView):
-    permission_classes = [perm("integrations.manage")]
-
-    def post(self, request, pk):
-        i = get_object_or_404(Integration.objects.select_related("form"), pk=pk)
-        i.secret = webhooks.new_secret()
-        i.save(update_fields=["secret"])
-        audit.record(request.user, "integration.rotate_secret", "integration", i.id,
-                     f"Rotated the signing secret of {i.name}")
-        return Response(body(i, i.secret))
-
-
 class EventCatalog(APIView):
     permission_classes = [perm("integrations.manage")]
 
@@ -155,7 +238,7 @@ class EventCatalog(APIView):
         return Response(webhooks.EVENTS)
 
 
-def _booking_for(request, form: Form) -> Booking | None:
+def _booking_for(request, form: Form, submitted: bool = False) -> Booking | None:
     raw = request.data.get("booking")
     if raw:
         try:
@@ -165,7 +248,9 @@ def _booking_for(request, form: Form) -> Booking | None:
     qs = Booking.objects.all()
     if form.type == FormType.CUSTOM:
         qs = qs.filter(inspection_type=form.inspection_type)
-    return qs.order_by("-created_at").first()
+    qs = qs.order_by("-created_at")
+    return (qs.filter(inspections__status="submitted").first() if submitted else None) \
+        or qs.first()
 
 
 class TestSend(APIView):
@@ -175,7 +260,7 @@ class TestSend(APIView):
 
     def post(self, request, pk):
         i = get_object_or_404(Integration.objects.select_related("form"), pk=pk)
-        booking = _booking_for(request, i.form)
+        booking = _booking_for(request, i.form, submitted=not i.event.startswith("booking."))
         d = Delivery.objects.create(
             integration=i, event="test.ping", booking=booking,
             booking_uuid=str(booking.id) if booking else "",
@@ -188,24 +273,49 @@ class TestSend(APIView):
         return Response(delivery_body(d))
 
 
-class RenderSample(APIView):
-    """Template preview for the editor: render an unsaved template with a real booking."""
+class Catalogue(APIView):
+    """The picker's list of values for a form and an event."""
+
+    permission_classes = [perm("integrations.manage")]
+
+    def get(self, request):
+        form = Form.objects.filter(pk=request.query_params.get("form", "").strip() or 0).first()
+        event = request.query_params.get("event")
+        if form is None or form.type not in (FormType.BOOKING, FormType.CUSTOM):
+            raise err("INVALID_FORM", "Choose a booking or inspection form.")
+        if event not in webhooks.EVENTS:
+            raise err("INVALID_EVENT", "Pick one event.", allowed=webhooks.EVENTS)
+        return Response(values.catalogue(form, event))
+
+
+class Preview(APIView):
+    """The whole request an unsaved integration would send, for a real job or sample values.
+    Nothing is sent and no ZIP is built."""
 
     permission_classes = [perm("integrations.manage")]
 
     def post(self, request):
-        template = request.data.get("template", "")
-        form = get_object_or_404(Form, pk=request.data.get("form"))
-        booking = _booking_for(request, form)
-        i = Integration(form=form, include_data=True, template=template, fields=[])
-        d = Delivery(integration=i, event="booking.updated",
+        data = {**request.data}
+        data["name"] = data.get("name") or "preview"          # a preview does not need a name yet
+        i = Integration(**_clean_integration(data, check_address=False))
+        booking = _booking_for(request, i.form, submitted=not i.event.startswith("booking."))
+        d = Delivery(integration=i, event=i.event,
                      booking_uuid=str(booking.id) if booking else "",
                      booking_ref=booking.booking_id if booking else "", context={})
+        types = {e["ref"]: e["type"] for e in values.catalogue(i.form, i.event)}
         try:
-            return Response({"rendered": webhooks.render_template(
-                template, webhooks.build_payload(d))})
-        except Exception as e:  # noqa: BLE001 - whatever the template does, it is the admin's to fix
-            raise err("TEMPLATE_ERROR", f"The template failed: {e}") from e
+            req = webhooks.build_request(d, "preview" if booking else "sample", types)
+        except values.MissingPathValue as e:
+            raise err("PATH_VALUE_EMPTY", f"{e} is empty for this job, so the URL cannot be "
+                      "built.") from e
+        except ValueError as e:                              # the body would be too large
+            raise err("REQUEST_FAILED", f"The request cannot be built: {e}.") from e
+        return Response({
+            "method": req.method, "url": req.url, "sample": booking is None,
+            "headers": [{"name": k, "value": v} for k, v in req.headers.items()],
+            "body": json.dumps(json.loads(req.body), indent=2) if req.body else None,
+            "booking": str(booking.id) if booking else None,
+            "broken_refs": values.broken_refs(i)})
 
 
 class DeliveryList(APIView):

@@ -5,9 +5,9 @@ from . import ext_views, views
 urlpatterns = [
     path("integrations", views.IntegrationList.as_view()),
     path("integrations/events", views.EventCatalog.as_view()),
-    path("integrations/render-sample", views.RenderSample.as_view()),
+    path("integrations/catalogue", views.Catalogue.as_view()),
+    path("integrations/preview", views.Preview.as_view()),
     path("integrations/<uuid:pk>", views.IntegrationDetail.as_view()),
-    path("integrations/<uuid:pk>/rotate-secret", views.RotateSecret.as_view()),
     path("integrations/<uuid:pk>/test", views.TestSend.as_view()),
     path("integrations/<uuid:pk>/deliveries", views.DeliveryList.as_view()),
     path("deliveries/<uuid:pk>/resend", views.Resend.as_view()),

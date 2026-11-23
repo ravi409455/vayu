@@ -37,7 +37,7 @@ def test_the_demo_seed_fills_the_problems_page_and_the_integrations_screens():
     assert any(a["code"] == "TYPE_CHANGE_REJECTED"
                for a in Booking.objects.get(booking_id="DEMO-15").alerts)
     assert Report.objects.get(booking__booking_id="DEMO-10").status == "failed"
-    assert Integration.objects.count() == 4 and Integration.objects.filter(is_active=False).count() == 1
+    assert Integration.objects.count() == 7 and Integration.objects.filter(is_active=False).count() == 1
     assert {d.status for d in Delivery.objects.all()} >= {"success", "retrying", "failed"}
     assert ApiKey.objects.count() == 2 and ApiKey.objects.filter(revoked_at__isnull=False).count() == 1
 

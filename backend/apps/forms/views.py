@@ -397,7 +397,7 @@ class PublishVersion(generics.GenericAPIView):
         v = services.publish_version(request.user, pk, body.validated_data["row_version"])
         return Response({"id": v.id, "number": v.number, "status": v.status,
                          "published_at": v.published_at, "row_version": v.row_version,
-                         "warnings": pdf_warnings(v)})
+                         "warnings": pdf_warnings(v) + integration_warnings(v)})
 
 
 class VersionSettings(generics.GenericAPIView):
@@ -455,6 +455,12 @@ def pdf_warnings(version) -> list:
     from apps.reports.service import warnings
 
     return warnings(version)
+
+
+def integration_warnings(version) -> list:
+    from apps.integrations.values import publish_warnings
+
+    return publish_warnings(version, published=True)
 
 
 class PromoteExport(generics.GenericAPIView):

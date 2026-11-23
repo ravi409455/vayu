@@ -5,6 +5,7 @@ The inspection forms (PDI, Used car, EV...) are meant to be built by hand in the
 the PDI form here is a small stand-in so the flow can be tried straight away."""
 import uuid
 from datetime import timedelta
+from typing import Any
 
 from django.conf import settings
 from django.core.management import call_command
@@ -305,60 +306,71 @@ class Command(BaseCommand):
     def _integrations(self, admin):
         """Webhooks with a mix of delivered, retrying and failed attempts, and two API keys."""
         from apps.bookings.models import Booking
-        from apps.integrations import apikeys, webhooks
+        from apps.integrations import apikeys
         from apps.integrations.models import ApiKey, Delivery, Integration
 
         forms = {f.key: f for f in Form.objects.filter(type__in=["booking", "custom"])}
-        specs = [
-            ("ERP sync", forms["booking"], "http://127.0.0.1:9099/erp",
-             ["booking.created", "booking.updated", "booking.deleted"], True),
-            ("Customer WhatsApp (PDI)", forms["pdi"], "http://127.0.0.1:9099/whatsapp",
-             ["inspection.submitted", "pdf.ready"], True),
-            ("Alerts to the ops channel", forms["pdi"], "http://127.0.0.1:9099/alerts",
-             ["alert.conflict", "alert.stuck_upload"], True),
-            ("Old CRM (switched off)", forms["booking"], "http://127.0.0.1:9099/old",
-             ["booking.created"], False),
-        ]
-        made = {}
-        for name, form, url, events, active in specs:
-            made[name] = Integration.objects.create(
-                form=form, name=name, url=url, secret=webhooks.new_secret(), events=events,
-                include_data=True, include_pdf="pdf.ready" in events, is_active=active,
-                created_by=admin)
+        host = "http://127.0.0.1:9099"
+        token = [{"key": "Authorization", "value": "Bearer demo-token"}]
+        # name -> (form, event, extra columns); one integration is one event
+        specs: dict[str, tuple[Form, str, dict[str, Any]]] = {
+            "ERP: new bookings": (forms["booking"], "booking.created", {"url": f"{host}/erp",
+                                  "headers": token}),
+            "ERP: booking changes": (forms["booking"], "booking.updated", {
+                "method": "PUT", "url": host + "/erp/{{job.booking_id}}",
+                "query": [{"key": "src", "value": "vayu"}], "headers": token,
+                "body_mode": "custom", "body": {"rows": [
+                    {"key": "ref", "value": "{{job.booking_id}}"},
+                    {"key": "customer", "rows": [
+                        {"key": "name", "value": "{{booking.customer_name}}"},
+                        {"key": "city", "value": "{{booking.city}}"}]},
+                    {"key": "changed", "value": "{{event.changed_fields}}"}]}}),
+            "WhatsApp: inspection done": (forms["pdi"], "inspection.submitted",
+                                          {"url": f"{host}/whatsapp"}),
+            "WhatsApp: PDF ready": (forms["pdi"], "pdf.ready", {
+                "url": f"{host}/whatsapp", "body_mode": "custom", "body": {"rows": [
+                    {"key": "ref", "value": "{{job.booking_id}}"},
+                    {"key": "chassis", "value": "{{inspection.chassis_no}}"},
+                    {"key": "overall", "value": "{{result.overall}}"},
+                    {"key": "report", "value": "{{link.pdf}}"}]}}),
+            "Alerts: conflict": (forms["pdi"], "alert.conflict", {"url": f"{host}/alerts"}),
+            "Alerts: stuck upload": (forms["pdi"], "alert.stuck_upload", {"url": f"{host}/alerts"}),
+            "Old CRM (switched off)": (forms["booking"], "booking.created",
+                                       {"url": f"{host}/old", "is_active": False}),
+        }
+        made = {name: Integration.objects.create(
+            form=form, name=name, event=event, include_data=True,
+            include_pdf=event == "pdf.ready", created_by=admin, **extra)
+            for name, (form, event, extra) in specs.items()}
         refs = {b.booking_id: b for b in Booking.objects.all()}
         now = timezone.now()
 
-        def delivery(integration, event, ref, status, attempts, **kw):
+        def delivery(integration, ref, status, attempts, **kw):
             b = refs.get(ref)
-            d = Delivery.objects.create(
-                integration=made[integration], event=event, booking=b,
+            return Delivery.objects.create(
+                integration=made[integration], event=made[integration].event, booking=b,
                 booking_uuid=str(b.id) if b else "", booking_ref=ref, status=status,
                 attempts=attempts, last_attempt_at=now - timedelta(minutes=kw.pop("ago", 30)),
                 **kw)
-            return d
 
         ok = {"response_status": 200}
-        delivery("ERP sync", "booking.created", "DEMO-11", "success", 1, ago=600, **ok)
-        delivery("ERP sync", "booking.updated", "DEMO-11", "success", 1, ago=420, **ok)
-        delivery("ERP sync", "booking.created", "DEMO-12", "success", 2, ago=380, **ok)
-        delivery("ERP sync", "booking.created", "DEMO-14", "retrying", 2, response_status=503,
+        delivery("ERP: new bookings", "DEMO-11", "success", 1, ago=600, **ok)
+        delivery("ERP: new bookings", "DEMO-12", "success", 2, ago=380, **ok)
+        delivery("ERP: new bookings", "DEMO-14", "retrying", 2, response_status=503,
                  error="http_503", next_retry_at=now + timedelta(hours=1), ago=25)
-        delivery("ERP sync", "booking.updated", "DEMO-9", "failed", 7, response_status=500,
+        delivery("ERP: booking changes", "DEMO-11", "success", 1, ago=420, **ok)
+        delivery("ERP: booking changes", "DEMO-9", "failed", 7, response_status=500,
                  error="retries_exhausted", ago=300)
-        delivery("Customer WhatsApp (PDI)", "inspection.submitted", "DEMO-11", "success", 1,
-                 response_status=204, ago=410)
-        delivery("Customer WhatsApp (PDI)", "pdf.ready", "DEMO-11", "success", 1,
-                 response_status=204, ago=405)
-        delivery("Customer WhatsApp (PDI)", "inspection.submitted", "DEMO-12", "failed", 1,
-                 response_status=404, error="http_404", ago=370)
-        delivery("Customer WhatsApp (PDI)", "pdf.ready", "DEMO-3", "failed", 1,
-                 error="template_failed", ago=900)
-        delivery("Alerts to the ops channel", "alert.conflict", "DEMO-14", "success", 1,
-                 response_status=200, ago=20)
-        delivery("Alerts to the ops channel", "alert.stuck_upload", "DEMO-10", "retrying", 3,
-                 error="connection_error", next_retry_at=now + timedelta(minutes=30), ago=15)
-        delivery("Alerts to the ops channel", "alert.conflict", "DEMO-15", "failed", 1,
-                 error="blocked_address", ago=60)
+        delivery("WhatsApp: inspection done", "DEMO-11", "success", 1, response_status=204,
+                 ago=410)
+        delivery("WhatsApp: inspection done", "DEMO-12", "failed", 1, response_status=404,
+                 error="http_404", ago=370)
+        delivery("WhatsApp: PDF ready", "DEMO-11", "success", 1, response_status=204, ago=405)
+        delivery("WhatsApp: PDF ready", "DEMO-3", "failed", 1, error="request_failed", ago=900)
+        delivery("Alerts: conflict", "DEMO-14", "success", 1, response_status=200, ago=20)
+        delivery("Alerts: conflict", "DEMO-15", "failed", 1, error="blocked_address", ago=60)
+        delivery("Alerts: stuck upload", "DEMO-10", "retrying", 3, error="connection_error",
+                 next_retry_at=now + timedelta(minutes=30), ago=15)
 
         shown, prefix, hashed = apikeys.generate()
         ApiKey.objects.create(

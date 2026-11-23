@@ -23,7 +23,7 @@ def http():
 
 
 def make(env, form, **over):
-    body = {"form": form, "name": "ERP", "url": HOOK, "events": ["booking.created"], **over}
+    body = {"form": form, "name": "ERP", "url": HOOK, "event": "booking.created", **over}
     r = env.admin.post("/api/v1/integrations", body, format="json")
     assert r.status_code == 201, r.json()
     return r.json()

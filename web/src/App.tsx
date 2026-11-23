@@ -16,6 +16,7 @@ const Library = lazy(() => import("./pages/admin/Library").then((m) => ({ defaul
 const LibraryEditor = lazy(() => import("./pages/admin/LibraryEditor").then((m) => ({ default: m.LibraryEditor })));
 const PdfDesigner = lazy(() => import("./pages/admin/PdfDesigner").then((m) => ({ default: m.PdfDesigner })));
 const Integrations = lazy(() => import("./pages/admin/Integrations").then((m) => ({ default: m.Integrations })));
+const IntegrationEditor = lazy(() => import("./pages/admin/integrations/IntegrationEditor").then((m) => ({ default: m.IntegrationEditor })));
 const ApiKeys = lazy(() => import("./pages/admin/ApiKeys").then((m) => ({ default: m.ApiKeys })));
 const Promote = lazy(() => import("./pages/admin/Promote").then((m) => ({ default: m.Promote })));
 const MyJobs = lazy(() => import("./pages/expert/MyJobs").then((m) => ({ default: m.MyJobs })));
@@ -62,6 +63,7 @@ export function App() {
           <Route path="/library/:id" element={<RequireAuth adminOnly perm="library.view"><LibraryEditor /></RequireAuth>} />
           <Route path="/pdf" element={<RequireAuth adminOnly perm="pdf_templates.view"><PdfDesigner /></RequireAuth>} />
           <Route path="/integrations" element={<RequireAuth adminOnly perm="integrations.manage"><Integrations /></RequireAuth>} />
+          <Route path="/integrations/:id" element={<RequireAuth adminOnly perm="integrations.manage"><IntegrationEditor /></RequireAuth>} />
           <Route path="/api-keys" element={<RequireAuth adminOnly perm="api_keys.manage"><ApiKeys /></RequireAuth>} />
           <Route path="/promote" element={<RequireAuth adminOnly perm="forms.promote"><Promote /></RequireAuth>} />
           <Route path="/forms" element={<RequireAuth adminOnly perm="forms.view"><Forms /></RequireAuth>} />

@@ -2,27 +2,25 @@
 
 Delivery rows hold metadata only. The body is built again from current data each time it is
 sent, so no customer value ever sits in the delivery log."""
-import hashlib
-import hmac
 import ipaddress
 import json
 import logging
-import secrets
+import re
 import socket
+from dataclasses import dataclass
 from datetime import timedelta
-from urllib.parse import urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 import requests
 from django.conf import settings
 from django.utils import timezone
-from jinja2 import TemplateError
-from jinja2.sandbox import ImmutableSandboxedEnvironment
 from requests.adapters import HTTPAdapter
 from urllib3.connection import HTTPConnection, HTTPSConnection
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
 from apps.core import tasks as core_tasks
 
+from . import values
 from .models import Delivery, Integration
 
 logger = logging.getLogger(__name__)
@@ -38,12 +36,12 @@ PUBLIC = {"booking.created": "booking.created", "booking.updated": "booking.upda
           "pdf.ready": "pdf.ready", "alert.conflict": "alert.conflict",
           "alert.type_change_rejected": "alert.conflict",
           "alert.stuck_upload": "alert.stuck_upload"}
-MAX_TEMPLATE = 10_000
 MAX_BODY = 1_000_000
-
-
-def new_secret() -> str:
-    return "whsec_" + secrets.token_urlsafe(24)
+METHODS = ["POST", "PUT", "PATCH", "GET", "DELETE"]
+BODY_METHODS = ("POST", "PUT", "PATCH")
+# set by the system, never by Admin (X-Vayu-* as a whole is ours)
+LOCKED_HEADERS = {"content-type", "content-length", "host", "user-agent"}
+HEADER_NAME = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
 
 
 # ------------------------------------------------------------------ address safety
@@ -146,11 +144,11 @@ def targets(booking, public: str) -> list[Integration]:
     from apps.forms.models import FormType
 
     rows = Integration.objects.filter(is_active=True, form__is_active=True).select_related("form")
-    q = Q(form__type=FormType.BOOKING) & Q(events__contains=[public]) \
+    q = Q(form__type=FormType.BOOKING) & Q(event=public) \
         if public.startswith("booking.") else Q(pk__in=[])
     if booking is not None:
         q |= (Q(form__type=FormType.CUSTOM, form__inspection_type=booking.inspection_type)
-              & Q(events__contains=[public]))
+              & Q(event=public))
     return list(rows.filter(q))
 
 
@@ -176,13 +174,14 @@ def send_later(d: Delivery) -> None:
     core_tasks.after_commit(lambda: deliver.delay(str(d.id)))
 
 
-# ------------------------------------------------------------------ the body
+# ------------------------------------------------------------------ the request
 
 def _scoped(answers: dict, allowed: list) -> dict:
     return {k: v for k, v in (answers or {}).items() if not allowed or k in allowed}
 
 
-def build_payload(d: Delivery) -> dict:
+def build_payload(d: Delivery, preview: bool = False) -> dict:
+    """The standard JSON body. `preview` shows example ZIP links instead of building a ZIP."""
     from apps.bookings.models import Booking
     from apps.media import storage as media_storage
     from apps.media import zips
@@ -217,6 +216,9 @@ def build_payload(d: Delivery) -> dict:
             report.key, report.filename, settings.WEBHOOK_LINK_DAYS * 86400) if report else None)
     for flag, kind in ((integ.include_image_zip, "image"), (integ.include_video_zip, "video")):
         if flag:
+            if preview:
+                body[f"{kind}_zip_url"] = f"{settings.PUBLIC_BASE_URL}/zip/example-{kind}-link"
+                continue
             has = MediaAsset.objects.filter(booking=booking, status="verified",
                                            kind__in=zips.KIND_TYPES[kind]).exists()
             z = zips.request_zip(booking, kind) if has else None
@@ -225,39 +227,79 @@ def build_payload(d: Delivery) -> dict:
     return body
 
 
-def render_template(template: str, body: dict) -> str:
-    """Admin's {{ field.key }} template, rendered in a sandbox with a fixed, small context."""
-    if len(template) > MAX_TEMPLATE:
-        raise TemplateError("template too long")
-    env = ImmutableSandboxedEnvironment(autoescape=False)
-    data = body.get("data") or {}
-    fields = {**data.get("booking", {}), **data.get("inspection", {})}
-    context = {"event": body["event"], "booking": body["booking"], "field": fields,
-               "pdf_url": body.get("pdf_url"), "image_zip_url": body.get("image_zip_url"),
-               "video_zip_url": body.get("video_zip_url"),
-               "changed_keys": body.get("changed_keys", [])}
-    out = env.from_string(template).render(**context)
-    if len(out) > MAX_BODY:
-        raise TemplateError("rendered body too large")
-    return out
+def build_sample_payload(d: Delivery, types: dict[str, str]) -> dict:
+    """The standard body for a form that has no job yet: values made up from each field's type."""
+    integ = d.integration
+    body: dict = {"event": d.event, "delivery": str(d.id),
+                  "occurred_at": d.created_at.isoformat(),
+                  "booking": {"id": "00000000-0000-0000-0000-000000000000",
+                              "booking_id": values.sample("text", "job.booking_id")}}
+    if integ.include_data:
+        def part(name: str) -> dict:
+            return {r.split(".", 1)[1]: values.sample(t, r) for r, t in types.items()
+                    if r.startswith(name + ".")
+                    and (not integ.fields or r.split(".", 1)[1] in integ.fields)}
+
+        body["data"] = {"booking": part("booking"), "inspection": part("inspection")}
+        if not integ.fields:
+            body["data"]["start"], body["data"]["end"] = part("start"), part("end")
+    for flag, key in ((integ.include_pdf, "pdf_url"), (integ.include_image_zip, "image_zip_url"),
+                      (integ.include_video_zip, "video_zip_url")):
+        if flag:
+            body[key] = f"{settings.PUBLIC_BASE_URL}/example/{key}"
+    return body
 
 
-def encode(d: Delivery) -> tuple[bytes, str]:
-    """(raw body bytes, content type). Raises on a broken template."""
-    body = build_payload(d)
-    if d.integration.template:
-        text = render_template(d.integration.template, body)
-        try:
-            json.loads(text)
-            kind = "application/json"
-        except ValueError:
-            kind = "text/plain; charset=utf-8"
-        return text.encode(), kind
-    return json.dumps(body, separators=(",", ":"), default=str).encode(), "application/json"
+@dataclass
+class Request:
+    method: str
+    url: str
+    headers: dict[str, str]
+    body: bytes | None
 
 
-def sign(secret: str, raw: bytes) -> str:
-    return "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+def _one_line(s: str) -> str:
+    """A header cannot hold line breaks; a multi-line answer becomes one line."""
+    return re.sub(r"[\r\n]+", " ", s).strip()
+
+
+def _header_value(s: str) -> str:
+    """HTTP headers are latin-1: other characters (a Hindi name) are percent-encoded."""
+    return re.sub(r"[^\x00-\xff]+", lambda m: quote(m.group()), _one_line(s))
+
+
+def build_request(d: Delivery, mode: str = "send", types: dict[str, str] | None = None) -> Request:
+    """The whole request for one delivery. Raises values.MissingPathValue when a value in the URL
+    path is empty, and any other error when the body cannot be made."""
+    integ = d.integration
+    resolver = values.Resolver(d, mode, types)
+    get = resolver.get
+    base, path = re.match(r"(https?://[^/?#]*)(.*)", integ.url, re.S).groups()      # type: ignore
+    url = base + values.render(path, get, encode=True)
+    query = [(q["key"], v) for q in integ.query
+             if (v := _one_line(str(values.render(q["value"], get, as_text=True, sep=",") or "")))]
+    if query:
+        url += ("&" if "?" in url else "?") + urlencode(query)
+    headers = {h["key"]: v for h in integ.headers
+               if (v := _header_value(str(values.render(h["value"], get, as_text=True, sep=",")
+                                          or "")))}
+    raw: bytes | None = None
+    if integ.method in BODY_METHODS:
+        if integ.body_mode == "custom":
+            data: dict = values.build_tree((integ.body or {}).get("rows", []), get)
+        elif mode == "sample":
+            data = build_sample_payload(d, types or {})
+        else:
+            data = build_payload(d, preview=mode != "send")
+        raw = json.dumps(data, separators=(",", ":"), default=str).encode()
+        if len(raw) > MAX_BODY:
+            raise ValueError("body too large")
+        headers["Content-Type"] = "application/json"
+    headers.update({"X-Vayu-Event": d.event, "X-Vayu-Delivery": str(d.id),
+                    "User-Agent": "Vayu-Webhooks/1"})
+    if d.event == "test.ping":
+        headers["X-Vayu-Test"] = "1"
+    return Request(integ.method, url, headers, raw)
 
 
 # ------------------------------------------------------------------ sending
@@ -278,22 +320,22 @@ def attempt(d: Delivery) -> Delivery:
         _finish(d, "failed", "integration_disabled")
         return d
     try:
-        raw, content_type = encode(d)
-    except Exception:  # noqa: BLE001 - a bad template must never kill the worker
-        logger.warning("Webhook body failed for delivery %s", d.id)
-        _finish(d, "failed", "template_failed")
+        req = build_request(d)
+    except values.MissingPathValue:
+        _finish(d, "failed", "missing_path_value")
         return d
-    reason = check_url(integ.url)
+    except Exception:  # noqa: BLE001 - a bad request must never kill the worker
+        logger.warning("Webhook request failed for delivery %s", d.id)
+        _finish(d, "failed", "request_failed")
+        return d
+    reason = check_url(req.url)
     if reason:
         _finish(d, "failed", reason)
         return d
-    headers = {"Content-Type": content_type, "X-Vayu-Event": d.event,
-               "X-Vayu-Delivery": str(d.id), "X-Vayu-Signature": sign(integ.secret, raw),
-               "User-Agent": "Vayu-Webhooks/1"}
     try:
         with session() as s:
-            r = s.post(integ.url, data=raw, headers=headers, timeout=settings.WEBHOOK_TIMEOUT,
-                       allow_redirects=False)
+            r = s.request(req.method, req.url, data=req.body, headers=req.headers,
+                          timeout=settings.WEBHOOK_TIMEOUT, allow_redirects=False)
     except requests.Timeout:
         return _retry(d, "timeout", None)
     except requests.RequestException as e:
@@ -301,6 +343,10 @@ def attempt(d: Delivery) -> Delivery:
             _finish(d, "failed", "blocked_address")
             return d
         return _retry(d, "connection_error", None)
+    except Exception:  # noqa: BLE001 - whatever else breaks must not leave the delivery "sending"
+        logger.warning("Webhook send failed for delivery %s", d.id)
+        _finish(d, "failed", "request_failed")
+        return d
     if 200 <= r.status_code < 300:
         _finish(d, "success", "", r.status_code)
     elif r.status_code == 429 or r.status_code >= 500:

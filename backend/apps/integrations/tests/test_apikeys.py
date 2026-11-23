@@ -281,8 +281,8 @@ def test_inspection_needs_the_form_in_scope_and_an_inspection(ienv, booking):
 def test_api_writes_and_bulk_updates_fire_webhooks(env, http, booking):
     from apps.integrations.tests.conftest import booking_form_id
 
-    make(env, booking_form_id(), events=["booking.created", "booking.updated",
-                                         "booking.deleted"])
+    for event in ("booking.created", "booking.updated", "booking.deleted"):
+        make(env, booking_form_id(), name=event, event=event)
     c = client(new_key(env, ALL, allow_delete=True))
     c.post("/api/v1/ext/bookings", {"answers": answers(booking_id="W1")}, format="json")
     c.patch("/api/v1/ext/bookings/W1", {"answers": {"address": "A1"}}, format="json")

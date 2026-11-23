@@ -38,8 +38,9 @@ built by you in the form builder (Admin → Forms): that is the test of the buil
 5. **Ops** → edit an answer → Ratings tab (override a rating) → Report tab: "Out of date" → Regenerate.
 6. Open the same inspection in two windows, change different fields in each, save in both: the second
    save shows "someone changed this" and keeps both people's fields.
-7. **Admin** → Integrations → new integration → start a receiver:
-   `python3 scripts/webhook_receiver.py --secret <the secret shown once>` and use the **Test** button.
+7. **Admin** → Integrations → new integration (pick the event, method, URL with a value in the path,
+   a header, a custom body) → start a receiver: `python3 scripts/webhook_receiver.py` (it prints every
+   request whole) and use the **Test** button; the preview shows the same request.
 8. **Admin** → API keys → create one → `curl -H "Authorization: Api-Key <key>" http://localhost:5173/api/v1/ext/bookings`.
    Docs: http://localhost:5173/api/v1/docs.
 9. Reassign a started job to `expert2` (Ops → "Force release", then assign) to see how conflicts show up.

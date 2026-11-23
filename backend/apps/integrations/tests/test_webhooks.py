@@ -1,5 +1,3 @@
-import hashlib
-import hmac
 import json
 from datetime import timedelta
 
@@ -8,7 +6,7 @@ import requests
 import responses
 from django.utils import timezone
 
-from apps.bookings.tests.conftest import answers, create
+from apps.bookings.tests.conftest import create
 from apps.bookings.tests.test_submissions import GOOD, assign, start, submit
 from apps.core import events
 from apps.integrations import tasks, webhooks
@@ -36,12 +34,12 @@ def test_crud_is_admin_only_and_audited(ienv):
     for client in (ienv.ops, ienv.expert):
         assert client.get("/api/v1/integrations").status_code == 403
         assert client.post("/api/v1/integrations", {}, format="json").status_code == 403
-    i = make(ienv, ienv.form_id, events=["booking.created", "pdf.ready"])
-    assert i["secret"].startswith("whsec_") and i["secret_last4"] == i["secret"][-4:]
+    i = make(ienv, ienv.form_id, event="booking.created")
+    assert "secret" not in i and "template" not in i and i["method"] == "POST"
     again = ienv.admin.get(f"/api/v1/integrations/{i['id']}").json()
-    assert "secret" not in again and again["secret_last4"] == i["secret_last4"]   # shown once
+    assert again["event"] == "booking.created" and again["broken_refs"] == []
     r = ienv.admin.patch(f"/api/v1/integrations/{i['id']}", {"name": "ERP 2", "is_active": False,
-                         "events": ["pdf.ready"]}, format="json")
+                         "event": "pdf.ready"}, format="json")
     assert r.json()["name"] == "ERP 2" and r.json()["is_active"] is False
     assert ienv.admin.get(f"/api/v1/integrations?form={ienv.form_id}").json()[0]["id"] == i["id"]
     assert ienv.admin.delete(f"/api/v1/integrations/{i['id']}").status_code == 204
@@ -60,15 +58,34 @@ def test_several_integrations_per_form(ienv):
     ({"name": ""}, "INVALID_NAME"), ({"name": 5}, "INVALID_NAME"),
     ({"url": "ftp://x.example.com"}, "INVALID_URL"), ({"url": 5}, "INVALID_URL"),
     ({"url": "https://user:pw@hooks.example.com/"}, "INVALID_URL"),
-    ({"events": []}, "INVALID_EVENTS"), ({"events": ["nope"]}, "INVALID_EVENTS"),
-    ({"events": "booking.created"}, "INVALID_EVENTS"),
+    ({"event": ""}, "INVALID_EVENT"), ({"event": "nope"}, "INVALID_EVENT"),
+    ({"event": ["booking.created"]}, "INVALID_EVENT"), ({"method": "TRACE"}, "INVALID_METHOD"),
+    ({"url": "https://hooks.example.com/{{job.booking_id}}/x?a={{job.city}}"}, "INVALID_URL"),
+    ({"url": "https://{{job.city}}.example.com/x"}, "INVALID_URL"),
+    ({"url": "https://hooks.example.com/{{booking.nope}}"}, "UNKNOWN_VALUE"),
+    ({"url": "https://hooks.example.com/{{ unclosed"}, "INVALID_VALUE"),
+    ({"query": "a"}, "INVALID_QUERY"), ({"query": [{"key": "", "value": "x"}]}, "INVALID_QUERY"),
+    ({"query": [{"key": "a", "value": "{{nope.x}}"}]}, "UNKNOWN_VALUE"),
+    ({"headers": [{"key": "Content-Type", "value": "x"}]}, "LOCKED_HEADER"),
+    ({"headers": [{"key": "x-vayu-event", "value": "x"}]}, "LOCKED_HEADER"),
+    ({"headers": [{"key": "Host", "value": "x"}]}, "LOCKED_HEADER"),
+    ({"headers": [{"key": "bad name", "value": "x"}]}, "INVALID_HEADERS"),
+    ({"headers": [{"key": "A", "value": "x"}, {"key": "a", "value": "y"}]}, "INVALID_HEADERS"),
+    ({"headers": [{"key": "A", "value": "two\nlines"}]}, "INVALID_VALUE"),
+    ({"body_mode": "weird"}, "INVALID_BODY"),
+    ({"body_mode": "custom", "body": {"rows": [{"key": "a"}]}}, "INVALID_BODY"),
+    ({"body_mode": "custom", "body": {"rows": [{"key": "a", "value": "x", "fixed": 1}]}},
+     "INVALID_BODY"),
+    ({"body_mode": "custom", "body": {"rows": [{"key": "a", "fixed": 1},
+                                               {"key": "a", "fixed": 2}]}}, "INVALID_BODY"),
+    ({"body_mode": "custom", "body": {"rows": [{"key": "a", "fixed": [1]}]}}, "INVALID_BODY"),
+    ({"body_mode": "custom", "body": {"rows": [{"key": "a", "value": "{{inspection.zzz}}"}]}},
+     "UNKNOWN_VALUE"),
     ({"include_data": "yes"}, "INVALID_TOGGLE"), ({"fields": "a"}, "INVALID_FIELDS"),
-    ({"fields": [1]}, "INVALID_FIELDS"), ({"template": 5}, "INVALID_TEMPLATE"),
-    ({"template": "{{ unclosed"}, "INVALID_TEMPLATE"),
-    ({"template": "x" * 10_001}, "INVALID_TEMPLATE"),
+    ({"fields": [1]}, "INVALID_FIELDS"),
 ])
 def test_bad_integrations_are_refused(ienv, change, code):
-    base = {"form": ienv.form_id, "name": "ERP", "url": HOOK, "events": ["booking.created"]}
+    base = {"form": ienv.form_id, "name": "ERP", "url": HOOK, "event": "booking.created"}
     r = ienv.admin.post("/api/v1/integrations", {**base, **change}, format="json")
     assert r.status_code == 400 and r.json()["code"] == code
 
@@ -79,14 +96,14 @@ def test_start_and_end_forms_cannot_have_integrations(ienv, ftype):
 
     system_form = Form.objects.get(type=ftype)
     r = ienv.admin.post("/api/v1/integrations", {"form": system_form.id, "name": "x", "url": HOOK,
-                                                 "events": ["booking.created"]}, format="json")
+                                                 "event": "booking.created"}, format="json")
     assert r.json()["code"] == "INVALID_FORM"
 
 
 def test_plain_http_and_private_addresses_are_refused_in_production_mode(ienv, settings,
                                                                           monkeypatch):
     settings.WEBHOOK_ALLOW_HTTP = False
-    base = {"form": ienv.form_id, "name": "x", "events": ["booking.created"]}
+    base = {"form": ienv.form_id, "name": "x", "event": "booking.created"}
     r = ienv.admin.post("/api/v1/integrations", {**base, "url": "http://hooks.example.com/"},
                         format="json")
     assert r.json()["reason"] == "https_required"
@@ -110,23 +127,10 @@ def test_the_event_catalog_lists_the_nine_events(ienv):
     assert len(got) == 9 and "alert.stuck_upload" in got and "pdf.ready" in got
 
 
-def test_rotating_the_secret_changes_what_signs_the_body(ienv, http, booking):
-    i = make(ienv, booking_form_id())
-    r = ienv.admin.post(f"/api/v1/integrations/{i['id']}/rotate-secret")
-    assert r.json()["secret"] != i["secret"] and r.json()["secret"].startswith("whsec_")
-    create(ienv.ops, booking_id="NEW1")
-    call = sent(http)[-1]
-    sig = call.request.headers["X-Vayu-Signature"]
-    assert sig == "sha256=" + hmac.new(r.json()["secret"].encode(), call.request.body,
-                                       hashlib.sha256).hexdigest()
-    assert sig != "sha256=" + hmac.new(i["secret"].encode(), call.request.body,
-                                       hashlib.sha256).hexdigest()
-
-
 # ---------------------------------------------------------------- which events go where
 
 def test_only_subscribed_events_are_sent(ienv, http):
-    make(ienv, booking_form_id(), events=["booking.deleted"])
+    make(ienv, booking_form_id(), event="booking.deleted")
     b = create(ienv.ops).json()
     assign(ienv, b)
     assert sent(http) == []                                  # created/updated not subscribed
@@ -135,17 +139,23 @@ def test_only_subscribed_events_are_sent(ienv, http):
 
 
 def test_booking_form_integrations_get_only_booking_events(ienv, http, booking):
-    make(ienv, booking_form_id(), events=webhooks.EVENTS)
+    for event in ("booking.created", "booking.updated", "booking.deleted"):
+        make(ienv, booking_form_id(), name=event, event=event)
     http.calls.reset()
     assign(ienv, booking)
     start(ienv.expert, booking)
     submit(ienv.expert, booking)
     got = {body_of(c)["event"] for c in sent(http)}
     assert got == {"booking.updated"}                        # not inspection/media/pdf events
+    for event in ("inspection.submitted", "pdf.ready", "alert.conflict"):
+        r = ienv.admin.post("/api/v1/integrations", {"form": booking_form_id(), "name": "x",
+                            "url": HOOK, "event": event}, format="json")
+        assert r.json()["code"] == "INVALID_EVENT"           # a booking form has booking events only
 
 
 def test_inspection_form_integrations_get_every_event_for_their_type(ienv, http, booking):
-    make(ienv, ienv.form_id, events=webhooks.EVENTS)
+    for event in webhooks.EVENTS:
+        make(ienv, ienv.form_id, name=event, event=event)
     assign(ienv, booking)
     start(ienv.expert, booking)
     submit(ienv.expert, booking)
@@ -155,7 +165,7 @@ def test_inspection_form_integrations_get_every_event_for_their_type(ienv, http,
 
 
 def test_other_types_inactive_and_deleted_forms_do_not_fire(ienv, http, booking):
-    i = make(ienv, ienv.form_id, events=["booking.updated"])
+    i = make(ienv, ienv.form_id, event="booking.updated")
     from apps.bookings.models import Booking
 
     Booking.objects.filter(pk=booking["id"]).update(inspection_type="used_car")
@@ -171,7 +181,7 @@ def test_other_types_inactive_and_deleted_forms_do_not_fire(ienv, http, booking)
 
 
 def test_unknown_internal_events_are_ignored(ienv, http, booking):
-    make(ienv, booking_form_id(), events=webhooks.EVENTS)
+    make(ienv, booking_form_id(), event="booking.updated")
     http.calls.reset()
     events.emit("inspection.updated", booking=booking["id"], booking_id="x")
     events.emit("booking.created")                           # no booking in the payload
@@ -183,13 +193,13 @@ def test_unknown_internal_events_are_ignored(ienv, http, booking):
     ("alert.conflict", "alert.conflict"), ("alert.stuck_upload", "alert.stuck_upload"),
     ("pdf.ready", "pdf.ready"), ("media.completed", "media.completed")])
 def test_internal_events_map_to_the_public_ones(ienv, http, booking, internal, public):
-    make(ienv, ienv.form_id, events=[public])
+    make(ienv, ienv.form_id, event=public)
     events.emit(internal, booking=booking["id"], booking_id="SA37926")
     assert [body_of(c)["event"] for c in sent(http)] == [public]
 
 
 def test_a_real_conflict_fires_alert_conflict(ienv, http, booking):
-    make(ienv, ienv.form_id, events=["alert.conflict"])
+    make(ienv, ienv.form_id, event="alert.conflict")
     assign(ienv, booking)
     start(ienv.expert, booking)
     from apps.bookings.models import Booking
@@ -203,7 +213,7 @@ def test_a_real_conflict_fires_alert_conflict(ienv, http, booking):
 
 
 def test_a_booking_id_edit_carries_old_and_new(ienv, http, booking):
-    make(ienv, booking_form_id(), events=["booking.updated"], include_data=False)
+    make(ienv, booking_form_id(), event="booking.updated", include_data=False)
     b = ienv.ops.get(f"/api/v1/bookings/{booking['id']}").json()
     ienv.ops.patch(f"/api/v1/bookings/{booking['id']}", {
         "row_version": b["row_version"], "answers": {"booking_id": "SA99999",
@@ -240,7 +250,7 @@ def test_full_data_is_scoped_to_the_integrations_fields(ienv, http):
 
 
 def test_full_data_includes_the_inspection_after_submission(ienv, http, booking):
-    make(ienv, ienv.form_id, events=["inspection.submitted"])
+    make(ienv, ienv.form_id, event="inspection.submitted")
     assign(ienv, booking)
     start(ienv.expert, booking)
     submit(ienv.expert, booking)
@@ -254,7 +264,7 @@ def test_full_data_includes_the_inspection_after_submission(ienv, http, booking)
 def test_link_toggles(renv, http, settings, pdf, image, video):
     from apps.reports.tests.test_reports import complete_job, set_template
 
-    make(renv, renv.form_id, events=["pdf.ready"], include_pdf=bool(pdf),
+    make(renv, renv.form_id, event="pdf.ready", include_pdf=bool(pdf),
          include_image_zip=bool(image), include_video_zip=bool(video))
     set_template(renv)
     complete_job(renv, settings=settings)
@@ -275,86 +285,6 @@ def test_toggles_are_null_when_nothing_exists_yet(ienv, http):
     create(ienv.ops, booking_id="ZZ3")
     p = body_of(sent(http)[-1])
     assert p["pdf_url"] is None and p["image_zip_url"] is None
-
-
-# ---------------------------------------------------------------- templates (sandboxed)
-
-def test_a_template_renders_field_placeholders(ienv, http):
-    make(ienv, booking_form_id(),
-         template='{"id": "{{ booking.booking_id }}", "who": "{{ field.customer_name }}", '
-                  '"event": "{{ event }}"}')
-    create(ienv.ops, booking_id="ZZ4")
-    call = sent(http)[-1]
-    assert json.loads(call.request.body) == {"id": "ZZ4", "who": "Asha", "event": "booking.created"}
-    assert call.request.headers["Content-Type"] == "application/json"
-
-
-def test_a_non_json_template_is_sent_as_text(ienv, http):
-    make(ienv, booking_form_id(), template="New booking {{ booking.booking_id }}")
-    create(ienv.ops, booking_id="ZZ5")
-    call = sent(http)[-1]
-    assert call.request.body == b"New booking ZZ5"
-    assert call.request.headers["Content-Type"].startswith("text/plain")
-
-
-@pytest.mark.parametrize("attack", [
-    "{{ field.__class__ }}", "{{ ''.__class__.__mro__[1].__subclasses__() }}",
-    "{{ booking.__init__.__globals__ }}", "{{ cycler.__init__.__globals__ }}",
-    "{% for i in range(100000000) %}x{% endfor %}"])
-def test_template_escape_attempts_are_blocked_and_the_worker_survives(ienv, http, attack):
-    make(ienv, booking_form_id(), template=attack)
-    create(ienv.ops, booking_id="ZZ6")
-    d = Delivery.objects.filter(booking_ref="ZZ6").get()
-    leaked = [c for c in sent(http) if any(w in (c.request.body or b"")
-                                           for w in (b"subclass", b"globals", b"class"))]
-    assert not leaked
-    assert d.status in ("success", "failed")                 # blocked: empty output or a failure
-    assert d.status == "success" or d.error == "template_failed"
-
-
-def test_a_failing_template_marks_the_delivery_failed_without_retrying(ienv, http):
-    make(ienv, booking_form_id(), template="{{ 1 / 0 }}")
-    create(ienv.ops, booking_id="ZZ7")
-    d = Delivery.objects.get(booking_ref="ZZ7")
-    assert d.status == "failed" and d.error == "template_failed" and d.attempts == 1
-    assert sent(http) == []
-
-
-def test_an_oversized_rendered_body_fails(ienv, http, monkeypatch):
-    monkeypatch.setattr(webhooks, "MAX_BODY", 5)
-    make(ienv, booking_form_id(), template="{{ booking.booking_id }} is long")
-    create(ienv.ops, booking_id="ZZ8")
-    assert Delivery.objects.get(booking_ref="ZZ8").error == "template_failed"
-
-
-def test_render_sample_previews_a_template_with_real_data(ienv, booking):
-    r = ienv.admin.post("/api/v1/integrations/render-sample", {
-        "form": booking_form_id(), "template": "{{ field.customer_name }}/{{ booking.booking_id }}",
-        "booking": booking["id"]}, format="json")
-    assert r.json() == {"rendered": "Asha/SA37926"}
-    r = ienv.admin.post("/api/v1/integrations/render-sample", {
-        "form": booking_form_id(), "template": "{{ field.customer_name }}"}, format="json")
-    assert r.json()["rendered"] == "Asha"                    # picks the newest booking
-    bad = ienv.admin.post("/api/v1/integrations/render-sample", {
-        "form": booking_form_id(), "template": "{{ 1 / 0 }}"}, format="json")
-    assert bad.status_code == 400 and bad.json()["code"] == "TEMPLATE_ERROR"
-    syn = ienv.admin.post("/api/v1/integrations/render-sample", {
-        "form": booking_form_id(), "template": "{{ x"}, format="json")
-    assert syn.status_code == 400
-    nope = ienv.admin.post("/api/v1/integrations/render-sample", {
-        "form": booking_form_id(), "template": "x", "booking": "not-a-uuid"}, format="json")
-    assert nope.status_code == 400
-    assert ienv.ops.post("/api/v1/integrations/render-sample", {}, format="json").status_code == 403
-
-
-# ---------------------------------------------------------------- signing
-
-def test_the_body_is_signed_with_hmac_sha256(ienv, http):
-    i = make(ienv, booking_form_id())
-    create(ienv.ops, booking_id="ZZ9")
-    call = sent(http)[-1]
-    expected = hmac.new(i["secret"].encode(), call.request.body, hashlib.sha256).hexdigest()
-    assert call.request.headers["X-Vayu-Signature"] == f"sha256={expected}"
 
 
 # ---------------------------------------------------------------- retries
@@ -480,7 +410,7 @@ def test_the_delivery_log_holds_no_customer_data(ienv, http):
 
 
 def test_the_delivery_list_filters_and_pages(ienv, http):
-    i = make(ienv, booking_form_id(), events=["booking.created"])
+    i = make(ienv, booking_form_id(), event="booking.created")
     for n in range(3):
         create(ienv.ops, booking_id=f"P{n}")
     url = f"/api/v1/integrations/{i['id']}/deliveries"
@@ -501,7 +431,7 @@ def test_resend_makes_a_new_delivery_from_todays_data(ienv, http):
 
 
 def test_the_test_button_sends_a_ping_and_reports_the_result(ienv, http, booking):
-    i = make(ienv, booking_form_id(), events=["pdf.ready"])
+    i = make(ienv, ienv.form_id, event="pdf.ready")
     r = ienv.admin.post(f"/api/v1/integrations/{i['id']}/test")
     assert r.status_code == 200 and r.json()["status"] == "success"
     assert r.json()["event"] == "test.ping"
@@ -532,7 +462,7 @@ def test_the_test_button_for_an_inspection_form_picks_that_types_booking(ienv, h
 
 
 def test_a_deleted_booking_still_delivers_its_ids(ienv, http, booking):
-    make(ienv, booking_form_id(), events=["booking.deleted"])
+    make(ienv, booking_form_id(), event="booking.deleted")
     ienv.admin.delete(f"/api/v1/bookings/{booking['id']}")
     p = body_of(sent(http)[-1])
     assert p["booking"] == {"id": booking["id"], "booking_id": "SA37926"} and "data" not in p
@@ -540,25 +470,14 @@ def test_a_deleted_booking_still_delivers_its_ids(ienv, http, booking):
     assert d.booking is None and d.booking_ref == "SA37926"
 
 
-def test_sign_helpers_and_secret_format():
-    assert webhooks.sign("k", b"x") == "sha256=" + hmac.new(b"k", b"x", hashlib.sha256).hexdigest()
-    assert webhooks.new_secret() != webhooks.new_secret()
-    assert answers()["booking_id"]
-
-
 def test_events_for_a_booking_that_no_longer_exists_reach_booking_form_integrations(ienv, http):
     import uuid
 
-    make(ienv, booking_form_id(), events=["booking.deleted"], include_data=True)
-    make(ienv, ienv.form_id, name="insp", events=["booking.deleted"])
+    make(ienv, booking_form_id(), event="booking.deleted", include_data=True)
+    make(ienv, ienv.form_id, name="insp", event="booking.deleted")
     gone = str(uuid.uuid4())
     events.emit("booking.deleted", booking=gone, booking_id="GONE1")
     assert [body_of(c)["booking"] for c in sent(http)] == [{"id": gone, "booking_id": "GONE1"}]
-
-
-def test_an_over_long_template_is_refused_by_the_renderer_itself(ienv):
-    with pytest.raises(Exception, match="too long"):
-        webhooks.render_template("x" * 10_001, {"event": "e", "booking": {}})
 
 
 def test_the_connected_address_is_checked_so_dns_rebinding_cannot_reach_private_hosts(

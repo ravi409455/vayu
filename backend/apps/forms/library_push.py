@@ -10,6 +10,7 @@ from django.db import transaction
 
 from apps.accounts import audit
 from apps.core.errors import CodedError
+from apps.integrations.values import publish_warnings
 
 from . import library, services
 from .models import Field, Form, FormVersion, LibraryItem, LibraryKind, Section, VersionStatus
@@ -109,7 +110,8 @@ def _run(actor, item: LibraryItem, *, publish: bool, commit: bool) -> dict:
                 library.accept_update(actor, obj)
             problems = _problems(form, draft)
             result["forms"].append({"form": form.key, "type": form.type, "state": state,
-                                    "changes": changes, "problems": problems})
+                                    "changes": changes, "problems": problems,
+                                    "warnings": publish_warnings(draft, published=False)})
             drafts.append((form, draft))
         result["blocked"] = any(f["problems"] for f in result["forms"])
         if result["blocked"] or not commit:

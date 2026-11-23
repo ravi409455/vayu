@@ -542,3 +542,30 @@ input.switch:focus-visible { outline: 2px solid var(--info); outline-offset: 2px
 @media (max-width: 900px) { .wizard-jump { display: flex; } }
 button.link.danger-link, .link.danger-link { color: var(--bad); }
 .rail-note { font-size: 12px; color: var(--muted); padding: 6px 10px 2px; margin: 0; }
+
+/* integration request designer */
+.integration-editor { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .integration-editor { grid-template-columns: 1fr; } }
+.request-line { display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: start; }
+.request-preview { position: sticky; top: 12px; }
+.request-preview pre { white-space: pre-wrap; word-break: break-all; max-height: 60vh; overflow: auto; }
+.vinput { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel); min-height: 36px; }
+.vinput input { border: 0; background: transparent; box-shadow: none; padding: 4px 2px; min-width: 2ch; flex: 0 1 auto; width: auto; }
+.vinput input.grow { flex: 1 1 8ch; }
+.vinput input:focus { outline: none; }
+.vinput:focus-within { border-color: var(--primary); }
+.vchip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 4px 1px 9px; border-radius: 999px; font-size: 13px; background: var(--info-tint, var(--hover)); color: var(--info, var(--ink)); }
+.vchip.gone { background: var(--warn-tint); color: var(--warn); }
+.vchip button { border: 0; background: none; padding: 2px; display: inline-flex; color: inherit; cursor: pointer; }
+.vplus { margin-left: auto; }
+.vpicker { position: absolute; z-index: 30; left: 0; top: calc(100% + 4px); width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 8px 24px rgba(16,24,40,.18); padding: 8px; }
+.vpicker input[role="searchbox"] { width: 100%; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 6px; }
+.vpicker [role="listbox"] { max-height: 260px; overflow: auto; margin-top: 6px; }
+.vpicker .vgroup { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3, var(--ink-2)); padding: 6px 4px 2px; }
+.vpicker [role="option"] { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 5px 6px; border-radius: 6px; cursor: pointer; }
+.vpicker [role="option"]:hover, .vpicker [role="option"]:focus { background: var(--hover); }
+.body-rows { display: flex; flex-direction: column; gap: 8px; }
+.brow-line { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+.brow-line > input:first-child { width: 160px; }
+.brow-group { margin: 6px 0 0 18px; padding-left: 12px; border-left: 2px solid var(--line); }
+.checklist { max-height: 220px; overflow: auto; margin-top: 6px; }
