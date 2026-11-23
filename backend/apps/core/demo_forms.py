@@ -269,26 +269,21 @@ def build_inspection(admin, *, key, name, itype, pages):
     return form, section_keys
 
 
-def pdf_definition(code, title, section_keys, pages):
-    """A report with a cover, a table per section, the ratings row and a photo grid."""
-    blocks = [{"type": "cover", "photo": "inspection.photo_front", "rows": [
-        {"label": "Booking ID", "field": "booking.booking_id"},
-        {"label": "Customer", "field": "booking.customer_name"},
-        {"label": "Registration", "field": "inspection.registration_no"},
-        {"label": "Chassis Number", "field": "inspection.chassis_no"},
-        {"label": "Odometer (km)", "field": "inspection.odometer"}]},
-        {"type": "ratings", "title": "Overall Rating"}]
-    labels = {it[1]: it[2] for _, secs in pages for _, items in secs if isinstance(items, list)
-              for it in items}
-    for stitle, keys in section_keys.items():
-        rows = [{"label": labels.get(k, k.replace("_", " ").title()), "field": f"inspection.{k}"}
-                for k in keys if not k.endswith("_photo") and not k.startswith("photo_")
-                and k not in ("video_walkaround", "customer_sign", "service_history")]
-        if rows and stitle != "Summary":
-            blocks.append({"type": "table", "title": stitle, "rows": rows})
-    blocks.append({"type": "photos", "title": "Photos", "columns": 2, "items": [
-        {"field": f"inspection.{k}", "index": 0, "caption": c} for k, c in (
-            ("photo_front", "Front"), ("photo_rear", "Rear"), ("photo_left", "Left"),
-            ("photo_right", "Right"), ("photo_dash", "Dashboard"), ("photo_vin", "Chassis plate"))]})
-    return {"filename": "{booking_id}" + code + ".pdf", "type_code": code,
-            "branding": {"title": title, "color": "#a62830"}, "blocks": blocks}
+def pdf_definition(code, title, form) -> dict:
+    """A plain report: a page per form page, a table of each section, then its photos."""
+    version = form.versions.get(status="published")
+    pages = []
+    for page in Page.objects.filter(version=version).order_by("order", "id"):
+        parts: list[dict] = [{"type": "text", "html": f"<h2>{page.title}</h2>"}]
+        for sec in Section.objects.filter(page=page).order_by("order", "id"):
+            parts.append({"type": "table", "title": sec.title,
+                          "source": {"kind": "section", "section": f"inspection.{sec.key}"}})
+            parts.append({"type": "photos", "per_row": 3, "caption": "label",
+                          "source": {"kind": "section", "section": f"inspection.{sec.key}"}})
+        pages.append({"title": page.title, "parts": parts})
+    header = {"left": [{"text": "<strong>CAR C.I.D.</strong>"}],
+              "right": [{"text": f"<strong>{title}</strong>"}, {"text": "{{ sys.booking_id }}"}],
+              "background": "brand", "height": 16}
+    footer = {"right": [{"text": "Page {{ sys.page }} of {{ sys.pages }}"}], "height": 8}
+    return {"schema": 2, "filename": "{{ sys.booking_id }}" + code + ".pdf",
+            "bands": {"normal": {"header": header, "footer": footer}}, "pages": pages}

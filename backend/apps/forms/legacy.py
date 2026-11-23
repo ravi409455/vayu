@@ -37,17 +37,6 @@ def rewrite_rules(node: Any) -> Any:
     return node
 
 
-def rewrite_references(node: Any) -> Any:
-    """Like rewrite_rules, for PDF template rows, which hold references as plain strings."""
-    if isinstance(node, dict):
-        return {k: rewrite_references(v) for k, v in node.items()}
-    if isinstance(node, list):
-        return [rewrite_references(x) for x in node]
-    if isinstance(node, str) and node.startswith("ops."):
-        return f"{_side(node[4:].split('.')[0])}.{node[4:]}"
-    return node
-
-
 def upgrade_v1(b: dict) -> dict:
     """The schema-2 form of a schema-1 bundle. Raises OldBundleError for what cannot be carried."""
     form = dict(b["form"])
@@ -61,8 +50,9 @@ def upgrade_v1(b: dict) -> dict:
     version["pages"] = [{k: v for k, v in p.items() if k != "slot"} for p in version["pages"]]
     out["version"] = rewrite_rules(version)
     out["library"] = [{**i, "definition": rewrite_rules(i["definition"])} for i in b["library"]]
-    if b.get("pdf_template"):
-        out["pdf_template"] = {"definition": rewrite_references(b["pdf_template"]["definition"])}
+    # a schema-1 bundle's report layout was made with the old designer, which the new one does
+    # not read: the form comes across and its report is built again (docs/plan-reports.md)
+    out["pdf_template"] = None
     if form["type"] == "booking":              # the type is picked from the custom forms now
         for p in out["version"]["pages"]:
             for s in p["sections"]:

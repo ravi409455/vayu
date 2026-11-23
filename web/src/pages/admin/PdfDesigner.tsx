@@ -11,28 +11,28 @@ import { MoreMenu } from "../../ui/Menu";
 import { fmtDay } from "../../lib/format";
 import { useRefChoices, type RefChoice } from "../../lib/useChoices";
 
-type Row = { label: string; field: string };
+type Row = { field: string; label?: string };
+/** One part of a report page (schema 2). Phase 3 replaces this screen with the full designer. */
 export type Block = {
-  type: string; show_if?: unknown; font_size?: string; title?: string; text?: string; rows?: Row[];
-  photo?: string; columns?: number; items?: { field: string; index?: number; caption?: string }[]; height?: number;
+  type: string; show_if?: unknown; title?: string; html?: string; height?: number; per_row?: number;
+  source?: { kind: string; rows?: Row[]; fields?: string[]; section?: string };
 };
-export type Definition = { filename?: string; type_code?: string; branding?: { title?: string; color?: string; watermark?: boolean }; blocks: Block[] };
+type ReportPage = { title: string; style?: string; parts: Block[] };
+export type Definition = { schema: 2; filename?: string; pages: ReportPage[]; [k: string]: unknown };
 type Template = { id: number; form: number; form_key: string; versions: { id: number; number: number; status: string }[] };
 type TVersion = { id: number; template: number; number: number; status: string; definition: Definition; row_version: number };
 
 export const BLOCK_LABEL: Record<string, string> = {
-  cover: "Cover + info grid", table: "Two-column table", ratings: "Ratings row", documents: "Documents grid",
-  photos: "Photo grid", heading: "Heading", text: "Text", page_break: "Page break", spacer: "Spacer",
+  table: "Table of checks", photos: "Photos", text: "Text", verify: "Verify code", page_break: "Page break", spacer: "Spacer",
 };
 
-/** A starter block of this type. */
+/** A starter part of this type. */
 export function newBlock(type: string): Block {
   switch (type) {
-    case "cover": case "table": case "documents": return { type, rows: [], ...(type !== "cover" ? { title: "" } : {}) };
-    case "ratings": return { type, title: "Overall Rating" };
-    case "photos": return { type, title: "Photos", columns: 2, items: [] };
-    case "heading": case "text": return { type, text: "" };
-    case "spacer": return { type, height: 20 };
+    case "table": return { type, title: "", source: { kind: "fields", rows: [] } };
+    case "photos": return { type, title: "Photos", per_row: 2, source: { kind: "fields", fields: [] } };
+    case "text": return { type, html: "" };
+    case "spacer": return { type, height: 10 };
     default: return { type };
   }
 }
@@ -43,6 +43,15 @@ export function moveBlock(blocks: Block[], from: number, to: number): Block[] {
   const [b] = out.splice(from, 1);
   out.splice(to, 0, b!);
   return out;
+}
+
+/** The parts of every page as one list, and a way to change that list back into pages. */
+export function flatParts(def: Definition): { page: number; part: Block }[] {
+  return (def.pages ?? []).flatMap((p, page) => p.parts.map((part) => ({ page, part })));
+}
+export function withParts(def: Definition, flat: { page: number; part: Block }[]): Definition {
+  const pages = (def.pages ?? []).length ? def.pages : [{ title: "Page 1", parts: [] }];
+  return { ...def, pages: pages.map((p, i) => ({ ...p, parts: flat.filter((x) => x.page === i).map((x) => x.part) })) };
 }
 
 export function PdfDesigner() {
@@ -81,7 +90,7 @@ function Designer({ template, form, editable, say, fail, refresh }: { template: 
   // bookings that can show this layout: inspected with this form, newest first
   const sample = useQuery({ queryKey: ["pdf-sample", form?.inspection_type], enabled: !!form?.inspection_type,
     queryFn: async () => (await Promise.all(["completed", "submitted"].map((stage) => api<Page<Booking>>("bookings", { query: { type: form!.inspection_type, stage } })))).flatMap((r) => r.results) });
-  const [def, setDef] = useState<Definition>({ blocks: [] });
+  const [def, setDef] = useState<Definition>({ schema: 2, pages: [] });
   const [sel, setSel] = useState<number | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [rendering, setRendering] = useState(false);
@@ -89,7 +98,7 @@ function Designer({ template, form, editable, say, fail, refresh }: { template: 
   const [changed, setChanged] = useState(false);
   const v = ver.data;
   const reload = useRefresh();
-  useEffect(() => { if (v) { setDef({ ...v.definition, blocks: v.definition.blocks ?? [] }); setChanged(false); } }, [v]);
+  useEffect(() => { if (v) { setDef({ ...v.definition, pages: v.definition.pages ?? [] }); setChanged(false); } }, [v]);
   const chosen = bookingId || sample.data?.[0]?.id || "";
   const draft = v?.status === "draft";
   const ok = editable && draft;
@@ -127,9 +136,12 @@ function Designer({ template, form, editable, say, fail, refresh }: { template: 
     } finally { setRendering(false); }
   }
   useEffect(() => { if (v && chosen) void preview(); }, [v?.id, chosen]); // eslint-disable-line react-hooks/exhaustive-deps
-  const setBlock = (i: number, p: Partial<Block>) => edit({ ...def, blocks: def.blocks.map((b, j) => (j === i ? { ...b, ...p } : b)) });
-  const b = sel !== null ? def.blocks[sel] : undefined;
-  const label = (blk: Block) => blk.title || (blk.text ? blk.text.slice(0, 24) : BLOCK_LABEL[blk.type]);
+  const flat = flatParts(def);
+  const setFlat = (f: { page: number; part: Block }[]) => edit(withParts(def, f));
+  const setBlock = (i: number, p: Partial<Block>) => setFlat(flat.map((x, j) => (j === i ? { ...x, part: { ...x.part, ...p } } : x)));
+  const b = sel !== null ? flat[sel]?.part : undefined;
+  const label = (blk: Block) => blk.title || (blk.html ? blk.html.replace(/<[^>]+>/g, "").slice(0, 24) : BLOCK_LABEL[blk.type] ?? blk.type);
+  const lastPage = Math.max(0, (def.pages ?? []).length - 1);
 
   return (
     <>
@@ -147,14 +159,17 @@ function Designer({ template, form, editable, say, fail, refresh }: { template: 
         <aside className="card pdf-blocks" aria-label="Blocks">
           <button className={`tree-item${sel === null ? " on" : ""}`} onClick={() => setSel(null)} style={{ width: "100%", border: 0, background: sel === null ? undefined : "none" }}>Page settings</button>
           <div className="rail-h" style={{ margin: "10px 8px 4px" }}>Blocks, top to bottom</div>
-          {def.blocks.map((blk, i) => (
-            <div key={i} className={`tree-item${sel === i ? " on" : ""}`} onClick={() => setSel(i)} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && setSel(i)}>
-              <span className="grow ellipsis" title={BLOCK_LABEL[blk.type]}>{label(blk)}</span>
-              {ok && <span className="row-tools"><button className="link" aria-label="Move up" onClick={(e) => { e.stopPropagation(); edit({ ...def, blocks: moveBlock(def.blocks, i, i - 1) }); setSel(Math.max(0, i - 1)); }}>↑</button>
-                <button className="link" aria-label="Move down" onClick={(e) => { e.stopPropagation(); edit({ ...def, blocks: moveBlock(def.blocks, i, i + 1) }); setSel(Math.min(def.blocks.length - 1, i + 1)); }}>↓</button></span>}
+          {flat.map(({ page, part: blk }, i) => (
+            <div key={i}>
+              {(i === 0 || flat[i - 1]!.page !== page) && <div className="rail-h" style={{ margin: "8px 8px 2px" }}>{def.pages[page]?.title || `Page ${page + 1}`}</div>}
+              <div className={`tree-item${sel === i ? " on" : ""}`} onClick={() => setSel(i)} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && setSel(i)}>
+                <span className="grow ellipsis" title={BLOCK_LABEL[blk.type]}>{label(blk)}</span>
+                {ok && <span className="row-tools"><button className="link" aria-label="Move up" onClick={(e) => { e.stopPropagation(); setFlat(moveBlock(flat as never, i, i - 1) as never); setSel(Math.max(0, i - 1)); }}>↑</button>
+                  <button className="link" aria-label="Move down" onClick={(e) => { e.stopPropagation(); setFlat(moveBlock(flat as never, i, i + 1) as never); setSel(Math.min(flat.length - 1, i + 1)); }}>↓</button></span>}
+              </div>
             </div>
           ))}
-          {ok && <select aria-label="Add a block" value="" style={{ marginTop: 8 }} onChange={(e) => { if (e.target.value) { edit({ ...def, blocks: [...def.blocks, newBlock(e.target.value)] }); setSel(def.blocks.length); } }}>
+          {ok && <select aria-label="Add a block" value="" style={{ marginTop: 8 }} onChange={(e) => { if (e.target.value) { setFlat([...flat, { page: lastPage, part: newBlock(e.target.value) }]); setSel(flat.length); } }}>
             <option value="">+ Add a block…</option>{Object.entries(BLOCK_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
         </aside>
         <section className="pdf-preview" aria-label="Preview">
@@ -172,13 +187,10 @@ function Designer({ template, form, editable, say, fail, refresh }: { template: 
             : <Empty title={chosen ? "Rendering the preview…" : "Nothing to preview yet"}>{chosen ? "" : "Complete one booking inspected with this form to see the layout with real answers."}</Empty>}
         </section>
         <aside className="card pdf-settings" aria-label={b ? "Block settings" : "Page settings"}>
-          {b && sel !== null ? <BlockEditor block={b} ok={ok} choices={choices} onChange={(p) => setBlock(sel, p)} onDelete={() => { edit({ ...def, blocks: def.blocks.filter((_, j) => j !== sel) }); setSel(null); }} /> : <>
+          {b && sel !== null ? <BlockEditor block={b} ok={ok} choices={choices} onChange={(p) => setBlock(sel, p)} onDelete={() => { setFlat(flat.filter((_, j) => j !== sel)); setSel(null); }} /> : <>
             <h3 style={{ marginTop: 0 }}>Page settings</h3>
-            <Field label="File name"><input disabled={!ok} value={def.filename ?? "{booking_id}{type_code}.pdf"} onChange={(e) => edit({ ...def, filename: e.target.value })} /></Field>
-            <Field label="Type code (added to the name)"><input disabled={!ok} value={def.type_code ?? ""} onChange={(e) => edit({ ...def, type_code: e.target.value })} /></Field>
-            <Field label="Header title"><input disabled={!ok} value={def.branding?.title ?? ""} onChange={(e) => edit({ ...def, branding: { ...def.branding, title: e.target.value } })} /></Field>
-            <Field label="Header colour"><input type="color" disabled={!ok} value={def.branding?.color ?? "#a62830"} onChange={(e) => edit({ ...def, branding: { ...def.branding, color: e.target.value } })} /></Field>
-            <label className="check"><input type="checkbox" disabled={!ok} checked={!!def.branding?.watermark} onChange={(e) => edit({ ...def, branding: { ...def.branding, watermark: e.target.checked } })} /> Watermark</label>
+            <Field label="File name" tip="Values like {{ sys.booking_id }} are filled in for each report."><input disabled={!ok} value={def.filename ?? "{{ sys.booking_id }}.pdf"} onChange={(e) => edit({ ...def, filename: e.target.value })} /></Field>
+            <p className="muted small">The full designer (pages, header and footer, colours, photo layouts) arrives in the next release. Templates made here keep working there.</p>
           </>}
         </aside>
       </div>
@@ -188,49 +200,48 @@ function Designer({ template, form, editable, say, fail, refresh }: { template: 
 
 function BlockEditor({ block, ok, choices, onChange, onDelete }: { block: Block; ok: boolean; choices: RefChoice[]; onChange: (p: Partial<Block>) => void; onDelete: () => void }) {
   const t = block.type;
-  const rows = block.rows ?? [];
-  const setRow = (i: number, p: Partial<Row>) => onChange({ rows: rows.map((r, j) => (j === i ? { ...r, ...p } : r)) });
-  const mediaChoices = choices.filter((c) => ["photo", "signature", "file"].includes(c.type));
+  const src = block.source ?? { kind: "fields" };
+  const rows = src.rows ?? [];
+  const setRows = (r: Row[]) => onChange({ source: { ...src, rows: r } });
+  const setRow = (i: number, p: Partial<Row>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...p } : r)));
+  const fields = src.fields ?? [];
+  const setFields = (f: string[]) => onChange({ source: { ...src, fields: f } });
+  const mediaChoices = choices.filter((c) => c.type === "photo");
   return (
     <div className="card">
-      <h3>{BLOCK_LABEL[t]}</h3>
+      <h3>{BLOCK_LABEL[t] ?? t}</h3>
       <fieldset disabled={!ok} style={{ border: 0, padding: 0 }}>
-        {(t === "table" || t === "documents" || t === "ratings" || t === "photos") && <Field label="Title"><input value={block.title ?? ""} onChange={(e) => onChange({ title: e.target.value })} /></Field>}
-        {(t === "heading" || t === "text") && <Field label="Text"><textarea value={block.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} /></Field>}
-        {t === "spacer" && <Field label="Height"><input type="number" min={1} max={200} value={block.height ?? 20} onChange={(e) => onChange({ height: Number(e.target.value) })} /></Field>}
-        {t === "cover" && <Field label="Hero photo"><select value={block.photo ?? ""} onChange={(e) => onChange({ photo: e.target.value || undefined })}><option value="">None</option>{mediaChoices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select></Field>}
-        {(t === "cover" || t === "table" || t === "documents") && (
+        {(t === "table" || t === "photos") && <Field label="Title"><input value={block.title ?? ""} onChange={(e) => onChange({ title: e.target.value })} /></Field>}
+        {t === "text" && <Field label="Text" tip="Simple formatting is kept (bold, lists). Values like {{ inspection.colour }} are filled in."><textarea value={block.html ?? ""} onChange={(e) => onChange({ html: e.target.value })} /></Field>}
+        {t === "spacer" && <Field label="Height (mm)"><input type="number" min={1} max={200} value={block.height ?? 10} onChange={(e) => onChange({ height: Number(e.target.value) })} /></Field>}
+        {t === "table" && src.kind === "fields" && (
           <>
             <strong>Rows (what the report calls each value)</strong>
             {rows.map((r, i) => (
               <div className="pdf-row" key={i}>
-                <input aria-label="Report label" placeholder="Label on the report" value={r.label} onChange={(e) => setRow(i, { label: e.target.value })} />
-                <button className="link" aria-label="Remove row" onClick={() => onChange({ rows: rows.filter((_, j) => j !== i) })}>✕</button>
-                <select aria-label="Field" value={r.field} onChange={(e) => setRow(i, { field: e.target.value, label: r.label || (choices.find((c) => c.value === e.target.value)?.label.split(": ")[1] ?? "") })}>
+                <input aria-label="Report label" placeholder="Label on the report (default: the field's label)" value={r.label ?? ""} onChange={(e) => setRow(i, { label: e.target.value || undefined })} />
+                <button className="link" aria-label="Remove row" onClick={() => setRows(rows.filter((_, j) => j !== i))}>✕</button>
+                <select aria-label="Field" value={r.field} onChange={(e) => setRow(i, { field: e.target.value })}>
                   <option value="">Choose a field…</option>{choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select>
               </div>))}
-            <button className="link" onClick={() => onChange({ rows: [...rows, { label: "", field: "" }] })}>+ Add row</button>
+            <button className="link" onClick={() => setRows([...rows, { field: "" }])}>+ Add row</button>
           </>
         )}
-        {t === "photos" && (
+        {t === "table" && src.kind !== "fields" && <p className="muted small">This table is filled from {src.kind === "section" ? `the form section ${src.section}` : src.kind}. Change it in the full designer.</p>}
+        {t === "photos" && src.kind === "fields" && (
           <>
-            <Field label="Photos per row"><select value={block.columns ?? 2} onChange={(e) => onChange({ columns: Number(e.target.value) })}><option>1</option><option>2</option><option>3</option></select></Field>
-            {(block.items ?? []).map((it, i) => (
+            <Field label="Photos per row"><select value={block.per_row ?? 2} onChange={(e) => onChange({ per_row: Number(e.target.value) })}><option>1</option><option>2</option><option>3</option><option>4</option></select></Field>
+            {fields.map((f, i) => (
               <div className="cond-row" key={i}>
-                <select aria-label="Photo field" value={it.field} onChange={(e) => onChange({ items: block.items!.map((x, j) => (j === i ? { ...x, field: e.target.value } : x)) })}>
+                <select aria-label="Photo field" value={f} onChange={(e) => setFields(fields.map((x, j) => (j === i ? e.target.value : x)))}>
                   <option value="">Choose a photo field…</option>{mediaChoices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select>
-                <input aria-label="Which photo (0 = first)" type="number" min={0} value={it.index ?? 0} onChange={(e) => onChange({ items: block.items!.map((x, j) => (j === i ? { ...x, index: Number(e.target.value) } : x)) })} style={{ maxWidth: 80 }} />
-                <input aria-label="Caption" placeholder="Caption" value={it.caption ?? ""} onChange={(e) => onChange({ items: block.items!.map((x, j) => (j === i ? { ...x, caption: e.target.value } : x)) })} />
-                <button className="link" aria-label="Remove photo" onClick={() => onChange({ items: block.items!.filter((_, j) => j !== i) })}>✕</button>
+                <button className="link" aria-label="Remove photo" onClick={() => setFields(fields.filter((_, j) => j !== i))}>✕</button>
               </div>))}
-            <button className="link" onClick={() => onChange({ items: [...(block.items ?? []), { field: "", index: 0, caption: "" }] })}>+ Add a photo</button>
+            <button className="link" onClick={() => setFields([...fields, ""])}>+ Add a photo field</button>
           </>
         )}
         {t !== "page_break" && t !== "spacer" && (
-          <>
-            <Field label="Text size"><select value={block.font_size ?? "medium"} onChange={(e) => onChange({ font_size: e.target.value })}><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></Field>
-            <ConditionBuilder label="Show this block only if" value={block.show_if ?? null} onChange={(r) => onChange({ show_if: r ?? undefined })} fields={choices.map((c) => ({ value: c.value, label: c.label }))} />
-          </>
+          <ConditionBuilder label="Show this block only if" value={block.show_if ?? null} onChange={(r) => onChange({ show_if: r ?? undefined })} fields={choices.map((c) => ({ value: c.value, label: c.label }))} />
         )}
       </fieldset>
       {ok && <button className="danger" onClick={onDelete}>Delete block</button>}

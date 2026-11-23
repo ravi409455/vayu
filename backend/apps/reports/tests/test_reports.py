@@ -1,4 +1,5 @@
-"""PDF templates, report rendering, regeneration, verification."""
+"""PDF templates (schema 2), report rendering, regeneration, verification."""
+import copy
 import io
 import uuid
 
@@ -11,37 +12,49 @@ from apps.bookings.tests.test_submissions import assign, publish_form, start
 from apps.core import events
 from apps.media import storage
 from apps.media.tests.conftest import initiate_body, jpeg, put_parts
-from apps.reports import context, definition
+from apps.reports import context, definition, placeholders, render
 from apps.reports.models import PdfTemplateVersion, Report
 
 from .conftest import create
 
 pytestmark = pytest.mark.django_db
 V = lambda k: {"var": k}  # noqa: E731
-CHOICES = [{"key": "ok", "label": "Ok"},
-           {"key": "dent", "label": "Dent", "is_defect": True, "severity": "major"}]
+CHOICES = [{"key": "ok", "label": "Ok", "tone": "ok"},
+           {"key": "scratch", "label": "Scratch", "is_defect": True, "severity": "minor"},
+           {"key": "dent", "label": "Dent", "is_defect": True, "severity": "major"},
+           {"key": "na", "label": "Not available", "tone": "muted"}]
+DENT = {"==": [V("inspection.door"), "dent"]}
+BAND = {"header": {"left": [{"text": "<strong>PRE DELIVERY CAR INSPECTION REPORT</strong>"}],
+                   "right": [{"text": "{{ sys.booking_id }}"}], "background": "brand"},
+        "footer": {"left": [{"text": "rev {{ sys.revision }}"}],
+                   "right": [{"text": "Page {{ sys.page }} of {{ sys.pages }}"}]}}
 DEFN = {
-    "filename": "{booking_id}{type_code}.pdf", "type_code": "PDI",
-    "branding": {"title": "PRE DELIVERY CAR INSPECTION REPORT", "color": "#a62830",
-                 "watermark": True},
-    "blocks": [
-        {"type": "cover", "photo": "photo_a", "rows": [
-            {"label": "Booking ID", "field": "booking.booking_id"},
-            {"label": "Chassis Number", "field": "chassis_no"},
-            {"label": "Car", "field": "booking.car_make_model"}]},
-        {"type": "ratings"},
-        {"type": "table", "title": "Exterior Body", "rows": [
-            {"label": "Driver Front Door", "field": "door"},
-            {"label": "Odometer Reading", "field": "odometer"},
-            {"label": "Key Check", "field": "dents"}]},
-        {"type": "table", "title": "Dent Details", "show_if": {"==": [V("inspection.door"), "dent"]},
-         "rows": [{"label": "Door", "field": "door"}]},
-        {"type": "page_break"},
-        {"type": "photos", "title": "Car Pictures", "columns": 2, "items": [
-            {"field": "photo_a", "index": 0, "caption": "Front View"},
-            {"field": "photo_a", "index": 1, "caption": "Rear View"}]},
-        {"type": "text", "text": "Please refer to the last page for terms."},
-    ]}
+    "schema": 2, "filename": "{{ sys.booking_id }}PDI.pdf",
+    "bands": {"cover": BAND, "normal": BAND},
+    "pages": [
+        {"title": "Cover", "style": "cover", "parts": [
+            {"type": "photos", "which": "first", "per_row": 1, "caption": "none",
+             "source": {"kind": "fields", "fields": ["inspection.photo_a"]}},
+            {"type": "table", "title": "Vehicle", "source": {"kind": "fields", "rows": [
+                {"field": "booking.booking_id", "label": "Booking ID"},
+                {"field": "inspection.chassis_no", "label": "Chassis Number"},
+                {"field": "booking.car_make_model", "label": "Car"}]}},
+            {"type": "table", "title": "Overall Rating", "look": {"header": True},
+             "source": {"kind": "grid", "columns": [{"label": "Engine"}, {"label": "Expert"}],
+                        "rows": [{"label": "Rating", "cells": [
+                            {"field": "inspection.engine_rating"},
+                            {"text": "{{ sys.overall }}"}]}]}}]},
+        {"title": "Detail", "parts": [
+            {"type": "table", "title": "Exterior Body", "source": {"kind": "fields", "rows": [
+                {"field": "inspection.door", "label": "Driver Front Door"},
+                {"field": "inspection.odometer", "label": "Odometer Reading"},
+                {"field": "inspection.dents", "label": "Key Check"}]}},
+            {"type": "table", "title": "Dent Details", "show_if": DENT,
+             "source": {"kind": "fields", "rows": [{"field": "inspection.door", "label": "Door"}]}},
+            {"type": "photos", "title": "Car Pictures", "per_row": 2,
+             "source": {"kind": "fields", "fields": ["inspection.photo_a"]}},
+            {"type": "text", "html": "<p>Please refer to the last page for terms.</p>"},
+            {"type": "verify"}]}]}
 
 
 @pytest.fixture
@@ -49,20 +62,29 @@ def renv(env):
     admin = env.admin
     form = custom_form(admin, "pdi", "PDI")
     v = form["draft_version"]["id"]
-    sec = admin.get(f"/api/v1/form-versions/{v}").json()["pages"][0]["sections"][0]["id"]
+    page = admin.get(f"/api/v1/form-versions/{v}").json()["pages"][0]
+    sec = page["sections"][0]["id"]
 
-    def add(key, type_, **kw):
+    def add(key, type_, section=sec, **kw):
         cfg = kw.pop("config", {})
-        r = admin.post(f"/api/v1/sections/{sec}/fields", {"key": key, "label": key, "type": type_,
-                                                          "config": cfg, **kw}, format="json")
+        r = admin.post(f"/api/v1/sections/{section}/fields", {"key": key, "label": key,
+                                                              "type": type_, "config": cfg, **kw},
+                       format="json")
         assert r.status_code == 201, r.json()
 
     add("door", "single_choice", config={"options": CHOICES}, required=True)
+    add("door_photo", "photo", config={"max_count": 2, "photo_of": "door"}, show_if=DENT)
     add("odometer", "number", config={"unit": "km"})
     add("photo_a", "photo", config={"max_count": 2})
     add("engine_rating", "rating", config={"category": "engine"})
     add("dents", "derived", config={"rule": {"some": [V("_defects"), {"in": [
         V(""), ["inspection.door"]]}]}, "true_label": "Found", "false_label": "Not Found"})
+    extra = admin.post(f"/api/v1/pages/{page['id']}/sections", {"title": "Extra"},
+                       format="json").json()["id"]
+    add("dent_note", "short_text", section=extra, show_if=DENT)
+    add("fuel", "single_choice", section=extra,
+        config={"options": [{"key": "petrol", "label": "Petrol"}]})
+    add("issue_pics", "photo", section=extra, config={"max_count": 2, "issue_photo": True})
     admin.patch(f"/api/v1/form-versions/{v}/rating-config", {"config": {"categories": [
         {"key": "engine", "label": "Engine", "sections": ["Section 1"]}]}}, format="json")
     publish_form(admin, form["id"])
@@ -83,16 +105,16 @@ def set_template(env, defn=DEFN, publish=True):
         assert p.status_code == 200, p.json()
 
 
-def photo(env, b, settings, color=(200, 30, 30)):
+def photo(env, b, settings, color=(200, 30, 30), field="photo_a"):
     data = jpeg(color=color)
-    init = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], data, field_key="photo_a"),
+    init = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], data, field_key=field),
                            format="json").json()
     parts = put_parts(init, data, settings)
     env.expert.post(f"/api/v1/media/{init['id']}/complete", {"parts": parts}, format="json")
     return init["id"]
 
 
-def complete_job(env, booking_id="SA37926", door="dent", photos=2, settings=None):
+def complete_job(env, booking_id="SA37926", door="dent", photos=2, settings=None, **extra):
     b = create(env.ops, booking_id=booking_id).json() if booking_id != "SA37926" else None
     if b is None:
         b = Booking.objects.filter(booking_id=booking_id).first()
@@ -100,8 +122,11 @@ def complete_job(env, booking_id="SA37926", door="dent", photos=2, settings=None
     assign(env, b)
     start(env.expert, b)
     ids = [photo(env, b, settings, (i * 40, 20, 20)) for i in range(photos)]
-    body = {"client_submission_uuid": str(uuid.uuid4()), "answers": {"inspection": {
-        "chassis_no": "MA3YPKCSKTJ273129", "door": door, "odometer": 45, "photo_a": ids}}}
+    answers = {"chassis_no": "MA3YPKCSKTJ273129", "door": door, "odometer": 45, "photo_a": ids,
+               **extra}
+    if door == "dent":
+        answers["door_photo"] = [photo(env, b, settings, field="door_photo")]
+    body = {"client_submission_uuid": str(uuid.uuid4()), "answers": {"inspection": answers}}
     r = env.expert.post(f"/api/v1/bookings/{b['id']}/submit", body, format="json")
     assert r.status_code == 200, r.json()
     return b
@@ -113,35 +138,97 @@ def pdf_text(booking_id) -> tuple[str, pypdf.PdfReader]:
     return "\n".join(p.extract_text() for p in reader.pages), reader
 
 
+def source(b, revision=1, token="tok"):
+    booking = Booking.objects.get(pk=b["id"])
+    insp = context.latest_inspection(booking)
+    assert insp is not None
+    return context.Source(booking, insp, revision=revision, token=token)
+
+
+def one_page(*parts, style="normal"):
+    return {"schema": 2, "pages": [{"title": "P", "style": style, "parts": list(parts)}]}
+
+
+def table(rows=None, **kw):
+    return {"type": "table", "source": {"kind": "fields", "rows": rows or []}, **kw}
+
+
 # ---------------------------------------------------------------- definition validation
 
 @pytest.mark.parametrize("bad", [
-    [], {"surprise": 1}, {"filename": "x.txt"}, {"filename": "{nope}.pdf"},
-    {"filename": "a/b.pdf"}, {"branding": {"color": "red"}}, {"branding": {"watermark": "yes"}},
-    {"branding": {"x": 1}}, {"blocks": "x"}, {"blocks": [{"type": "video"}]},
-    {"blocks": [{"type": "table", "rows": [{"label": "", "field": "a"}]}]},
-    {"blocks": [{"type": "table", "rows": [{"label": "L"}]}]},
-    {"blocks": [{"type": "table", "bogus": 1}]}, {"blocks": [{"type": "table", "font_size": "huge"}]},
-    {"blocks": [{"type": "table", "show_if": {"missing": ["a"]}}]},
-    {"blocks": [{"type": "photos", "columns": 5}]},
-    {"blocks": [{"type": "photos", "items": [{"caption": "x"}]}]},
-    {"blocks": [{"type": "spacer", "height": 0}]}, {"blocks": [{"type": "cover", "photo": 5}]},
-    {"blocks": [{"type": "text", "text": 5}]},
-    {"blocks": [{"type": "table", "rows": "nope"}]}, {"type_code": 5},
+    [], {"surprise": 1}, {"schema": 1, "pages": []}, {"schema": 2},
+    {"schema": 2, "pages": [], "filename": "x.txt"},
+    {"schema": 2, "pages": [], "filename": "{{ nope }}.pdf"},
+    {"schema": 2, "pages": [], "filename": "{% if 1 %}x{% endif %}.pdf"},
+    {"schema": 2, "pages": [], "filename": "{{ sys.booking_id | upper }}.pdf"},
+    {"schema": 2, "pages": [], "filename": "{{ sys.booking_id.pdf"},
+    {"schema": 2, "pages": [], "theme": {"colors": {"brand": "red"}}},
+    {"schema": 2, "pages": [{"title": "P", "parts": [{"type": "video"}]}]},
+    one_page(table([{"field": "door"}])),                                # not form.key
+    one_page(table(bogus=1)), one_page(table(show_if={"missing": ["a"]})),
+    one_page({"type": "photos", "per_row": 5, "source": {"kind": "issues"}}),
+    one_page({"type": "spacer", "height": 0}),
+    one_page({"type": "text", "html": 5}),
+    one_page({"type": "text", "html": "{{ booking.x() }}"}),
+    one_page(table([{"field": "inspection.door", "show_if": {"a": 1, "b": 2}}])),
+    {"schema": 2, "pages": [{"title": "P", "show_if": {"a": 1, "b": 2}, "parts": []}]},
+    {"schema": 2, "pages": [{"id": "a", "title": "P", "parts": [{"type": "spacer", "id": "a"}]}]},
+    {"schema": 2, "pages": [], "bands": {"normal": {"header": {"left": [{"text": "{{ x.y }}"}]}}}},
+    one_page({"type": "table", "source": {"kind": "grid", "columns": [{"label": "A"}],
+                                          "rows": [{"label": "{{ q }}", "cells": []}]}}),
+    one_page({"type": "table", "source": {"kind": "grid", "columns": [{"label": "A"}],
+                                          "rows": [{"label": "", "cells": [{"text": "{{ q }}"}]}]}}),
+    one_page({"type": "photos", "caption": "custom", "caption_text": "{{ q }}",
+              "source": {"kind": "issues"}}),
 ])
 def test_bad_definitions_are_rejected(bad):
     with pytest.raises(ValueError):
         definition.validate_definition(bad)
 
 
+def test_an_old_template_gets_a_clear_message():
+    with pytest.raises(ValueError, match="old report designer"):
+        definition.validate_definition({"blocks": []})
+
+
 def test_good_definitions_and_filenames():
-    definition.validate_definition(DEFN)
-    definition.validate_definition({})
-    assert definition.filename_for(DEFN, "SA 37926", "14-10-2026") == "SA_37926PDI.pdf"
-    assert definition.filename_for({"filename": "{date}-{booking_id}.pdf"}, "X1",
-                                   "14-10-2026") == "14-10-2026-X1.pdf"
+    d = copy.deepcopy(DEFN)
+    assert definition.validate_definition(d) == d
+    assert definition.filename_for(DEFN, {"sys": {"booking_id": "SA 37926"}}) == "SA_37926PDI.pdf"
+    assert definition.filename_for({}, {"sys": {"booking_id": "X1"}}) == "X1.pdf"
+    assert definition.filename_for({"filename": "{{ inspection.colour }}.pdf"},
+                                   {"inspection": {"colour": ""}}) == ".pdf"
     assert definition.referenced_fields(DEFN) >= {("booking", "booking_id"), ("inspection", "door"),
                                                   ("inspection", "photo_a")}
+
+
+def test_rich_text_and_band_text_are_cleaned_and_placeholders_found():
+    d = one_page({"type": "text", "html": '<p class="tone-bad evil">Hi {{ inspection.colour }}'
+                                          '<script>x()</script><img src="http://x/y.png">'
+                                          '<a href="javascript:alert(1)">l</a></p>'})
+    d["bands"] = {"normal": {"header": {"left": [{"text": "<b>A</b><iframe src=x></iframe>"}]}}}
+    out = definition.validate_definition(d)
+    html = out["pages"][0]["parts"][0]["html"]
+    assert "script" not in html and "img" not in html and "javascript" not in html
+    assert 'class="tone-bad"' in html and "{{ inspection.colour }}" in html
+    assert out["bands"]["normal"]["header"]["left"][0]["text"] == "<b>A</b>"
+    assert ("inspection", "colour") in definition.referenced_fields(out)
+    assert placeholders.refs("{{ sys.booking_id }} {{ booking.city }}") == {("booking", "city")}
+
+
+def test_placeholder_values_are_escaped():
+    assert placeholders.render("{{ inspection.x }}", {"inspection": {"x": "<b>"}}) == "&lt;b&gt;"
+    assert placeholders.render("{{ inspection.missing.deep }}", {"inspection": {}}) == ""
+    assert placeholders.render("{{ inspection.x }}", {"inspection": {"x": "<b>"}},
+                               html=False) == "<b>"
+
+
+def test_sections_and_exclusions_count_as_used():
+    d = one_page({"type": "table", "source": {"kind": "section", "section": "inspection.extra",
+                                              "exclude": ["fuel"]}},
+                 {"type": "photos", "source": {"kind": "section", "section": "inspection.x"}})
+    assert definition.referenced_sections(d) == {"extra", "x"}
+    assert ("inspection", "fuel") in definition.referenced_fields(d)
 
 
 # ---------------------------------------------------------------- template workflow API
@@ -151,12 +238,12 @@ def test_template_workflow(renv):
     assert a.get("/api/v1/pdf-templates").json()[0]["form_key"] == "pdi"
     dup = a.post("/api/v1/pdf-templates", {"form": renv.form_id}, format="json")
     assert dup.status_code == 409 and dup.json()["code"] == "TEMPLATE_EXISTS"
-    booking_form = a.get("/api/v1/forms").json()["results"]
-    bf = [f for f in booking_form if f["type"] == "booking"][0]
+    forms = a.get("/api/v1/forms").json()["results"]
+    bf = [f for f in forms if f["type"] == "booking"][0]
     assert a.post("/api/v1/pdf-templates", {"form": bf["id"]}, format="json").status_code == 400
     set_template(renv)
     v = a.get(f"/api/v1/pdf-template-versions/{renv.template_version_id}").json()
-    assert v["status"] == "published" and v["definition"]["type_code"] == "PDI"
+    assert v["status"] == "published" and v["definition"]["schema"] == 2
     pub_edit = a.patch(f"/api/v1/pdf-template-versions/{v['id']}", {"definition": DEFN,
                        "row_version": v["row_version"]}, format="json")
     assert pub_edit.status_code == 409 and pub_edit.json()["code"] == "VERSION_PUBLISHED"
@@ -172,8 +259,10 @@ def test_template_edit_validation_and_stale_guard_and_audit(renv):
     a = renv.admin
     v = a.get(f"/api/v1/pdf-template-versions/{renv.template_version_id}").json()
     url = f"/api/v1/pdf-template-versions/{v['id']}"
-    bad = a.patch(url, {"definition": {"blocks": [{"type": "x"}]}, "row_version": 0}, format="json")
+    bad = a.patch(url, {"definition": {"schema": 2, "pages": "x"}, "row_version": 0},
+                  format="json")
     assert bad.status_code == 400 and bad.json()["code"] == "INVALID_TEMPLATE"
+    assert "pages" in bad.json()["detail"]
     assert a.patch(url, {"definition": {}}, format="json").status_code == 400
     ok = a.patch(url, {"definition": DEFN, "row_version": 0}, format="json")
     stale = a.patch(url, {"definition": DEFN, "row_version": 0}, format="json")
@@ -184,11 +273,12 @@ def test_template_edit_validation_and_stale_guard_and_audit(renv):
     assert a.post(f"{url}/publish", {}, format="json").status_code == 400
 
 
-def test_publish_is_blocked_by_unknown_fields(renv):
+def test_publish_is_blocked_by_unknown_fields_and_sections(renv):
     a = renv.admin
     v = a.get(f"/api/v1/pdf-template-versions/{renv.template_version_id}").json()
-    bad = {"blocks": [{"type": "table", "rows": [{"label": "X", "field": "ghost"},
-                                                  {"label": "Y", "field": "booking.nope"}]}]}
+    bad = one_page(table([{"field": "inspection.ghost"}, {"field": "booking.nope"}]),
+                   {"type": "table", "source": {"kind": "section",
+                                                "section": "inspection.nowhere"}})
     r = a.patch(f"/api/v1/pdf-template-versions/{v['id']}", {"definition": bad, "row_version": 0},
                 format="json")
     p = a.post(f"/api/v1/pdf-template-versions/{v['id']}/publish",
@@ -196,7 +286,8 @@ def test_publish_is_blocked_by_unknown_fields(renv):
     assert p.status_code == 400 and p.json()["code"] == "PUBLISH_BLOCKED"
     assert {i["message"] for i in p.json()["issues"]} == {
         "'inspection.ghost' is not a field of the inspection form.",
-        "'booking.nope' is not a field of the booking form."}
+        "'booking.nope' is not a field of the booking form.",
+        "Section 'nowhere' is not a section of the form."}
 
 
 def test_only_template_editors_can_change_templates(renv):
@@ -212,14 +303,16 @@ def test_only_template_editors_can_change_templates(renv):
 
 
 def test_form_publish_warns_about_fields_the_template_never_shows(renv):
-    set_template(renv, {"blocks": [{"type": "table", "rows": [
-        {"label": "Door", "field": "door"}]}]})
+    set_template(renv, one_page(table([{"field": "inspection.door"}]),
+                                {"type": "table", "source": {"kind": "section",
+                                                             "section": "inspection.extra"}}))
     d = renv.admin.post(f"/api/v1/forms/{renv.form_id}/drafts").json()["id"]
     rv = renv.admin.get(f"/api/v1/form-versions/{d}").json()["row_version"]
     r = renv.admin.post(f"/api/v1/form-versions/{d}/publish", {"row_version": rv}, format="json")
     assert r.status_code == 200
     keys = {w["key"] for w in r.json()["warnings"]}
     assert "odometer" in keys and "door" not in keys
+    assert "fuel" not in keys and "dent_note" not in keys           # the whole section is shown
     assert {w["code"] for w in r.json()["warnings"]} == {"FIELD_NOT_IN_PDF"}
 
 
@@ -232,44 +325,110 @@ def test_publish_has_no_warnings_without_a_template(env):
     assert r.json()["warnings"] == []
 
 
-# ---------------------------------------------------------------- context
+# ---------------------------------------------------------------- working out the content
 
-def test_missing_and_hidden_things_never_break_the_report(renv, settings):
-    set_template(renv)
+def test_rows_hide_when_empty_or_hidden_and_keep_their_fallback(renv, settings):
     b = complete_job(renv, door="ok", photos=1, settings=settings)
-    booking = Booking.objects.get(pk=b["id"])
-    insp = context.latest_inspection(booking)
-    assert insp is not None
-    unknown = {"blocks": [{"type": "table", "title": "T", "rows": [
-        {"label": "Old field", "field": "no_such_field"}, {"label": "Door", "field": "door"}]},
-        {"type": "photos", "items": [{"field": "photo_a", "index": 5, "caption": "none"}]}]}
-    blocks = context.build(booking, insp, unknown)
-    rows = {r["label"]: r for r in blocks[0]["rows"]}
-    assert rows["Old field"]["text"] == "" and rows["Door"]["text"] == "Ok"
-    assert blocks[1]["items"][0]["media"] is None
-    shown = context.build(booking, insp, DEFN)
-    assert "Dent Details" not in [b.get("title") for b in shown]      # show_if false: dropped
+    src = source(b)
+    d = one_page(
+        table([{"field": "inspection.ghost"}, {"field": "inspection.door", "label": "Door"},
+               {"field": "inspection.fuel", "fallback": "Not mentioned"},
+               {"field": "inspection.dent_note", "fallback": "never"},          # hidden: no row
+               {"field": "inspection.odometer", "show_if": DENT}], title="T"),
+        table([{"field": "inspection.fuel"}], title="Empty"),                     # dropped
+        {**table([{"field": "inspection.fuel"}], title="Kept"), "hide_when_empty": False},
+        {"type": "photos", "source": {"kind": "fields", "fields": ["inspection.ghost",
+                                                                   "inspection.door_photo"]}},
+        {"type": "text", "html": "   "},
+        {"type": "spacer"}, {"type": "page_break"})
+    d["pages"].append({"title": "Gone", "show_if": DENT, "parts": [{"type": "spacer"}]})
+    d["pages"].append({"title": "Empty", "parts": [table([{"field": "inspection.fuel"}])]})
+    pages = context.build(src, d)
+    assert len(pages) == 1
+    parts = pages[0]["parts"]
+    assert [p["type"] for p in parts] == ["table", "table", "spacer", "page_break"]
+    rows = {r["label"]: r for r in parts[0]["rows"]}
+    assert set(rows) == {"Door", "fuel"}
+    assert rows["Door"]["text"] == "Ok" and rows["Door"]["tone"] == "ok"
+    assert rows["fuel"] == {"label": "fuel", "text": "Not mentioned", "tone": None,
+                            "problem": False, "empty": True}
+    assert parts[1]["rows"] == []
 
 
-def test_values_are_formatted_and_defects_flagged(renv, settings):
-    set_template(renv)
-    b = complete_job(renv, door="dent", photos=1, settings=settings)
-    booking = Booking.objects.get(pk=b["id"])
-    insp = context.latest_inspection(booking)
-    assert insp is not None
-    blocks = context.build(booking, insp, DEFN)
-    by_title = {b.get("title"): b for b in blocks}
-    ext = {r["label"]: r for r in by_title["Exterior Body"]["rows"]}
-    assert ext["Driver Front Door"] == {"label": "Driver Front Door", "text": "Dent", "defect": True}
+def test_values_tones_and_problems(renv, settings):
+    b = complete_job(renv, door="dent", photos=1, settings=settings, fuel="petrol")
+    src = source(b)
+    by = {p.get("title"): p for p in context.build(src, DEFN)[1]["parts"]}
+    ext = {r["label"]: r for r in by["Exterior Body"]["rows"]}
+    assert ext["Driver Front Door"] == {"label": "Driver Front Door", "text": "Dent", "tone": "bad",
+                                        "problem": True, "empty": False}
     assert ext["Odometer Reading"]["text"] == "45 km" and ext["Key Check"]["text"] == "Found"
-    assert "Dent Details" in by_title                                  # show_if true
-    cover = blocks[0]
-    assert cover["photo"] and {r["label"] for r in cover["rows"]} == {
-        "Booking ID", "Chassis Number", "Car"}
-    assert [r for r in cover["rows"] if r["label"] == "Car"][0]["text"] == "Maruti Victoris"
-    ratings = [b for b in blocks if b["type"] == "ratings"][0]
-    assert ratings["rows"] == [{"label": "Engine", "text": "4/5", "defect": False}]
-    assert ratings["overall"] == "Good"
+    assert ext["Key Check"]["tone"] == "bad"
+    assert "Dent Details" in by                                      # show_if true
+    cover = context.build(src, DEFN)[0]["parts"]
+    assert len(cover[0]["items"]) == 1                               # which: first
+    vehicle = {r["label"]: r["text"] for r in cover[1]["rows"]}
+    assert vehicle["Car"] == "Maruti Victoris"
+    grid = cover[2]["rows"][0]
+    assert grid["label"] == "Rating" and [c["text"] for c in grid["cells"]] == ["4/5", "Good"]
+    fuel = src.cell("inspection.fuel")
+    assert fuel.text == "Petrol" and fuel.tone is None               # a fact, not a check
+
+
+def test_section_defects_and_grid_sources(renv, settings):
+    b = complete_job(renv, door="scratch", photos=1, settings=settings, fuel="petrol")
+    src = source(b)
+    d = one_page(
+        {"type": "table", "source": {"kind": "section", "section": "inspection.section_1",
+                                     "exclude": ["odometer"]}},
+        {"type": "table", "source": {"kind": "section", "section": "inspection.gone"}},
+        {"type": "table", "source": {"kind": "defects"}},
+        {"type": "table", "source": {"kind": "grid", "columns": [{"label": "A"}, {"label": "B"}],
+                                     "rows": [{"label": "{{ sys.booking_id }}", "cells": [
+                                         {"field": "inspection.door"},
+                                         {"field": "inspection.ghost", "fallback": "-"}]},
+                                              {"label": "skip", "show_if": DENT, "cells": []},
+                                              {"label": "blank", "cells": [
+                                                  {"field": "inspection.ghost"}]}]}})
+    parts = context.build(src, d)[0]["parts"]
+    assert [r["label"] for r in parts[0]["rows"]] == ["Chassis number", "door", "engine_rating",
+                                                     "dents"]
+    assert parts[1]["source"]["kind"] == "defects"                   # empty section part dropped
+    assert parts[1]["rows"] == [{"section": "Section 1", "label": "door", "text": "Scratch",
+                                 "tone": "warn", "problem": True, "empty": False}]
+    assert parts[2]["rows"] == [{"label": "SA37926", "cells": [
+        {"text": "Scratch", "tone": "warn", "problem": True},
+        {"text": "-", "tone": None, "problem": False}]}]
+
+
+def test_photo_grids_pick_issue_photos_and_captions(renv, settings):
+    b = create(renv.ops, booking_id="PH1").json()
+    assign(renv, b)
+    start(renv.expert, b)
+    door_pic = photo(renv, b, settings, field="door_photo")
+    issue = photo(renv, b, settings, field="issue_pics")
+    a1, a2 = photo(renv, b, settings), photo(renv, b, settings)
+    body = {"client_submission_uuid": str(uuid.uuid4()), "answers": {"inspection": {
+        "chassis_no": "MA3YPKCSKTJ273129", "door": "dent", "photo_a": [a1, a2],
+        "door_photo": [door_pic], "issue_pics": [issue]}}}
+    assert renv.expert.post(f"/api/v1/bookings/{b['id']}/submit", body,
+                            format="json").status_code == 200
+    src = source(b)
+
+    def items(**part):
+        d = one_page({"type": "photos", "hide_when_empty": False, **part})
+        return [(i["media"], i["caption"]) for i in context.build(src, d)[0]["parts"][0]["items"]]
+
+    assert items(source={"kind": "issues"}, caption="check") == [
+        (door_pic, "door: Dent"), (issue, "issue_pics")]          # no check: its own label
+    assert items(source={"kind": "section", "section": "inspection.section_1"}, which="first") == [
+        (door_pic, "door_photo"), (a1, "photo_a")]
+    assert items(source={"kind": "fields", "fields": ["inspection.photo_a"]}, which="issues") == []
+    assert items(source={"kind": "fields", "fields": ["inspection.photo_a", "inspection.door"]},
+                 caption="custom", caption_text="{{ sys.booking_id }}") == [
+        (a1, "PH1"), (a2, "PH1")]
+    assert items(source={"kind": "fields", "fields": ["inspection.photo_a"]},
+                 caption="none")[0][1] == ""
 
 
 def test_display_formats_every_field_type():
@@ -279,21 +438,145 @@ def test_display_formats_every_field_type():
     def f(t, **c):
         return Field(key="k", type=t, config=c)
 
-    assert display(f("yes_no"), True, {}) == ("Yes", False)
-    assert display(f("multi_choice", options=CHOICES), ["ok", "dent"], {}) == ("Ok, Dent", True)
-    assert display(f("currency"), 1500, {}) == ("₹1,500", False)
-    assert display(f("currency"), 1499.5, {})[0] == "₹1,499.50"
-    assert display(f("date"), "2026-10-14", {}) == ("14-10-2026", False)
-    assert display(f("datetime"), "2026-10-14T15:29:00+05:30", {})[0] == "14-10-2026 15:29"
-    assert display(f("gps"), {"lat": 28.6, "lng": 77.2}, {})[0] == "28.60000, 77.20000"
-    assert display(f("photo"), ["a", "b"], {}) == ("2 photos", False)
-    assert display(f("video"), ["a"], {}) == ("1 video", False)
-    assert display(f("signature"), "x", {}) == ("Signed", False)
-    assert display(f("rating"), 4, {}) == ("4/5", False)
-    assert display(f("short_text"), "hello", {}) == ("hello", False)
-    assert display(f("number"), 7, {}) == ("7", False)
-    assert display(None, "x", {}) == ("", False) and display(f("short_text"), None, {}) == ("", False)
-    assert display(f("derived", true_label="Found", false_label="No"), False, {}) == ("No", False)
+    assert display(f("yes_no"), True) == ("Yes", None, False)
+    assert display(f("multi_choice", options=CHOICES), ["ok", "dent"]) == ("Ok, Dent", "bad", True)
+    assert display(f("single_choice", options=CHOICES), "gone") == ("gone", "ok", False)
+    assert display(f("single_choice", options=CHOICES), "scratch")[1] == "warn"
+    assert display(f("currency"), 1500) == ("₹1,500", None, False)
+    assert display(f("currency"), 1499.5)[0] == "₹1,499.50"
+    assert display(f("date"), "2026-10-14")[0] == "14-10-2026"
+    assert display(f("datetime"), "2026-10-14T15:29:00+05:30")[0] == "14-10-2026 15:29"
+    assert display(f("gps"), {"lat": 28.6, "lng": 77.2})[0] == "28.60000, 77.20000"
+    assert display(f("photo"), ["a", "b"]) == ("", None, False)
+    assert display(f("rating"), 4)[0] == "4/5"
+    assert display(f("short_text"), "hello")[0] == "hello"
+    assert display(f("number"), 7.5)[0] == "7.5" and display(f("number", unit="km"), 7)[0] == "7 km"
+    assert display(None, "x") == ("", None, False) and display(f("short_text"), "")[0] == ""
+    assert display(f("derived", true_label="Found", false_label="No"), False) == ("No", "ok", False)
+    assert display(f("derived"), True) == ("Yes", "bad", True)
+
+
+def test_user_pickers_and_master_lists_show_names(renv):
+    from apps.accounts.models import User
+    from apps.forms.models import Field
+    from apps.reports.context import display
+
+    user = User.objects.get(pk=renv.expert_user.pk)
+    assert display(Field(key="k", type="user_picker", config={}), user.pk)[0] == (
+        user.name or user.username)
+    assert display(Field(key="k", type="user_picker", config={}), 999999)[0] == ""
+    assert display(Field(key="k", type="master_list", config={"list": "city"}), "zz")[0] == "zz"
+
+
+# ---------------------------------------------------------------- the HTML
+
+def test_the_html_has_every_part_style_and_band(renv, settings):
+    b = complete_job(renv, door="dent", photos=1, settings=settings)
+    src = source(b, revision=3, token="tok-1")
+    box = {"space_above": 2, "space_below": 1, "padding": 2, "border": "bottom",
+           "border_color": "brand", "background": "warn", "round": True}
+    d = {"schema": 2, "filename": "x.pdf",
+         "paper": {"size": "Letter", "orientation": "landscape", "margins": {"left": 10}},
+         "theme": {"colors": {"brand": "#123456"}, "size": 10},
+         "bands": {"normal": {"header": {"left": [{"text": "<b>Hi {{ sys.booking_id }}</b>"},
+                                                  {"image": "00000000-0000-0000-0000-000000000000"}],
+                                         "background": "none"}},
+                   "cover": {"footer": {"right": [{"text": "{{ sys.page }}/{{ sys.pages }}"}]}}},
+         "pages": [
+             {"title": "A", "style": "cover", "parts": [
+                 {**table([{"field": "inspection.door"}, {"field": "inspection.odometer"},
+                           {"field": "inspection.dents"}], title="Pairs"), "per_row": 2,
+                  "look": {"header": True, "lines": "all", "height": "roomy", "stripes": False},
+                  "box": box, "keep_together": True, "new_page": True, "keep_title": False},
+                 {"type": "table", "source": {"kind": "defects"},
+                  "look": {"header": False, "headers": ["S", "C", "R"]}},
+                 {"type": "table", "source": {"kind": "grid", "columns": [
+                     {"label": "Wide", "width": 40}, {"label": "Plain"}],
+                     "rows": [{"label": "R", "cells": [{"field": "inspection.door"},
+                                                       {"text": "x"}]}]}}]},
+             {"title": "B", "style": "full", "parts": [
+                 {"type": "photos", "per_row": 3, "shape": "original", "fit": "whole",
+                  "frame": {"border": "brand", "round": False, "gap": 2}, "box": {"padding": 3},
+                  "source": {"kind": "fields", "fields": ["inspection.photo_a"]}},
+                 {"type": "text", "html": "<p>{{ inspection.odometer }}</p>", "columns": 2,
+                  "size": "title", "align": "center"},
+                 {"type": "verify", "size": 30}, {"type": "spacer", "height": 7},
+                 {"type": "page_break"}]},
+             {"title": "C", "parts": [
+                 {"type": "photos", "fit": "top", "shape": "1:1",
+                  "source": {"kind": "fields", "fields": ["inspection.door_photo"]}}]}]}
+    html = render.render_html(context.build(src, d), d, src.values())
+    for needle in ("Letter landscape", "--brand:#123456", "font-size: 10pt", "Hi SA37926",
+                   "@page cover", "@page full { margin: 0; @top-center { content: none }", 'class="pageno"', 'class="pages"',
+                   "chip tone-bad", "lines-all", "--pad:2.0mm", "border-bottom:0.4mm solid var(--brand)",
+                   "background:var(--warn-tint)", "border-radius:2mm", "break-inside:avoid",
+                   "break-before:page", "Section 1", 'style="width:40%"',
+                   "object-fit:contain", "object-position:top", "cols2", "size-title",
+                   "text-align:center", "tok-1", "height:7mm", 'class="pb"', "pg-full"):
+        assert needle in html, needle
+    assert "<thead>" in html and "part keep" not in html.split("Pairs")[0][-200:]
+    assert "Photo not available" not in html
+
+
+def test_missing_photos_and_pictures_render_a_gap(renv, settings):
+    b = complete_job(renv, door="ok", photos=1, settings=settings)
+    src = source(b)
+    src.answers["inspection"]["photo_a"] = [str(uuid.uuid4())]          # never uploaded
+    d = one_page({"type": "photos", "source": {"kind": "fields", "fields": ["inspection.photo_a"]}})
+    d["watermark"] = {"image": "00000000-0000-0000-0000-000000000000"}
+    html = render.render_html(context.build(src, d), d, src.values())
+    assert "Photo not available" in html and "background: url" not in html
+
+
+def test_logo_and_watermark_are_embedded_and_faded(renv):
+    import base64
+
+    from PIL import Image
+
+    from apps.forms import assets
+
+    buf = io.BytesIO()
+    Image.new("RGBA", (40, 40), (166, 40, 48, 255)).save(buf, "PNG")
+    pic = assets.create_asset(renv.admin_user, buf.getvalue())
+    full = render.asset_uri(str(pic.id))
+    faded = render.asset_uri(str(pic.id), 0.5)
+    assert full and faded and full.startswith("data:image/png;base64,")
+    img = Image.open(io.BytesIO(base64.b64decode(faded.split(",", 1)[1])))
+    assert img.getpixel((5, 5)) == (166, 40, 48, 127)                  # half see-through
+    assert render.asset_uri(str(uuid.uuid4())) is None
+
+
+def test_photos_are_shrunk_once_for_print_and_previews_use_the_small_copy(renv, settings):
+    from apps.media.models import MediaAsset
+
+    b = create(renv.ops, booking_id="PR1").json()
+    assign(renv, b)
+    big = jpeg(w=2000, h=1500)
+    init = renv.expert.post("/api/v1/media/initiate",
+                            initiate_body(b["id"], big, field_key="photo_a"), format="json").json()
+    renv.expert.post(f"/api/v1/media/{init['id']}/complete",
+                     {"parts": put_parts(init, big, settings)}, format="json")
+    asset = MediaAsset.objects.get(pk=init["id"])
+    uri = render.print_image(str(asset.id))
+    assert uri and storage.exists(f"print/{asset.id}-1000.jpg")
+    assert render.print_image(str(asset.id)) == uri                   # the kept copy
+    assert (render.print_image(str(asset.id), 480) or "").startswith("data:image/jpeg")  # preview
+    asset.preview_key = ""
+    asset.save()
+    assert render.print_image(str(asset.id), 480)                     # no preview: shrunk here
+    storage.put(asset.key, b"not a picture", "image/jpeg")
+    assert render.print_image(str(asset.id), 300) is None
+    assert render.print_image(str(uuid.uuid4())) is None
+
+
+def test_the_renderer_loads_nothing_from_outside():
+    html = ('<html><body><img src="file:///etc/passwd"><img src="http://example.com/x.png">'
+            '<link rel="stylesheet" href="https://example.com/x.css">'
+            '<style>@import url("file:///etc/hosts");</style><p>ok</p></body></html>')
+    pdf = render.render_pdf(html)
+    assert pdf[:4] == b"%PDF"
+    reader = pypdf.PdfReader(io.BytesIO(pdf))
+    assert sum(len(p.images) for p in reader.pages) == 0
 
 
 # ---------------------------------------------------------------- rendering end to end
@@ -307,13 +590,14 @@ def test_a_completed_booking_gets_a_pdf_automatically(renv, settings):
     text, reader = pdf_text(b["id"])
     for needle in ("PRE DELIVERY CAR INSPECTION REPORT", "Booking ID", "SA37926", "Chassis Number",
                    "MA3YPKCSKTJ273129", "Driver Front Door", "Dent", "45 km", "Overall Rating",
-                   "Front View", "Rear View", "Please refer to the last page"):
+                   "Car Pictures", "Please refer to the last page", "rev 1"):
         assert needle in text, needle
-    assert "Page 1 of 2" in text and "Page 2 of 2" in text and "rev 1" in text
-    assert "Generated" in text and f"verify.carcid.in/{r.token}" in text
-    assert len(reader.pages) == 2                                    # the page break
-    assert sum(len(p.images) for p in reader.pages) >= 3             # hero + 2 grid photos + QR
-    assert "gallery" not in text.lower() and "camera" not in text.lower()
+    assert "Page 1 of 2" in text and "Page 2 of 2" in text
+    assert f"verify.carcid.in/{r.token}" in text
+    assert len(reader.pages) == 2                                    # cover, then the detail page
+    assert sum(len(p.images) for p in reader.pages) >= 4             # cover + 2 grid photos + QR
+    for page in reader.pages:                                         # no blank pages
+        assert "SA37926" in page.extract_text()
 
 
 def test_no_template_means_no_report_but_the_booking_still_completes(env, settings):
@@ -366,8 +650,6 @@ def test_regenerate_needs_permission_and_a_completed_booking(renv, settings):
 
 
 def test_a_failing_render_is_retried_then_recorded_and_alerted(renv, settings, monkeypatch):
-    from apps.reports import render
-
     set_template(renv)
     calls = []
 
@@ -460,32 +742,6 @@ def test_report_access_follows_the_reports_view_scope(renv, settings):
     assert PdfTemplateVersion.objects.count() == 1
 
 
-def test_rating_fields_user_pickers_headings_and_spacers_render(renv, settings, db):
-    from apps.accounts.models import User
-    from apps.forms.models import Field
-    from apps.reports.context import display
-    from apps.reports.render import render_html
-
-    set_template(renv)
-    b = complete_job(renv, settings=settings)
-    booking = Booking.objects.get(pk=b["id"])
-    insp = context.latest_inspection(booking)
-    assert insp is not None
-    blocks = context.build(booking, insp, {"blocks": [{"type": "table", "title": "T", "rows": [
-        {"label": "Rating", "field": "engine_rating"}]}]})
-    assert blocks[0]["rows"][0]["text"] == "4/5"
-    user = User.objects.get(pk=renv.expert_user.pk)
-    assert display(Field(key="k", type="user_picker", config={}), user.pk, {})[0] == (
-        user.name or user.username)
-    assert display(Field(key="k", type="user_picker", config={}), 999999, {})[0] == ""
-    html_text = render_html(
-        [{"type": "heading", "text": "Big <b>", "font_size": "large"},
-         {"type": "spacer", "height": 30, "font_size": "medium"},
-         {"type": "page_break", "font_size": "medium"}],
-        {"branding": {}}, booking_id="X1", revision=3, stamp="now", token="tok")
-    assert "Big &lt;b&gt;" in html_text and "height:30px" in html_text and "rev 3" in html_text
-
-
 def test_publishing_a_template_works_without_a_booking_form_and_detects_stale_drafts(db, api_as):
     from apps.accounts.models import Role
 
@@ -545,3 +801,24 @@ def test_the_pdf_job_waits_for_the_commit(renv, settings, django_capture_on_comm
         for cb in callbacks:
             cb()
         queued.assert_called_once()
+
+
+def test_a_real_logo_and_watermark_reach_the_page(renv, settings):
+    from PIL import Image
+
+    from apps.forms import assets
+
+    buf = io.BytesIO()
+    Image.new("RGBA", (40, 40), (166, 40, 48, 255)).save(buf, "PNG")
+    pic = str(assets.create_asset(renv.admin_user, buf.getvalue()).id)
+    b = complete_job(renv, door="ok", photos=1, settings=settings)
+    src = source(b)
+    d = definition.validate_definition({
+        "schema": 2, "watermark": {"image": pic, "opacity": 0.3},
+        "bands": {"normal": {"header": {"left": [{"image": pic, "height": 12}]}}},
+        "pages": [{"title": "P", "parts": [
+            {"type": "spacer", "show_if": DENT}, {"type": "text", "html": "<p>Hello</p>"}]}]})
+    pages = context.build(src, d)
+    assert [p["type"] for p in pages[0]["parts"]] == ["text"]         # the hidden part is gone
+    html = render.render_html(pages, d, src.values())
+    assert 'style="height:12mm"' in html and "@page { background: url(data:image/png" in html

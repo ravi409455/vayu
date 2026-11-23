@@ -95,3 +95,35 @@ def test_the_pdi_form_is_the_full_one_from_the_sample_report():
     assert answers["window_driver_front"] == "loose" and answers["odometer"] == 39
     assert len(answers["picture_front"]) == 1 and "door_driver_front_photo" not in answers
     assert "cng_fitting" not in answers                            # petrol: no CNG section
+
+
+def test_the_pdi_report_of_the_sample_booking_reads_like_the_sample():
+    """The seeded PDI template rendered for DEMO-3 (the sample AV66022): no blank pages, every
+    section title on the same page as its first row, page numbers, verify page, disclaimer."""
+    import io
+
+    import pypdf
+
+    from apps.media import storage
+
+    call_command("seed_demo")
+    report = Report.objects.get(booking__booking_id="DEMO-3")
+    assert report.status == "ready" and report.filename == "DEMO-3PDI.pdf"
+    pages = [p.extract_text() for p in pypdf.PdfReader(io.BytesIO(storage.read(report.key))).pages]
+    n = len(pages)
+    assert 12 <= n <= 30
+    assert all(len(t.strip()) > 20 for t in pages)                       # no blank pages
+    numbered = [t for t in pages if f"of {n}" in t]
+    assert len(numbered) == n - 1                                        # all but the divider
+    for title, first_row in (("Front", "Front bonnet top"), ("Driver side", "Driver front fender"),
+                             ("Tyres", "Tyre size"), ("Warning lights", "Check engine light"),
+                             ("Key checks", "Control panel lights"),
+                             ("Issues found", "Driver front door window")):
+        assert any(title in t and first_row in t for t in pages), title
+    text = "\n".join(pages)
+    for needle in ("PRE DELIVERY INSPECTION REPORT", "MA1NS2NP1T2H75335", "Deep Forest",
+                   "Not Available", "Loose", "Detailed Report", "Verify this report",
+                   "Arbitration and Conciliation Act, 1996", "+91-9429690830",
+                   "The left front door glass outer weatherstrip is loose."):
+        assert needle in text, needle
+    assert "CNG hydro test" not in text                                 # petrol car: no CNG

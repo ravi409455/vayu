@@ -96,7 +96,7 @@ class Preview(APIView):
         insp = context.latest_inspection(booking)
         if insp is None or insp.form_version.form_id != tv.template.form_id:
             raise err("INVALID_BOOKING", "Pick a submitted booking inspected with this form.")
-        pdf, name = tasks.build_pdf(booking, insp, tv, "preview", 0)
+        pdf, name = tasks.build_pdf(booking, insp, tv, "preview", 0, edge=480)
         response = HttpResponse(pdf, content_type="application/pdf")
         response["Content-Disposition"] = f'inline; filename="{name}"'
         return response

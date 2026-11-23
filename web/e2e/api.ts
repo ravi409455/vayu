@@ -69,12 +69,17 @@ export async function seedForms(): Promise<Pdi> {
   await publish(admin, pdi.id);
   const t = await json(await admin.post("pdf-templates", { data: { form: pdi.id } }));
   const tv = await json(await admin.get(`pdf-template-versions/${t.versions[0].id}`));
-  const definition = { filename: "{booking_id}PDI.pdf", branding: { title: "PRE DELIVERY CAR INSPECTION REPORT", color: "#a62830" }, blocks: [
-    { type: "cover", photo: "inspection.door_photo", rows: [{ label: "Booking ID", field: "booking.booking_id" }, { label: "Chassis Number", field: "inspection.chassis_no" }] },
-    { type: "table", title: "Exterior", rows: [{ label: "Driver Front Door", field: "inspection.door" }, { label: "Odometer", field: "inspection.odometer" }] },
-    { type: "ratings", title: "Overall Rating" },
-    { type: "photos", title: "Photos", columns: 2, items: [{ field: "inspection.door_photo", index: 0, caption: "Door" }] },
-  ] };
+  const definition = { schema: 2, filename: "{{ sys.booking_id }}PDI.pdf",
+    bands: { normal: { header: { left: [{ text: "<strong>PRE DELIVERY CAR INSPECTION REPORT</strong>" }], background: "brand" },
+      footer: { right: [{ text: "Page {{ sys.page }} of {{ sys.pages }}" }] } } },
+    pages: [{ title: "Report", parts: [
+      { type: "photos", per_row: 1, caption: "none", source: { kind: "fields", fields: ["inspection.door_photo"] } },
+      { type: "table", title: "Vehicle", source: { kind: "fields", rows: [{ field: "booking.booking_id", label: "Booking ID" }, { field: "inspection.chassis_no", label: "Chassis Number" }] } },
+      { type: "table", title: "Exterior", source: { kind: "fields", rows: [{ field: "inspection.door", label: "Driver Front Door" }, { field: "inspection.odometer", label: "Odometer" }] } },
+      { type: "table", title: "Overall Rating", source: { kind: "grid", columns: [{ label: "Exterior" }, { label: "Expert rating" }], rows: [{ label: "Rating", cells: [{ field: "inspection.engine_rating" }, { text: "{{ sys.overall }}" }] }] } },
+      { type: "photos", title: "Photos", per_row: 2, source: { kind: "fields", fields: ["inspection.door_photo"] } },
+      { type: "verify" },
+    ] }] };
   const saved = await json(await admin.patch(`pdf-template-versions/${tv.id}`, { data: { definition, row_version: tv.row_version } }));
   await json(await admin.post(`pdf-template-versions/${tv.id}/publish`, { data: { row_version: saved.row_version } }));
   return { formId: pdi.id, bookingFormId: booking.id, startFormId: start.id, endFormId: end.id, templateId: t.id };

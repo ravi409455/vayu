@@ -819,7 +819,9 @@ def _make(v, sec, item, show=None, made=None) -> None:
                 f"{label} remark",
                 "short_text",
                 {"max_length": 300},
-                show_if={"in": [{"var": f"inspection.{key}"}, [k for k, *_ in SETS[set_][1:]]]},
+                # a remark for anything worth explaining: problems and amber answers
+                show_if={"in": [{"var": f"inspection.{key}"},
+                                [k for k, _, tone, _ in SETS[set_] if tone in ("warn", "bad")]]},
             )
     elif kind == "n":
         cfg = {"unit": item[3]} if item[3] else {}
@@ -1126,47 +1128,428 @@ def sample_answers(version, chassis: str, **overrides) -> tuple[dict, list[str]]
     return answers, photos
 
 
-def pdf_definition(made: dict[str, list[str]], labels: dict[str, str]) -> dict:
-    """A stand-in report for today's engine (the new designer replaces it): the cover, ratings,
-    a table per section and the car pictures."""
-    blocks = [
-        {
-            "type": "cover",
-            "photo": "inspection.cover_photo",
+def _sec(key: str, title: str = "", **kw) -> dict:
+    return {
+        "type": "table",
+        "title": title,
+        "source": {"kind": "section", "section": f"inspection.{key}"},
+        **kw,
+    }
+
+
+def _issue_photos(key: str, title: str = "Photos of issues") -> dict:
+    return {
+        "type": "photos",
+        "title": title,
+        "per_row": 3,
+        "caption": "check",
+        "source": {"kind": "section", "section": f"inspection.{key}"},
+        "which": "issues",
+    }
+
+
+def _heading(text: str, sub: str = "") -> dict:
+    small = f' <span class="tone-muted small">{sub}</span>' if sub else ""
+    return {"type": "text", "html": f"<h2>{text}{small}</h2>", "box": {"space_below": 1}}
+
+
+def _page(title: str, parts: list, style: str = "normal") -> dict:
+    return {"title": title, "style": style, "parts": parts}
+
+
+def pdf_definition(logo: str | None, watermark: str | None, disclaimer: str) -> dict:
+    """The PDI report of the sample (AV66022PDI.pdf) in the new template format."""
+    brand = [{"image": logo, "height": 11}] if logo else []
+    tyre_grid = {
+        "type": "table",
+        "title": "",
+        "look": {"header": True},
+        "source": {
+            "kind": "grid",
+            "columns": [
+                {"label": "Tread"},
+                {"label": "Depth"},
+                {"label": "Made (week, year)"},
+                {"label": "Shape"},
+            ],
             "rows": [
-                {"label": "Booking ID", "field": "booking.booking_id"},
-                {"label": "Customer", "field": "booking.customer_name"},
-                {"label": "Chassis Number", "field": "inspection.chassis_no"},
-                {"label": "Engine Number", "field": "inspection.engine_no"},
-                {"label": "Odometer Reading", "field": "inspection.odometer"},
+                {
+                    "label": who,
+                    "cells": [
+                        {"field": f"inspection.tyre_{k}_{c}"}
+                        for c in ("tread", "depth", "dot", "shape")
+                    ],
+                }
+                for k, who in TYRES
             ],
         },
-        {"type": "ratings", "title": "Overall Rating"},
-    ]
-    for title, keys in made.items():
-        rows = [
-            {"label": labels[k], "field": f"inspection.{k}"}
-            for k in keys
-            if not k.endswith(("_photo", "_video"))
-            and not k.startswith(("picture_", "rating_"))
-            and k != "issue_photos"
-        ]
-        if rows:
-            blocks.append({"type": "table", "title": title, "rows": rows})
-    blocks.append(
-        {
-            "type": "photos",
-            "title": "Car Pictures",
-            "columns": 2,
-            "items": [
-                {"field": f"inspection.picture_{k}", "index": 0, "caption": label}
-                for k, label in PICTURES
-            ],
-        }
-    )
-    return {
-        "filename": "{booking_id}PDI.pdf",
-        "type_code": "PDI",
-        "branding": {"title": "PRE DELIVERY INSPECTION REPORT", "color": "#a62830"},
-        "blocks": blocks,
     }
+    ratings = {
+        "type": "table",
+        "title": "Overall rating",
+        "look": {"header": True, "lines": "all"},
+        "source": {
+            "kind": "grid",
+            "columns": [{"label": lb} for _, lb, _ in CATEGORIES] + [{"label": "Expert rating"}],
+            "rows": [
+                {
+                    "label": "Rating",
+                    "cells": [{"field": f"inspection.rating_{k}"} for k, _, _ in CATEGORIES]
+                    + [{"text": "{{ sys.overall }}"}],
+                }
+            ],
+        },
+    }
+    vehicle = {
+        "type": "table",
+        "title": "",
+        "per_row": 2,
+        "source": {
+            "kind": "fields",
+            "rows": [
+                {"field": "booking.booking_id", "label": "Booking ID"},
+                {"field": "booking.car_make_model", "label": "Car"},
+                {"field": "inspection.engine_cc", "label": "Engine capacity"},
+                {"field": "inspection.fuel"},
+                {"field": "inspection.transmission"},
+                {"field": "inspection.chassis_no"},
+                {"field": "inspection.engine_no"},
+                {"field": "inspection.colour"},
+                {"field": "inspection.odometer"},
+                {"field": "inspection.mfg_month", "label": "Manufactured (month)"},
+                {"field": "inspection.mfg_year", "label": "Manufactured (year)"},
+                {"field": "inspection.keys"},
+            ],
+        },
+    }
+    key_checks = {
+        "type": "table",
+        "title": "Key checks",
+        "source": {
+            "kind": "fields",
+            "rows": [
+                *[{"field": f"inspection.{k}"} for k, *_ in key_checks_list()],
+                {"field": "inspection.tyre_year"},
+            ],
+        },
+    }
+    pages = [
+        _page(
+            "Cover",
+            [
+                {
+                    "type": "photos",
+                    "per_row": 1,
+                    "shape": "16:9",
+                    "caption": "none",
+                    "source": {"kind": "fields", "fields": ["inspection.cover_photo"]},
+                },
+                vehicle,
+                ratings,
+                {
+                    "type": "text",
+                    "html": "<p><strong>{{ sys.issues }}</strong> issue(s) found. See the "
+                    "summary on the next page.</p>",
+                },
+                {**_sec("documents", "Documents", per_row=2)},
+                {
+                    "type": "text",
+                    "size": "small",
+                    "html": "<p>*Please refer to the last pages for terms, conditions and "
+                    "disclaimer.</p>",
+                },
+            ],
+            style="cover",
+        ),
+        _page(
+            "Summary",
+            [
+                {"type": "table", "title": "Issues found", "source": {"kind": "defects"}},
+                {
+                    "type": "photos",
+                    "title": "Photos of issues",
+                    "per_row": 3,
+                    "caption": "check",
+                    "source": {"kind": "issues"},
+                },
+                key_checks,
+                {
+                    "type": "text",
+                    "html": "<h3>Expert comments</h3><p>{{ inspection.expert_comments }}</p>",
+                    "box": {
+                        "padding": 3,
+                        "background": "muted",
+                        "border": "left",
+                        "border_color": "brand",
+                        "border_width": 1,
+                    },
+                },
+            ],
+        ),
+        _page(
+            "Detailed report",
+            [
+                {"type": "spacer", "height": 90},
+                {
+                    "type": "text",
+                    "size": "title",
+                    "align": "center",
+                    "html": "<p>Detailed Report</p>",
+                },
+                {
+                    "type": "text",
+                    "align": "center",
+                    "html": "<p>{{ sys.booking_id }} · {{ sys.car }}</p>",
+                },
+            ],
+            style="full",
+        ),
+        _page(
+            "Exterior",
+            [
+                _heading("Exterior"),
+                _sec("front", "Front"),
+                _sec("driver_side", "Driver side"),
+                _sec("rear", "Rear"),
+                _sec("passenger_side", "Passenger side"),
+                _sec("glass_and_mirrors", "Glass and mirrors", per_row=2),
+                _sec("roof", "Roof"),
+                *[
+                    _issue_photos(k, "")
+                    for k in (
+                        "front",
+                        "driver_side",
+                        "rear",
+                        "passenger_side",
+                        "glass_and_mirrors",
+                        "roof",
+                    )
+                ],
+            ],
+        ),
+        _page(
+            "Body frame",
+            [
+                _heading("Body frame accidental checklist"),
+                _sec("body_frame"),
+                _issue_photos("body_frame"),
+            ],
+        ),
+        _page(
+            "Tyres",
+            [
+                _heading("Tyres"),
+                {
+                    "type": "table",
+                    "title": "",
+                    "per_row": 2,
+                    "source": {
+                        "kind": "fields",
+                        "rows": [
+                            {"field": "inspection.tyre_size"},
+                            {"field": "inspection.tyre_type"},
+                            {"field": "inspection.rim_type"},
+                            {"field": "inspection.camber"},
+                        ],
+                    },
+                },
+                tyre_grid,
+                {
+                    "type": "photos",
+                    "title": "Tyre photos",
+                    "per_row": 3,
+                    "source": {
+                        "kind": "fields",
+                        "fields": [f"inspection.tyre_{k}_photo" for k, _ in TYRES],
+                    },
+                },
+                _heading("OBD (engine scan)"),
+                _sec("obd_scan"),
+                {
+                    "type": "photos",
+                    "per_row": 2,
+                    "caption": "label",
+                    "source": {"kind": "fields", "fields": ["inspection.obd_photo"]},
+                },
+            ],
+        ),
+        _page(
+            "Electrical and interior",
+            [
+                _heading("Electrical and interior components"),
+                _sec("lights", "Lights"),
+                _sec("controls", "Controls"),
+                _sec("windows", "Windows", per_row=2),
+                _sec("seats_and_floor", "Seats and floor"),
+                *[
+                    _issue_photos(k, "")
+                    for k in ("lights", "controls", "windows", "seats_and_floor")
+                ],
+            ],
+        ),
+        _page(
+            "Warning lights and AC",
+            [
+                _heading("Warning lights"),
+                _sec("warning_lights"),
+                _issue_photos("warning_lights"),
+                _heading("Air conditioning"),
+                _sec("air_conditioning"),
+                _issue_photos("air_conditioning"),
+            ],
+        ),
+        _page(
+            "Drive and brakes",
+            [
+                _heading("Brakes and steering"),
+                _sec("brakes_and_steering"),
+                _heading("Transmission and clutch pedal"),
+                _sec("transmission_and_clutch"),
+                _heading("Axle"),
+                _sec("axle"),
+                _heading("Brakes"),
+                _sec("brakes", per_row=2),
+                _heading("Suspension"),
+                _sec("suspension"),
+                *[
+                    _issue_photos(k, "")
+                    for k in (
+                        "brakes_and_steering",
+                        "transmission_and_clutch",
+                        "axle",
+                        "brakes",
+                        "suspension",
+                    )
+                ],
+            ],
+        ),
+        _page(
+            "Engine",
+            [
+                _heading("Engine"),
+                _sec("engine_bay"),
+                _sec("exhaust", "Exhaust"),
+                {
+                    "type": "photos",
+                    "title": "Engine photos",
+                    "per_row": 3,
+                    "caption": "check",
+                    "source": {"kind": "section", "section": "inspection.engine_bay"},
+                },
+                _issue_photos("exhaust", ""),
+            ],
+        ),
+        _page(
+            "Underbody",
+            [
+                _heading("Underbody"),
+                _sec("underbody"),
+                {
+                    "type": "photos",
+                    "per_row": 2,
+                    "source": {"kind": "section", "section": "inspection.underbody"},
+                },
+                _heading("Equipment"),
+                _sec("equipment"),
+                {
+                    "type": "photos",
+                    "per_row": 3,
+                    "source": {"kind": "fields", "fields": ["inspection.tool_kit_photo"]},
+                },
+                {**_sec("cng", "CNG"), "show_if": CNG},
+            ],
+        ),
+        _page(
+            "Car pictures",
+            [
+                _heading("Car pictures"),
+                {
+                    "type": "photos",
+                    "per_row": 2,
+                    "source": {"kind": "section", "section": "inspection.car_pictures"},
+                },
+            ],
+        ),
+        _page(
+            "Verify",
+            [
+                {"type": "spacer", "height": 20},
+                {
+                    "type": "text",
+                    "align": "center",
+                    "html": "<h2>Verify this report</h2><p>Scan the "
+                    "code or open the link to see this report as Car C.I.D. issued it. If anything "
+                    "differs, the copy you hold has been changed.</p>",
+                },
+                {"type": "verify", "size": 60},
+                {
+                    "type": "text",
+                    "align": "center",
+                    "html": "<p>Booking {{ sys.booking_id }} · "
+                    "revision {{ sys.revision }} · generated {{ sys.generated_at }}</p>",
+                },
+            ],
+        ),
+        _page("Disclaimer", [{"type": "text", "columns": 2, "size": "small", "html": disclaimer}]),
+    ]
+    header = {
+        "left": brand + [{"text": "<strong>CAR C.I.D.</strong>"}],
+        "right": [
+            {"text": "<strong>PDI REPORT</strong>"},
+            {"text": "{{ sys.booking_id }} · {{ sys.car }}"},
+        ],
+        "background": "brand",
+        "height": 16,
+    }
+    return {
+        "schema": 2,
+        "filename": "{{ sys.booking_id }}PDI.pdf",
+        "theme": {"colors": {"brand": "#a62830"}},
+        "bands": {
+            "cover": {
+                "header": {
+                    **header,
+                    "height": 26,
+                    "left": ([{"image": logo, "height": 18}] if logo else [])
+                    + [{"text": "<strong>CAR C.I.D.</strong>"}],
+                    "right": [
+                        {"text": "<strong>PRE DELIVERY INSPECTION REPORT</strong>"},
+                        {"text": "Booking {{ sys.booking_id }}"},
+                    ],
+                },
+                "footer": {
+                    "left": [{"text": "Verify this report and read the terms on the last pages"}],
+                    "right": [{"text": "Page {{ sys.page }} of {{ sys.pages }}"}],
+                    "height": 8,
+                },
+            },
+            "normal": {
+                "header": header,
+                "footer": {
+                    "left": [{"text": "Inspected {{ sys.inspected_on }}"}],
+                    "right": [{"text": "Page {{ sys.page }} of {{ sys.pages }}"}],
+                    "height": 8,
+                },
+            },
+        },
+        **({"watermark": {"image": watermark, "opacity": 0.35, "width": 62}} if watermark else {}),
+        "pages": pages,
+    }
+
+
+def key_checks_list() -> list[tuple]:
+    """The Key Check fields in report order (their rules need the built form)."""
+    return [
+        (k,)
+        for k in (
+            "kc_control_lights",
+            "kc_fluid_leaks",
+            "kc_rear_subframe",
+            "kc_seat_belts",
+            "kc_engine_noise",
+            "kc_steering_vibration",
+            "kc_scratches_dents",
+            "kc_repainted",
+            "kc_obd",
+        )
+    ]

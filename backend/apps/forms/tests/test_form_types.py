@@ -143,8 +143,9 @@ def test_a_pdf_row_that_needs_the_end_form_blocks_the_template_when_it_is_switch
     publish(admin, d)
     template = admin.get("/api/v1/pdf-templates").json()[0]
     draft = admin.post(f"/api/v1/pdf-templates/{template['id']}/drafts").json()
-    definition = {"type_code": "PDI", "blocks": [{"type": "table", "title": "Pay", "rows": [
-        {"label": "Paid", "field": "end.taking_payment"}]}]}
+    definition = {"schema": 2, "pages": [{"title": "Pay", "parts": [{
+        "type": "table", "title": "Pay",
+        "source": {"kind": "fields", "rows": [{"field": "end.taking_payment"}]}}]}]}
     admin.patch(f"/api/v1/pdf-template-versions/{draft['id']}", {
         "definition": definition, "row_version": draft["row_version"]}, format="json")
     rv = admin.get(f"/api/v1/pdf-template-versions/{draft['id']}").json()["row_version"]
@@ -209,9 +210,7 @@ def test_an_old_inspection_bundle_still_imports_with_its_ops_references_renamed(
         "!!": [{"var": "start.selfie"}]}
     from apps.reports.models import PdfTemplateVersion
 
-    pdf = PdfTemplateVersion.objects.get(template__form__key="pdi")
-    assert pdf.definition["blocks"][0]["rows"][0]["field"] == "end.payment_mode"
-    assert pdf.definition["blocks"][0]["rows"][1]["field"] == "door"
+    assert not PdfTemplateVersion.objects.filter(template__form__key="pdi").exists()   # old layout
     assert Form.objects.get(key="pdi").type == "custom"
 
 

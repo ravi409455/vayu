@@ -238,8 +238,9 @@ def test_the_push_is_blocked_while_any_problem_exists_and_nothing_changes(admin,
     t = admin.post("/api/v1/pdf-templates", {"form": f["id"]}, format="json").json()
     tv = t["versions"][0]
     admin.patch(f"/api/v1/pdf-template-versions/{tv['id']}", {"definition": {
-        "type_code": "PDI", "blocks": [{"type": "table", "title": "T", "rows": [
-            {"label": "FR", "field": "depth_fr"}]}]}, "row_version": 0}, format="json")
+        "schema": 2, "pages": [{"title": "T", "parts": [{"type": "table", "source": {
+            "kind": "fields", "rows": [{"field": "inspection.depth_fr"}]}}]}]},
+        "row_version": 0}, format="json")
     edit(admin, item, fields=[TYRES["fields"][0]])             # depth_fr is removed
     before = FormVersion.objects.count()
     out = push_preview(admin, item)

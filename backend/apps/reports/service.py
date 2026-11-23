@@ -7,10 +7,10 @@ from apps.bookings.services import err
 from apps.core.errors import CodedError
 from apps.forms.models import Field, Form, FormType, FormVersion
 
-from .definition import referenced_fields, validate_definition
+from .definition import referenced_fields, referenced_sections, validate_definition
 from .models import PdfTemplate, PdfTemplateVersion
 
-DEFAULT_DEFINITION = {"filename": "{booking_id}{type_code}.pdf", "type_code": "", "blocks": []}
+DEFAULT_DEFINITION = {"schema": 2, "filename": "{{ sys.booking_id }}.pdf", "pages": []}
 
 
 def create_template(actor, form: Form) -> PdfTemplate:
@@ -28,7 +28,7 @@ def create_template(actor, form: Form) -> PdfTemplate:
 def save_definition(actor, v: PdfTemplateVersion, definition,
                     row_version: int) -> PdfTemplateVersion:
     try:
-        validate_definition(definition)
+        definition = validate_definition(definition)
     except ValueError as e:
         raise err("INVALID_TEMPLATE", str(e)) from e
     with transaction.atomic():
@@ -75,10 +75,22 @@ def _known_keys(template: PdfTemplate) -> dict[str, set[str]]:
             "end": keys(system_version("end")) if use_end else set()}
 
 
+def _section_keys(template: PdfTemplate) -> set[str]:
+    from apps.forms.models import Section
+
+    latest = FormVersion.objects.filter(form=template.form).order_by("-number").first()
+    return set(Section.objects.filter(version=latest).values_list("key", flat=True))
+
+
 def definition_issues(template: PdfTemplate, definition: dict) -> list[dict]:
-    """Rows of a layout that point at fields the form (as it is now, draft or live) lacks."""
+    """Parts of a layout that point at fields or sections the form (as it is now, draft or
+    live) lacks."""
     known = _known_keys(template)
-    return [{"path": "definition", "code": "UNKNOWN_FIELD",
+    sections = _section_keys(template)
+    missing = [{"path": "definition", "code": "UNKNOWN_SECTION",
+                "message": f"Section '{key}' is not a section of the form."}
+               for key in sorted(referenced_sections(definition) - sections)]
+    return missing + [{"path": "definition", "code": "UNKNOWN_FIELD",
              "message": (f"'{form}.{key}' needs the {form} form, which this form does not "
                          "include (see its form settings)."
                          if form in ("start", "end") and not known.get(form)
@@ -121,10 +133,11 @@ def warnings(version: FormVersion) -> list[dict]:
     if last is None:
         return []
     used = {key for form, key in referenced_fields(last.definition) if form == "inspection"}
+    whole = referenced_sections(last.definition)
     return [{"code": "FIELD_NOT_IN_PDF", "key": k,
              "message": f"Field '{k}' is not shown in the PDF template."}
-            for k in Field.objects.filter(version=version).order_by("id")
-            .values_list("key", flat=True) if k not in used]
+            for k, section in Field.objects.filter(version=version).order_by("id")
+            .values_list("key", "section__key") if k not in used and section not in whole]
 
 
 def discard_draft(actor, v: PdfTemplateVersion) -> None:

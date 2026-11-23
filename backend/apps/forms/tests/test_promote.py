@@ -74,8 +74,10 @@ def staging(admin):
     t = admin.post("/api/v1/pdf-templates", {"form": form["id"]}, format="json").json()
     tv = t["versions"][0]
     admin.patch(f"/api/v1/pdf-template-versions/{tv['id']}", {"definition": {
-        "type_code": "PDI", "blocks": [{"type": "table", "title": "Body", "rows": [
-            {"label": "Door", "field": "door"}]}]}, "row_version": 0}, format="json")
+        "schema": 2, "pages": [{"title": "Body", "parts": [{
+            "type": "table", "title": "Body",
+            "source": {"kind": "fields", "rows": [{"field": "inspection.door"}]}}]}]},
+        "row_version": 0}, format="json")
     r = admin.post(f"/api/v1/pdf-template-versions/{tv['id']}/publish", {"row_version": 1},
                    format="json")
     assert r.status_code == 200, r.json()
@@ -114,7 +116,7 @@ def test_export_is_self_contained_and_has_no_environment_ids(admin, staging):
     assert [m["key"] for m in b["master_lists"]] == ["yard"]
     assert b["version"]["rating_config"]["categories"][0]["key"] == "engine"
     assert b["version"]["checks"][0]["message"] == "Pick a door state"
-    assert b["pdf_template"]["definition"]["type_code"] == "PDI"
+    assert b["pdf_template"]["definition"]["schema"] == 2
     blob = json.dumps(b)
     assert '"id"' not in blob and '"row_version"' not in blob       # nothing environment-specific
 
@@ -215,7 +217,7 @@ def test_imported_structure_and_details_match(admin, staging):
     assert v.versions if False else True
     tpl = PdfTemplate.objects.get(form__key="pdi")
     draft = tpl.versions.get(status="draft")
-    assert draft.definition["type_code"] == "PDI"
+    assert draft.definition["pages"][0]["title"] == "Body"
 
 
 # ---------------------------------------------------------------- conflicts and bad input
@@ -335,6 +337,7 @@ def _first_field(b):
     lambda b: b["form"].__setitem__("key", "Bad Key!"),
     lambda b: _first_field(b).pop("access"),
     lambda b: b["pdf_template"].__setitem__("definition", {"junk": 1}),
+    lambda b: b["pdf_template"].__setitem__("definition", {"blocks": []}),   # old designer
     lambda b: b["version"]["checks"].append({"rule": {"a": 1, "b": 2}, "message": "m",
                                              "fields": [], "order": 9}),
     lambda b: b["library"][0].__setitem__("definition", {"type": "bogus"}),

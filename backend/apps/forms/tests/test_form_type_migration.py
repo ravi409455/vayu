@@ -100,7 +100,8 @@ def build_old_data(apps):
 @pytest.mark.django_db(transaction=True, serialized_rollback=True)
 def test_an_old_database_comes_across_with_forms_rules_answers_and_pdf_rows(old_world):
     build_old_data(old_world)
-    migrate(AFTER)
+    after = migrate(AFTER)
+    old_rows = after.get_model("reports", "PdfTemplateVersion").objects.get().definition["blocks"][0]["rows"]
     migrate(MigrationExecutor(connection).loader.graph.leaf_nodes())  # the models below are today's
     from apps.bookings.models import Inspection
     from apps.forms.models import Field, Form, LibraryItem, MasterList, Page, VersionCheck
@@ -137,8 +138,10 @@ def test_an_old_database_comes_across_with_forms_rules_answers_and_pdf_rows(old_
         "!!": [{"var": "start.selfie"}]}
     assert VersionCheck.objects.get().rule == paid
     assert LibraryItem.objects.get(key="lib").definition["show_if"] == paid
-    rows = PdfTemplateVersion.objects.get().definition["blocks"][0]["rows"]
-    assert [r["field"] for r in rows] == ["end.payment_mode", "inspection.door"]
+    assert [r["field"] for r in old_rows] == ["end.payment_mode", "inspection.door"]
+    # the new report designer starts fresh: one empty draft per template
+    fresh = PdfTemplateVersion.objects.get()
+    assert fresh.status == "draft" and fresh.definition["schema"] == 2 and fresh.definition["pages"] == []
 
     # the booking form picks the type from the custom forms; the old list is gone
     assert Field.objects.get(version__form__key="booking", key="inspection_type"

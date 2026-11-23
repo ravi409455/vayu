@@ -87,8 +87,10 @@ def test_the_verify_link_never_wraps_even_with_hyphens_in_the_token():
     from apps.reports import render
 
     token = "-".join(["abcdefgh"] * 4)                        # 35 characters, four hyphens
-    pdf = render.render_pdf(render.render_html([], {}, booking_id="SA1", revision=1,
-                                               stamp="now", token=token))
+    url = f"https://verify.carcid.in/{token}"
+    values = {"sys": {"booking_id": "SA1", "inspection_type": "PDI", "verify_url": url}}
+    pages = [{"title": "V", "parts": [{"type": "verify"}]}]
+    pdf = render.render_pdf(render.render_html(pages, {}, values))
     text = pypdf.PdfReader(io.BytesIO(pdf)).pages[0].extract_text()
     assert f"verify.carcid.in/{token}" in text
 
@@ -213,7 +215,7 @@ def test_the_newest_layout_is_checked_against_the_form_as_it_is_now(renv):
     assert latest_layout_issues(form) == []                                  # the layout fits
     PdfTemplateVersion.objects.create(
         template=PdfTemplate.objects.get(form=form), number=99, definition={
-            "blocks": [{"type": "table", "title": "T", "rows": [{"label": "X",
-                                                                  "field": "inspection.nope"}]}]})
+            "schema": 2, "pages": [{"title": "T", "parts": [{"type": "table", "source": {
+                "kind": "fields", "rows": [{"field": "inspection.nope"}]}}]}]})
     issues = latest_layout_issues(form)
     assert [i["code"] for i in issues] == ["UNKNOWN_FIELD"] and "nope" in issues[0]["message"]

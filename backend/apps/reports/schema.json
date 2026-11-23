@@ -1,0 +1,891 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "PDF report template (schema 2)",
+ "description": "A report is a list of pages; each page holds parts (a table of checks, photos, text...). docs/plan-reports.md explains every setting.",
+ "type": "object",
+ "required": [
+  "schema",
+  "pages"
+ ],
+ "additionalProperties": false,
+ "properties": {
+  "schema": {
+   "const": 2
+  },
+  "filename": {
+   "type": "string",
+   "minLength": 5,
+   "maxLength": 200,
+   "pattern": "\\.pdf$"
+  },
+  "paper": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "size": {
+     "enum": [
+      "A4",
+      "Letter"
+     ]
+    },
+    "orientation": {
+     "enum": [
+      "portrait",
+      "landscape"
+     ]
+    },
+    "margins": {
+     "$ref": "#/$defs/sides"
+    }
+   }
+  },
+  "theme": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "colors": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "brand": {
+       "$ref": "#/$defs/hex"
+      },
+      "text": {
+       "$ref": "#/$defs/hex"
+      },
+      "ok": {
+       "$ref": "#/$defs/hex"
+      },
+      "warn": {
+       "$ref": "#/$defs/hex"
+      },
+      "bad": {
+       "$ref": "#/$defs/hex"
+      },
+      "muted": {
+       "$ref": "#/$defs/hex"
+      }
+     }
+    },
+    "size": {
+     "type": "number",
+     "minimum": 7,
+     "maximum": 14
+    }
+   }
+  },
+  "bands": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "normal": {
+     "$ref": "#/$defs/bandset"
+    },
+    "cover": {
+     "$ref": "#/$defs/bandset"
+    }
+   }
+  },
+  "watermark": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "image"
+   ],
+   "properties": {
+    "image": {
+     "$ref": "#/$defs/asset"
+    },
+    "opacity": {
+     "type": "number",
+     "minimum": 0.02,
+     "maximum": 1
+    },
+    "width": {
+     "type": "number",
+     "minimum": 10,
+     "maximum": 100
+    }
+   }
+  },
+  "pages": {
+   "type": "array",
+   "maxItems": 200,
+   "items": {
+    "$ref": "#/$defs/page"
+   }
+  }
+ },
+ "$defs": {
+  "hex": {
+   "type": "string",
+   "pattern": "^#[0-9a-fA-F]{6}$"
+  },
+  "asset": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+  },
+  "id": {
+   "type": "string",
+   "pattern": "^[A-Za-z0-9_-]{1,40}$"
+  },
+  "ref": {
+   "type": "string",
+   "pattern": "^(booking|start|inspection|end)\\.[a-z][a-z0-9_]{0,62}$"
+  },
+  "mm": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 60
+  },
+  "tone": {
+   "enum": [
+    "brand",
+    "text",
+    "ok",
+    "warn",
+    "bad",
+    "muted"
+   ]
+  },
+  "rule": {},
+  "text": {
+   "type": "string",
+   "maxLength": 20000
+  },
+  "sides": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "top": {
+     "$ref": "#/$defs/mm"
+    },
+    "right": {
+     "$ref": "#/$defs/mm"
+    },
+    "bottom": {
+     "$ref": "#/$defs/mm"
+    },
+    "left": {
+     "$ref": "#/$defs/mm"
+    }
+   }
+  },
+  "slot": {
+   "type": "array",
+   "maxItems": 4,
+   "items": {
+    "oneOf": [
+     {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "text"
+      ],
+      "properties": {
+       "text": {
+        "type": "string",
+        "maxLength": 300
+       }
+      }
+     },
+     {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "image"
+      ],
+      "properties": {
+       "image": {
+        "$ref": "#/$defs/asset"
+       },
+       "height": {
+        "type": "number",
+        "minimum": 3,
+        "maximum": 40
+       }
+      }
+     }
+    ]
+   }
+  },
+  "band": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "left": {
+     "$ref": "#/$defs/slot"
+    },
+    "center": {
+     "$ref": "#/$defs/slot"
+    },
+    "right": {
+     "$ref": "#/$defs/slot"
+    },
+    "background": {
+     "enum": [
+      "none",
+      "brand"
+     ]
+    },
+    "height": {
+     "type": "number",
+     "minimum": 6,
+     "maximum": 60
+    }
+   }
+  },
+  "bandset": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "header": {
+     "$ref": "#/$defs/band"
+    },
+    "footer": {
+     "$ref": "#/$defs/band"
+    }
+   }
+  },
+  "page": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "title",
+    "parts"
+   ],
+   "properties": {
+    "id": {
+     "$ref": "#/$defs/id"
+    },
+    "title": {
+     "type": "string",
+     "maxLength": 150
+    },
+    "style": {
+     "enum": [
+      "normal",
+      "cover",
+      "full"
+     ]
+    },
+    "show_if": {
+     "$ref": "#/$defs/rule"
+    },
+    "parts": {
+     "type": "array",
+     "maxItems": 100,
+     "items": {
+      "$ref": "#/$defs/part"
+     }
+    }
+   }
+  },
+  "box": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "space_above": {
+     "$ref": "#/$defs/mm"
+    },
+    "space_below": {
+     "$ref": "#/$defs/mm"
+    },
+    "padding": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 20
+    },
+    "border": {
+     "enum": [
+      "none",
+      "all",
+      "bottom",
+      "left"
+     ]
+    },
+    "border_width": {
+     "type": "number",
+     "minimum": 0.1,
+     "maximum": 3
+    },
+    "border_color": {
+     "$ref": "#/$defs/tone"
+    },
+    "background": {
+     "enum": [
+      "none",
+      "brand",
+      "ok",
+      "warn",
+      "bad",
+      "muted"
+     ]
+    },
+    "round": {
+     "type": "boolean"
+    }
+   }
+  },
+  "common": {
+   "type": "object",
+   "properties": {
+    "id": {
+     "$ref": "#/$defs/id"
+    },
+    "show_if": {
+     "$ref": "#/$defs/rule"
+    },
+    "hide_when_empty": {
+     "type": "boolean"
+    },
+    "new_page": {
+     "type": "boolean"
+    },
+    "keep_together": {
+     "type": "boolean"
+    },
+    "keep_title": {
+     "type": "boolean"
+    },
+    "box": {
+     "$ref": "#/$defs/box"
+    }
+   }
+  },
+  "row": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "field"
+   ],
+   "properties": {
+    "field": {
+     "$ref": "#/$defs/ref"
+    },
+    "label": {
+     "type": "string",
+     "maxLength": 200
+    },
+    "show_if": {
+     "$ref": "#/$defs/rule"
+    },
+    "fallback": {
+     "type": "string",
+     "maxLength": 100
+    }
+   }
+  },
+  "cell": {
+   "oneOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "field"
+     ],
+     "properties": {
+      "field": {
+       "$ref": "#/$defs/ref"
+      },
+      "fallback": {
+       "type": "string",
+       "maxLength": 100
+      }
+     }
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "text"
+     ],
+     "properties": {
+      "text": {
+       "type": "string",
+       "maxLength": 300
+      }
+     }
+    }
+   ]
+  },
+  "table": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "source"
+   ],
+   "properties": {
+    "id": true,
+    "show_if": true,
+    "hide_when_empty": true,
+    "new_page": true,
+    "keep_together": true,
+    "keep_title": true,
+    "box": true,
+    "type": {
+     "const": "table"
+    },
+    "title": {
+     "type": "string",
+     "maxLength": 200
+    },
+    "source": {
+     "oneOf": [
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "kind",
+        "rows"
+       ],
+       "properties": {
+        "kind": {
+         "const": "fields"
+        },
+        "rows": {
+         "type": "array",
+         "maxItems": 400,
+         "items": {
+          "$ref": "#/$defs/row"
+         }
+        }
+       }
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "kind",
+        "section"
+       ],
+       "properties": {
+        "kind": {
+         "const": "section"
+        },
+        "section": {
+         "type": "string",
+         "pattern": "^inspection\\.[a-z][a-z0-9_]{0,62}$"
+        },
+        "exclude": {
+         "type": "array",
+         "maxItems": 400,
+         "items": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+         }
+        },
+        "fallback": {
+         "type": "string",
+         "maxLength": 100
+        }
+       }
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "kind"
+       ],
+       "properties": {
+        "kind": {
+         "const": "defects"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "kind",
+        "columns",
+        "rows"
+       ],
+       "properties": {
+        "kind": {
+         "const": "grid"
+        },
+        "columns": {
+         "type": "array",
+         "minItems": 1,
+         "maxItems": 8,
+         "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+           "label"
+          ],
+          "properties": {
+           "label": {
+            "type": "string",
+            "maxLength": 100
+           },
+           "width": {
+            "type": "number",
+            "minimum": 5,
+            "maximum": 90
+           }
+          }
+         }
+        },
+        "rows": {
+         "type": "array",
+         "maxItems": 60,
+         "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+           "label",
+           "cells"
+          ],
+          "properties": {
+           "label": {
+            "type": "string",
+            "maxLength": 200
+           },
+           "show_if": {
+            "$ref": "#/$defs/rule"
+           },
+           "cells": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+             "$ref": "#/$defs/cell"
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     ]
+    },
+    "per_row": {
+     "enum": [
+      1,
+      2,
+      3,
+      4
+     ]
+    },
+    "look": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "lines": {
+       "enum": [
+        "all",
+        "rows",
+        "none"
+       ]
+      },
+      "height": {
+       "enum": [
+        "compact",
+        "normal",
+        "roomy"
+       ]
+      },
+      "stripes": {
+       "type": "boolean"
+      },
+      "label_width": {
+       "type": "number",
+       "minimum": 15,
+       "maximum": 85
+      },
+      "header": {
+       "type": "boolean"
+      },
+      "headers": {
+       "type": "array",
+       "maxItems": 3,
+       "items": {
+        "type": "string",
+        "maxLength": 60
+       }
+      }
+     }
+    }
+   }
+  },
+  "photos": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "source"
+   ],
+   "properties": {
+    "id": true,
+    "show_if": true,
+    "hide_when_empty": true,
+    "new_page": true,
+    "keep_together": true,
+    "keep_title": true,
+    "box": true,
+    "type": {
+     "const": "photos"
+    },
+    "title": {
+     "type": "string",
+     "maxLength": 200
+    },
+    "source": {
+     "oneOf": [
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "kind",
+        "fields"
+       ],
+       "properties": {
+        "kind": {
+         "const": "fields"
+        },
+        "fields": {
+         "type": "array",
+         "maxItems": 200,
+         "items": {
+          "$ref": "#/$defs/ref"
+         }
+        }
+       }
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "kind",
+        "section"
+       ],
+       "properties": {
+        "kind": {
+         "const": "section"
+        },
+        "section": {
+         "type": "string",
+         "pattern": "^inspection\\.[a-z][a-z0-9_]{0,62}$"
+        }
+       }
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "kind"
+       ],
+       "properties": {
+        "kind": {
+         "const": "issues"
+        }
+       }
+      }
+     ]
+    },
+    "which": {
+     "enum": [
+      "all",
+      "issues",
+      "first"
+     ]
+    },
+    "per_row": {
+     "enum": [
+      1,
+      2,
+      3,
+      4
+     ]
+    },
+    "shape": {
+     "enum": [
+      "4:3",
+      "16:9",
+      "1:1",
+      "original"
+     ]
+    },
+    "fit": {
+     "enum": [
+      "fill",
+      "whole",
+      "top"
+     ]
+    },
+    "caption": {
+     "enum": [
+      "label",
+      "check",
+      "custom",
+      "none"
+     ]
+    },
+    "caption_text": {
+     "type": "string",
+     "maxLength": 200
+    },
+    "frame": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "border": {
+       "enum": [
+        "none",
+        "grey",
+        "brand"
+       ]
+      },
+      "round": {
+       "type": "boolean"
+      },
+      "gap": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 12
+      }
+     }
+    }
+   }
+  },
+  "textpart": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "html"
+   ],
+   "properties": {
+    "id": true,
+    "show_if": true,
+    "hide_when_empty": true,
+    "new_page": true,
+    "keep_together": true,
+    "keep_title": true,
+    "box": true,
+    "type": {
+     "const": "text"
+    },
+    "html": {
+     "$ref": "#/$defs/text"
+    },
+    "columns": {
+     "enum": [
+      1,
+      2
+     ]
+    },
+    "size": {
+     "enum": [
+      "small",
+      "normal",
+      "large",
+      "title"
+     ]
+    },
+    "align": {
+     "enum": [
+      "left",
+      "center",
+      "right",
+      "justify"
+     ]
+    }
+   }
+  },
+  "pagebreak": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type"
+   ],
+   "properties": {
+    "id": {
+     "$ref": "#/$defs/id"
+    },
+    "show_if": {
+     "$ref": "#/$defs/rule"
+    },
+    "type": {
+     "const": "page_break"
+    }
+   }
+  },
+  "spacer": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type"
+   ],
+   "properties": {
+    "id": {
+     "$ref": "#/$defs/id"
+    },
+    "show_if": {
+     "$ref": "#/$defs/rule"
+    },
+    "type": {
+     "const": "spacer"
+    },
+    "height": {
+     "type": "number",
+     "minimum": 1,
+     "maximum": 200
+    }
+   }
+  },
+  "part": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/common"
+    }
+   ],
+   "oneOf": [
+    {
+     "$ref": "#/$defs/table"
+    },
+    {
+     "$ref": "#/$defs/photos"
+    },
+    {
+     "$ref": "#/$defs/textpart"
+    },
+    {
+     "$ref": "#/$defs/pagebreak"
+    },
+    {
+     "$ref": "#/$defs/spacer"
+    },
+    {
+     "$ref": "#/$defs/verify"
+    }
+   ]
+  },
+  "verify": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type"
+   ],
+   "properties": {
+    "id": true,
+    "show_if": true,
+    "hide_when_empty": true,
+    "new_page": true,
+    "keep_together": true,
+    "keep_title": true,
+    "box": true,
+    "type": {
+     "const": "verify"
+    },
+    "size": {
+     "type": "number",
+     "minimum": 15,
+     "maximum": 120
+    }
+   }
+  }
+ }
+}

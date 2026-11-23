@@ -21,6 +21,8 @@ dependencies = [
   "jinja2>=3.1.6",
   "drf-spectacular>=0.30.0",
   "requests>=2.34.2",
+  "jsonschema>=4.23",
+  "nh3>=0.2.18",
 ]
 
 [dependency-groups]

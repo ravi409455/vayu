@@ -237,6 +237,22 @@ next to your sample.
 The finished PDI template is the complete report: every section, the verify page and the exact
 disclaimer, built only with the designer.
 
+### Phase 2 status (2026-11-24)
+
+Done: the new template format (`backend/apps/reports/schema.json`, schema 2: pages of parts),
+values in text (`{{ ... }}`, sandboxed), rich text cleaned on save, tables (one per row, side
+by side, grid; rows from picked fields, a form section, or all problems), photo grids (which,
+per row, shape, fit, caption, frame), text, verify code, page break, spacer, page styles (normal,
+cover, full page) with header and footer bands, watermark, answer colours, hide when empty,
+fallback text, show-if on pages, parts and rows, page-break settings, box settings. Photos are
+shrunk once for print (1000 px, kept), previews use the 480 px copies, and the renderer loads
+only data URIs. Old templates were removed by migration (`reports 0004`); the seeded PDI template
+is the full sample report (20 pages). The current PDF templates screen edits the new format in a
+simple way until Phase 3 replaces it.
+
+Moved to later phases as planned: columns (photo beside table), style rules, bundled fonts, the
+automatic section list on the divider, PDF bookmarks per section.
+
 ## 12. Questions for you
 
 1. Battery state and Generator state: keep them in the PDI form? They are not in the sample

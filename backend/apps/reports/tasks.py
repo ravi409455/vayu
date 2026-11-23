@@ -28,15 +28,14 @@ def published_template(booking: Booking, insp) -> PdfTemplateVersion | None:
                                               status="published").order_by("-number").first())
 
 
-def build_pdf(booking: Booking, insp, tv: PdfTemplateVersion, token: str, revision: int):
-    """(pdf bytes, filename). Used by the real render and by template previews."""
-    blocks = context.build(booking, insp, tv.definition)
-    stamp = timezone.localtime().strftime("%d-%m-%Y %H:%M")
-    html_text = render.render_html(blocks, tv.definition, booking_id=booking.booking_id,
-                                   revision=revision, stamp=stamp, token=token)
-    name = definition.filename_for(tv.definition, booking.booking_id,
-                                   timezone.localdate().strftime("%d-%m-%Y"))
-    return render.render_pdf(html_text), name
+def build_pdf(booking: Booking, insp, tv: PdfTemplateVersion, token: str, revision: int,
+              edge: int = render.PRINT_EDGE):
+    """(pdf bytes, filename). Used by the real render and by template previews (small photos)."""
+    src = context.Source(booking, insp, revision=revision, token=token)
+    pages = context.build(src, tv.definition)
+    values = src.values()
+    html_text = render.render_html(pages, tv.definition, values, edge=edge)
+    return render.render_pdf(html_text), definition.filename_for(tv.definition, values)
 
 
 def _render_with_retries(booking, insp, tv, token: str, revision: int):

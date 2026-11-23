@@ -17,7 +17,7 @@ from apps.bookings.models import Booking, Inspection
 from apps.forms.models import Form, FormVersion
 from apps.media import storage
 from apps.media.models import MediaAsset
-from apps.reports import tasks
+from apps.reports import render, tasks
 from apps.reports.models import PdfTemplateVersion
 
 LIMIT_SECONDS = 120
@@ -75,10 +75,12 @@ class Command(BaseCommand):
                 insp = Inspection.objects.create(
                     booking=b, expert=expert, form_version=version, status="submitted",
                     answers={"inspection": {field: ids}, "start": {}, "end": {}})
-                items = [{"field": f"inspection.{field}", "index": i, "caption": f"Photo {i + 1}"}
-                         for i in range(photos)]
-                tv = PdfTemplateVersion(definition={"blocks": [
-                    {"type": "photos", "title": "Photos", "columns": 3, "items": items}]})
+                tv = PdfTemplateVersion(definition={"schema": 2, "pages": [{
+                    "title": "Photos", "parts": [{"type": "photos", "title": "Photos",
+                                                  "per_row": 3, "source": {
+                                                      "kind": "fields",
+                                                      "fields": [f"inspection.{field}"]}}]}]})
+                keys += [f"print/{i}-{render.PRINT_EDGE}.jpg" for i in ids]   # shrunk copies
                 start = time.monotonic()
                 pdf, _name = tasks.build_pdf(b, insp, tv, "bench", 1)
                 took = time.monotonic() - start

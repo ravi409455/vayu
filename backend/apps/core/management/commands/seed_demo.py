@@ -6,6 +6,7 @@ the PDI form here is the full one from the sample report (apps/core/demo_pdi.py)
 the report can be tried straight away."""
 import uuid
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 from django.conf import settings
@@ -130,23 +131,43 @@ class Command(BaseCommand):
         from apps.reports import service as reports
 
         d.library_items(admin)
-        form, made = demo_pdi.build_pdi(admin)
+        form, _ = demo_pdi.build_pdi(admin)
         template = reports.create_template(admin, form)
         draft = template.versions.get(status="draft")
-        labels = dict(Field.objects.filter(version__form=form).values_list("key", "label"))
-        saved = reports.save_definition(admin, draft, demo_pdi.pdf_definition(made, labels),
-                                        draft.row_version)
+        logo, mark = self._brand_assets(admin)
+        disclaimer = (Path(demo_pdi.__file__).parent / "seed_assets" / "pdi-disclaimer.html")
+        definition = demo_pdi.pdf_definition(str(logo.id), str(mark.id),
+                                             disclaimer.read_text())
+        saved = reports.save_definition(admin, draft, definition, draft.row_version)
         reports.publish(admin, saved, saved.row_version)
         for key, name, itype, pages, code, title in (
                 ("used_car", "Used car", "used_car", d.used_pages(), "UC",
                  "USED CAR INSPECTION REPORT"),
                 ("ev", "EV", "ev", d.ev_pages(), "EV", "ELECTRIC CAR INSPECTION REPORT")):
-            form, keys = d.build_inspection(admin, key=key, name=name, itype=itype, pages=pages)
+            form, _ = d.build_inspection(admin, key=key, name=name, itype=itype, pages=pages)
             template = reports.create_template(admin, form)
             draft = template.versions.get(status="draft")
-            definition = d.pdf_definition(code, title, keys, pages)
+            definition = d.pdf_definition(code, title, form)
             saved = reports.save_definition(admin, draft, definition, draft.row_version)
             reports.publish(admin, saved, saved.row_version)
+
+    def _brand_assets(self, admin):
+        """The Car C.I.D. logo and the faint shield watermark, as uploaded pictures."""
+        import io
+
+        from PIL import Image
+
+        from apps.forms import assets
+
+        folder = Path(__file__).resolve().parents[2] / "seed_assets"
+        out = []
+        for name, edge in (("carcid-logo.webp", 400), ("carcid-watermark.webp", 900)):
+            img = Image.open(folder / name).convert("RGBA")
+            img.thumbnail((edge, edge))
+            buf = io.BytesIO()
+            img.save(buf, "PNG", optimize=True)
+            out.append(assets.create_asset(admin, buf.getvalue()))
+        return out
 
     def _selfie(self, booking, expert) -> str:
         """A real (tiny) verified picture, so the completed demo booking has its selfie."""
