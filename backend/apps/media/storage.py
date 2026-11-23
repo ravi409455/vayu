@@ -80,9 +80,9 @@ def exists(key: str) -> bool:
         return False
 
 
-def presign_get(key: str, filename: str | None = None) -> str:
+def presign_get(key: str, filename: str | None = None, expires: int | None = None) -> str:
     params = {"Bucket": settings.S3_BUCKET, "Key": key}
     if filename:
         params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
-    return client().generate_presigned_url("get_object", ExpiresIn=settings.MEDIA_URL_TTL,
-                                           Params=params)
+    return client().generate_presigned_url(
+        "get_object", ExpiresIn=expires or settings.MEDIA_URL_TTL, Params=params)

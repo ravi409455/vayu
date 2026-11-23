@@ -23,6 +23,16 @@ services:
       REDIS_URL: redis://redis:6379/0
     depends_on: [postgres, redis]
     command: celery -A vayu worker -Q default -c 4
+  beat:                       # schedules the webhook retry check, once a minute
+    build: ../backend
+    restart: always
+    env_file: ../.env.prod
+    environment:
+      DJANGO_SETTINGS_MODULE: vayu.settings.prod
+      DB_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+    depends_on: [postgres, redis]
+    command: celery -A vayu beat --schedule /tmp/celerybeat-schedule
   pdf-worker:
     build: ../backend
     restart: always

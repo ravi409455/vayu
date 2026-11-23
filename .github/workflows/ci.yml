@@ -33,6 +33,7 @@ jobs:
           uv run pytest -q apps/reports --cov=apps.reports --cov-branch --cov-fail-under=100
           uv run pytest -q apps/forms/tests/test_promote.py --cov=apps.forms.promote --cov-branch --cov-fail-under=100
           uv run pytest -q apps/scoring apps/bookings/tests/test_scoring.py --cov=apps.scoring --cov-branch --cov-fail-under=100
+          uv run pytest -q apps/integrations --cov=apps.integrations --cov-branch --cov-fail-under=100
           uv run pytest -q apps/accounts --cov=apps.accounts.permissions --cov=apps.accounts.roles --cov-branch --cov-fail-under=100
   web:
     runs-on: ubuntu-latest

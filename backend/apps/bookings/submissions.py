@@ -193,6 +193,8 @@ def _advance(actor, b: Booking, insp: Inspection) -> None:
                                              status="draft").exists()
         b.conflict = "TWO_EXPERTS"
         _alert(b, "CONFLICT_TWO_EXPERTS", "Two experts inspected this booking.")
+        events.emit("alert.conflict", booking=str(b.id), booking_id=b.booking_id,
+                    code="CONFLICT_TWO_EXPERTS")
         if not other_started:
             b.withdrawn_expert_id = b.assigned_expert_id
             b.assigned_expert = actor
@@ -202,6 +204,8 @@ def _advance(actor, b: Booking, insp: Inspection) -> None:
         if b.stage == "assigned" and b.released_draft_expected:
             b.conflict = "RELEASED_DRAFT_ARRIVED"
             _alert(b, "RELEASED_DRAFT_ARRIVED", "A force-released draft was submitted.")
+            events.emit("alert.conflict", booking=str(b.id), booking_id=b.booking_id,
+                        code="RELEASED_DRAFT_ARRIVED")
         b.released_draft_expected = False
         changes = {"stage": [b.stage, "submitted"]}
         b.stage = "submitted"

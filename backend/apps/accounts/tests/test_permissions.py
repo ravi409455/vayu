@@ -316,7 +316,10 @@ def test_ops_without_users_manage_cannot_manage_users(api_as, make_user):
 # ------------------------------------------------------ every endpoint declares its permission
 
 PUBLIC_OR_AUTHENTICATED_ONLY = {"HealthView", "LoginView", "DeviceCheckedRefreshView", "MeView",
-                                "LogoutView", "ChangePasswordView", "ZipDownload", "Verify"}
+                                "LogoutView", "ChangePasswordView", "ZipDownload", "Verify",
+                                # API-key views: authorised by the key and its scope
+                                "Bookings", "BookingDetail", "BulkBookings",
+                                "BookingInspection"}
 
 
 def _all_views():

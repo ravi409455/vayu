@@ -31,6 +31,8 @@ INSTALLED_APPS = [
     "apps.scoring",
     "apps.media",
     "apps.reports",
+    "apps.integrations",
+    "drf_spectacular",
 ]
 
 MIDDLEWARE = [
@@ -45,6 +47,8 @@ MIDDLEWARE = [
 ]
 X_FRAME_OPTIONS = "DENY"
 
+TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "APP_DIRS": True,
+              "OPTIONS": {"context_processors": ["django.template.context_processors.request"]}}]
 ROOT_URLCONF = "vayu.urls"
 WSGI_APPLICATION = "vayu.wsgi.application"
 
@@ -78,6 +82,7 @@ REST_FRAMEWORK = {
         "apps.accounts.authentication.DeviceJWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
     # abuse limits per client IP (views opt in with throttle_scope); counters live in Redis so
@@ -107,6 +112,17 @@ PDF_RETRY_DELAY = 15           # seconds between render attempts
 VERIFY_BASE_URL = env("VERIFY_BASE_URL", "https://verify.carcid.in")
 CELERY_TASK_ROUTES = {"apps.reports.tasks.render_report": {"queue": "pdf"}}
 STUCK_UPLOAD_HOURS = int(env("STUCK_UPLOAD_HOURS", "6"))
+
+# Webhooks
+PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", "http://localhost:8000")   # absolute links in payloads
+WEBHOOK_TIMEOUT = 10
+WEBHOOK_RETRY_SECONDS = [60, 300, 1800, 7200, 21600, 43200]     # 1m 5m 30m 2h 6h 12h
+WEBHOOK_ALLOW_HTTP = False         # https only; dev/test may allow plain http
+WEBHOOK_ALLOW_PRIVATE = False      # never call private/loopback/link-local addresses
+WEBHOOK_LINK_DAYS = 7
+CELERY_BEAT_SCHEDULE = {
+    "retry-webhooks": {"task": "apps.integrations.tasks.retry_due", "schedule": 60.0},
+}
 
 CELERY_BROKER_URL = REDIS_URL
 CELERY_TASK_ALWAYS_EAGER = False
@@ -148,3 +164,6 @@ if SENTRY_DSN:
     import sentry_sdk
 
     sentry_sdk.init(dsn=SENTRY_DSN, send_default_pii=False)
+
+SPECTACULAR_SETTINGS = {"TITLE": "Vayu API", "VERSION": "1.0.0", "SERVE_INCLUDE_SCHEMA": False,
+                        "SCHEMA_PATH_PREFIX": "/api/v1"}

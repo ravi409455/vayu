@@ -621,3 +621,10 @@ Replaces "three fixed roles" with an Admin-editable role x permission matrix (RE
 - Upload fixes: booking lock for max count, no new files on closed bookings, parallel `complete`, unreadable images fail cleanly, deleting a file re-checks completion, storage deletes after commit.
 - Login, refresh and the public verify/ZIP links are rate limited per IP (Redis cache; `NUM_PROXIES=1` behind Caddy). Changing a password signs out the other phones.
 - Not changed on purpose: template Preview still renders inside the web request (admin-only); lockout stays per username (a locked message is part of the sign-in UX).
+
+### 2026-11-23 — Phase 9 built (webhooks, API keys, docs)
+- `apps/integrations`: Integration/Delivery/ApiKey; `webhooks.py` (routing, body, sandbox templates, HMAC, SSRF checks, retries), `ext_views.py` (REST API for keys), 100% gate in CI. See `docs/integrations.md`.
+- Retries are driven by the database (`next_retry_at`) and a once-a-minute Celery beat task (new `beat` service in the prod compose), not by Celery countdowns.
+- Push-mode promotion (staging pushes to prod with an API key) is **still deferred**: bundles stay file-based. Not needed for launch.
+- The integration signing secret is stored as plain text (it must be readable to sign). Database access = secret access; acceptable for a single-tenant internal system, revisit with envelope encryption if that changes.
+- The API-key identity is an inactive Admin-role service user: it cannot sign in and does not count as "the last admin".
