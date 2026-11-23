@@ -148,3 +148,28 @@ describe("field types in words", () => {
     expect(onSave.mock.calls[0]![0].config).toEqual({ options: [{ key: "ok", label: "OK" }, { key: "badly_dented", label: "Badly dented", is_defect: true, severity: "major" }], display: "dropdown" });
   });
 });
+
+describe("choice keys stay put once saved", () => {
+  it("renaming a saved choice keeps its key; a new one follows its label", async () => {
+    const { followsLabel } = await import("./pages/admin/FieldEditor");
+    const saved = new Set(["ok"]);
+    expect(followsLabel({ key: "ok", label: "OK" }, saved)).toBe(false);          // saved: never rewritten
+    expect(followsLabel({ key: "", label: "" }, saved)).toBe(true);               // new and empty
+    expect(followsLabel({ key: "badly", label: "Badly" }, saved)).toBe(true);     // new, still following
+    expect(followsLabel({ key: "custom", label: "Badly" }, saved)).toBe(false);   // new, key typed by hand
+  });
+  it("editing the label of a saved choice in the editor does not touch its key", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    const onSave = vi.fn();
+    const f = { id: 1, section: 1, key: "door", label: "Door", helper_text: "", type: "single_choice", required: false, required_if: null, show_if: null,
+      config: { options: [{ key: "ok", label: "OK" }] }, visible: true, order: 0, is_system: false, access: {}, locked: false, library: null };
+    const u = userEvent.setup();
+    render(<FieldEditor field={f as never} choices={[]} lists={[]} categories={[]} onSave={onSave} onDelete={() => {}} readOnly={false} />);
+    await u.clear(screen.getByLabelText("Choice label"));
+    await u.type(screen.getByLabelText("Choice label"), "Fine");
+    await u.click(screen.getByRole("button", { name: "Save field" }));
+    expect(onSave.mock.calls[0]![0].config.options).toEqual([{ key: "ok", label: "Fine" }]);
+  });
+});

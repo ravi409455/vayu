@@ -79,6 +79,7 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
               </Field>
             )}
             {!field.locked && CHOICE_TYPES.includes(field.type) && <OptionsEditor options={(cfg.options as Option[]) ?? []} onChange={(options) => setCfg({ options })}
+              savedKeys={new Set((((field.config as Record<string, unknown>).options as Option[] | undefined) ?? []).map((o) => o.key))}
               display={field.type === "single_choice" ? String(cfg.display ?? "") : null} onDisplay={(display) => setCfg({ display })} />}
             {!locked && field.type === "master_list" && (
               <Field label="List" tip="The master list whose items this field offers (cities, car models...).">
@@ -154,11 +155,14 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
 const OUTCOMES = [
   { id: "fine", label: "Fine" }, { id: "minor", label: "Defect: minor" }, { id: "major", label: "Defect: major" }, { id: "critical", label: "Defect: critical" },
 ] as const;
+/** Only a choice that is not saved yet takes its key from the label; a saved choice keeps its key
+ *  (answers, rules and reports point at it) however its label changes. */
+export const followsLabel = (o: Option, saved: Set<string>) => !saved.has(o.key) && (!o.key || o.key === slugKey(o.label));
 const outcomeOf = (o: Option) => (o.is_defect ? (o.severity ?? "minor") : "fine");
 
 /** The answers people can pick: label, what it means for the rating, the order. The key (used by the
  *  API, rules and reports) follows the label until someone types their own. */
-function OptionsEditor({ options, onChange, display, onDisplay }: { options: Option[]; onChange: (o: Option[]) => void; display: string | null; onDisplay: (d: string) => void }) {
+function OptionsEditor({ options, onChange, display, onDisplay, savedKeys }: { options: Option[]; onChange: (o: Option[]) => void; display: string | null; onDisplay: (d: string) => void; savedKeys: Set<string> }) {
   const set = (i: number, p: Partial<Option>) => onChange(options.map((o, j) => (j === i ? { ...o, ...p } : o)));
   const move = (i: number, by: number) => { const j = i + by; if (j < 0 || j >= options.length) return; const out = [...options]; [out[i], out[j]] = [out[j]!, out[i]!]; onChange(out); };
   const dupes = new Set(options.map((o) => o.key).filter((k, i, a) => k && a.indexOf(k) !== i));
@@ -181,14 +185,16 @@ function OptionsEditor({ options, onChange, display, onDisplay }: { options: Opt
               <div className="opt-main">
                 <span className="opt-dot" aria-hidden="true" />
                 <input aria-label="Choice label" value={o.label} placeholder="What people see"
-                  onChange={(e) => set(i, { label: e.target.value, ...(!o.key || o.key === slugKey(o.label) ? { key: slugKey(e.target.value) } : {}) })} />
+                  onChange={(e) => set(i, { label: e.target.value, ...(followsLabel(o, savedKeys) ? { key: slugKey(e.target.value) } : {}) })} />
                 <select aria-label="What this choice means" value={out} onChange={(e) => {
                   const v = e.target.value;
                   set(i, v === "fine" ? { is_defect: false, severity: null } : { is_defect: true, severity: v });
                 }}>{OUTCOMES.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select>
               </div>
               <div className="opt-sub">
-                <label className="opt-key"><span>key</span><input aria-label="Choice key" className="mono" value={o.key} placeholder="key" onChange={(e) => set(i, { key: e.target.value })} /></label>
+                <label className="opt-key"><span>key</span><input aria-label="Choice key" className="mono" value={o.key} placeholder="key" onChange={(e) => set(i, { key: e.target.value })}
+                  title={savedKeys.has(o.key) ? "Answers already saved use this key: changing it disconnects them" : undefined} /></label>
+                {savedKeys.has(o.key) ? null : o.key && <span className="muted small">new</span>}
                 {dupes.has(o.key) && <span className="error" style={{ margin: 0 }}>used twice</span>}
                 <span className="grow" />
                 <button type="button" className="icon-btn" aria-label={`Move ${o.label || "choice"} up`} disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp size={14} aria-hidden /></button>
