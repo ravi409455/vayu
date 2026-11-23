@@ -5,10 +5,12 @@ import { useList, useRefresh } from "../../api/hooks";
 import type { ApiKeyRow, FormSummary } from "../../api/types";
 import { Field, Modal, Pill, useToast, when } from "../../ui/kit";
 
-/** "*" or "a, b" -> the list the API wants. */
+/** "a, b" -> ["a", "b"]; "*" -> ["*"] (every field, only when typed on purpose);
+ *  empty means no access at all (fail closed). */
 export function parseFields(s: string): string[] {
   const t = s.trim();
-  return t === "" || t === "*" ? ["*"] : t.split(",").map((x) => x.trim()).filter(Boolean);
+  if (t === "*") return ["*"];
+  return t.split(",").map((x) => x.trim()).filter((x) => x && x !== "*");
 }
 
 export function ApiKeys() {
@@ -22,7 +24,10 @@ export function ApiKeys() {
   const save = useMutation({
     mutationFn: (e: NonNullable<typeof edit>) => {
       const forms: Record<string, string[]> = {};
-      for (const [k, v] of Object.entries(e.scope)) if (v !== undefined && v !== "off") forms[k] = parseFields(v);
+      for (const [k, v] of Object.entries(e.scope)) {
+        const fields = parseFields(v);
+        if (fields.length > 0) forms[k] = fields;      // no fields listed = the form is left out
+      }
       const body = { name: e.name, allow_delete: e.allow_delete, scope: { forms } };
       return e.id ? api<ApiKeyRow>(`api-keys/${e.id}`, { method: "PATCH", body }) : api<ApiKeyRow>("api-keys", { body });
     },
@@ -45,12 +50,12 @@ export function ApiKeys() {
               <button className="link" onClick={() => confirm(`Revoke ${k.name}? It stops working immediately.`) && revoke.mutate(k)}>Revoke</button></>}</td></tr>))}</tbody></table>
       {edit && (
         <Modal title={edit.id ? "Edit API key" : "New API key"} onClose={() => setEdit(null)}
-          actions={<><button onClick={() => setEdit(null)}>Cancel</button><button className="primary" disabled={!edit.name || Object.values(edit.scope).every((v) => !v || v === "off")} onClick={() => save.mutate(edit)}>Save</button></>}>
+          actions={<><button onClick={() => setEdit(null)}>Cancel</button><button className="primary" disabled={!edit.name || Object.values(edit.scope).every((v) => parseFields(v).length === 0)} onClick={() => save.mutate(edit)}>Save</button></>}>
           <Field label="Name"><input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Field>
           <h3>Forms and fields</h3>
           <p className="muted small">Type <code>*</code> for every field, or field keys separated by commas. Leave empty for no access.</p>
           {eligible.map((f) => (
-            <Field key={f.id} label={`${f.name} (${f.key})`}><input aria-label={`Fields of ${f.key}`} placeholder="no access" value={edit.scope[f.key] ?? ""} onChange={(e) => setEdit({ ...edit, scope: { ...edit.scope, [f.key]: e.target.value || "off" } })} /></Field>))}
+            <Field key={f.id} label={`${f.name} (${f.key})`}><input aria-label={`Fields of ${f.key}`} placeholder="no access (type * for every field)" value={edit.scope[f.key] ?? ""} onChange={(e) => setEdit({ ...edit, scope: { ...edit.scope, [f.key]: e.target.value } })} /></Field>))}
           <label className="check"><input type="checkbox" checked={edit.allow_delete} onChange={(e) => setEdit({ ...edit, allow_delete: e.target.checked })} /> Allow deleting bookings (audited)</label>
         </Modal>
       )}

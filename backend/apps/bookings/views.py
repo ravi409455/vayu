@@ -136,6 +136,9 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
             "booking": BookingSerializer(Booking.objects.get(pk=b.pk), context=ctx).data,
             "inspection": InspectionSerializer(insp, context=ctx).data,
             "form": submissions.form_for_role(insp.form_version, request.user.role, "in_progress"),
+            # the check-in / wrap-up form (payment, review...) the expert also fills in
+            "ops_form": (submissions.form_for_role(ov, request.user.role, "in_progress")
+                         if (ov := submissions.ops_version()) is not None else None),
             "server_time": timezone.now().isoformat()})
 
     @action(detail=True, methods=["post"])

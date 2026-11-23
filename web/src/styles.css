@@ -27,8 +27,8 @@ button.primary { background: var(--brand); color: var(--brand-ink); border-color
 button.danger { color: var(--bad); border-color: #f1c0bd; } button.link { border: 0; background: none; color: var(--info); padding: 2px 4px; }
 input, select, textarea { font: inherit; padding: 7px 10px; border: 1px solid #cfd4dc; border-radius: 8px; background: #fff; width: 100%; max-width: 100%; }
 textarea { min-height: 84px; resize: vertical; } input[type=checkbox], input[type=radio] { width: auto; }
-label.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-weight: 500; }
-label.field > .help { font-weight: 400; color: var(--muted); font-size: 13px; }
+label.field, div.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-weight: 500; }
+label.field > .help, div.field > .help { font-weight: 400; color: var(--muted); font-size: 13px; }
 label.check { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
 .error { color: var(--bad); font-size: 13px; margin: 4px 0; } .ok { color: var(--ok); }
 table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }

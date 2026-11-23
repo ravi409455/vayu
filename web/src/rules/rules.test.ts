@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Runs the shared cases in /shared/rule-vectors (the Python and Kotlin suites run the same files).
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";

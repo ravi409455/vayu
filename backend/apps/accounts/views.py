@@ -195,7 +195,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
                 raise ValidationError({"actor": "Use a user id."})
             qs = qs.filter(actor_id=p["actor"])
         if p.get("action"):
-            qs = qs.filter(action=p["action"])
+            qs = qs.filter(action__startswith=p["action"])     # "api_key" finds api_key.create too
         if p.get("from"):
             qs = qs.filter(created_at__date__gte=p["from"])
         if p.get("to"):

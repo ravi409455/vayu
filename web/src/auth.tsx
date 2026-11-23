@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api, ApiError, setApiHandlers } from "./api/client";
 import type { Me } from "./api/types";
 
@@ -13,6 +13,12 @@ type Auth = {
   refresh: () => Promise<unknown>;
 };
 const Ctx = createContext<Auth | null>(null);
+
+/** Forget everything cached except the "who am I" query itself (removing that one would leave
+ *  the screens watching a query that no longer exists). */
+function wipe(qc: QueryClient): void {
+  qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "me" });
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
@@ -30,7 +36,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
   useEffect(() => {
-    setApiHandlers({ onUnauthorized: () => qc.setQueryData(["me"], null) });
+    // Whenever the identity changes, nothing cached for the previous person may stay.
+    setApiHandlers({
+      onUnauthorized: () => {
+        // only when someone WAS signed in: the first "who am I" call is allowed to be a 401
+        if (qc.getQueryData(["me"])) { wipe(qc); qc.setQueryData(["me"], null); }
+      },
+    });
   }, [qc]);
   const me = q.data ?? null;
   const scope = useCallback((p: string) => (me ? (me.permissions[p] ?? null) : null), [me]);
@@ -41,15 +53,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       scope,
       can: (p) => scope(p) !== null,
       login: async (username, password) => {
+        wipe(qc);
         await api("auth/login", { body: { username, password, client: "web" } });
         const next = await api<Me>("auth/me");
         qc.setQueryData(["me"], next);
         return next;
       },
       logout: async () => {
-        await api("auth/logout", { method: "POST", body: {} });
-        qc.clear();
-        qc.setQueryData(["me"], null);
+        try {
+          await api("auth/logout", { method: "POST", body: {} });
+        } finally {                       // even if the call fails, this browser forgets the person
+          wipe(qc);
+          qc.setQueryData(["me"], null);
+        }
       },
       refresh: () => qc.invalidateQueries({ queryKey: ["me"] }),
     }),

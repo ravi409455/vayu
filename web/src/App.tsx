@@ -16,6 +16,8 @@ const PdfDesigner = lazy(() => import("./pages/admin/PdfDesigner").then((m) => (
 const Integrations = lazy(() => import("./pages/admin/Integrations").then((m) => ({ default: m.Integrations })));
 const ApiKeys = lazy(() => import("./pages/admin/ApiKeys").then((m) => ({ default: m.ApiKeys })));
 const Promote = lazy(() => import("./pages/admin/Promote").then((m) => ({ default: m.Promote })));
+const MyJobs = lazy(() => import("./pages/expert/MyJobs").then((m) => ({ default: m.MyJobs })));
+const Job = lazy(() => import("./pages/expert/Job").then((m) => ({ default: m.Job })));
 const FormBuilder = lazy(() => import("./pages/admin/FormBuilder").then((m) => ({ default: m.FormBuilder })));
 
 function Home() {
@@ -31,6 +33,8 @@ export function App() {
         <Route path="/change-password" element={<RequireAuth><ChangePassword /></RequireAuth>} />
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
           <Route path="/" element={<Home />} />
+          <Route path="/jobs" element={<RequireAuth perm="submissions.fill"><MyJobs /></RequireAuth>} />
+          <Route path="/jobs/:id" element={<RequireAuth perm="submissions.fill"><Job /></RequireAuth>} />
           <Route path="/users" element={<RequireAuth perm="users.view"><Users /></RequireAuth>} />
           <Route path="/roles" element={<RequireAuth perm="roles.manage"><Roles /></RequireAuth>} />
           <Route path="/lists" element={<RequireAuth perm="forms.view"><MasterLists /></RequireAuth>} />

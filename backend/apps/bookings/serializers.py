@@ -23,7 +23,7 @@ class BookingSerializer(serializers.ModelSerializer):
         fields = ["id", "booking_id", "stage", "ops_status", "inspection_type", "assigned_expert",
                   "answers", "row_version", "started_at", "cancel_reason", "released_by",
                   "released_draft_expected", "last_edited_by", "last_edited_at", "reschedules",
-                  "created_at"]
+                  "created_at", "conflict", "alerts", "withdrawn_expert"]
 
 
     def to_representation(self, instance):

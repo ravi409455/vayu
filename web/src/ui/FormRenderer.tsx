@@ -1,0 +1,202 @@
+import { useRef, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../api/client";
+import { asList } from "../api/hooks";
+import type { FormField, FormPage, FormVersion, MasterListItem, Option, User } from "../api/types";
+import { addFile, useUploads } from "../lib/uploadManager";
+import { evaluateTree, type Answers, type Ctx, type Kind } from "../lib/formSpec";
+import { Field } from "./kit";
+
+export type RenderProps = {
+  kind: Kind;
+  tree: Pick<FormVersion, "pages" | "checks">;
+  values: Answers;
+  ctx?: Ctx;
+  onChange: (key: string, value: unknown) => void;
+  errors?: Record<string, string>;
+  readOnly?: boolean;
+  role?: string;
+  bookingId?: string;                 // needed for photo / video / file fields
+  pages?: FormPage[];                 // render only these pages (the wizard shows one at a time)
+  mediaUrl?: (id: string) => Promise<{ url: string; preview_url: string | null } | null>;
+  onMediaRemove?: (field: FormField, id: string) => void;
+};
+
+/** Draws a form tree: only what is visible, with the right input for each type, and the
+ *  access level the server assigned (view = read-only). Ratings and Key Checks never show to experts. */
+export function FormRenderer(p: RenderProps) {
+  const result = evaluateTree(p.kind, p.tree, p.values, p.ctx);
+  const pages = p.pages ?? p.tree.pages;
+  return (
+    <div>
+      {pages.map((page) => (
+        <div key={page.id}>
+          {p.pages === undefined && <h2>{page.title}</h2>}
+          {page.sections.map((s) => {
+            const fields = s.fields.filter((f) => result.visible[f.key] && !(p.role === "expert" && (f.type === "derived" || f.type === "rating")));
+            if (fields.length === 0) return null;
+            return (
+              <section className="card" key={s.id} aria-label={s.title}>
+                <h3 style={{ marginTop: 0 }}>{s.title}</h3>
+                {fields.map((f) => (
+                  <FieldInput key={f.id} f={f} value={p.values[f.key]} derived={result.derived[f.key]} required={!!result.required[f.key]}
+                    error={p.errors?.[f.key]} readOnly={p.readOnly || f.level === "view" || f.type === "derived" || f.type === "rating"}
+                    onChange={(v) => p.onChange(f.key, v)} p={p} />
+                ))}
+              </section>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FieldInput({ f, value, derived, required, error, readOnly, onChange, p }: {
+  f: FormField; value: unknown; derived: unknown; required: boolean; error?: string; readOnly: boolean; onChange: (v: unknown) => void; p: RenderProps;
+}) {
+  const label = `${f.label || f.key}${required ? " *" : ""}`;
+  const err = error === "required" ? "This is needed." : error;
+  const common = { disabled: readOnly, "aria-label": f.label || f.key };
+  const str = (value ?? "") as string | number;
+  let input: ReactNode;
+  switch (f.type) {
+    case "long_text": input = <textarea {...common} value={String(str)} onChange={(e) => onChange(e.target.value)} />; break;
+    case "number": case "currency":
+      input = <input {...common} type="number" inputMode="decimal" value={String(str)} placeholder={f.type === "currency" ? "₹" : String(f.config.unit ?? "")}
+        onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))} />; break;
+    case "phone": input = <input {...common} type="tel" value={String(str)} onChange={(e) => onChange(e.target.value)} />; break;
+    case "date": input = <input {...common} type="date" value={String(str)} onChange={(e) => onChange(e.target.value)} />; break;
+    case "time": input = <input {...common} type="time" value={String(str)} onChange={(e) => onChange(e.target.value)} />; break;
+    case "datetime": input = <input {...common} type="datetime-local" value={String(str).slice(0, 16)} onChange={(e) => onChange(e.target.value)} />; break;
+    case "yes_no":
+      input = <Choices name={f.key} disabled={readOnly} label={f.label} value={value === true ? "yes" : value === false ? "no" : ""} options={[{ key: "yes", label: "Yes" }, { key: "no", label: "No" }]} onChange={(k) => onChange(k === "yes")} />; break;
+    case "single_choice": {
+      const opts = (f.config.options as Option[]) ?? [];
+      input = f.config.display === "dropdown" || opts.length > 5
+        ? <select {...common} value={String(str)} onChange={(e) => onChange(e.target.value || null)}><option value="">Choose…</option>{opts.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select>
+        : <Choices name={f.key} disabled={readOnly} label={f.label} value={String(str)} options={opts} onChange={(k) => onChange(value === k ? null : k)} />;
+      break;
+    }
+    case "multi_choice": {
+      const opts = (f.config.options as Option[]) ?? [];
+      const chosen = Array.isArray(value) ? (value as string[]) : [];
+      input = <div role="group" aria-label={f.label}>{opts.map((o) => (
+        <label className="check" key={o.key}><input type="checkbox" disabled={readOnly} checked={chosen.includes(o.key)}
+          onChange={(e) => onChange(e.target.checked ? [...chosen, o.key] : chosen.filter((x) => x !== o.key))} /> {o.label}</label>))}</div>;
+      break;
+    }
+    case "master_list": input = <ListSelect list={String(f.config.list ?? "")} value={String(str)} disabled={readOnly} label={f.label} onChange={(v) => onChange(v || null)} />; break;
+    case "user_picker": input = <UserSelect role={String(f.config.role ?? "expert")} value={value as number | null} disabled={readOnly} label={f.label} onChange={onChange} />; break;
+    case "gps": input = <Gps value={value as { lat: number; lng: number } | undefined} disabled={readOnly} onChange={onChange} />; break;
+    case "photo": case "video": case "file": case "signature":
+      input = <MediaField f={f} value={value} readOnly={readOnly} onChange={onChange} p={p} />; break;
+    case "derived":
+      input = <p><strong>{derived === true ? String(f.config.true_label ?? "Yes") : String(f.config.false_label ?? "No")}</strong></p>; break;
+    case "rating": input = <p className="muted">Calculated from the defects found.</p>; break;
+    default: input = <input {...common} value={String(str)} onChange={(e) => onChange(e.target.value)} />;
+  }
+  return <Field bare label={label} help={f.helper_text || undefined} error={err}>{input}</Field>;
+}
+
+function Choices({ name, options, value, onChange, disabled, label }: { name: string; options: { key: string; label: string }[]; value: string; onChange: (k: string) => void; disabled: boolean; label: string }) {
+  return (
+    <div role="radiogroup" aria-label={label} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {options.map((o) => (
+        <button type="button" key={o.key} role="radio" aria-checked={value === o.key} disabled={disabled} name={name}
+          className={value === o.key ? "primary" : ""} onClick={() => onChange(o.key)}>{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
+function ListSelect({ list, value, onChange, disabled, label }: { list: string; value: string; onChange: (v: string) => void; disabled: boolean; label: string }) {
+  const q = useQuery({ queryKey: ["list-items", list], enabled: !!list, staleTime: 300_000, queryFn: async () => asList<MasterListItem>(await api(`master-lists/${list}/items`)) });
+  const items = (q.data ?? []).filter((i) => !i.archived || i.key === value);
+  return <select aria-label={label} disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Choose…</option>{items.map((i) => <option key={i.key} value={i.key}>{i.label}</option>)}</select>;
+}
+
+function UserSelect({ role, value, onChange, disabled, label }: { role: string; value: number | null | undefined; onChange: (v: unknown) => void; disabled: boolean; label: string }) {
+  const q = useQuery({ queryKey: ["users-by-role", role], retry: false, staleTime: 300_000, queryFn: async () => asList<User>(await api("users", { query: { role } })) });
+  if (q.isError) return <input aria-label={label} disabled value={value ?? ""} readOnly />;
+  return <select aria-label={label} disabled={disabled} value={value ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
+    <option value="">Choose…</option>{(q.data ?? []).filter((u) => u.is_active).map((u) => <option key={u.id} value={u.id}>{u.name || u.username}</option>)}</select>;
+}
+
+/** Browser location. If it is refused or unavailable the field just says so: it never blocks the job. */
+function Gps({ value, onChange, disabled }: { value?: { lat: number; lng: number; accuracy?: number }; onChange: (v: unknown) => void; disabled: boolean }) {
+  const [state, setState] = useState<"idle" | "busy" | "unavailable">("idle");
+  function capture() {
+    if (!("geolocation" in navigator)) return setState("unavailable");
+    setState("busy");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setState("idle"); onChange({ lat: +pos.coords.latitude.toFixed(6), lng: +pos.coords.longitude.toFixed(6), accuracy: Math.round(pos.coords.accuracy) }); },
+      () => setState("unavailable"), { enableHighAccuracy: true, timeout: 10_000 });
+  }
+  return (
+    <div>
+      {value ? <p className="ok" data-testid="gps-value">📍 {value.lat}, {value.lng}</p> : state === "unavailable" ? <p className="muted" role="status">GPS unavailable</p> : null}
+      {!disabled && <button type="button" onClick={capture} disabled={state === "busy"}>{value ? "Capture again" : state === "busy" ? "Finding you…" : "Capture my location"}</button>}
+    </div>
+  );
+}
+
+function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: unknown; readOnly: boolean; onChange: (v: unknown) => void; p: RenderProps }) {
+  const single = f.type === "signature";
+  const ids = (single ? (value ? [String(value)] : []) : Array.isArray(value) ? (value as string[]) : []);
+  const max = single ? 1 : Number(f.config.max_count ?? (f.type === "video" ? 3 : 10));
+  const uploads = useUploads(p.bookingId);
+  const input = useRef<HTMLInputElement>(null);
+  const cam = useRef<HTMLInputElement>(null);
+  const [err, setErr] = useState("");
+  const accept = f.type === "photo" || f.type === "signature" ? "image/*" : f.type === "video" ? "video/*" : "image/*,application/pdf";
+
+  async function pick(files: FileList | null, source: "camera" | "gallery") {
+    if (!files || !p.bookingId) return;
+    setErr("");
+    let next = [...ids];
+    for (const file of Array.from(files).slice(0, Math.max(0, max - ids.length))) {
+      try {
+        const id = await addFile({ bookingId: p.bookingId, fieldKey: f.key, kind: f.type as "photo", file, name: file.name, source });
+        next = single ? [id] : [...next, id];
+        onChange(single ? id : next);
+      } catch { setErr("That file could not be added. Check its type and size, then try again."); }
+    }
+  }
+  const mine = new Map(uploads.map((u) => [u.assetId, u]));
+  return (
+    <div>
+      <div className="photo-grid">
+        {ids.map((id) => {
+          const u = mine.get(id);
+          return (
+            <div key={id} data-testid="media-item" style={{ position: "relative" }}>
+              {u?.preview ? <img src={u.preview} alt="" /> : <RemoteThumb id={id} kind={f.type} mediaUrl={p.mediaUrl} />}
+              {u && u.status !== "done" && <div className="progress" aria-label={`Upload ${u.status}`}><div style={{ width: `${Math.round(u.progress * 100)}%` }} /></div>}
+              {u?.status === "failed" && <span className="error small">Will retry</span>}
+              {!readOnly && <button type="button" className="link" aria-label="Remove" onClick={() => { const rest = ids.filter((x) => x !== id); onChange(single ? null : rest); p.onMediaRemove?.(f, id); }}>Remove</button>}
+            </div>
+          );
+        })}
+      </div>
+      {!readOnly && ids.length < max && (
+        <div className="bar" style={{ marginTop: 8 }}>
+          {(f.type === "photo" || f.type === "video" || f.type === "signature") && (
+            <button type="button" onClick={() => cam.current?.click()}>{f.type === "video" ? "Record" : "Take photo"}</button>)}
+          <button type="button" onClick={() => input.current?.click()}>{f.type === "file" ? "Add file" : "Choose from device"}</button>
+          <span className="muted small">{ids.length}/{max}</span>
+          <input ref={cam} type="file" hidden accept={accept} capture="environment" data-testid={`camera-${f.key}`} onChange={(e) => { void pick(e.target.files, "camera"); e.target.value = ""; }} />
+          <input ref={input} type="file" hidden multiple={!single} accept={accept} data-testid={`file-${f.key}`} onChange={(e) => { void pick(e.target.files, "gallery"); e.target.value = ""; }} />
+        </div>
+      )}
+      {err && <p className="error" role="alert">{err}</p>}
+    </div>
+  );
+}
+
+function RemoteThumb({ id, kind, mediaUrl }: { id: string; kind: string; mediaUrl?: RenderProps["mediaUrl"] }) {
+  const q = useQuery({ queryKey: ["media-url", id], enabled: !!mediaUrl, staleTime: 600_000, queryFn: () => mediaUrl!(id) });
+  const u = q.data?.preview_url ?? q.data?.url;
+  if (!u) return <div style={{ aspectRatio: "4/3", background: "#eee", borderRadius: 8 }} aria-label="Preview not ready" />;
+  return kind === "video" ? <video src={q.data!.url} controls preload="metadata" /> : <img src={u} alt="" />;
+}

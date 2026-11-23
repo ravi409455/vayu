@@ -43,15 +43,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function Field({ label, help, error, children }: { label: string; help?: string; error?: string; children: ReactNode }) {
-  return (
-    <label className="field">
+/** A labelled input. `bare` uses a plain box instead of a <label> wrapper: needed when the
+ *  content has its own buttons (a label would swallow their accessible names). */
+export function Field({ label, help, error, children, bare }: { label: string; help?: string; error?: string; children: ReactNode; bare?: boolean }) {
+  const body = (
+    <>
       <span>{label}</span>
       {children}
       {help && <span className="help">{help}</span>}
-      {error && <span className="error">{error}</span>}
-    </label>
+      {error && <span className="error" role="alert">{error}</span>}
+    </>
   );
+  return bare ? <div className="field">{body}</div> : <label className="field">{body}</label>;
 }
 
 export function Pill({ children, tone }: { children: ReactNode; tone?: "ok" | "warn" | "bad" | "info" }) {

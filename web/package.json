@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@noble/hashes": "^1.8.0",
     "@tanstack/react-query": "^5.108.3",
     "json-logic-js": "2.0.5",
     "react": "^18.3.1",

@@ -229,7 +229,7 @@ function Checks({ version, choices, edit, run }: { version: FormVersion; choices
   );
 }
 
-const DEFAULT_RATING: RatingConfig = { categories: [], deductions: { minor: 0.25, major: 1, critical: 3 }, thresholds: { Excellent: 4.5, Good: 3.5, Average: 2.5 } };
+const DEFAULT_RATING: RatingConfig = { categories: [], deductions: { minor: 0.25, major: 1, critical: 3 }, thresholds: { excellent: 4.5, good: 3.5, average: 2.5 } };
 
 function Ratings({ version, sections, edit, run }: { version: FormVersion; sections: string[]; edit: boolean; run: (fn: () => Promise<unknown>) => void }) {
   const [cfg, setCfg] = useState<RatingConfig>({ ...DEFAULT_RATING, ...(version.rating_config ?? {}) });
@@ -259,7 +259,7 @@ function Ratings({ version, sections, edit, run }: { version: FormVersion; secti
       <h3>Overall word cut-offs (average at least…)</h3>
       <div className="grid2">
         {Object.entries(cfg.thresholds ?? {}).map(([w, n]) => (
-          <Field key={w} label={w}><input type="number" step="0.1" disabled={!edit} value={n} onChange={(e) => setCfg({ ...cfg, thresholds: { ...cfg.thresholds, [w]: Number(e.target.value) } })} /></Field>))}
+          <Field key={w} label={w[0]!.toUpperCase() + w.slice(1)}><input type="number" step="0.1" disabled={!edit} value={n} onChange={(e) => setCfg({ ...cfg, thresholds: { ...cfg.thresholds, [w]: Number(e.target.value) } })} /></Field>))}
       </div>
       {edit && <button className="primary" style={{ marginTop: 10 }} onClick={() => run(() => api(`form-versions/${version.id}/rating-config`, { method: "PATCH", body: { config: cfg } }))}>Save ratings</button>}
     </>

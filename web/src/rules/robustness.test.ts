@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Rules must never throw: odd data gives a falsy result (mirrors test_rule_robustness.py).
 import { describe, expect, it } from "vitest";
 import { evaluate, truthy } from "./rules";
