@@ -1,9 +1,11 @@
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import perm, scope_for
@@ -131,7 +133,9 @@ class Problems(APIView):
     permission_classes = [perm("reports.view")]
 
     def get(self, request):
-        qs = Report.objects.filter(status="failed") | Report.objects.filter(stale=True)
+        killed = timezone.now() - tasks.STUCK_AFTER       # a render that never finished
+        qs = (Report.objects.filter(status="failed") | Report.objects.filter(stale=True)
+              | Report.objects.filter(render_started_at__lt=killed))
         if scope_for(request.user, "reports.view", request) == "own":
             qs = qs.filter(booking__in=Booking.objects.filter(own_filter(request.user)))
         return Response([{"booking": str(r.booking_id), "booking_id": r.booking.booking_id,
@@ -145,6 +149,8 @@ class Verify(APIView):
 
     authentication_classes: list = []
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "public"
 
     def get(self, request, token):
         r = Report.objects.filter(token=token, status="ready").select_related("booking").first()

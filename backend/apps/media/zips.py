@@ -33,12 +33,15 @@ def fresh(z: MediaZip) -> bool:
     return (timezone.now() - z.created_at).days < settings.ZIP_LINK_DAYS
 
 
-def request_zip(booking, kind: str) -> MediaZip:
-    """The cached ZIP if there is a fresh one, else start building."""
-    z = MediaZip.objects.filter(booking=booking, kind=kind).order_by("-created_at").first()
+def request_zip(booking, kind: str, excluded: list[str] | None = None) -> MediaZip:
+    """The cached ZIP if there is a fresh one with the same left-out fields, else start building.
+    Fields the requester may not see never go into their ZIP."""
+    excluded = sorted(excluded or [])
+    z = MediaZip.objects.filter(booking=booking, kind=kind,
+                                excluded=excluded).order_by("-created_at").first()
     if z is not None and z.status != "failed" and fresh(z):
         return z
-    z = MediaZip.objects.create(booking=booking, kind=kind)
+    z = MediaZip.objects.create(booking=booking, kind=kind, excluded=excluded)
     build_zip.delay(str(z.id))
     z.refresh_from_db()
     return z
@@ -48,7 +51,8 @@ def request_zip(booking, kind: str) -> MediaZip:
 def build_zip(zip_id: str) -> None:
     z = MediaZip.objects.select_related("booking").get(pk=zip_id)
     assets = list(MediaAsset.objects.filter(booking=z.booking, status="verified",
-                                            kind__in=KIND_TYPES[z.kind]).order_by("created_at"))
+                                            kind__in=KIND_TYPES[z.kind])
+                  .exclude(field_key__in=z.excluded).order_by("created_at"))
     if not assets:
         z.status = "failed"
         z.save()

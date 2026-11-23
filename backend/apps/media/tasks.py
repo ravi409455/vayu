@@ -43,12 +43,18 @@ def verify_asset(asset_id: str) -> str:
         asset.save()
         return "failed"
     if asset.kind in ("photo", "signature") and asset.content_type != "image/heic":
-        image = Image.open(io.BytesIO(storage.read(asset.key)))
-        if max(image.size) > MAX_EDGE:    # keep the stored copy at most 2048 px on the long edge
-            storage.put(asset.key, _jpeg(_shrink(image, MAX_EDGE), 85), "image/jpeg")
-            asset.content_type = "image/jpeg"
-        asset.preview_key = f"previews/{asset.id}.jpg"
-        storage.put(asset.preview_key, _jpeg(_shrink(image, PREVIEW_EDGE), 75), "image/jpeg")
+        try:
+            image = Image.open(io.BytesIO(storage.read(asset.key)))
+            if max(image.size) > MAX_EDGE:  # keep the stored copy at most 2048 px on the long edge
+                storage.put(asset.key, _jpeg(_shrink(image, MAX_EDGE), 85), "image/jpeg")
+                asset.content_type = "image/jpeg"
+            asset.preview_key = f"previews/{asset.id}.jpg"
+            storage.put(asset.preview_key, _jpeg(_shrink(image, PREVIEW_EDGE), 75), "image/jpeg")
+        except (OSError, ValueError, Image.DecompressionBombError):   # not a readable image
+            storage.delete(asset.key)
+            asset.status = "failed"
+            asset.save()
+            return "failed"
     asset.status, asset.verified_at = "verified", timezone.now()
     asset.save()
     check_completion(asset.booking_id)

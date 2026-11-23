@@ -59,6 +59,8 @@ DATABASES = {
     }
 }
 REDIS_URL = env("REDIS_URL")
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache",
+                      "LOCATION": REDIS_URL}}
 
 AUTH_USER_MODEL = "accounts.User"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -66,12 +68,21 @@ TIME_ZONE = "Asia/Kolkata"
 USE_TZ = True
 
 REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "apps.core.exceptions.handler",
+    "DEFAULT_PARSER_CLASSES": [
+        "apps.core.exceptions.ObjectJSONParser",
+        "rest_framework.parsers.FormParser",
+        "rest_framework.parsers.MultiPartParser",
+    ],
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "apps.accounts.authentication.DeviceJWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
+    # abuse limits per client IP (views opt in with throttle_scope); counters live in Redis so
+    # every gunicorn worker shares them
+    "DEFAULT_THROTTLE_RATES": {"login": "20/min", "public": "60/min"},
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
         "apps.accounts.permissions.PasswordChangeNotRequired",

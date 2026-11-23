@@ -261,7 +261,10 @@ def test_kind_and_inspection_type_conflicts(admin, staging):
 def test_bad_bundles_are_rejected(admin, staging, mutate, status):
     bundle = export(admin, staging["version"])
     r = admin.post("/api/v1/promote/import", mutate(bundle), format="json")
-    assert r.status_code == status and r.json()["code"] in ("INVALID_BUNDLE", "BUNDLE_TOO_NEW")
+    # a bare list never reaches the view: the JSON parser refuses it (still a 400)
+    assert r.status_code == status
+    assert isinstance(mutate(bundle), list) or r.json()["code"] in ("INVALID_BUNDLE",
+                                                                    "BUNDLE_TOO_NEW")
 
 
 def test_a_bundle_from_a_newer_server_is_refused_with_a_clear_code(admin, staging):

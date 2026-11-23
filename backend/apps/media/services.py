@@ -3,7 +3,9 @@ import math
 import uuid
 from datetime import timedelta
 
+from botocore.exceptions import ClientError
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts.permissions import scope_for
@@ -11,6 +13,8 @@ from apps.bookings.models import Booking, Inspection
 from apps.bookings.services import err
 from apps.bookings.submissions import inspection_version, ops_version, own_filter
 from apps.core import events
+from apps.core import tasks as core_tasks
+from apps.forms.access import levels_for
 from apps.forms.fieldtypes import DEFAULT_MAX_COUNT
 from apps.forms.models import Field
 
@@ -63,6 +67,21 @@ def field_for(booking: Booking, field_key: str) -> Field:
     raise err("UNKNOWN_FIELD", f"'{field_key}' is not a field of this inspection.")
 
 
+def hidden_fields(user, booking: Booking) -> set[str]:
+    """Media field keys this user may not see at the booking's current stage (an expert's own
+    form too: Ops-only photo fields stay Ops-only)."""
+    if user.role == "admin":
+        return set()
+    insp = booking.inspections.order_by("-created_at").first()
+    versions = [insp.form_version if insp else None, ops_version()]
+    out: set[str] = set()
+    for v in versions:
+        if v is not None:
+            out |= {k for k, level in levels_for(v, user.role, booking.stage).items()
+                    if level == "hidden"}
+    return out
+
+
 def _urls(asset: MediaAsset) -> list[dict]:
     parts = math.ceil(asset.size / settings.MEDIA_PART_SIZE)
     return [{"part_number": n, "url": storage.presign_part(asset.key, asset.upload_id, n)}
@@ -111,20 +130,25 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
             existing.sha256, existing.size = sha, size
             existing.save()
         return _body(existing, existing.status == "pending"), False
+    if booking.stage == "cancelled" or (
+            booking.stage == "completed" and scope_for(user, "media.manage", request) is None):
+        raise err("BOOKING_CLOSED", f"A {booking.stage} booking takes no new files.", 409)
     field = field_for(booking, data.get("field_key", ""))
     if field.type != kind:
         raise err("WRONG_KIND", f"'{field.key}' takes {field.type}, not {kind}.")
     limit_count = field.config.get("max_count", DEFAULT_MAX_COUNT.get(kind, 1))
     if kind == "signature":
         limit_count = 1
-    if MediaAsset.objects.filter(booking=booking, field_key=field.key).count() >= limit_count:
-        raise err("TOO_MANY", f"'{field.key}' takes at most {limit_count}.", 409)
-    asset = MediaAsset(client_uuid=client_uuid, booking=booking, uploaded_by=user,
-                       field_key=field.key, kind=kind, content_type=ctype, size=size, sha256=sha,
-                       source=source)
-    asset.key = f"bookings/{booking.id}/{asset.id}"
-    asset.upload_id = storage.create_multipart(asset.key, ctype)
-    asset.save()
+    with transaction.atomic():
+        Booking.objects.select_for_update().get(pk=booking.pk)   # two uploads must not both fit
+        if MediaAsset.objects.filter(booking=booking, field_key=field.key).count() >= limit_count:
+            raise err("TOO_MANY", f"'{field.key}' takes at most {limit_count}.", 409)
+        asset = MediaAsset(client_uuid=client_uuid, booking=booking, uploaded_by=user,
+                           field_key=field.key, kind=kind, content_type=ctype, size=size,
+                           sha256=sha, source=source)
+        asset.key = f"bookings/{booking.id}/{asset.id}"
+        asset.upload_id = storage.create_multipart(asset.key, ctype)
+        asset.save()
     return _body(asset, True), True
 
 
@@ -147,7 +171,15 @@ def complete(asset: MediaAsset, parts: list[dict]) -> MediaAsset:
     missing = [n for n in wanted if n not in have]
     if missing or {p["part_number"]: p["etag"] for p in parts} != have:
         raise err("INCOMPLETE_UPLOAD", "Some parts are missing or do not match.", missing=missing)
-    storage.complete_multipart(asset.key, asset.upload_id, parts)
+    try:
+        storage.complete_multipart(asset.key, asset.upload_id, parts)
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") != "NoSuchUpload":
+            raise
+        asset.refresh_from_db()          # a parallel request finished it first
+        if asset.status in ("uploaded", "verified"):
+            return asset
+        raise err("NOT_UPLOADING", "Start the upload again.", 409) from e
     asset.upload_id, asset.status = "", "uploaded"
     asset.save()
     verify_asset.delay(str(asset.id))
@@ -197,8 +229,6 @@ def expected_media(inspection: Inspection) -> set[str]:
 
 def check_completion(booking_id) -> bool:
     """Submitted -> Completed once every referenced file is verified. Exactly once."""
-    from django.db import transaction
-
     with transaction.atomic():
         b = Booking.objects.select_for_update().get(pk=booking_id)
         if b.stage != "submitted":
@@ -223,8 +253,6 @@ def check_completion(booking_id) -> bool:
 
 def delete_asset(actor, asset: MediaAsset) -> None:
     """Ops remove a file after submission: the object, its preview, its reference in the answers."""
-    from django.db import transaction
-
     from apps.scoring import service as scoring
 
     with transaction.atomic():
@@ -250,13 +278,18 @@ def delete_asset(actor, asset: MediaAsset) -> None:
                 insp.save()
                 scoring.recompute(insp)
         MediaZip.objects.filter(booking=asset.booking).delete()   # cached ZIPs no longer match
-        for key in (asset.key, asset.preview_key):
-            if key:
-                storage.delete(key)
-        if asset.upload_id:
-            storage.abort_multipart(asset.key, asset.upload_id)
+        keys, upload = [k for k in (asset.key, asset.preview_key) if k], asset.upload_id
         asset.delete()
+
+        def clean_storage():                  # only once the database change is really saved
+            for key in keys:
+                storage.delete(key)
+            if upload:
+                storage.abort_multipart(asset.key, upload)
+
+        core_tasks.after_commit(clean_storage)
     events.emit("media.deleted", booking=str(asset.booking_id), field_key=asset.field_key)
+    check_completion(asset.booking_id)        # the removed file may have been the one holding it up
 
 
 def stuck_uploads(hours: int | None = None):

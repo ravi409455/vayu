@@ -50,6 +50,8 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         for param, column in (("stage", "stage"), ("type", "inspection_type"), ("city", "city"),
                               ("expert", "assigned_expert_id")):
             if p.get(param):
+                if param == "expert" and not p[param].isdigit():
+                    raise ValidationError({param: "Use a user id."})
                 qs = qs.filter(**{column: p[param]})
         for param, lookup in (("date_from", "inspection_date__gte"),
                               ("date_to", "inspection_date__lte")):

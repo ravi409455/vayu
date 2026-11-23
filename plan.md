@@ -612,3 +612,12 @@ Replaces "three fixed roles" with an Admin-editable role x permission matrix (RE
 - **Phase 8 scope trimmed:** promotion is file-based (export a bundle on staging, import it as a draft on production). The "staging pushes to prod with an Admin API key" mode needs API keys, so it moves to Phase 9.
 - **Behaviour to know:** a submission with no media goes straight to Completed; Completed triggers the PDF on a one-at-a-time queue.
 - **Review fixes:** scores follow field access; experts never get the rating config; PDF failures store only a reason code (details go to logs); template previews need `reports.view`; the Phase 6 commit's automated review did not complete (HTTP 429) and has no result.
+
+### 2026-11-23 — Whole-code review fixes (before Phase 9)
+- PDF job and any other background work started by an event now waits for the database commit (`apps/core/tasks.after_commit`). **Phase 9 webhooks must deliver through `after_commit` too.**
+- Media links and ZIPs follow field access (a hidden field is a 404; ZIPs are cached per hidden-field set).
+- One JSON-object parser and one exception handler turn odd input into 400s; ids in filters are checked.
+- Rendering: limits 300/330 s, one render per booking at a time, killed renders listed under problems; an edit during a render keeps the PDF "stale".
+- Upload fixes: booking lock for max count, no new files on closed bookings, parallel `complete`, unreadable images fail cleanly, deleting a file re-checks completion, storage deletes after commit.
+- Login, refresh and the public verify/ZIP links are rate limited per IP (Redis cache; `NUM_PROXIES=1` behind Caddy). Changing a password signs out the other phones.
+- Not changed on purpose: template Preview still renders inside the web request (admin-only); lockout stays per username (a locked message is part of the sign-in UX).

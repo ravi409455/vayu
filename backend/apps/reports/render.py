@@ -104,8 +104,8 @@ def render_html(blocks: list[dict], definition: dict, *, booking_id: str, revisi
             f'<div id="header" style="background:{color}">{e(title)} &nbsp; <small>{e(booking_id)}'
             f'</small></div><div id="stampbox">Generated {e(stamp)}, rev {revision}</div>{mark}'
             + "".join(block_html(b) for b in blocks)
-            + f'<div style="margin-top:12px"><img src="{qr}" width="70"> <small>Verify this report: '
-            f'{e(settings.VERIFY_BASE_URL)}/{e(token)}</small></div></body></html>')
+            + f'<div style="margin-top:12px"><img src="{qr}" width="70"> <small style="font-size:8pt;white-space:nowrap">'
+            f'Verify this report: {e(settings.VERIFY_BASE_URL)}/{e(token)}</small></div></body></html>')
 
 
 def render_pdf(html_text: str) -> bytes:

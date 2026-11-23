@@ -9,6 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -31,6 +32,8 @@ from .serializers import (
 class LoginView(APIView):
     authentication_classes: list = []
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
 
     def post(self, request):
         s = LoginSerializer(data=request.data)
@@ -48,6 +51,8 @@ class LoginView(APIView):
 
 
 class DeviceCheckedRefreshView(TokenRefreshView):
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
     serializer_class = DeviceCheckedRefreshSerializer
 
 
@@ -86,6 +91,11 @@ class ChangePasswordView(APIView):
         user.set_password(s.validated_data["new_password"])
         user.must_change_password = False
         user.save(update_fields=["password", "must_change_password"])
+        # a changed password signs out every other phone (this one keeps working)
+        others = Device.objects.filter(user=user, revoked_at__isnull=True)
+        if hasattr(request.auth, "get") and request.auth.get("device_id"):
+            others = others.exclude(pk=request.auth.get("device_id"))
+        others.update(revoked_at=timezone.now())
         if request._request.user.is_authenticated:  # keep the web session alive
             update_session_auth_hash(request._request, user)
         return Response({"detail": "Password changed."})
@@ -181,6 +191,8 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
         p = self.request.query_params
         qs = AuditLog.objects.select_related("actor").order_by("-created_at", "-id")
         if p.get("actor"):
+            if not p["actor"].isdigit():
+                raise ValidationError({"actor": "Use a user id."})
             qs = qs.filter(actor_id=p["actor"])
         if p.get("action"):
             qs = qs.filter(action=p["action"])

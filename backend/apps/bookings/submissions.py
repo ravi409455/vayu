@@ -61,6 +61,14 @@ def form_for_role(version: FormVersion, role: str, stage: str) -> dict:
     return tree
 
 
+def check_shape(answers) -> None:
+    """answers must be {"inspection": {...}, "ops": {...}} (either part optional)."""
+    if not isinstance(answers, dict) or any(
+            answers.get(k) is not None and not isinstance(answers[k], dict)
+            for k in ("inspection", "ops")):
+        raise err("INVALID_ANSWERS", "answers must look like {inspection: {...}, ops: {...}}.")
+
+
 def _alert(b: Booking, code: str, detail: str) -> None:
     b.alerts = [*b.alerts, {"code": code, "detail": detail, "at": timezone.now().isoformat()}]
 
@@ -137,6 +145,7 @@ def _locked_keys(role: str, stage: str, version, ops_v, answers: dict, old: dict
 
 @transaction.atomic
 def submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id=None):
+    check_shape(answers)
     b = _lock(b)
     done = Inspection.objects.filter(client_submission_uuid=submission_uuid).first()
     if done is not None:
@@ -202,6 +211,7 @@ def _advance(actor, b: Booking, insp: Inspection) -> None:
 
 @transaction.atomic
 def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) -> Inspection:
+    check_shape(answers)
     insp = Inspection.objects.select_for_update().get(pk=insp.pk)
     if row_version != insp.row_version:
         raise err("STALE_INSPECTION", "Someone changed this inspection since you opened it.", 409,

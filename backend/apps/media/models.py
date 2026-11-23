@@ -42,6 +42,7 @@ class MediaZip(models.Model):
     booking = models.ForeignKey("bookings.Booking", on_delete=models.CASCADE,
                                 related_name="zips")
     kind = models.CharField(max_length=10)             # image | video
+    excluded = models.JSONField(default=list)          # field keys left out (hidden from them)
     status = models.CharField(max_length=10, default="building")  # building | ready | failed
     progress = models.PositiveSmallIntegerField(default=0)
     key = models.CharField(max_length=200, blank=True)

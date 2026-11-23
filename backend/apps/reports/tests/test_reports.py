@@ -529,3 +529,19 @@ def test_a_storage_failure_is_recorded_as_such_and_previews_need_reports_view(re
     r = renv.ops.post(f"/api/v1/pdf-template-versions/{draft['id']}/preview",
                       {"booking": b["id"]}, format="json")
     assert r.status_code == 403 and r.json()["code"] == "FORBIDDEN"
+
+
+@pytest.mark.real_commit
+def test_the_pdf_job_waits_for_the_commit(renv, settings, django_capture_on_commit_callbacks):
+    """submit() emits 'completed' inside its transaction; a worker must not start before it is saved."""
+    from unittest import mock
+
+    set_template(renv)
+    with mock.patch("apps.reports.tasks.render_report.delay") as queued:
+        with django_capture_on_commit_callbacks(execute=False) as callbacks:
+            complete_job(renv, settings=settings)
+        queued.assert_not_called()           # nothing queued while the transaction is open
+        assert callbacks
+        for cb in callbacks:
+            cb()
+        queued.assert_called_once()

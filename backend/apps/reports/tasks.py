@@ -1,10 +1,13 @@
 import logging
 import time
+from datetime import timedelta
 
 from botocore.exceptions import ClientError
 from celery import shared_task
+from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.bookings.models import Booking
@@ -15,6 +18,8 @@ from . import context, definition, render
 from .models import PdfTemplateVersion, Report
 
 MAX_RETRIES = 2
+SOFT_LIMIT, HARD_LIMIT = 300, 330        # seconds: 150 photos must fit with room to spare
+STUCK_AFTER = timedelta(seconds=HARD_LIMIT + 60)   # a render older than this was killed
 logger = logging.getLogger(__name__)
 
 
@@ -42,6 +47,8 @@ def _render_with_retries(booking, insp, tv, token: str, revision: int):
             key = f"reports/{booking.id}/rev{revision}.pdf"
             storage.put(key, pdf, "application/pdf")
             return pdf, name, key
+        except SoftTimeLimitExceeded:
+            raise                              # out of time: retrying would only be killed
         except Exception:  # noqa: BLE001
             if attempt == MAX_RETRIES:
                 raise
@@ -49,7 +56,7 @@ def _render_with_retries(booking, insp, tv, token: str, revision: int):
     raise AssertionError("unreachable")  # pragma: no cover
 
 
-@shared_task(soft_time_limit=120, time_limit=150)
+@shared_task(soft_time_limit=SOFT_LIMIT, time_limit=HARD_LIMIT)
 def render_report(booking_id: str) -> str:
     """Make (or remake) the PDF of a completed booking. Latest revision only is kept."""
     booking = Booking.objects.get(pk=booking_id)
@@ -58,22 +65,34 @@ def render_report(booking_id: str) -> str:
     if insp is None or tv is None:
         return "skipped"                          # nothing to render yet
     report, _ = Report.objects.get_or_create(booking=booking)
+    now = timezone.now()
+    # one render at a time per booking: a second request while one runs is dropped (edits made
+    # meanwhile set 'stale', and the claim below clears it only for data read after this point)
+    claimed = Report.objects.filter(pk=report.pk).filter(
+        Q(render_started_at__isnull=True) | Q(render_started_at__lt=now - STUCK_AFTER)
+    ).update(render_started_at=now, stale=False)
+    if not claimed:
+        return "busy"
+    report.refresh_from_db()
     revision = report.revision + 1
     try:
         pdf, name, key = _render_with_retries(booking, insp, tv, report.token, revision)
     except Exception as exc:  # noqa: BLE001 - recorded, not raised: Ops see it as a problem
-        reason = "storage_failed" if isinstance(exc, ClientError) else "render_failed"
+        reason = ("timeout" if isinstance(exc, SoftTimeLimitExceeded)
+                  else "storage_failed" if isinstance(exc, ClientError) else "render_failed")
         logger.exception("PDF render failed for booking %s", booking.id)   # detail stays in logs
-        Report.objects.filter(pk=report.pk).update(status="failed", error=reason)
+        Report.objects.filter(pk=report.pk).update(status="failed", error=reason,
+                                                   render_started_at=None)
         events.emit("alert.pdf_failed", booking=str(booking.id), reason=reason)
         return "failed"
     with transaction.atomic():
         report = Report.objects.select_for_update().get(pk=report.pk)
         old = report.key
         report.revision, report.key, report.filename = revision, key, name
-        report.status, report.stale, report.error = "ready", False, ""
+        report.status, report.error, report.render_started_at = "ready", "", None
         report.template_version, report.generated_at = tv, timezone.now()
-        report.save()
+        report.save(update_fields=["revision", "key", "filename", "status", "error",
+                                   "render_started_at", "template_version", "generated_at"])
     if old:
         storage.delete(old)
     events.emit("pdf.ready", booking=str(booking.id), booking_id=booking.booking_id,

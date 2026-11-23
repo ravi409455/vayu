@@ -48,3 +48,4 @@ class Report(models.Model):
     stale = models.BooleanField(default=False)    # data changed since this PDF was made
     error = models.TextField(blank=True)
     generated_at = models.DateTimeField(null=True, blank=True)
+    render_started_at = models.DateTimeField(null=True, blank=True)   # set while a render runs

@@ -3,6 +3,7 @@ from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import perm, perm_any, scope_for
@@ -63,6 +64,8 @@ class Url(APIView):
 
     def get(self, request, pk):
         asset = _asset(request, pk, write=False)
+        if asset.field_key in services.hidden_fields(request.user, asset.booking):
+            raise err("NOT_FOUND", "Media not found.", 404)      # same answer as a missing file
         if asset.status != "verified":
             raise err("NOT_READY", "This file is not verified yet.", 409)
         return Response({"url": storage.presign_get(asset.key),
@@ -91,7 +94,7 @@ class RequestZip(APIView):
         if kind not in zips.KIND_TYPES:
             raise ValidationError({"kind": "Use image or video."})
         booking = services.readable_booking(request, pk)
-        z = zips.request_zip(booking, kind)
+        z = zips.request_zip(booking, kind, sorted(services.hidden_fields(request.user, booking)))
         return Response({"url": f"/api/v1/zips/{zips.token_for(z.id)}", "status": z.status},
                         status=status.HTTP_202_ACCEPTED)
 
@@ -101,6 +104,8 @@ class ZipDownload(APIView):
 
     authentication_classes: list = []
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "public"
 
     def get(self, request, token):
         z = zips.zip_from_token(token)
