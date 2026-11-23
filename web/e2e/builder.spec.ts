@@ -27,7 +27,11 @@ test.describe("form builder", () => {
     await expect(rows.first()).toBeVisible();
     const before = await rows.allInnerTexts();
     const grip = page.locator(".field-row", { hasText: "Odometer" }).locator(".grip");
-    await drag(page, grip, page.locator(".field-row", { hasText: "Chassis number" }).locator(".grip"));
+    for (let attempt = 0; attempt < 3; attempt++) {                        // a drag is a gesture: try again if it did not take
+      await drag(page, page.locator(".field-row", { hasText: "Odometer" }).locator(".grip"), page.locator(".field-row", { hasText: "Chassis number" }).locator(".grip"));
+      try { await expect.poll(async () => (await page.locator(".field-row").allInnerTexts()).join("|"), { timeout: 3000 }).not.toBe(before.join("|")); break; } catch { /* again */ }
+    }
+    void grip;
     await expect.poll(async () => (await page.locator(".field-row").allInnerTexts()).join("|")).not.toBe(before.join("|"));
     const draftId = (await json(await admin.get(`forms/${form.id}`))).draft_version.id;
     const serverKeys = async () => {
@@ -129,5 +133,41 @@ test.describe("layout", () => {
     await expect(page.getByRole("tooltip")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("tooltip")).toHaveCount(0);
+  });
+});
+
+test.describe("system forms are named and tuned by the Admin", () => {
+  test("a system form can be renamed (the name is free, the type stays) and its payment choices edited", async ({ page }) => {
+    const admin = await apiAs("admin");
+    const end = (await json(await admin.get("forms?type=end"))).results[0];
+    await signIn(page, "admin");
+    await page.goto(`/forms/${end.id}`);
+    await page.getByRole("button", { name: "Rename" }).click();
+    await page.getByRole("dialog").getByLabel("Name").fill("Payment and review");
+    await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+    await expect(page.getByText("Renamed.")).toBeVisible();
+    await page.goto("/forms");
+    const system = page.getByRole("table", { name: "System forms" });
+    await expect(system.getByRole("link", { name: "Payment and review" })).toBeVisible();
+    await expect(system.getByText("End form", { exact: true })).toBeVisible();            // still the end form by type
+    expect((await json(await admin.get(`forms/${end.id}`))).type).toBe("end");
+
+    // the payment mode choices are editable like any choice field
+    await page.goto(`/forms/${end.id}`);
+    await page.getByRole("button", { name: "Start a new draft" }).click();
+    await expect(page.getByText(/You are editing a draft/)).toBeVisible();
+    await page.locator(".field-row", { hasText: "Payment mode" }).click();
+    await expect(page.getByRole("heading", { name: "Payment mode" })).toBeVisible();
+    await expect(page.getByLabel("Choice label").first()).toHaveValue("Cash");
+    await page.getByRole("button", { name: "+ Add choice" }).click();
+    await page.getByLabel("Choice key").last().fill("wallet");
+    await page.getByLabel("Choice label").last().fill("Wallet");
+    await page.getByRole("button", { name: "Save field" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Saved" }).first()).toBeVisible();
+    const draft = (await json(await admin.get(`forms/${end.id}`))).draft_version;
+    const tree = await json(await admin.get(`form-versions/${draft.id}`));
+    const field = tree.pages.flatMap((p: { sections: { fields: { key: string; config: { options: { key: string }[] } }[] }[] }) => p.sections).flatMap((s: { fields: { key: string; config: { options: { key: string }[] } }[] }) => s.fields).find((f: { key: string }) => f.key === "payment_mode");
+    expect(field.config.options.map((o: { key: string }) => o.key)).toContain("wallet");
+    expect((await admin.delete(`forms/${end.id}/draft`)).status()).toBe(204);                       // leave no open draft behind
   });
 });

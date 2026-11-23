@@ -15,7 +15,7 @@ const form = (id: number, key: string, type: string, name: string, over: Record<
   id, key, type, name, is_active: true, inspection_type: type === "custom" ? key : "", submission_roles: ["expert", "ops"],
   draft_version: null, published_version: { id: id * 10, number: 1, use_start: true, use_end: true }, ...over,
 });
-const FORMS = [form(1, "booking", "booking", "Booking"), form(2, "start", "start", "Start (check-in)"), form(3, "end", "end", "End (wrap-up)"),
+const FORMS = [form(1, "booking", "booking", "Booking"), form(2, "start", "start", "Start"), form(3, "end", "end", "End"),
   form(4, "pdi", "custom", "PDI (new car)"), form(5, "ev", "custom", "EV", { published_version: null, draft_version: { id: 50, number: 1 } }),
   form(6, "old", "custom", "Old form", { is_active: false })];
 
@@ -41,7 +41,7 @@ describe("the Forms page", () => {
     shell(<Forms />);
     const system = within(await screen.findByRole("table", { name: "System forms" }));
     await waitFor(() => expect(system.getAllByRole("row")).toHaveLength(4));
-    expect(system.getAllByRole("row").slice(1).map((r) => within(r).getAllByRole("cell")[1]!.textContent)).toEqual(["Booking form", "Start form (check-in)", "End form (wrap-up)"]);
+    expect(system.getAllByRole("row").slice(1).map((r) => within(r).getAllByRole("cell")[1]!.textContent)).toEqual(["Booking form", "Start form", "End form"]);
     const custom = within(screen.getByRole("table", { name: "Custom forms" }));
     expect(custom.getByText("PDI (new car)")).toBeInTheDocument();
     expect(custom.getByText("Not published")).toBeInTheDocument();           // EV has only a draft
@@ -90,5 +90,28 @@ describe("the booking form's inspection type", () => {
     await waitFor(() => expect(within(screen.getByLabelText("Inspection type")).getAllByRole("option")).toHaveLength(2));
     await u.selectOptions(screen.getByLabelText("Inspection type"), "pdi");
     expect(onChange).toHaveBeenCalledWith("inspection_type", "pdi");
+  });
+});
+
+describe("system fields in the field editor", () => {
+  const mode = { id: 9, section: 1, key: "payment_mode", label: "Payment mode", helper_text: "", type: "single_choice", required: false, required_if: null, show_if: null,
+    config: { options: [{ key: "cash", label: "Cash" }, { key: "upi", label: "UPI" }] }, visible: true, order: 0, is_system: true, access: {}, locked: false, library: null } as FormField;
+  it("lists and lets the Admin change the choices of a system choice field, like any other choice field", async () => {
+    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    const onSave = vi.fn();
+    const u = userEvent.setup();
+    render(<FieldEditor field={mode} choices={[]} lists={[]} categories={[]} onSave={onSave} onDelete={() => {}} readOnly={false} />);
+    expect(screen.getAllByLabelText("Choice label").map((i) => (i as HTMLInputElement).value)).toEqual(["Cash", "UPI"]);
+    await u.click(screen.getByRole("button", { name: "+ Add choice" }));
+    const keys = screen.getAllByLabelText("Choice key");
+    await u.type(keys[2]!, "wallet");
+    await u.type(screen.getAllByLabelText("Choice label")[2]!, "Wallet");
+    await u.click(screen.getByRole("button", { name: "Save field" }));
+    expect(onSave.mock.calls[0]![0].config.options).toEqual([{ key: "cash", label: "Cash" }, { key: "upi", label: "UPI" }, { key: "wallet", label: "Wallet" }]);
+  });
+  it("still keeps a library-linked field's choices read-only", async () => {
+    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    render(<FieldEditor field={{ ...mode, is_system: false, locked: true }} choices={[]} lists={[]} categories={[]} onSave={() => {}} onDelete={() => {}} readOnly />);
+    expect(screen.queryByLabelText("Choice key")).toBeNull();
   });
 });

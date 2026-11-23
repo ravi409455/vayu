@@ -37,7 +37,7 @@ export type RatingConfig = {
   deductions?: { minor: number; major: number; critical: number };
   thresholds?: Record<string, number>;
 };
-/** booking, start (check-in) and end (wrap-up) always exist once; custom forms are what Admins build. */
+/** booking, start and end always exist once (Admins name them); custom forms are what Admins build. */
 export type FormType = "booking" | "start" | "end" | "custom";
 export type FormSummary = {
   id: number; key: string; type: FormType; name: string; is_active: boolean;

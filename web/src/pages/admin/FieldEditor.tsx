@@ -73,7 +73,7 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
                 }} />
               </Field>
             )}
-            {!locked && CHOICE_TYPES.includes(field.type) && <OptionsEditor options={(cfg.options as Option[]) ?? []} onChange={(options) => setCfg({ options })} />}
+            {!field.locked && CHOICE_TYPES.includes(field.type) && <OptionsEditor options={(cfg.options as Option[]) ?? []} onChange={(options) => setCfg({ options })} />}
             {!locked && field.type === "master_list" && (
               <Field label="List" tip="The master list whose items this field offers (cities, car models...).">
                 <select value={String(cfg.list ?? "")} onChange={(e) => setCfg({ list: e.target.value })}>

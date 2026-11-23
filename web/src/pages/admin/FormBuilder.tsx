@@ -1,4 +1,4 @@
-import { Copy, Download, Eye, Rocket, Trash2, Users } from "lucide-react";
+import { Copy, Download, Eye, Pencil, Rocket, Trash2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
@@ -8,7 +8,7 @@ import type { FormField, FormPage, FormSummary, FormVersion, MasterList } from "
 import { useAuth } from "../../auth";
 import { applyDrag, isEmptyBody, reorderBody, type Ref } from "../../lib/tree";
 import { type FieldChoice } from "../../ui/ConditionBuilder";
-import { Confirm, InfoTip, Modal, NameDialog, PageHeader, Pill, Tabs, useToast } from "../../ui/kit";
+import { Confirm, Field, InfoTip, Modal, NameDialog, PageHeader, Pill, Tabs, useToast } from "../../ui/kit";
 import { AddFieldDialog, AddSectionDialog } from "./builder/AddDialogs";
 import { Canvas, type Sel } from "./builder/Canvas";
 import { Checks, Ratings } from "./builder/FormExtras";
@@ -41,6 +41,7 @@ export function FormBuilder() {
   const [preview, setPreview] = useState(false);
   const [discard, setDiscard] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<string[] | null>(null);
   const [confirmDel, setConfirmDel] = useState<null | (() => void)>(null);
   const edit = can("forms.edit") && draft;
@@ -122,6 +123,7 @@ export function FormBuilder() {
         tip="A form is built in a draft, tried in the preview, then published. Once published it never changes; edits go into the next draft. Every inspection stays on the version it started with.">
         {f.published_version && <Pill tone="ok">Live: v{f.published_version.number}</Pill>}
         {draft && <Pill tone="info">Draft v{f.draft_version!.number}</Pill>}
+        {can("forms.edit") && <button onClick={() => setRenaming(f.name)}><Pencil size={15} aria-hidden /> Rename</button>}
         {v && <button onClick={() => setPreview(true)}><Eye size={15} aria-hidden /> Preview</button>}
         {f.type === "custom" && <button onClick={() => setVisibility(f.submission_roles ?? ["expert", "ops"])}><Users size={15} aria-hidden /> Who sees submissions</button>}
         {f.published_version && can("forms.promote") && (
@@ -135,8 +137,8 @@ export function FormBuilder() {
         <>
           {f.type === "custom" && (
             <div className="card form-switches" aria-label="Form settings">
-              <label className="check"><input type="checkbox" checked={v.use_start !== false} disabled={!edit || setSwitch.isPending} onChange={(e) => setSwitch.mutate({ use_start: e.target.checked })} /> Begins with the start form (check-in)</label>
-              <label className="check"><input type="checkbox" checked={v.use_end !== false} disabled={!edit || setSwitch.isPending} onChange={(e) => setSwitch.mutate({ use_end: e.target.checked })} /> Ends with the end form (wrap-up)
+              <label className="check"><input type="checkbox" checked={v.use_start !== false} disabled={!edit || setSwitch.isPending} onChange={(e) => setSwitch.mutate({ use_start: e.target.checked })} /> Begins with the start form</label>
+              <label className="check"><input type="checkbox" checked={v.use_end !== false} disabled={!edit || setSwitch.isPending} onChange={(e) => setSwitch.mutate({ use_end: e.target.checked })} /> Ends with the end form
                 <InfoTip>When on, the expert fills in the start form first and the end form last, and rules here may use start.* and end.* answers. When off, those steps are skipped for this form. Changes apply to this draft and are frozen when you publish.</InfoTip></label>
             </div>)}
           <Tabs tabs={[{ id: "structure", label: "Questions" }, { id: "checks", label: "Key Checks" }, { id: "ratings", label: "Ratings" }]} value={tab} onChange={setTab} />
@@ -202,6 +204,13 @@ export function FormBuilder() {
           ))}
         </Modal>
       )}
+      {renaming !== null && (
+        <Modal title="Rename this form" onClose={() => setRenaming(null)}
+          actions={<><button onClick={() => setRenaming(null)}>Cancel</button>
+            <button className="primary" disabled={!renaming.trim() || renaming.trim() === f.name} onClick={async () => { try { await api(`forms/${id}`, { method: "PATCH", body: { name: renaming.trim() } }); say("Renamed."); setRenaming(null); await reload(); } catch (e) { fail(e); } }}>Save</button></>}>
+          <Field label="Name" help={f.type === "custom" ? "This is what Ops pick from when they create a booking." : "Only the name changes. This form stays the form of its kind."}>
+            <input aria-label="Name" value={renaming} onChange={(e) => setRenaming(e.target.value)} /></Field>
+        </Modal>)}
       {duplicating && <DuplicateDialog form={f} onClose={() => setDuplicating(false)} />}
       {preview && v && <PreviewDialog tree={{ pages, checks: v.checks }} kind={ns} onClose={() => setPreview(false)} />}
       {discard && (

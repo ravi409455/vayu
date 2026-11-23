@@ -57,8 +57,8 @@ def create_form(actor, *, key: str, name: str, inspection_type: str = "") -> For
 
 
 SYSTEM_FORM_NAMES = {FormType.BOOKING: ("booking", "Booking"),
-                     FormType.START: ("start", "Start (check-in)"),
-                     FormType.END: ("end", "End (wrap-up)")}
+                     FormType.START: ("start", "Start"),
+                     FormType.END: ("end", "End")}
 
 
 def ensure_system_forms() -> None:

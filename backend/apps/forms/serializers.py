@@ -18,6 +18,7 @@ from .models import (
     Section,
     VersionCheck,
     VersionStatus,
+    only_choices_changed,
 )
 from .rules import rule_syntax_issues
 
@@ -168,11 +169,13 @@ class FieldSerializer(serializers.ModelSerializer):
                 for k in ("label", "helper_text", "config", "type")):
             raise CodedError("LINKED_LOCKED", "This field's content comes from the library; "
                              "unlink it or edit the library item.", 409)
-        if inst is not None and inst.is_system and any(
+        if inst is not None and inst.is_system and (any(
                 k in attrs and attrs[k] != getattr(inst, k)
-                for k in ("key", "type", "config", "required", "required_if", "show_if",
-                          "visible")):
-            raise CodedError("SYSTEM_FIELD", "System fields can only be relabelled or moved.", 400)
+                for k in ("key", "type", "required", "required_if", "show_if", "visible")) or (
+                "config" in attrs and not only_choices_changed(inst.type, inst.config,
+                                                                attrs["config"]))):
+            raise CodedError("SYSTEM_FIELD", "System fields can only be relabelled, moved, or "
+                             "(for a choice) given other choices.", 400)
         _check_rules(attrs, "show_if", "required_if")
         _check_access(attrs)
         if inst is None or "config" in attrs:

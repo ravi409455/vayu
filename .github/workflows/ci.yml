@@ -53,7 +53,7 @@ jobs:
           uv run pytest -q apps/bookings apps/forms/tests/test_access_model.py --cov=apps.bookings --cov=apps.forms.access --cov-branch --cov-fail-under=100
           uv run pytest -q apps/media --cov=apps.media --cov-branch --cov-fail-under=100
           uv run pytest -q apps/reports --cov=apps.reports --cov-branch --cov-fail-under=100
-          uv run pytest -q apps/forms/tests/test_promote.py apps/forms/tests/test_builder_support.py apps/forms/tests/test_system_forms.py apps/forms/tests/test_form_types.py --cov=apps.forms.promote --cov=apps.forms.legacy --cov-branch --cov-fail-under=100
+          uv run pytest -q apps/forms/tests/test_promote.py apps/forms/tests/test_builder_support.py apps/forms/tests/test_system_forms.py apps/forms/tests/test_form_types.py apps/forms/tests/test_library_push.py --cov=apps.forms.promote --cov=apps.forms.legacy --cov-branch --cov-fail-under=100
           uv run pytest -q apps/forms/tests/test_library.py apps/forms/tests/test_library_push.py apps/forms/tests/test_access_model.py --cov=apps.forms.library --cov=apps.forms.library_push --cov=apps.forms.ratings --cov-branch --cov-fail-under=100
           uv run pytest -q apps/scoring apps/bookings/tests/test_scoring.py --cov=apps.scoring --cov-branch --cov-fail-under=100
           uv run pytest -q apps/integrations --cov=apps.integrations --cov-branch --cov-fail-under=100

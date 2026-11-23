@@ -34,7 +34,7 @@ const shell = (ui: React.ReactNode, path = "/") => render(
 
 const FORMS: FormSummary[] = [
   { id: 1, key: "pdi", type: "custom", name: "PDI", is_active: true, inspection_type: "pdi", draft_version: null, published_version: { id: 10, number: 1 } },
-  { id: 2, key: "start", type: "start", name: "Start (check-in)", is_active: true, inspection_type: "", draft_version: null, published_version: { id: 20, number: 1 } },
+  { id: 2, key: "start", type: "start", name: "Start", is_active: true, inspection_type: "", draft_version: null, published_version: { id: 20, number: 1 } },
 ];
 
 describe("the library list", () => {

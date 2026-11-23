@@ -66,10 +66,10 @@ def split_ops_form(apps, schema_editor):
     owner: dict[str, str] = {}
     ops = Form.objects.filter(kind="ops").first()
     if ops is not None:
-        ops.type, ops.name = "start", "Start (check-in)"
+        ops.type, ops.name = "start", "Start"
         ops.save()
         end = Form.objects.create(key=free_key(Form, "end"), kind="ops", type="end",
-                                  name="End (wrap-up)", is_active=True, inspection_type="")
+                                  name="End", is_active=True, inspection_type="")
         for v in FormVersion.objects.filter(form=ops).order_by("number"):
             ev = FormVersion.objects.create(
                 form=end, number=v.number, status=v.status, published_at=v.published_at,

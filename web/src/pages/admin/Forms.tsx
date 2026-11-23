@@ -9,7 +9,7 @@ import { Field, Modal, Pill, useToast, PageHeader } from "../../ui/kit";
 import { slugKey } from "../../lib/fieldTypes";
 import { ImportDialog } from "./ImportForm";
 
-export const TYPE_LABEL: Record<FormType, string> = { booking: "Booking form", start: "Start form (check-in)", end: "End form (wrap-up)", custom: "Custom form" };
+export const TYPE_LABEL: Record<FormType, string> = { booking: "Booking form", start: "Start form", end: "End form", custom: "Custom form" };
 const SYSTEM_ORDER: FormType[] = ["booking", "start", "end"];
 
 function Versions({ x }: { x: FormSummary }) {

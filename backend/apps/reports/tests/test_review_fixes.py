@@ -199,3 +199,21 @@ def test_a_switched_off_form_still_hides_its_reports(report_env):
     Form.objects.filter(pk=env.form_id).update(is_active=False)
     assert env.ops.get(url).status_code == 404
     assert env.admin.get(url).status_code == 200
+
+
+def test_the_newest_layout_is_checked_against_the_form_as_it_is_now(renv):
+    from apps.forms.models import Form
+    from apps.reports.models import PdfTemplate, PdfTemplateVersion
+    from apps.reports.service import latest_layout_issues
+    from apps.reports.tests.test_reports import set_template
+
+    form = Form.objects.get(pk=renv.form_id)
+    assert latest_layout_issues(form) == []                                  # no template at all
+    set_template(renv)
+    assert latest_layout_issues(form) == []                                  # the layout fits
+    PdfTemplateVersion.objects.create(
+        template=PdfTemplate.objects.get(form=form), number=99, definition={
+            "blocks": [{"type": "table", "title": "T", "rows": [{"label": "X",
+                                                                  "field": "inspection.nope"}]}]})
+    issues = latest_layout_issues(form)
+    assert [i["code"] for i in issues] == ["UNKNOWN_FIELD"] and "nope" in issues[0]["message"]

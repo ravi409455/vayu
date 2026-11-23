@@ -272,6 +272,18 @@ SYSTEM_PROTECTED = ("key", "type", "config", "required", "required_if", "show_if
                     "is_system")
 
 
+CHOICE_FIELD_TYPES = ("single_choice", "multi_choice")
+
+
+def only_choices_changed(ftype: str, old: dict, new: dict) -> bool:
+    """For a system field that offers choices (such as the payment mode) the Admin may change
+    the choices themselves; everything else about its config stays as the platform made it."""
+    if ftype not in CHOICE_FIELD_TYPES:
+        return old == new
+    keep = lambda c: {k: v for k, v in (c or {}).items() if k not in ("options", "display")}  # noqa: E731
+    return keep(old) == keep(new)
+
+
 class Field(DraftOnly):
     section = models.ForeignKey(Section, on_delete=models.CASCADE, related_name="fields")
     key = models.CharField(max_length=63)
@@ -329,8 +341,11 @@ class Field(DraftOnly):
         if old["type"] != self.type:
             raise CodedError("TYPE_IMMUTABLE", "A field's type can never change; add a new "
                              "field instead.", 400)
-        if old["is_system"] and any(old[a] != getattr(self, a) for a in SYSTEM_PROTECTED):
-            raise CodedError("SYSTEM_FIELD", "System fields can only be relabelled or moved.", 400)
+        locked = any(old[a] != getattr(self, a) for a in SYSTEM_PROTECTED if a != "config")
+        locked = locked or not only_choices_changed(self.type, old["config"], self.config)
+        if old["is_system"] and locked:
+            raise CodedError("SYSTEM_FIELD", "System fields can only be relabelled, moved, or (for "
+                             "a choice) given other choices.", 400)
 
 
 class VersionCheck(DraftOnly):

@@ -231,3 +231,30 @@ def test_submission_visibility_travels_and_bad_values_are_refused(admin, staging
     bundle["form"]["submission_roles"] = ["admin"]
     assert admin.post("/api/v1/promote/import", bundle, format="json").json()["code"] == \
         "INVALID_BUNDLE"
+
+
+def test_the_choices_of_a_system_choice_field_can_be_changed_but_nothing_else(admin, end_form):
+    v = end_form.versions.get()
+    publish(admin, v.id)
+    d = admin.post(f"/api/v1/forms/{end_form.id}/drafts").json()["id"]
+    mode = next(f for p in tree(admin, d)["pages"] for s in p["sections"] for f in s["fields"]
+                if f["key"] == "payment_mode")
+    options = [*mode["config"]["options"], {"key": "wallet", "label": "Wallet"}]
+    ok = admin.patch(f"/api/v1/fields/{mode['id']}", {"config": {**mode["config"],
+                                                                  "options": options}},
+                     format="json")
+    assert ok.status_code == 200 and ok.json()["config"]["options"][-1]["key"] == "wallet"
+    assert Field.objects.get(pk=mode["id"]).config["options"][-1]["label"] == "Wallet"
+    other = admin.patch(f"/api/v1/fields/{mode['id']}", {"config": {"options": options,
+                                                                     "display": "dropdown"}},
+                        format="json")
+    assert other.status_code == 200                                      # display is a choice setting too
+    bad = admin.patch(f"/api/v1/fields/{mode['id']}", {"required": True}, format="json")
+    assert bad.json()["code"] == "SYSTEM_FIELD"
+    # the model refuses the same thing underneath, whoever calls it
+    from apps.core.errors import CodedError
+
+    f = Field.objects.get(pk=mode["id"])
+    f.config = {**f.config, "surprise": 1}
+    with pytest.raises(CodedError):
+        f.save()
