@@ -363,9 +363,15 @@ def test_start_error_paths(ienv, booking):
     from apps.bookings import submissions
 
     assign(ienv, booking)
-    assert start(ienv.expert, booking).status_code == 200
+    first = start(ienv.expert, booking)
+    assert first.status_code == 200
+    # a phone that lost its saved session starts again with a new request ID: same inspection back
     again = start(ienv.expert, booking)
-    assert again.status_code == 409 and again.json()["code"] == "ALREADY_STARTED"
+    assert again.status_code == 200 and again.json()["inspection"]["id"] == first.json()["inspection"]["id"]
+    assert Inspection.objects.filter(booking_id=booking["id"]).count() == 1
+    Inspection.objects.filter(booking_id=booking["id"]).delete()      # in progress, but nothing of theirs open
+    gone = start(ienv.expert, booking)
+    assert gone.status_code == 409 and gone.json()["code"] == "ALREADY_STARTED"
     b = Booking.objects.get(pk=booking["id"])
     other = ienv.make_user("expert", username="e9")
     with pytest.raises(APIException) as e:
