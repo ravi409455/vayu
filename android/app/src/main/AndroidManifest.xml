@@ -5,6 +5,7 @@
         android:allowBackup="false"
         android:label="Vayu"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="${cleartext}"
         android:theme="@style/Theme.Vayu">
         <activity
             android:name=".MainActivity"
