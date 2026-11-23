@@ -12,6 +12,8 @@ import { resumeUploads, summary, useUploads, retryFailed } from "../../lib/uploa
 import { FormRenderer } from "../../ui/FormRenderer";
 import { Pill } from "../../ui/kit";
 import { useCrumb } from "../../ui/crumb";
+import { MapPin, Phone } from "lucide-react";
+import { fmtPhone, fmtSlot, mapsUrl } from "../../lib/format";
 
 type Session = { startUuid: string; submitUuid: string; inspectionId: string; form: Tree; startForm: Tree | null; endForm: Tree | null; versionId: number };
 type Draft = { inspection: Answers; start: Answers; end: Answers; step: number };
@@ -48,17 +50,22 @@ export function Job() {
   if (!b) return <p className="error pad">This job could not be opened.</p>;
   const canWork = b.stage === "assigned" || b.stage === "in_progress";
   return (
-    <div style={{ maxWidth: 680 }}>
-      <p><Link to="/jobs">← My jobs</Link></p>
+    <div style={{ maxWidth: session && canWork ? 1100 : 680 }}>
       {(!session || !canWork) && (
         <>
           <div className="bar"><h1 className="grow">{String(b.answers.customer_name ?? "")}</h1><Pill tone={STAGE_TONE[b.stage]}>{STAGE_LABEL[b.stage] ?? b.stage}</Pill></div>
           <div className="card">
-            <p><strong>{car(b.answers.car_make_model)}</strong> · {type(b.inspection_type)}</p>
-            <p>{String(b.answers.inspection_date ?? "")} at {String(b.answers.inspection_time ?? "")} · {city(b.answers.city)}</p>
-            <p>{String(b.answers.address ?? "")}</p>
-            <p><a href={`tel:${String(b.answers.customer_phone ?? "")}`}>📞 {String(b.answers.customer_phone ?? "")}</a></p>
-            <p className="muted small">Booking {b.booking_id}</p>
+            <dl className="details">
+              <dt>When</dt><dd><strong>{fmtSlot(b.answers.inspection_date, b.answers.inspection_time)}</strong></dd>
+              <dt>Car</dt><dd>{car(b.answers.car_make_model)} · {type(b.inspection_type)}</dd>
+              <dt>Address</dt><dd>{String(b.answers.address ?? "")}, {city(b.answers.city)}</dd>
+              <dt>Phone</dt><dd>{fmtPhone(b.answers.customer_phone)}</dd>
+              <dt>Booking</dt><dd className="muted">{b.booking_id}</dd>
+            </dl>
+            <div className="bar" style={{ marginBottom: 0 }}>
+              {b.answers.customer_phone ? <a className="btn" href={`tel:${String(b.answers.customer_phone)}`} aria-label={`Call ${String(b.answers.customer_phone)}`}><Phone size={15} aria-hidden /> Call</a> : null}
+              {b.answers.address ? <a className="btn" href={mapsUrl(`${String(b.answers.address)} ${city(b.answers.city)}`)} target="_blank" rel="noreferrer"><MapPin size={15} aria-hidden /> Directions</a> : null}
+            </div>
           </div>
           {b.stage === "assigned" && <><p className="muted">Check the details above, then start when you reach the car.</p>
             <button className="primary bigbtn" onClick={() => start.mutate()} disabled={start.isPending}>Start inspection</button></>}
@@ -141,8 +148,21 @@ function Wizard({ booking, session, onSubmitted }: { booking: Booking; session: 
 
   const { done, total } = summary(ups);
   const progress = Math.round((step / (steps.length - 1)) * 100);
+  const missingOn = (s: (typeof steps)[number]) => (s.kind !== "review" && s.page ? pageGaps(s.kind, trees[s.kind]!, s.page, draft[s.kind], ctx).length : 0);
   return (
-    <div>
+    <div className="wizard">
+      <nav className="card wizard-rail" aria-label="Steps">
+        {steps.map((s, i) => {
+          const miss = missingOn(s);
+          return (
+            <button key={i} className={`step-item${i === step ? " on" : ""}`} aria-current={i === step ? "step" : undefined} disabled={i > step} onClick={() => go(i)}>
+              <span className={`step-dot${i < step && miss === 0 ? " done" : ""}`} aria-hidden="true">{i < step && miss === 0 ? "✓" : i + 1}</span>
+              <span className="grow ellipsis">{s.title}</span>
+              {i < step && miss > 0 && <span className="pill warn" title="Still needed">{miss}</span>}
+            </button>);
+        })}
+      </nav>
+      <div className="wizard-main">
       <h1>{String(booking.answers.customer_name ?? "")} <span className="muted small">{booking.booking_id}</span></h1>
       <div className="progress" aria-label={`Step ${step + 1} of ${steps.length}`}><div style={{ width: `${progress}%` }} /></div>
       <p className="muted small" style={{ margin: "6px 0 14px" }}>Step {step + 1} of {steps.length}: {cur.title}{total > 0 && ` · files ${done}/${total} sent`}</p>
@@ -162,10 +182,11 @@ function Wizard({ booking, session, onSubmitted }: { booking: Booking; session: 
         </div>
       )}
       {blocked.length > 0 && <div className="card" role="alert"><strong>Finish this step first</strong><p className="muted small">You cannot move on until these are done:</p><ul>{blocked.map((b) => <li key={b}>{b}</li>)}</ul></div>}
-      <div className="bar" style={{ marginTop: 16 }}>
+      <div className="wizard-foot">
         <button onClick={() => go(step - 1)} disabled={step === 0}>Back</button>
-        <span className="grow" />
+        <span className="grow muted small" style={{ textAlign: "center" }}>Saved on this device</span>
         {cur.kind !== "review" && <button className="primary" onClick={next}>Next</button>}
+      </div>
       </div>
     </div>
   );

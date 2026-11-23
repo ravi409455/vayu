@@ -1,6 +1,7 @@
 import { cloneElement, createContext, isValidElement, useCallback, useContext, useId, useState, type ReactElement, type ReactNode } from "react";
 import { Inbox } from "lucide-react";
 import { explain } from "../api/client";
+import { fmtStamp } from "../lib/format";
 import { InfoTip } from "./InfoTip";
 
 export function Modal({ title, children, onClose, actions, wide }: { title: string; children: ReactNode; onClose: () => void; actions?: ReactNode; wide?: boolean }) {
@@ -84,10 +85,9 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: 
   );
 }
 
+/** A timestamp as people say it: "Today, 3:30 pm", "Tue 24 Nov, 10:30 am". */
 export function when(iso?: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? "" : d.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+  return iso ? fmtStamp(iso) : "";
 }
 
 /** One empty-state pattern: what is (not) here, and the next step when there is one. */

@@ -87,3 +87,15 @@ describe("dashboard", () => {
     expect(delta(null, 5, "count").text).toBe("");
   });
 });
+
+describe("my jobs", () => {
+  it("groups jobs under Today (overdue too), Tomorrow, Later and Earlier (finished)", async () => {
+    const { groupOf } = await import("./pages/expert/MyJobs");
+    const j = (stage: string, d: string) => ({ stage, answers: { inspection_date: d } });
+    expect(groupOf(j("assigned", "2026-11-23"), NOW)).toBe("Today");
+    expect(groupOf(j("in_progress", "2026-11-20"), NOW)).toBe("Today");
+    expect(groupOf(j("assigned", "2026-11-24"), NOW)).toBe("Tomorrow");
+    expect(groupOf(j("assigned", "2026-12-02"), NOW)).toBe("Later");
+    expect(groupOf(j("completed", "2026-11-23"), NOW)).toBe("Earlier");
+  });
+});
