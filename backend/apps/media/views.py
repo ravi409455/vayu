@@ -34,15 +34,13 @@ class Initiate(APIView):
 class Detail(APIView):
     declared_permissions = ("submissions.fill", "media.manage")
 
-    def get_permissions(self):
-        key = "media.manage" if self.request.method == "DELETE" else None
-        return [perm(key)() if key else perm_any("submissions.fill", "media.manage")()]
+    permission_classes = [perm_any("submissions.fill", "media.manage")]
 
     def get(self, request, pk):
         return Response(services.progress(_asset(request, pk)))
 
     def delete(self, request, pk):
-        services.delete_asset(request.user, _asset(request, pk))
+        services.remove(request, _asset(request, pk))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

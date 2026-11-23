@@ -61,3 +61,18 @@ test("a refused camera says why and offers the other ways", async ({ browser }) 
   await expect(page.getByRole("button", { name: "Use the device's camera app" })).toBeVisible();
   await ctx.close();
 });
+
+test("removing the selfie and taking it again works (the removed file no longer counts)", async ({ page }) => {
+  const id = await job("CAM-4");
+  await signIn(page, "expert");
+  await page.goto(`/jobs/${id}`);
+  await page.getByRole("button", { name: "Start inspection" }).click();
+  await page.getByTestId("camera-selfie").setInputFiles({ name: "a.jpg", mimeType: "image/jpeg", buffer: JPEG });
+  await expect(page.getByTestId("media-item")).toHaveCount(1);
+  await expect(page.getByText(/files 1\/1 sent/)).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByTestId("media-item")).toHaveCount(0);
+  await page.getByTestId("camera-selfie").setInputFiles({ name: "b.jpg", mimeType: "image/jpeg", buffer: JPEG });
+  await expect(page.getByTestId("media-item")).toHaveCount(1);
+  await expect(page.getByText("could not be added")).toHaveCount(0);
+});

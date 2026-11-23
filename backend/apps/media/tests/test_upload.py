@@ -371,6 +371,27 @@ def test_deleting_the_only_photo_empties_the_answer(job, settings):
     assert "photo_a" not in answers and "sign" not in answers
 
 
+def test_an_expert_can_take_back_their_own_file_before_submitting(job, settings):
+    env, b = job
+    a = upload(env.expert, b["id"], jpeg(), settings).json()["id"]
+    asset = MediaAsset.objects.get(pk=a)
+    assert env.expert.delete(f"/api/v1/media/{a}").status_code == 204       # the Remove button
+    assert not MediaAsset.objects.filter(pk=a).exists() and not storage.exists(asset.key)
+    assert upload(env.expert, b["id"], jpeg(color=(9, 9, 9)), settings).status_code in (200, 201)
+
+
+def test_an_expert_cannot_take_back_someone_elses_or_a_closed_bookings_file(job, settings):
+    from apps.bookings.models import Booking
+
+    env, b = job
+    theirs = upload(env.ops, b["id"], jpeg(), settings).json()["id"]        # uploaded by Ops
+    assert env.expert.delete(f"/api/v1/media/{theirs}").status_code == 403
+    mine = upload(env.expert, b["id"], jpeg(color=(1, 2, 3)), settings).json()["id"]
+    Booking.objects.filter(pk=b["id"]).update(stage="cancelled")
+    assert env.expert.delete(f"/api/v1/media/{mine}").status_code == 403
+    assert MediaAsset.objects.filter(pk=mine).exists()
+
+
 def test_deleting_an_unfinished_upload_aborts_it(job, settings):
     env, b = job
     init = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),

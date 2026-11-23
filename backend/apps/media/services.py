@@ -1,4 +1,5 @@
 """Upload protocol: initiate -> (client PUTs parts straight to storage) -> complete -> verify."""
+import json
 import math
 import uuid
 from datetime import timedelta
@@ -256,6 +257,23 @@ def check_completion(booking_id) -> bool:
                 inspection=str(insp.id))
     events.emit("media.completed", booking=str(b.id), booking_id=b.booking_id)
     return True
+
+
+def remove(request, asset: MediaAsset) -> None:
+    """Media managers (Ops, Admin) remove any file. Anyone else may only take back a file they
+    uploaded themselves that no submitted inspection uses yet (the expert's Remove button), so
+    a retake is never blocked by a file that is no longer wanted."""
+    user = request.user
+    if scope_for(user, "media.manage", request) is not None:
+        delete_asset(user, asset)
+        return
+    booking = asset.booking
+    used = any(str(asset.id) in json.dumps(i.answers) for i in booking.inspections.filter(
+        status="submitted"))
+    if asset.uploaded_by_id != user.pk or booking.stage in ("completed", "cancelled") or used:
+        raise err("DELETE_NOT_ALLOWED", "You can only take back your own file before it is "
+                  "submitted.", 403)
+    delete_asset(user, asset)
 
 
 def delete_asset(actor, asset: MediaAsset) -> None:

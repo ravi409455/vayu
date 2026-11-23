@@ -1,10 +1,10 @@
 import { Camera, Image as ImageIcon, MapPin, Paperclip, Video as VideoIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../api/client";
+import { api, ApiError } from "../api/client";
 import { asList } from "../api/hooks";
 import type { FormField, FormPage, FormVersion, MasterListItem, Option, User } from "../api/types";
-import { addFile, useUploads } from "../lib/uploadManager";
+import { addFile, discardFile, useUploads } from "../lib/uploadManager";
 import { evaluateTree, type Answers, type Ctx, type Kind } from "../lib/formSpec";
 import { CameraCapture } from "./CameraCapture";
 import { Field } from "./kit";
@@ -210,7 +210,7 @@ function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: 
         const id = p.preview ? `preview-${Date.now()}-${next.length}` : await addFile({ bookingId: p.bookingId!, fieldKey: f.key, kind: f.type as "photo", file, name: file.name, source });
         next = single ? [id] : [...next, id];
         onChange(single ? id : next);
-      } catch { setErr("That file could not be added. Check its type and size, then try again."); }
+      } catch (e) { setErr(e instanceof ApiError && e.status < 500 && e.code !== "HTTP_" + e.status ? e.message : "That file could not be added. Check its type and size, then try again."); }
     }
   }
   const mine = new Map(uploads.map((u) => [u.assetId, u]));
@@ -226,7 +226,7 @@ function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: 
               {u?.preview ? <img src={u.preview} alt="" /> : id.startsWith("preview-") ? <div className="fake-photo"><ImageIcon size={22} aria-hidden /></div> : <RemoteThumb id={id} kind={f.type} mediaUrl={p.mediaUrl} />}
               {u && u.status !== "done" && <div className="progress" aria-label={`Upload ${u.status}`}><div style={{ width: `${Math.round(u.progress * 100)}%` }} /></div>}
               {u?.status === "failed" && <span className="error small">Will retry</span>}
-              {!readOnly && <button type="button" className="link" aria-label="Remove" onClick={() => { const rest = ids.filter((x) => x !== id); onChange(single ? null : rest); p.onMediaRemove?.(f, id); }}>Remove</button>}
+              {!readOnly && <button type="button" className="link" aria-label="Remove" onClick={() => { const rest = ids.filter((x) => x !== id); onChange(single ? null : rest); p.onMediaRemove?.(f, id); if (!p.preview && p.bookingId && !id.startsWith("preview-")) void discardFile(id); }}>Remove</button>}
             </div>
           );
         })}

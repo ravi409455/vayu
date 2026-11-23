@@ -1,6 +1,7 @@
 // Keeps uploads running in the background while the person keeps filling the form, shows their
 // progress, and picks interrupted ones up again after a refresh.
 import { useSyncExternalStore } from "react";
+import { api } from "../api/client";
 import { allJobs, deleteJob, putJob, type PendingUpload } from "./store";
 import { hashBlob, initiate, shrinkImage, transfer } from "./uploader";
 
@@ -45,6 +46,19 @@ export async function addFile(args: { bookingId: string; fieldKey: string; kind:
   await putJob(job).catch(() => {});          // kept until it is sent, even across a refresh
   track(job);
   return init.id;
+}
+
+/** Takes back a file the person removed: stop sending it, forget it, and tell the server so it no
+ *  longer counts towards the field's limit (a retake would otherwise be refused). */
+export async function discardFile(assetId: string): Promise<void> {
+  const i = queue.findIndex((j) => j.assetId === assetId);
+  const job = i >= 0 ? queue.splice(i, 1)[0] : undefined;
+  const st = states.get(assetId);
+  states.delete(assetId);
+  emit();
+  if (job) await deleteJob(job.clientUuid).catch(() => {});
+  else if (st) await allJobs().then((all) => all.filter((j) => j.assetId === assetId).forEach((j) => void deleteJob(j.clientUuid))).catch(() => {});
+  await api(`media/${assetId}`, { method: "DELETE" }).catch(() => {});      // best effort: the server cleans up stragglers
 }
 
 /** After a refresh: carry on with everything for this booking that never finished. */

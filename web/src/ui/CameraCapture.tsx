@@ -18,6 +18,7 @@ export function CameraCapture({ kind, label, onDone, onClose, onFallback }: {
   const [error, setError] = useState("");
   const [shot, setShot] = useState<{ blob: Blob; url: string } | null>(null);
   const [recording, setRecording] = useState(false);
+  const [live, setLive] = useState(false);       // the shutter waits until the camera is really showing a picture
   const [seconds, setSeconds] = useState(0);
 
   async function open() {
@@ -67,7 +68,7 @@ export function CameraCapture({ kind, label, onDone, onClose, onFallback }: {
     onDone(new File([shot.blob], `${kind}-${Date.now()}.${ext}`, { type: shot.blob.type }));
     stop();
   }
-  const retake = () => { if (shot) URL.revokeObjectURL(shot.url); setShot(null); };
+  const retake = () => { if (shot) URL.revokeObjectURL(shot.url); setLive(false); setShot(null); };
 
   return (
     <Modal title={label} onClose={() => { stop(); onClose(); }} actions={<button onClick={() => { stop(); onClose(); }}>Cancel</button>}>
@@ -79,14 +80,14 @@ export function CameraCapture({ kind, label, onDone, onClose, onFallback }: {
       ) : (
         <>
           <div className="camera-box">
-            {shot ? (kind === "photo" ? <img src={shot.url} alt="Preview of what you captured" /> : <video src={shot.url} controls playsInline />) : <video ref={video} muted playsInline aria-label="Live camera" />}
+            {shot ? (kind === "photo" ? <img src={shot.url} alt="Preview of what you captured" /> : <video src={shot.url} controls playsInline />) : <video ref={video} muted playsInline aria-label="Live camera" onLoadedData={() => setLive(true)} />}
             {recording && <span className="rec">● {seconds}s / {MAX_VIDEO_SECONDS}s</span>}
           </div>
           <div className="bar" style={{ justifyContent: "center", marginTop: 12 }}>
             {shot ? (
               <><button onClick={retake}><RefreshCw size={14} aria-hidden /> Retake</button><button className="primary" onClick={keep}>Use this {kind}</button></>
             ) : kind === "photo" ? (
-              <button className="primary shutter" onClick={snap} aria-label="Take photo"><Camera size={20} aria-hidden /> Take photo</button>
+              <button className="primary shutter" onClick={snap} disabled={!live} aria-label="Take photo"><Camera size={20} aria-hidden /> Take photo</button>
             ) : recording ? (
               <button className="danger" onClick={finish} aria-label="Stop recording"><Square size={16} aria-hidden /> Stop</button>
             ) : (
