@@ -34,8 +34,7 @@ export function Roles() {
   const groups = [...new Set((perms.data ?? []).map((p) => p.group))];
   return (
     <>
-      <PageHeader title="Roles &amp; permissions" subtitle="Decide what Ops and Experts may do. Admin always has everything."
-        tip="Click a button to cycle: off → own → all. “Own” means only bookings assigned to that person; “all” means every booking. Changes apply to everyone in that role as soon as you save.">
+      <PageHeader title="Roles &amp; permissions" subtitle="Decide what Ops and Experts may do. Click a button to cycle off → own → all; “own” means only bookings assigned to that person. Admin always has everything.">
         <button className="primary" onClick={() => save.mutate()}>Save changes</button></PageHeader>
       <Tabs tabs={[{ id: "ops", label: "Ops" }, { id: "expert", label: "Expert" }]} value={role} onChange={setRole} />
       {groups.map((g) => (

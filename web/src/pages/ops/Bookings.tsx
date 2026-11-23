@@ -1,7 +1,7 @@
 import { ExternalLink, Plus, Trash2, XCircle } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type Page } from "../../api/client";
 import { asList, useList, useRefresh } from "../../api/hooks";
 import { STAGE_LABEL, STAGE_TONE, useInspectionTypes, useLabels, useTypeLabels } from "../../api/labels";
@@ -22,7 +22,10 @@ export function Bookings() {
   const nav = useNavigate();
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const [f, setF] = useState({ search: "", stage: "", city: "", type: "" });
+  const [sp] = useSearchParams();
+  const [f, setF] = useState({ search: sp.get("search") ?? "", stage: "", city: "", type: "" });
+  const urlSearch = sp.get("search");
+  useEffect(() => { if (urlSearch !== null) { setF((x) => ({ ...x, search: urlSearch })); setPage(1); } }, [urlSearch]);
   const [page, setPage] = useState(1);
   const [cancelling, setCancelling] = useState<Booking | null>(null);
   const [deleting, setDeleting] = useState<Booking | null>(null);
@@ -40,8 +43,7 @@ export function Bookings() {
   });
   return (
     <>
-      <PageHeader title="Bookings" subtitle="Create, find and manage every booking. Open one for the full details."
-        tip="This is where bookings are created and managed. The Job board is a read-only view of the same bookings. Admin can delete any booking; Ops can only delete a draft nobody has worked on (use Cancel for the rest).">
+      <PageHeader title="Bookings" count={q.data?.count}>
         {can("bookings.create") && <button className="primary" onClick={() => nav("/booking/new")}><Plus size={15} aria-hidden /> New booking</button>}
       </PageHeader>
       <div className="card"><div className="grid2">

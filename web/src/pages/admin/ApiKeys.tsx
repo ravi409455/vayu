@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { ApiKeyRow, FormSummary } from "../../api/types";
-import { Field, Modal, Pill, useToast, when, PageHeader } from "../../ui/kit";
+import { Empty, Field, Modal, Pill, useToast, when, PageHeader } from "../../ui/kit";
 
 /** "a, b" -> ["a", "b"]; "*" -> ["*"] (every field, only when typed on purpose);
  *  empty means no access at all (fail closed). */
@@ -37,9 +37,9 @@ export function ApiKeys() {
   const revoke = useMutation({ mutationFn: (k: ApiKeyRow) => api(`api-keys/${k.id}/revoke`, { body: {} }), onSuccess: () => { say("Revoked. It stopped working immediately."); void refresh("api-keys"); }, onError: fail });
   return (
     <>
-      <PageHeader title="API keys" subtitle={<>Let another system read and write bookings. API docs: <a href="/api/v1/docs" target="_blank" rel="noreferrer">/api/v1/docs</a></>}
-        tip="Each key only sees the forms and fields you give it. A key is shown once when created and can be revoked instantly. Deleting bookings is off unless you turn it on for that key.">
+      <PageHeader title="API keys" subtitle={<>Let another system read and write bookings. API docs: <a href="/api/v1/docs" target="_blank" rel="noreferrer">/api/v1/docs</a></>}>
         <button className="primary" onClick={() => setEdit({ name: "", allow_delete: false, scope: {} })}>New key</button></PageHeader>
+      {keys.data && keys.data.length === 0 ? <Empty title="No API keys yet" action={<button className="primary" onClick={() => setEdit({ name: "", allow_delete: false, scope: {} })}>New key</button>}>A key lets another system read and write bookings.</Empty> :
       <table><thead><tr><th>Name</th><th>Key starts with</th><th>Can access</th><th>Last used</th><th /></tr></thead>
         <tbody>{(keys.data ?? []).map((k) => (
           <tr key={k.id}><td>{k.name} {k.revoked_at && <Pill tone="bad">Revoked</Pill>} {k.allow_delete && <Pill tone="warn">Can delete</Pill>}</td>
@@ -48,7 +48,7 @@ export function ApiKeys() {
             <td>{when(k.last_used_at) || "never"}</td>
             <td style={{ textAlign: "right" }}>{!k.revoked_at && <>
               <button className="link" onClick={() => setEdit({ id: k.id, name: k.name, allow_delete: k.allow_delete, scope: Object.fromEntries(Object.entries(k.scope.forms).map(([f, v]) => [f, v.join(", ")])) })}>Edit</button>
-              <button className="link" onClick={() => confirm(`Revoke ${k.name}? It stops working immediately.`) && revoke.mutate(k)}>Revoke</button></>}</td></tr>))}</tbody></table>
+              <button className="link" onClick={() => confirm(`Revoke ${k.name}? It stops working immediately.`) && revoke.mutate(k)}>Revoke</button></>}</td></tr>))}</tbody></table>}
       {edit && (
         <Modal title={edit.id ? "Edit API key" : "New API key"} onClose={() => setEdit(null)}
           actions={<><button onClick={() => setEdit(null)}>Cancel</button><button className="primary" disabled={!edit.name || Object.values(edit.scope).every((v) => parseFields(v).length === 0)} onClick={() => save.mutate(edit)}>Save</button></>}>

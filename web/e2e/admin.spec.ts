@@ -137,7 +137,8 @@ test.describe("admin screens", () => {
     await signIn(page, "expert");
     await page.goto("/users");
     await expect(page).toHaveURL(/\/jobs$/);
-    await page.getByRole("button", { name: "Sign out" }).click();
+    await page.getByRole("button", { name: "Account menu" }).click();
+    await page.getByRole("menuitem", { name: "Sign out" }).click();
     await signIn(page, "ops");
     await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Job board" })).toBeVisible();

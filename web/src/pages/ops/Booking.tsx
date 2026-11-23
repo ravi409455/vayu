@@ -13,6 +13,7 @@ import { FormRenderer } from "../../ui/FormRenderer";
 import { Confirm, Field, Modal, Pill, Tabs, useToast, when } from "../../ui/kit";
 import { StaleDialog, type Stale } from "../../ui/StaleDialog";
 import type { Answers } from "../../lib/formSpec";
+import { useCrumb } from "../../ui/crumb";
 
 export function BookingPage() {
   const id = useParams().id!;
@@ -21,6 +22,7 @@ export function BookingPage() {
 
 function NewBooking() {
   const { fail } = useToast();
+  useCrumb("New booking");
   const nav = useNavigate();
   const { booking: tree, loading } = useTrees();
   const [values, setValues] = useState<Answers>({});
@@ -51,6 +53,7 @@ function Detail({ id }: { id: string }) {
   const { say, fail } = useToast();
   const refresh = useRefresh();
   const b = useQuery({ queryKey: ["booking", id], queryFn: () => api<Booking>(`bookings/${id}`) });
+  useCrumb(b.data?.booking_id);
   const insps = useQuery({ queryKey: ["inspections", id], queryFn: async () => asList<Inspection>(await api(`bookings/${id}/inspections`)) });
   const [tab, setTab] = useState<Tab>("booking");
   const [action, setAction] = useState<null | "assign" | "reschedule" | "cancel" | "release" | "type">(null);

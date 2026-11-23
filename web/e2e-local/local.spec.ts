@@ -16,7 +16,8 @@ test("the demo is there for each role", async ({ page }) => {
   await signIn(page, "ops");
   await expect(page.getByRole("link", { name: "DEMO-1" })).toBeVisible();
   await expect(page.getByRole("link", { name: "DEMO-3" })).toBeVisible();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
   await signIn(page, "admin");
   await page.goto("/forms");
   await expect(page.getByRole("link", { name: "PDI" })).toBeVisible();

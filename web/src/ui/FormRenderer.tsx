@@ -84,7 +84,7 @@ function FieldInput({ f, value, derived, required, error, readOnly, onChange, p 
       return <div className="field"><span className="label-row">{f.label}</span>{asset ? <img className="static-image" src={`/api/v1/form-assets/${asset}`} alt={f.label || "Picture"} /> : <p className="muted">No picture yet.</p>}{f.helper_text && <span className="help">{f.helper_text}</span>}</div>;
     }
     case "yes_no":
-      input = <Choices name={f.key} disabled={readOnly} label={f.label} value={value === true ? "yes" : value === false ? "no" : ""} options={[{ key: "yes", label: "Yes" }, { key: "no", label: "No" }]} onChange={(k) => onChange(k === "yes")} />; break;
+      input = <Choices name={f.key} disabled={readOnly} label={f.label} value={value === true ? "yes" : value === false ? "no" : ""} plain options={[{ key: "yes", label: "Yes" }, { key: "no", label: "No" }]} onChange={(k) => onChange(k === "yes")} />; break;
     case "single_choice": {
       const opts = (f.config.options as Option[]) ?? [];
       input = f.config.display === "dropdown" || opts.length > 5
@@ -114,12 +114,13 @@ function FieldInput({ f, value, derived, required, error, readOnly, onChange, p 
   return <Field bare label={label} help={f.helper_text || undefined} error={err}>{input}</Field>;
 }
 
-function Choices({ name, options, value, onChange, disabled, label }: { name: string; options: { key: string; label: string }[]; value: string; onChange: (k: string) => void; disabled: boolean; label: string }) {
+/** Picked answers read at a glance: green when fine, red only for a defect; Yes / No stays neutral. */
+function Choices({ name, options, value, onChange, disabled, label, plain }: { name: string; options: { key: string; label: string; is_defect?: boolean }[]; value: string; onChange: (k: string) => void; disabled: boolean; label: string; plain?: boolean }) {
   return (
     <div role="radiogroup" aria-label={label} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {options.map((o) => (
         <button type="button" key={o.key} role="radio" aria-checked={value === o.key} disabled={disabled} name={name}
-          className={value === o.key ? "primary" : ""} onClick={() => onChange(o.key)}>{o.label}</button>
+          className={`choice${plain ? " plain" : o.is_defect ? " defect" : ""}`} onClick={() => onChange(o.key)}>{o.label}</button>
       ))}
     </div>
   );

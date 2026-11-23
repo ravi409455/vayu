@@ -31,8 +31,7 @@ export function MasterLists() {
   });
   return (
     <>
-      <PageHeader title="Master lists" subtitle="The choices that dropdowns offer: cities, inspection types, cancel reasons, car models."
-        tip="Each item has a permanent key (used by reports and the API) and a label people see. Keys never change; to stop offering something, archive it: old bookings keep showing it." />
+      <PageHeader title="Master lists" />
       <table><thead><tr><th>List</th><th>Key</th><th /></tr></thead>
         <tbody>{(lists.data ?? []).map((l) => (
           <tr key={l.id} className="click" onClick={() => setOpen(l)}><td>{l.name}</td><td className="mono">{l.key}</td><td><button className="link">Open</button></td></tr>

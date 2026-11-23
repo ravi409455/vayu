@@ -11,6 +11,7 @@ import { loadJSON, removeKey, saveJSON } from "../../lib/store";
 import { resumeUploads, summary, useUploads, retryFailed } from "../../lib/uploadManager";
 import { FormRenderer } from "../../ui/FormRenderer";
 import { Pill } from "../../ui/kit";
+import { useCrumb } from "../../ui/crumb";
 
 type Session = { startUuid: string; submitUuid: string; inspectionId: string; form: Tree; startForm: Tree | null; endForm: Tree | null; versionId: number };
 type Draft = { inspection: Answers; start: Answers; end: Answers; step: number };
@@ -22,6 +23,7 @@ export function Job() {
   const id = useParams().id!;
   const refresh = useRefresh();
   const booking = useQuery({ queryKey: ["job", id], queryFn: () => api<Booking>(`bookings/${id}`), refetchInterval: (q) => (q.state.data?.stage === "submitted" ? 4000 : false) });
+  useCrumb(booking.data?.booking_id);
   const [session, setSession] = useState<Session | null>(() => loadJSON<Session | null>(sKey(id), null));
   const b = booking.data;
   const [error, setError] = useState("");

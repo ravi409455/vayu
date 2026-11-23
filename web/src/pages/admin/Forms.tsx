@@ -39,8 +39,7 @@ export function Forms() {
   const custom = (forms.data ?? []).filter((x) => x.type === "custom");
   return (
     <>
-      <PageHeader title="Forms" subtitle="Three forms that are always there, and a custom form for each kind of inspection."
-        tip="The booking form is what Ops fill to create a booking. The start form is the check-in an expert does before the inspection (location, time, selfie); the end form is the wrap-up after it (payment). Custom forms (PDI, Used car, EV...) are the inspections themselves; each can choose whether it begins with the start form and ends with the end form.">
+      <PageHeader title="Forms">
         {can("forms.promote") && <button onClick={() => file.current?.click()}>Import</button>}
         {can("forms.edit") && <button className="primary" onClick={() => setOpen(true)}>New custom form</button>}</PageHeader>
       <input ref={file} type="file" accept="application/json,.json" aria-label="Form file to import" hidden onChange={async (e) => {

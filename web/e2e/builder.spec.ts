@@ -125,10 +125,11 @@ test.describe("layout", () => {
   });
 
   test("the little i explains things", async ({ page }) => {
+    const { form } = await pdi();
     await signIn(page, "admin");
-    await page.goto("/roles");
+    await page.goto(`/forms/${form.id}`);
     await page.getByRole("button", { name: "More info" }).first().hover();                 // hover shows it, no click needed
-    await expect(page.getByRole("tooltip")).toContainText("cycle");
+    await expect(page.getByRole("tooltip")).toContainText("start form");
     await page.getByRole("button", { name: "More info" }).first().click();                 // a click on top keeps it open
     await expect(page.getByRole("tooltip")).toBeVisible();
     await page.keyboard.press("Escape");

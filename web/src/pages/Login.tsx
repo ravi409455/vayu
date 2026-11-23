@@ -4,6 +4,7 @@ import { useAuth } from "../auth";
 import { homeFor } from "../guards";
 import { explain } from "../api/client";
 import { Field } from "../ui/kit";
+import { envName, Logo } from "../ui/Logo";
 
 export function Login() {
   const { login } = useAuth();
@@ -31,14 +32,15 @@ export function Login() {
 
   return (
     <div style={{ maxWidth: 380, margin: "12vh auto", padding: 16 }}>
-      <h1 style={{ color: "var(--brand)" }}>Vayu</h1>
-      <p className="muted">Sign in to continue.</p>
+      <h1 style={{ margin: "0 0 4px" }}><Logo big /></h1>
+      <p className="muted" style={{ margin: "0 0 16px" }}>Sign in to continue. {envName() && <span className="env">{envName()}</span>}</p>
       <form className="card" onSubmit={submit}>
         <Field label="Username"><input value={u} onChange={(e) => setU(e.target.value)} autoComplete="username" autoFocus /></Field>
         <Field label="Password"><input type="password" value={p} onChange={(e) => setP(e.target.value)} autoComplete="current-password" /></Field>
         {err && <p className="error" role="alert">{err}</p>}
         <button className="primary bigbtn" disabled={busy || !u || !p}>Sign in</button>
       </form>
+      <p className="muted small" style={{ textAlign: "center" }}>Forgot your password? Ask an Admin to reset it.</p>
     </div>
   );
 }

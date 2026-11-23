@@ -17,6 +17,7 @@ import { LibraryBox } from "./builder/LibraryBox";
 import { PreviewDialog } from "./builder/PreviewDialog";
 import { DuplicateDialog } from "./ImportForm";
 import { FieldEditor, type FieldDraft } from "./FieldEditor";
+import { useCrumb } from "../../ui/crumb";
 
 type Issue = { path: string; code: string; message: string };
 
@@ -27,6 +28,7 @@ export function FormBuilder() {
   const refresh = useRefresh();
   const form = useQuery({ queryKey: ["form", id], queryFn: () => api<FormSummary>(`forms/${id}`) });
   const f = form.data;
+  useCrumb(f?.name);
   const vid = f?.draft_version?.id ?? f?.published_version?.id;
   const draft = !!f?.draft_version;
   const version = useQuery({ queryKey: ["version", vid], enabled: !!vid, queryFn: () => api<FormVersion>(`form-versions/${vid}`) });
@@ -119,8 +121,7 @@ export function FormBuilder() {
   return (
     <>
       <PageHeader title={<>{f.name} <span className="muted mono small">{f.key}</span></>}
-        subtitle={draft ? "You are editing a draft. Experts keep using the live version until you publish." : "This version is live and cannot be changed. Start a draft to make changes."}
-        tip="A form is built in a draft, tried in the preview, then published. Once published it never changes; edits go into the next draft. Every inspection stays on the version it started with.">
+        subtitle={draft ? "You are editing a draft. Experts keep using the live version until you publish." : "This version is live and cannot be changed. Start a draft to make changes."}>
         {f.published_version && <Pill tone="ok">Live: v{f.published_version.number}</Pill>}
         {draft && <Pill tone="info">Draft v{f.draft_version!.number}</Pill>}
         {can("forms.edit") && <button onClick={() => setRenaming(f.name)}><Pencil size={15} aria-hidden /> Rename</button>}

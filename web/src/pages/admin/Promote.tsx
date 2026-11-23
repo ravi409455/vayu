@@ -28,8 +28,7 @@ export function Promote() {
   }
   return (
     <>
-      <PageHeader title="Promote forms" subtitle="Move a tested form from staging to production as a file."
-        tip="Build and test on staging, export a bundle, import it here. An import always creates a draft: you review it and publish yourself. If anything conflicts, nothing is written." />
+      <PageHeader title="Promote forms" subtitle="Move a tested form from staging to production as a file." />
       <div className="grid2">
         <div className="card">
           <h2>Export from this server</h2>

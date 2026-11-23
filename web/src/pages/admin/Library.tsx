@@ -29,8 +29,7 @@ export function Library() {
   const rows = items.data ?? [];
   return (
     <>
-      <PageHeader title="Library" subtitle="Reusable fields and sections: built once, used in many forms, and updated everywhere from one place."
-        tip="The library decides everything inside an item. Each form decides only where the item sits. Change an item here, then update every form that uses it (you see exactly what will change first). Only Admins can edit the library.">
+      <PageHeader title="Library" subtitle="Reusable fields and sections: built once, used in many forms, and updated everywhere from one place.">
         {can("library.edit") && <button className="primary" onClick={() => setCreating(true)}>New item</button>}</PageHeader>
       <div className="card"><div className="grid2">
         <input aria-label="Search the library" placeholder="Search by name or key" value={q} onChange={(e) => setQ(e.target.value)} />

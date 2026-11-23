@@ -75,7 +75,8 @@ test("theme: dark at once, kept after a reload without a flash, Light when signe
   await expect(page.getByRole("radio", { name: /Dark/ })).toBeChecked();
   await page.reload();
   expect(await page.evaluate(() => (window as unknown as { __first: string }).__first)).toBe("dark");   // painted dark from the first moment
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page.getByRole("heading", { name: "Vayu" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   const fresh = await browser.newContext({ baseURL: "http://localhost:5173" });          // nothing remembered in this browser

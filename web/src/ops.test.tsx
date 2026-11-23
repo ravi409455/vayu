@@ -92,6 +92,14 @@ describe("form renderer", () => {
   function show(role: string) {
     render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="inspection" tree={tree} values={{ view_only: "x" }} role={role} onChange={() => {}} /></QueryClientProvider>);
   }
+  it("colours a picked answer by meaning: green when fine, red for a defect, neutral for yes / no", () => {
+    const opts = [{ key: "ok", label: "OK" }, { key: "dent", label: "Dented", is_defect: true }];
+    const t = { pages: [pageOf([fld("door", "single_choice", { config: { options: opts } }), fld("glass", "single_choice", { config: { options: opts } }), fld("keys", "yes_no")])], checks: [] };
+    render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="inspection" tree={t} values={{ door: "ok", glass: "dent", keys: true }} onChange={() => {}} /></QueryClientProvider>);
+    const picked = screen.getAllByRole("radio", { checked: true });
+    expect(picked.map((b) => [b.textContent, b.className])).toEqual([["OK", "choice"], ["Dented", "choice defect"], ["Yes", "choice plain"]]);
+    expect(picked.some((b) => b.className.includes("primary"))).toBe(false);
+  });
   it("never shows ratings or Key Checks to an expert", () => {
     show("expert");
     expect(screen.getByLabelText("door")).toBeInTheDocument();

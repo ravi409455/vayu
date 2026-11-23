@@ -56,8 +56,7 @@ export function PdfDesigner() {
   const make = useMutation({ mutationFn: (form: number) => api<Template>("pdf-templates", { body: { form } }), onSuccess: (r) => { void refresh("pdf-templates"); setTid(r.id); }, onError: fail });
   return (
     <>
-      <PageHeader title="PDF templates" subtitle="How each inspection becomes a report: the blocks, the labels, the branding."
-        tip="Every inspection form has one template. Build a draft, preview it with a real booking, then publish. Reports made afterwards use the new layout; old reports are not changed until regenerated.">
+      <PageHeader title="PDF templates">
         {editable && withoutTemplate.length > 0 && (
           <select aria-label="Create a template for" value="" onChange={(e) => e.target.value && make.mutate(Number(e.target.value))} style={{ maxWidth: 240 }}>
             <option value="">+ New template for…</option>{withoutTemplate.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select>)}

@@ -48,8 +48,7 @@ export function Profile() {
   const theme = me.theme ?? "light";
   return (
     <div style={{ maxWidth: 720 }}>
-      <PageHeader title="Your profile" subtitle="Your picture, how the app looks, and your password."
-        tip="Your name, email, role and phone number are set by an Admin. Your picture is shown to you, to Ops and to Admins (for example next to your name on the job board). It is never shown to customers or in reports." />
+      <PageHeader title="Your profile" />
       <section className="card" aria-label="Picture">
         <h2>Picture</h2>
         <div className="bar" style={{ gap: 16 }}>

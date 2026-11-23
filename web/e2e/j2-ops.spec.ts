@@ -81,7 +81,8 @@ test("the Bookings page finds a booking by customer, and an expert cannot open t
   await expect(page.getByRole("link", { name: "J2-100" })).toBeVisible();
   await page.goto("/search");                                                  // the old Search page is gone
   await expect(page).toHaveURL(/\/board$/);
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
   await signIn(page, "expert");
   await page.goto("/board");
   await expect(page).toHaveURL(/\/jobs$/);
@@ -118,7 +119,8 @@ test("delete rules: Ops may delete only a draft, Admin any booking", async ({ pa
   await expect(page.getByText("Booking deleted.")).toBeVisible();
   expect((await admin.get(`bookings/${draft.id}`)).status()).toBe(404);
 
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "Account menu" }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
   await signIn(page, "admin");
   await page.goto("/bookings");
   await page.getByLabel("Search").fill("J2-DEL-B");

@@ -14,6 +14,7 @@ import { FormRenderer } from "../../ui/FormRenderer";
 import { Field, Modal, PageHeader, Pill, Tabs, useToast } from "../../ui/kit";
 import { FieldEditor, type FieldDraft } from "./FieldEditor";
 import { PushReview } from "./library/PushReview";
+import { useCrumb } from "../../ui/crumb";
 
 type Item = { id: number; kind: "field" | "section"; key: string; name: string; revision: number; archived: boolean; definition: Definition; usages: { form: string; version: number; status: string }[] };
 type Revision = { revision: number; name: string; definition: Definition; changed_keys: string[]; by: string; at: string };
@@ -27,6 +28,7 @@ export function LibraryEditor() {
   const { say, fail } = useToast();
   const refresh = useRefresh();
   const item = useQuery({ queryKey: ["library-item", id], queryFn: () => api<Item>(`library/${id}`) });
+  useCrumb(item.data?.name);
   const history = useQuery({ queryKey: ["library-history", id], queryFn: () => api<Revision[]>(`library/${id}/history`) });
   const lists = useList<MasterList>("master-lists", "master-lists");
   const [def, setDef] = useState<Definition | null>(null);
@@ -67,8 +69,7 @@ export function LibraryEditor() {
   return (
     <>
       <PageHeader title={<>{it.name} <span className="muted mono small">{it.kind} · {it.key}</span></>}
-        subtitle={`Revision ${it.revision}. Everything inside the item is decided here; each form only decides where it sits.`}
-        tip="Saving makes a new revision. Forms using the item then show “update available”, or you can update every form at once (you see exactly what changes first). A rule inside an item may only use the item's own fields and the system fields every form has.">
+        subtitle={`Revision ${it.revision}. Everything inside the item is decided here; each form only decides where it sits.`}>
         <Link className="btn" to="/library">← Library</Link>
         {it.archived && <Pill tone="warn">Archived</Pill>}
         {edit && <button onClick={() => archive.mutate()}>{it.archived ? "Restore" : "Archive"}</button>}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
+import { Logo } from "../ui/Logo";
 
 type Verify = { valid: boolean; booking_id: string; car: string; type: string; date: string | null; overall_rating: string | null; revision: number; generated_at: string | null; current: boolean };
 
@@ -12,7 +13,8 @@ export function VerifyPage() {
   useEffect(() => { api<Verify>(`verify/${token}`).then(setV).catch(() => setBad(true)); }, [token]);
   return (
     <div style={{ maxWidth: 480, margin: "10vh auto", padding: 16 }}>
-      <h1 style={{ color: "var(--brand)" }}>Report check</h1>
+      <p><Logo /></p>
+      <h1>Report check</h1>
       {bad && <div className="card" role="alert"><strong>We could not find this report.</strong><p className="muted">The link may be wrong or the report was replaced.</p></div>}
       {v && (
         <div className="card">
@@ -47,7 +49,8 @@ export function ZipPage() {
   }, [token]);
   return (
     <div style={{ maxWidth: 480, margin: "10vh auto", padding: 16 }}>
-      <h1 style={{ color: "var(--brand)" }}>Download</h1>
+      <p><Logo /></p>
+      <h1>Download</h1>
       {gone ? <div className="card" role="alert"><strong>This download link is invalid, expired or has nothing in it.</strong></div> : (
         <div className="card" role="status">
           {state?.status === "ready" ? <p className="ok"><strong>Ready.</strong> Your download is starting… <a href={state.url}>Click here if it does not.</a></p>

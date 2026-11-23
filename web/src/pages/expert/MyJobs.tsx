@@ -26,7 +26,7 @@ export function MyJobs() {
   );
   return (
     <div style={{ maxWidth: 640 }}>
-      <PageHeader title="My jobs" subtitle="Your inspections, soonest first." tip="Open a job to see the address and call the customer. Start the inspection when you reach the car: photos upload as you go." />
+      <PageHeader title="My jobs" />
       {jobs.isLoading && <p className="muted">Loading…</p>}
       {!jobs.isLoading && open.length === 0 && <Empty>No jobs right now.</Empty>}
       {open.map(card)}

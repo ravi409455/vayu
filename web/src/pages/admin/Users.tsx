@@ -49,8 +49,7 @@ export function Users() {
 
   return (
     <>
-      <PageHeader title="Users" subtitle="Everyone who can sign in, and what they are."
-        tip="Admin sees and changes everything. Ops run bookings every day. Experts do inspections. Exactly what each role may do is set under Roles & permissions.">
+      <PageHeader title="Users">
         {manage && <button className="primary" onClick={() => setForm({ role: "expert" })}>New user</button>}</PageHeader>
       <table>
         <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th /></tr></thead>

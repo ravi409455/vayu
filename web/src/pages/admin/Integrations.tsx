@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, type Page } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { Delivery, FormSummary, Integration } from "../../api/types";
-import { Field, Modal, Pill, Tabs, useToast, when, PageHeader } from "../../ui/kit";
+import { Empty, Field, Modal, Pill, Tabs, useToast, when, PageHeader } from "../../ui/kit";
 
 const EVENT_LABEL: Record<string, string> = {
   "booking.created": "Booking created", "booking.updated": "Booking updated (incl. assignment and stage)", "booking.deleted": "Booking deleted",
@@ -46,9 +46,9 @@ export function Integrations() {
 
   return (
     <>
-      <PageHeader title="Integrations" subtitle="Send events to other systems the moment they happen."
-        tip="A webhook posts a message to a web address when something happens (a booking is created, a PDF is ready...). Every message is signed with a secret so the receiver can trust it. An integration on the booking form gets booking events; on an inspection form it gets every event for that inspection type.">
+      <PageHeader title="Integrations" subtitle="Send events to other systems the moment they happen.">
         <button className="primary" disabled={eligible.length === 0} onClick={() => setEdit(blank(eligible[0]!.id))}>New integration</button></PageHeader>
+      {list.data && list.data.length === 0 ? <Empty title="No integrations yet">Send bookings, PDFs and changes to another system the moment they happen.</Empty> :
       <table><thead><tr><th>Name</th><th>Form</th><th>URL</th><th>Events</th><th /></tr></thead>
         <tbody>{(list.data ?? []).map((i) => (
           <tr key={i.id}>
@@ -56,7 +56,7 @@ export function Integrations() {
             <td style={{ textAlign: "right" }}>
               <button className="link" onClick={() => setEdit(i)}>Edit</button><button className="link" onClick={() => test.mutate(i)}>Test</button>
               <button className="link" onClick={() => setLog(i)}>Deliveries</button><button className="link" onClick={() => rotate.mutate(i)}>New secret</button>
-              <button className="link" onClick={() => confirm(`Delete ${i.name}?`) && remove.mutate(i)}>Delete</button></td></tr>))}</tbody></table>
+              <button className="link" onClick={() => confirm(`Delete ${i.name}?`) && remove.mutate(i)}>Delete</button></td></tr>))}</tbody></table>}
       {edit && <Editor value={edit} onChange={setEdit} events={events.data ?? []} forms={eligible} onSave={() => save.mutate(edit)} onClose={() => setEdit(null)} fail={fail} />}
       {secret && <Modal title="Signing secret" onClose={() => setSecret(null)}><p>Copy it now. It is shown only once.</p><pre className="mono card" data-testid="secret">{secret}</pre></Modal>}
       {log && <DeliveryLog integration={log} onClose={() => setLog(null)} />}
@@ -109,7 +109,7 @@ function DeliveryLog({ integration, onClose }: { integration: Integration; onClo
           <tr key={d.id}><td>{when(d.created_at)}</td><td className="small">{d.event}</td><td>{d.booking_id}</td>
             <td><Pill tone={tone(d.status)}>{d.status}</Pill> <span className="small muted">{d.response_status ?? ""} {d.error} {d.attempts > 1 ? `· ${d.attempts} tries` : ""}</span></td>
             <td><button className="link" onClick={() => resend.mutate(d)}>Re-send</button></td></tr>))}</tbody></table>
-      {(q.data?.results ?? []).length === 0 && <p className="muted">Nothing here yet.</p>}
+      {q.data && q.data.results.length === 0 && <Empty>No deliveries yet.</Empty>}
     </Modal>
   );
 }

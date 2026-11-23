@@ -32,7 +32,7 @@ export function Dashboards() {
   const csv = `/api/v1/dashboards/volume?${new URLSearchParams({ group, by, date_from: from, date_to: to, export: "csv" })}`;
   return (
     <>
-      <PageHeader title="Dashboards" subtitle="How many bookings, by day, week or month." tip="Split the numbers by inspection type, city, expert, stage or lead owner. The CSV has exactly what the table shows.">
+      <PageHeader title="Dashboards">
         {can("dashboards.export") && <a className="btn" href={csv} download>Export CSV</a>}</PageHeader>
       <div className="card"><div className="grid2">
         <select aria-label="Group by time" value={group} onChange={(e) => setGroup(e.target.value)}><option value="day">By day</option><option value="week">By week</option><option value="month">By month</option></select>
@@ -40,7 +40,7 @@ export function Dashboards() {
         <input aria-label="From" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /><input aria-label="To" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div></div>
       {rows.length === 0 ? <p className="muted pad">No bookings in this range.</p> : (
         <table aria-label="Bookings volume"><thead><tr><th>Period</th>{keys.map((k) => <th key={k}>{name(k)}</th>)}</tr></thead>
-          <tbody>{periods.map((p) => <tr key={p}><td>{p}</td>{keys.map((k) => { const n = cell(p, k); return <td key={k}>{n > 0 && <div style={{ display: "flex", alignItems: "center", gap: 6 }}><div style={{ background: "var(--brand)", height: 10, width: `${(n / max) * 80}px`, borderRadius: 3 }} /> {n}</div>}</td>; })}</tr>)}</tbody></table>)}
+          <tbody>{periods.map((p) => <tr key={p}><td>{p}</td>{keys.map((k) => { const n = cell(p, k); return <td key={k}>{n > 0 && <div style={{ display: "flex", alignItems: "center", gap: 6 }}><div style={{ background: "var(--info)", height: 10, width: `${(n / max) * 80}px`, borderRadius: 3 }} /> {n}</div>}</td>; })}</tr>)}</tbody></table>)}
     </>
   );
 }

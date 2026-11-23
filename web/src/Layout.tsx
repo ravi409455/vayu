@@ -1,12 +1,14 @@
 import {
   AlertTriangle, BarChart3, BookOpen, Briefcase, ChevronsLeft, ChevronsRight, FileOutput, FileText, KeyRound,
-  ClipboardList, LayoutDashboard, List, LogOut, Rocket, ScrollText, Shield, Users, Webhook, type LucideIcon,
+  ClipboardList, LayoutDashboard, List, Rocket, ScrollText, Shield, Users, Webhook, type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "./auth";
 import { loadJSON, saveJSON } from "./lib/store";
-import { Avatar } from "./ui/Avatar";
+import { CrumbProvider } from "./ui/crumb";
+import { Logo } from "./ui/Logo";
+import { TopBar } from "./ui/TopBar";
 
 type Item = { to: string; label: string; icon: LucideIcon; perm?: string; role?: string };
 const GROUPS: { title: string; items: Item[] }[] = [
@@ -51,34 +53,35 @@ export function visibleNav(role: string, can: (p: string) => boolean): { title: 
 }
 
 export function Layout() {
-  const { me, can, logout } = useAuth();
+  const { me, can } = useAuth();
   const [collapsed, setCollapsed] = useState(() => loadJSON<boolean>("vayu:nav:collapsed", false));
   useEffect(() => saveJSON("vayu:nav:collapsed", collapsed), [collapsed]);
   if (!me) return null;
   return (
-    <div className={`shell${collapsed ? " collapsed" : ""}`}>
-      <nav className="side" aria-label="Main">
-        <div className="side-top">
-          <div className="brand">{collapsed ? "V" : "VAYU"}</div>
-          <button className="icon-btn dark" aria-label={collapsed ? "Expand the menu" : "Collapse the menu"} aria-pressed={collapsed} title={collapsed ? "Expand" : "Collapse"}
-            onClick={() => setCollapsed(!collapsed)}>{collapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}</button>
-        </div>
-        {visibleNav(me.role, can).map((g) => (
-          <div key={g.title}>
-            <div className="group">{collapsed ? "·" : g.title}</div>
-            {g.items.map((i) => (
-              <NavLink key={i.to} to={i.to} title={i.label} aria-label={i.label}>
-                <i.icon size={18} aria-hidden /><span className="nav-label">{i.label}</span>
-              </NavLink>
-            ))}
+    <CrumbProvider>
+      <div className={`shell${collapsed ? " collapsed" : ""}`}>
+        <nav className="side" aria-label="Main">
+          <div className="side-top">
+            <Logo markOnly={collapsed} />
+            <button className="icon-btn dark side-toggle" aria-label={collapsed ? "Expand the menu" : "Collapse the menu"} aria-pressed={collapsed} title={collapsed ? "Expand" : "Collapse"}
+              onClick={() => setCollapsed(!collapsed)}>{collapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}</button>
           </div>
-        ))}
-        <div className="who">
-          <NavLink to="/profile" className="who-name" title="Your profile" aria-label={`Your profile: ${me.name || me.username}`}><Avatar who={me} size={26} /><span className="nav-label">{me.name || me.username} · {me.role}</span></NavLink>
-          <button className="nav-btn" title="Sign out" aria-label="Sign out" onClick={() => logout()}><LogOut size={18} aria-hidden /><span className="nav-label">Sign out</span></button>
+          {visibleNav(me.role, can).map((g) => (
+            <div key={g.title}>
+              <div className="group">{collapsed ? "·" : g.title}</div>
+              {g.items.map((i) => (
+                <NavLink key={i.to} to={i.to} title={i.label} aria-label={i.label}>
+                  <i.icon size={18} aria-hidden /><span className="nav-label">{i.label}</span>
+                </NavLink>
+              ))}
+            </div>
+          ))}
+        </nav>
+        <div className="body">
+          <TopBar />
+          <main className="main"><Outlet /></main>
         </div>
-      </nav>
-      <main className="main"><Outlet /></main>
-    </div>
+      </div>
+    </CrumbProvider>
   );
 }

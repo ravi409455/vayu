@@ -11,8 +11,7 @@ export function Audit() {
   const q = useQuery({ queryKey: ["audit", action, page], queryFn: () => api<Page<Row>>("audit-logs", { query: { action, page } }) });
   return (
     <>
-      <PageHeader title="Audit log" subtitle="Who changed what: forms, templates, users, roles, integrations and API keys."
-        tip="Entries cannot be edited or deleted. Type the start of an action to filter, for example “form.” for everything about forms.">
+      <PageHeader title="Audit log">
         <input style={{ maxWidth: 260 }} placeholder="Filter by action, e.g. form.publish" value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }} /></PageHeader>
       <table><thead><tr><th>When</th><th>Who</th><th>Action</th><th>What</th></tr></thead>
         <tbody>{(q.data?.results ?? []).map((r) => (

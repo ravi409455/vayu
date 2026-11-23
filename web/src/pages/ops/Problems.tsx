@@ -19,8 +19,7 @@ export function Problems() {
   const label = (t: string, n: number) => `${t}${n ? ` (${n})` : ""}`;
   return (
     <>
-      <PageHeader title="Problems" subtitle="Things that need a person. Each row opens the booking."
-        tip="Stuck uploads: a file never finished. Conflicts: two experts inspected the same booking. Rejected type changes: Ops changed the type after the expert had started. PDF problems: a report failed or is out of date." />
+      <PageHeader title="Problems" />
       <Tabs value={tab} onChange={setTab} tabs={[{ id: "stuck", label: label("Stuck uploads", counts.stuck) }, { id: "conflicts", label: label("Conflicts", counts.conflicts) }, { id: "types", label: label("Rejected type changes", counts.types) }, { id: "pdf", label: label("PDF problems", counts.pdf) }]} />
       {tab === "stuck" && <Rows empty="No uploads are stuck." head={["Booking", "File", "Expert", "Since"]} rows={(stuck.data ?? []).map((s) => [<Link to={`/booking/${s.booking}`}>{s.booking_id}</Link>, `${s.field_key} · ${s.status}`, s.expert, when(s.created_at)])} />}
       {tab === "conflicts" && <Rows empty="No conflicts." head={["Booking", "Conflict", "Stage"]} rows={(conflicts.data?.results ?? []).map((b) => [<Link to={`/booking/${b.id}`}>{b.booking_id}</Link>, <Pill tone="bad">{b.conflict === "TWO_EXPERTS" ? "Two experts inspected it" : "A released draft arrived"}</Pill>, b.stage])} />}
@@ -31,6 +30,6 @@ export function Problems() {
 }
 
 function Rows({ head, rows, empty }: { head: string[]; rows: React.ReactNode[][]; empty: string }) {
-  if (rows.length === 0) return <Empty>{empty}</Empty>;
+  if (rows.length === 0) return <Empty title="All clear">{empty}</Empty>;
   return <table><thead><tr>{head.map((h) => <th key={h}>{h}</th>)}</tr></thead><tbody>{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{c}</td>)}</tr>)}</tbody></table>;
 }

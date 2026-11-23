@@ -30,7 +30,7 @@ export function JobBoard() {
   const type = useTypeLabels();
   return (
     <>
-      <PageHeader title="Job board" subtitle="Every booking, with filters that are remembered for you." tip="A read-only view of the bookings. Click a row to open the full booking. Your filters stay as you left them. To create or manage bookings use the Bookings page.">
+      <PageHeader title="Job board">
         <button onClick={() => set({ date_from: todayIso(), date_to: todayIso() })}>Today</button>
         <button onClick={() => setF(EMPTY)}>Clear filters</button>
 </PageHeader>

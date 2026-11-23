@@ -1,4 +1,5 @@
 import { cloneElement, createContext, isValidElement, useCallback, useContext, useId, useState, type ReactElement, type ReactNode } from "react";
+import { Inbox } from "lucide-react";
 import { explain } from "../api/client";
 import { InfoTip } from "./InfoTip";
 
@@ -89,8 +90,16 @@ export function when(iso?: string | null): string {
   return isNaN(d.getTime()) ? "" : d.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
 }
 
-export function Empty({ children }: { children: ReactNode }) {
-  return <p className="muted pad">{children}</p>;
+/** One empty-state pattern: what is (not) here, and the next step when there is one. */
+export function Empty({ children, title, action }: { children?: ReactNode; title?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="empty-state" role="status">
+      <Inbox size={28} aria-hidden />
+      {title && <strong>{title}</strong>}
+      {children && <span>{children}</span>}
+      {action}
+    </div>
+  );
 }
 
 /** Asks for one short text (a page or section name) in a proper dialog. */
@@ -104,12 +113,13 @@ export function NameDialog({ title, label, onOk, onCancel }: { title: string; la
   );
 }
 
-/** Page title row: title, a one-line explanation, an optional "i", and the page's buttons. */
-export function PageHeader({ title, subtitle, tip, children }: { title: ReactNode; subtitle?: ReactNode; tip?: ReactNode; children?: ReactNode }) {
+/** Page title row, the same on every page: title (and a count) on the left, the page's buttons on the right,
+ *  the main one last. A one-line explanation only where a first-time Admin needs it. */
+export function PageHeader({ title, count, subtitle, children }: { title: ReactNode; count?: number; subtitle?: ReactNode; children?: ReactNode }) {
   return (
     <header className="page-head">
       <div className="grow">
-        <h1>{title}{tip && <InfoTip>{tip}</InfoTip>}</h1>
+        <h1>{title}{count !== undefined && <span className="count">{count}</span>}</h1>
         {subtitle && <p className="muted subtitle">{subtitle}</p>}
       </div>
       {children && <div className="page-actions">{children}</div>}
