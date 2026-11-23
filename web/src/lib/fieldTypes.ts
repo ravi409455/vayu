@@ -1,0 +1,33 @@
+export const FIELD_TYPES: { id: string; label: string; group: string }[] = [
+  { id: "short_text", label: "Short text", group: "Text" }, { id: "long_text", label: "Long text", group: "Text" },
+  { id: "number", label: "Number", group: "Text" }, { id: "currency", label: "Money (₹)", group: "Text" },
+  { id: "phone", label: "Phone", group: "Text" }, { id: "date", label: "Date", group: "Text" },
+  { id: "time", label: "Time", group: "Text" }, { id: "datetime", label: "Date and time", group: "Text" },
+  { id: "single_choice", label: "Choose one", group: "Choices" }, { id: "multi_choice", label: "Choose several", group: "Choices" },
+  { id: "yes_no", label: "Yes / No", group: "Choices" }, { id: "master_list", label: "From a master list", group: "Choices" },
+  { id: "user_picker", label: "Pick a user", group: "Choices" },
+  { id: "photo", label: "Photos", group: "Media" }, { id: "video", label: "Videos", group: "Media" },
+  { id: "file", label: "Files", group: "Media" }, { id: "signature", label: "Signature", group: "Media" },
+  { id: "gps", label: "GPS location", group: "Media" },
+  { id: "derived", label: "Key Check (automatic)", group: "Automatic" }, { id: "rating", label: "Rating (automatic)", group: "Automatic" },
+];
+export const CHOICE_TYPES = ["single_choice", "multi_choice"];
+export const MEDIA_TYPES = ["photo", "video", "file", "signature"];
+
+/** A sensible starting config for a new field of this type. */
+export function defaultConfig(type: string): Record<string, unknown> {
+  switch (type) {
+    case "single_choice": case "multi_choice": return { options: [{ key: "ok", label: "OK" }, { key: "not_ok", label: "Not OK", is_defect: true, severity: "minor" }] };
+    case "master_list": return { list: "" };
+    case "user_picker": return { role: "expert" };
+    case "photo": case "video": case "file": return { max_count: type === "video" ? 1 : 5 };
+    case "derived": return { rule: { "!!": [{ var: "inspection.chassis_no" }] }, true_label: "Yes", false_label: "No" };
+    case "rating": return { category: "" };
+    default: return {};
+  }
+}
+
+export function slugKey(label: string): string {
+  const k = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return /^[a-z]/.test(k) ? k.slice(0, 63) : `f_${k}`.slice(0, 63);
+}
