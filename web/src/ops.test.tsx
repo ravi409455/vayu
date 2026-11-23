@@ -59,12 +59,13 @@ describe("problem queue", () => {
       return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
     });
     render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><AuthProvider><Problems /></AuthProvider></MemoryRouter></QueryClientProvider>);
-    const stuck = await screen.findByRole("region", { name: "Uploads stuck" });
-    expect(stuck).toHaveTextContent("2");
-    await waitFor(() => expect(screen.getByRole("region", { name: "Conflicts" })).toHaveTextContent("B4"));
-    expect(screen.getByRole("region", { name: "PDF problems" })).toHaveTextContent("render_failed");
-    expect(screen.queryByRole("region", { name: "Rejected type changes" })).toBeNull();       // empty: not shown
-    expect(screen.getByRole("heading", { name: /Problems/ })).toHaveTextContent("4");
+    const list = await screen.findByRole("list", { name: "Needs you" });
+    await waitFor(() => expect(list).toHaveTextContent("B4: two experts submitted"));
+    expect(list).toHaveTextContent("Upload stuck: B1");
+    expect(list).toHaveTextContent("Report failed: B3");
+    expect(screen.getByRole("heading", { name: /Needs you/ })).toHaveTextContent("4");
+    expect(screen.getByRole("button", { name: "Stuck uploads 2" })).toBeInTheDocument();     // one filter per kind present
+    expect(screen.queryByRole("button", { name: /Type changes/ })).toBeNull();
   });
   it("says so when there is nothing wrong", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => new Response(JSON.stringify(String(url).includes("auth/me") ? { id: 1, username: "o", name: "O", role: "ops", permissions: { "bookings.view": "all" } }

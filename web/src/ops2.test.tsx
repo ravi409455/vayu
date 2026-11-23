@@ -37,9 +37,9 @@ describe("booking views", () => {
     expect(viewQuery("upcoming", NOW)).toMatchObject({ date_from: "2026-11-24" });
     expect(viewQuery("all", NOW)).toEqual({});
   });
-  it("the schedule spans at least 9 to 7 and grows to fit early or late jobs", () => {
-    expect(dayWindow([])).toEqual([9, 19]);
-    expect(dayWindow([7.5, 18.75])).toEqual([7, 21]);
+  it("the schedule spans at least 8 am to 8 pm and grows to fit early or late jobs", () => {
+    expect(dayWindow([])).toEqual([8, 20]);
+    expect(dayWindow([7.5, 19.75])).toEqual([7, 22]);
   });
 });
 
@@ -171,5 +171,30 @@ describe("choice keys stay put once saved", () => {
     await u.type(screen.getByLabelText("Choice label"), "Fine");
     await u.click(screen.getByRole("button", { name: "Save field" }));
     expect(onSave.mock.calls[0]![0].config.options).toEqual([{ key: "ok", label: "Fine" }]);
+  });
+});
+
+describe("row menus", () => {
+  it("open below the button, or above it near the bottom, and stay inside the window", async () => {
+    const { placeMenu } = await import("./ui/Menu");
+    const view = { width: 1440, height: 900 }, menu = { width: 200, height: 180 };
+    expect(placeMenu({ top: 100, bottom: 130, right: 1400 }, menu, view)).toEqual({ top: 136, left: 1200 });
+    expect(placeMenu({ top: 800, bottom: 830, right: 1400 }, menu, view)).toEqual({ top: 614, left: 1200 });   // flipped up
+    expect(placeMenu({ top: 100, bottom: 130, right: 50 }, menu, view).left).toBe(8);                         // not off the left edge
+  });
+});
+
+describe("stacked bars", () => {
+  it("uses clean ticks and folds a ninth series into Other", async () => {
+    const { niceTicks, foldSeries } = await import("./ui/StackedBars");
+    expect(niceTicks(4)).toEqual([0, 1, 2, 3, 4]);
+    expect(niceTicks(23)).toEqual([0, 10, 20, 30]);
+    expect(niceTicks(0)).toEqual([0, 1]);
+    const series = Array.from({ length: 10 }, (_, i) => ({ key: `s${i}`, name: `S${i}` }));
+    const cols = [{ key: "d", label: "d", long: "d", values: Object.fromEntries(series.map((s, i) => [s.key, i + 1])) }];
+    const f = foldSeries(series, cols);
+    expect(f.series).toHaveLength(8);
+    expect(f.series[7]!.name).toBe("Other");
+    expect(f.cols[0]!.values.__other).toBe(1 + 2 + 3);         // the three smallest
   });
 });

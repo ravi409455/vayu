@@ -103,8 +103,8 @@ describe("system fields in the field editor", () => {
     render(<FieldEditor field={mode} choices={[]} lists={[]} categories={[]} onSave={onSave} onDelete={() => {}} readOnly={false} />);
     expect(screen.getAllByLabelText("Choice label").map((i) => (i as HTMLInputElement).value)).toEqual(["Cash", "UPI"]);
     await u.click(screen.getByRole("button", { name: "+ Add choice" }));
-    const keys = screen.getAllByLabelText("Choice key");
-    await u.type(keys[2]!, "wallet");
+    const keys = screen.getAllByLabelText("Choice key");                     // only the new choice shows its key
+    await u.type(keys[keys.length - 1]!, "wallet");
     await u.type(screen.getAllByLabelText("Choice label")[2]!, "Wallet");
     await u.click(screen.getByRole("button", { name: "Save field" }));
     expect(onSave.mock.calls[0]![0].config.options).toEqual([{ key: "cash", label: "Cash" }, { key: "upi", label: "UPI" }, { key: "wallet", label: "Wallet" }]);

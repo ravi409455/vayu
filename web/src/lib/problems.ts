@@ -20,3 +20,24 @@ export function useProblems() {
   return { ...lists, total: lists.stuck.length + lists.pdf.length + lists.conflicts.length + lists.types.length,
     loading: stuck.isLoading || pdf.isLoading || conflicts.isLoading || types.isLoading };
 }
+
+export type Need = { key: string; kind: "unassigned" | "upload" | "conflict" | "report" | "type"; tone: "warn" | "bad"; title: string; meta: string; to: string; action: string; at?: string };
+export const NEED_KIND: Record<Need["kind"], string> = { unassigned: "Unassigned today", upload: "Stuck uploads", conflict: "Conflicts", report: "Reports", type: "Type changes" };
+
+/** Everything that needs a person, as one list, most urgent first: today's jobs with no expert,
+ *  conflicts, stuck uploads, failed or out-of-date reports, rejected type changes. */
+export function useNeeds(): { needs: Need[]; loading: boolean } {
+  const p = useProblems();
+  const { me, can } = useAuth();
+  const t = new Date(); const day = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  const open = useQuery({ enabled: !!me && me.role !== "expert" && can("bookings.view"), staleTime: 30_000, refetchInterval: 60_000,
+    queryKey: ["bookings-page", "unassigned-today", day], queryFn: () => api<Page<Booking>>("bookings", { query: { stage: "draft", date_from: day, date_to: day, order: "schedule" } }) });
+  const needs: Need[] = [
+    ...p.conflicts.map((b) => ({ key: `c${b.id}`, kind: "conflict" as const, tone: "bad" as const, title: `${b.booking_id}: two experts submitted`, meta: "Choose which inspection counts", to: `/booking/${b.id}`, action: "Resolve" })),
+    ...(open.data?.results ?? []).map((b) => ({ key: `a${b.id}`, kind: "unassigned" as const, tone: "warn" as const, title: `${b.booking_id} has no expert`, meta: `Today at ${String(b.answers.inspection_time ?? "")} · ${String(b.answers.customer_name ?? "")}`, to: `/booking/${b.id}`, action: "Assign" })),
+    ...p.stuck.map((s) => ({ key: `s${s.id}`, kind: "upload" as const, tone: "bad" as const, title: `Upload stuck: ${s.booking_id}`, meta: `${s.expert} · ${s.field_key} · ${s.status}`, to: `/booking/${s.booking}`, action: "Open", at: s.created_at })),
+    ...p.pdf.map((r) => ({ key: `p${r.booking}`, kind: "report" as const, tone: (r.stale ? "warn" : "bad") as Need["tone"], title: r.stale ? `Report out of date: ${r.booking_id}` : `Report failed: ${r.booking_id}`, meta: r.error || "Answers changed after the PDF was made", to: `/booking/${r.booking}`, action: r.stale ? "Regenerate" : "Open" })),
+    ...p.types.map((b) => ({ key: `t${b.id}`, kind: "type" as const, tone: "warn" as const, title: `${b.booking_id}: type change rejected`, meta: b.alerts?.find((a) => a.code === "TYPE_CHANGE_REJECTED")?.detail ?? "The expert started another type", to: `/booking/${b.id}`, action: "Open" })),
+  ];
+  return { needs, loading: p.loading || open.isLoading };
+}

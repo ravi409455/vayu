@@ -1,28 +1,37 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useProblems } from "../../lib/problems";
+import { NEED_KIND, useNeeds, type Need } from "../../lib/problems";
 import { fmtStamp } from "../../lib/format";
-import { Empty, PageHeader, Pill } from "../../ui/kit";
+import { Empty, PageHeader } from "../../ui/kit";
 
-/** Things that need a person, grouped by kind. Each row opens the booking. */
+/** One inbox of everything that needs a person, most urgent first, filterable by kind. */
 export function Problems() {
-  const p = useProblems();
-  const groups = [
-    { title: "Uploads stuck", rows: p.stuck.map((s) => ({ to: `/booking/${s.booking}`, id: s.booking_id, text: `${s.field_key} · ${s.expert}`, meta: `${s.status} since ${fmtStamp(s.created_at)}` })) },
-    { title: "Conflicts", rows: p.conflicts.map((b) => ({ to: `/booking/${b.id}`, id: b.booking_id, text: "Two experts submitted this booking", meta: String(b.answers.customer_name ?? "") })) },
-    { title: "Rejected type changes", rows: p.types.map((b) => ({ to: `/booking/${b.id}`, id: b.booking_id, text: b.alerts?.find((a) => a.code === "TYPE_CHANGE_REJECTED")?.detail ?? "The expert started another type", meta: "" })) },
-    { title: "PDF problems", rows: p.pdf.map((r) => ({ to: `/booking/${r.booking}`, id: r.booking_id, text: r.error || (r.stale ? "Out of date: regenerate after the edits" : r.status), meta: "" })) },
-  ];
+  const { needs, loading } = useNeeds();
+  const [kind, setKind] = useState<Need["kind"] | "">("");
+  const kinds = (Object.keys(NEED_KIND) as Need["kind"][]).filter((k) => needs.some((n) => n.kind === k));
+  const shown = needs.filter((n) => !kind || n.kind === kind);
   return (
     <>
-      <PageHeader title="Problems" count={p.loading ? undefined : p.total} />
-      {!p.loading && p.total === 0 && <Empty title="All clear">No stuck uploads, conflicts, rejected type changes or PDF problems.</Empty>}
-      {groups.filter((g) => g.rows.length > 0).map((g) => (
-        <section key={g.title} className="table-card" aria-label={g.title} style={{ marginBottom: 14 }}>
-          <h2 className="table-title">{g.title} <Pill tone="bad">{g.rows.length}</Pill></h2>
-          <table className="rows"><tbody>{g.rows.map((r, i) => (
-            <tr key={i}><td style={{ width: 140 }}><Link className="cell-main" to={r.to}>{r.id}</Link></td><td>{r.text}</td><td className="muted small">{r.meta}</td>
-              <td style={{ textAlign: "right" }}><Link className="btn sm" to={r.to}>Open</Link></td></tr>))}</tbody></table>
-        </section>))}
+      <PageHeader title="Needs you" count={loading ? undefined : needs.length} subtitle="Things a person has to sort out. Each one opens the booking." />
+      {needs.length > 0 && (
+        <div className="seg" role="group" aria-label="Kind" style={{ marginBottom: 12 }}>
+          <button aria-pressed={kind === ""} onClick={() => setKind("")}>All {needs.length}</button>
+          {kinds.map((k) => <button key={k} aria-pressed={kind === k} onClick={() => setKind(k)}>{NEED_KIND[k]} {needs.filter((n) => n.kind === k).length}</button>)}
+        </div>)}
+      {!loading && needs.length === 0 && <Empty title="All clear">No unassigned jobs today, stuck uploads, conflicts, report problems or rejected type changes.</Empty>}
+      {shown.length > 0 && (
+        <div className="table-card inbox" role="list" aria-label="Needs you">
+          {shown.map((n) => (
+            <div key={n.key} className="inbox-row" role="listitem">
+              <span className={`dot ${n.tone}`} aria-hidden="true" />
+              <div className="grow" style={{ minWidth: 0 }}>
+                <div className="need-title">{n.title}</div>
+                <div className="need-meta">{n.meta}{n.at ? ` · since ${fmtStamp(n.at)}` : ""}</div>
+              </div>
+              <span className="chip">{NEED_KIND[n.kind]}</span>
+              <Link className={`btn sm${n.tone === "bad" ? " primary" : ""}`} to={n.to}>{n.action}</Link>
+            </div>))}
+        </div>)}
     </>
   );
 }

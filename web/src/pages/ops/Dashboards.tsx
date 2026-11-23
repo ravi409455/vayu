@@ -8,14 +8,13 @@ import { useAuth } from "../../auth";
 import { addDays, fmtDay, today } from "../../lib/format";
 import { Avatar } from "../../ui/Avatar";
 import { Empty, PageHeader } from "../../ui/kit";
+import { StackedBars } from "../../ui/StackedBars";
 
 type Row = { period: string; key: string; count: number };
 type Stats = { bookings: number; completed: number; cancelled: number; completion_rate: number | null; avg_minutes: number | null; on_time: number | null };
 type Summary = { date_from: string; date_to: string; period: Stats; previous: Stats; by_expert: (Stats & { expert: number })[] };
 const BY = { type: "Type", city: "City", expert: "Expert", stage: "Stage", lead_owner: "Lead owner" } as const;
 type Preset = "today" | "7" | "30" | "month" | "custom";
-// blue steps of different lightness (told apart without colour vision), then neutrals
-const PALETTE = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)", "var(--muted)", "var(--line-strong)"];
 
 /** Rows -> one line per period with a count per key, for a simple table and bars. */
 export function pivot(rows: Row[]): { periods: string[]; keys: string[]; cell: (p: string, k: string) => number } {
@@ -77,8 +76,6 @@ export function Dashboards() {
   const periods = group === "day" && rows.length ? daysBetween(from, to) : piv.periods;
   const who = (id: unknown) => (users.data ?? []).find((u) => String(u.id) === String(id));
   const name = (k: string) => !k ? "—" : by === "type" ? typeLabel(k) : by === "city" ? cityLabel(k) : by === "stage" ? STAGE_LABEL[k] ?? k : who(k)?.name || k;
-  const totals = periods.map((p) => keys.reduce((n, k) => n + cell(p, k), 0));
-  const max = Math.max(1, ...totals);
   const csv = `/api/v1/dashboards/volume?${new URLSearchParams({ group, by, date_from: from, date_to: to, export: "csv" })}`;
   const s = sum.data;
   const kpis = s ? [
@@ -89,7 +86,9 @@ export function Dashboards() {
     { label: "Started on time", value: s.period.on_time === null ? "—" : `${s.period.on_time}%`, d: delta(s.period.on_time, s.previous.on_time, "pct") },
     { label: "Cancelled", value: String(s.period.cancelled), d: delta(s.period.cancelled, s.previous.cancelled, "count", false) },
   ] : [];
-  const periodLabel = (p: string) => group === "day" ? fmtDay(p) : group === "week" ? `Week ${p.split("-W")[1]}` : new Date(`${p}-01`).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+  const periodLabel = (p: string, short = false) => group === "day"
+    ? (short ? new Date(`${p}T00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : fmtDay(p))
+    : group === "week" ? `${short ? "W" : "Week "}${p.split("-W")[1]}` : new Date(`${p}-01`).toLocaleDateString("en-IN", { month: "short", ...(short ? {} : { year: "numeric" }) });
   return (
     <>
       <PageHeader title="Dashboard" subtitle={`${fmtDay(from)} – ${fmtDay(to)}, compared with the ${preset === "today" ? "day" : "days"} before`}>
@@ -114,18 +113,9 @@ export function Dashboards() {
             <h3>Bookings per {group}</h3>
             <select aria-label="Split by" value={by} onChange={(e) => setBy(e.target.value as keyof typeof BY)} style={{ width: "auto" }}>{Object.entries(BY).map(([k, l]) => <option key={k} value={k}>Split by {l.toLowerCase()}</option>)}</select>
           </div>
-          {rows.length === 0 ? <Empty title="No bookings in this range" /> : <>
-            <div className="legend-row">{keys.map((k, i) => <span key={k} className="legend-key"><span style={{ background: PALETTE[i % PALETTE.length] }} />{name(k)}</span>)}</div>
-            <div className="chart" role="img" aria-label={`Bookings per ${group}, split by ${BY[by].toLowerCase()}. The table below has the exact numbers.`}>
-              {periods.map((p, pi) => (
-                <div key={p} className="bar-col" title={`${periodLabel(p)}: ${totals[pi]}`}>
-                  <div className="bar-stack" style={{ height: `${(totals[pi]! / max) * 100}%` }}>
-                    {keys.map((k, i) => cell(p, k) > 0 && <div key={k} style={{ flexGrow: cell(p, k), background: PALETTE[i % PALETTE.length] }} />)}
-                  </div>
-                </div>))}
-            </div>
-            <div className="chart-axis"><span>{periodLabel(periods[0]!)}</span>{periods.length > 2 && <span>{periodLabel(periods[Math.floor(periods.length / 2)]!)}</span>}<span>{periodLabel(periods[periods.length - 1]!)}</span></div>
-          </>}
+          {rows.length === 0 ? <Empty title="No bookings in this range" /> : (
+            <StackedBars series={keys.map((k) => ({ key: k, name: name(k) }))}
+              cols={periods.map((p) => ({ key: p, label: periodLabel(p, true), long: periodLabel(p), values: Object.fromEntries(keys.map((k) => [k, cell(p, k)])) }))} />)}
         </section>
         <section className="card needs" aria-label="By expert" style={{ padding: "16px 0 6px" }}>
           <h3 style={{ margin: "0 18px 8px" }}>By expert</h3>

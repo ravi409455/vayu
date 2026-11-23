@@ -91,7 +91,7 @@ test("the Bookings page finds a booking by customer, and an expert cannot open t
 
 test("the menu and pages: Ops see only their four, nothing of the admin side", async ({ page }) => {
   await signIn(page, "ops");
-  for (const name of ["Today", "Bookings", "Problems", "Dashboard"]) await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
+  for (const name of ["Today", "Bookings", "Needs you", "Dashboard"]) await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
   for (const name of ["Library", "Master lists", "Users", "Forms", "PDF templates", "Promote", "Integrations", "API keys", "Search"]) await expect(page.getByRole("link", { name })).toHaveCount(0);
   for (const path of ["/library", "/lists", "/users", "/forms", "/pdf", "/promote", "/integrations"]) {
     await page.goto(path);

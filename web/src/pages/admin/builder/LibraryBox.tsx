@@ -16,7 +16,7 @@ export function LibraryBox({ kind, id, library, readOnly, onDone }: {
     try { await api(`${path}/${action}`, { body }); say(done); onDone(); } catch (e) { fail(e); }
   };
   return (
-    <div className="card" style={{ marginTop: 14 }}>
+    <div className="lib-box">
       <div className="bar" style={{ marginBottom: 6 }}><strong><Link2 size={14} aria-hidden /> Library</strong>
         <InfoTip>The library holds reusable {kind}s. A linked {kind} stays in sync with the library: when someone improves the library item you see “update available” and accept it. Copies are independent.</InfoTip></div>
       {library ? (

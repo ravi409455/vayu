@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "./auth";
 import { loadJSON, saveJSON } from "./lib/store";
-import { useProblems } from "./lib/problems";
+import { useNeeds } from "./lib/problems";
 import { CrumbProvider } from "./ui/crumb";
 import { Logo } from "./ui/Logo";
 import { TopBar } from "./ui/TopBar";
@@ -17,7 +17,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     { to: "/jobs", label: "My jobs", icon: Briefcase, role: "expert" },
     { to: "/today", label: "Today", icon: Home, perm: "bookings.view", role: "ops-admin" },
     { to: "/bookings", label: "Bookings", icon: ClipboardList, perm: "bookings.view", role: "ops-admin" },
-    { to: "/problems", label: "Problems", icon: AlertTriangle, perm: "bookings.view", role: "ops-admin" },
+    { to: "/problems", label: "Needs you", icon: AlertTriangle, perm: "bookings.view", role: "ops-admin" },
     { to: "/dashboards", label: "Dashboard", icon: BarChart3, perm: "dashboards.view" },
   ] },
   { title: "Templates", items: [
@@ -55,7 +55,7 @@ export function visibleNav(role: string, can: (p: string) => boolean): { title: 
 
 export function Layout() {
   const { me, can } = useAuth();
-  const problems = useProblems();
+  const { needs } = useNeeds();
   const [collapsed, setCollapsed] = useState(() => loadJSON<boolean>("vayu:nav:collapsed", false));
   useEffect(() => saveJSON("vayu:nav:collapsed", collapsed), [collapsed]);
   if (!me) return null;
@@ -74,7 +74,7 @@ export function Layout() {
               {g.items.map((i) => (
                 <NavLink key={i.to} to={i.to} title={i.label} aria-label={i.label}>
                   <i.icon size={18} aria-hidden /><span className="nav-label">{i.label}</span>
-                  {i.to === "/problems" && problems.total > 0 && <span className="nav-badge" aria-label={`${problems.total} problems`}>{problems.total}</span>}
+                  {i.to === "/problems" && needs.length > 0 && <span className="nav-badge" aria-label={`${needs.length} need you`}>{needs.length}</span>}
                 </NavLink>
               ))}
             </div>

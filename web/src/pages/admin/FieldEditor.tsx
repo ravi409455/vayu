@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Link2, Trash2, X } from "lucide-react";
+import { Link2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Access, FormField, Option } from "../../api/types";
 import { uploadFile } from "../../api/client";
@@ -6,6 +6,7 @@ import { iconFor } from "../../lib/typeIcons";
 import { AccessEditor } from "../../ui/AccessEditor";
 import { ConditionBuilder, type FieldChoice } from "../../ui/ConditionBuilder";
 import { Field, Pill, Tabs, useToast } from "../../ui/kit";
+import { MoreMenu } from "../../ui/Menu";
 import { CHOICE_TYPES, FIELD_TYPES, slugKey, SYSTEM_TYPE_LABELS } from "../../lib/fieldTypes";
 
 export type FieldDraft = Pick<FormField, "label" | "helper_text" | "type" | "config" | "required" | "required_if" | "show_if" | "visible" | "access">;
@@ -50,16 +51,18 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
       <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         {pane === "settings" && (
           <>
-            <Field label="Label" tip="What the person sees above the field.">
-              <input value={d.label} onChange={(e) => set({ label: e.target.value })} />
+            <Field label="Label">
+              <input value={d.label} placeholder="The question people see" onChange={(e) => set({ label: e.target.value })} />
             </Field>
-            <Field label="Help text" tip="Small grey text under the field: an example or a reminder.">
-              <input value={d.helper_text} onChange={(e) => set({ helper_text: e.target.value })} />
+            <Field label="Help text">
+              <input value={d.helper_text} placeholder="Optional: an example or a reminder" onChange={(e) => set({ helper_text: e.target.value })} />
             </Field>
             {!field.is_system && (
-              <div className="bar" style={{ gap: 18, marginBottom: 10 }}>
-                <label className="check"><input type="checkbox" checked={d.required} onChange={(e) => set({ required: e.target.checked })} /> Required</label>
-                <label className="check"><input type="checkbox" checked={d.visible} onChange={(e) => set({ visible: e.target.checked })} /> Visible</label>
+              <div className="switch-list">
+                <label className="switch-row"><span className="grow">Required<span className="muted small"> · must be answered</span></span>
+                  <input type="checkbox" role="switch" className="switch" checked={d.required} onChange={(e) => set({ required: e.target.checked })} aria-label="Required" /></label>
+                <label className="switch-row"><span className="grow">Visible<span className="muted small"> · off hides it everywhere</span></span>
+                  <input type="checkbox" role="switch" className="switch" checked={d.visible} onChange={(e) => set({ visible: e.target.checked })} aria-label="Visible" /></label>
               </div>
             )}
             {["gps", "date", "time", "datetime"].includes(field.type) && (
@@ -144,8 +147,9 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
       {outside}
       {!readOnly && (
         <div className="insp-foot">
+          {!field.is_system && <button className="link danger-link" onClick={onDelete}><Trash2 size={14} aria-hidden /> Delete field</button>}
+          <span className="grow muted small" style={{ textAlign: "right" }}>{dirty ? "Unsaved changes" : ""}</span>
           <button className="primary" disabled={!dirty} onClick={() => onSave(d)}>Save field</button>
-          {!field.is_system && <button className="danger" onClick={onDelete}><Trash2 size={14} aria-hidden /> Delete field</button>}
         </div>
       )}
     </div>
@@ -163,49 +167,56 @@ const outcomeOf = (o: Option) => (o.is_defect ? (o.severity ?? "minor") : "fine"
 /** The answers people can pick: label, what it means for the rating, the order. The key (used by the
  *  API, rules and reports) follows the label until someone types their own. */
 function OptionsEditor({ options, onChange, display, onDisplay, savedKeys }: { options: Option[]; onChange: (o: Option[]) => void; display: string | null; onDisplay: (d: string) => void; savedKeys: Set<string> }) {
+  const [keys, setKeys] = useState(false);
   const set = (i: number, p: Partial<Option>) => onChange(options.map((o, j) => (j === i ? { ...o, ...p } : o)));
   const move = (i: number, by: number) => { const j = i + by; if (j < 0 || j >= options.length) return; const out = [...options]; [out[i], out[j]] = [out[j]!, out[i]!]; onChange(out); };
   const dupes = new Set(options.map((o) => o.key).filter((k, i, a) => k && a.indexOf(k) !== i));
   return (
     <section className="options-editor" aria-label="Choices">
       <div className="opt-head">
-        <strong className="grow">Choices</strong>
+        <span className="opt-title grow">Choices</span>
         {display !== null && (
-          <div className="seg" role="group" aria-label="Show as">
+          <div className="seg sm" role="group" aria-label="Show as">
             <button type="button" aria-pressed={display !== "dropdown"} onClick={() => onDisplay("buttons")}>Buttons</button>
             <button type="button" aria-pressed={display === "dropdown"} onClick={() => onDisplay("dropdown")}>Dropdown</button>
           </div>)}
       </div>
-      <p className="muted small" style={{ margin: "0 0 8px" }}>A defect counts against the rating; its severity decides how much.</p>
       <ol className="opt-list">
         {options.map((o, i) => {
           const out = outcomeOf(o);
+          const showKey = keys || !savedKeys.has(o.key) || dupes.has(o.key);
           return (
             <li key={i} className={`opt-row ${out}`}>
               <div className="opt-main">
                 <span className="opt-dot" aria-hidden="true" />
-                <input aria-label="Choice label" value={o.label} placeholder="What people see"
+                <input aria-label="Choice label" value={o.label} placeholder="Answer"
                   onChange={(e) => set(i, { label: e.target.value, ...(followsLabel(o, savedKeys) ? { key: slugKey(e.target.value) } : {}) })} />
                 <select aria-label="What this choice means" value={out} onChange={(e) => {
                   const v = e.target.value;
                   set(i, v === "fine" ? { is_defect: false, severity: null } : { is_defect: true, severity: v });
                 }}>{OUTCOMES.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select>
+                <MoreMenu label={`More for ${o.label || "this choice"}`} items={[
+                  { label: "Move up", onClick: () => move(i, -1), hidden: i === 0 },
+                  { label: "Move down", onClick: () => move(i, 1), hidden: i === options.length - 1 },
+                  { label: "Remove", danger: true, onClick: () => onChange(options.filter((_, j) => j !== i)) },
+                ]} />
               </div>
-              <div className="opt-sub">
-                <label className="opt-key"><span>key</span><input aria-label="Choice key" className="mono" value={o.key} placeholder="key" onChange={(e) => set(i, { key: e.target.value })}
-                  title={savedKeys.has(o.key) ? "Answers already saved use this key: changing it disconnects them" : undefined} /></label>
-                {savedKeys.has(o.key) ? null : o.key && <span className="muted small">new</span>}
-                {dupes.has(o.key) && <span className="error" style={{ margin: 0 }}>used twice</span>}
-                <span className="grow" />
-                <button type="button" className="icon-btn" aria-label={`Move ${o.label || "choice"} up`} disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp size={14} aria-hidden /></button>
-                <button type="button" className="icon-btn" aria-label={`Move ${o.label || "choice"} down`} disabled={i === options.length - 1} onClick={() => move(i, 1)}><ArrowDown size={14} aria-hidden /></button>
-                <button type="button" className="icon-btn" aria-label="Remove choice" onClick={() => onChange(options.filter((_, j) => j !== i))}><X size={14} aria-hidden /></button>
-              </div>
+              {showKey && (
+                <div className="opt-sub">
+                  <label className="opt-key"><span>key</span><input aria-label="Choice key" className="mono" value={o.key} placeholder="key" onChange={(e) => set(i, { key: e.target.value })}
+                    title={savedKeys.has(o.key) ? "Answers already saved use this key: changing it disconnects them" : undefined} /></label>
+                  {dupes.has(o.key) && <span className="error" style={{ margin: 0 }}>used twice</span>}
+                  {!savedKeys.has(o.key) && <span className="muted small">new</span>}
+                </div>)}
             </li>);
         })}
       </ol>
-      <button type="button" className="link" onClick={() => onChange([...options, { key: "", label: "" }])}>+ Add choice</button>
-      {display !== null && options.length > 5 && display !== "dropdown" && <p className="muted small">More than 5 choices show as a dropdown unless you pick Buttons here.</p>}
+      <div className="opt-foot">
+        <button type="button" className="link" onClick={() => onChange([...options, { key: "", label: "" }])}>+ Add choice</button>
+        <span className="grow" />
+        <button type="button" className="link muted-link" aria-pressed={keys} onClick={() => setKeys(!keys)}>{keys ? "Hide keys" : "Show keys"}</button>
+      </div>
+      {display !== null && options.length > 5 && display !== "dropdown" && <p className="muted small" style={{ margin: "6px 0 0" }}>More than 5 choices show as a dropdown unless you pick Buttons.</p>}
     </section>
   );
 }

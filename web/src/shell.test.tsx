@@ -67,7 +67,7 @@ describe("route guards", () => {
     const titles = (role: string, perms: string[]) => visibleNav(role, (p) => perms.includes(p)).flatMap((g) => g.items.map((i) => i.label));
     expect(titles("expert", [])).toEqual(["My jobs"]);
     const ops = titles("ops", ["bookings.view", "dashboards.view", "forms.view"]);
-    expect(ops).toEqual(["Today", "Bookings", "Problems", "Dashboard"]);
+    expect(ops).toEqual(["Today", "Bookings", "Needs you", "Dashboard"]);
     expect(ops).not.toContain("Users");
     expect(ops).not.toContain("My jobs");
     expect(titles("admin", ["users.view", "roles.manage", "forms.view"])).toEqual(expect.arrayContaining(["Users", "Roles & permissions", "Forms"]));

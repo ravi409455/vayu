@@ -9,12 +9,12 @@ import { useAuth } from "../auth";
 import { Avatar } from "./Avatar";
 import { useCrumbText } from "./crumb";
 import { envName } from "./Logo";
-import { useProblems } from "../lib/problems";
+import { useNeeds } from "../lib/problems";
 
 /** Section of the app for each first path segment; detail pages name their parent list. */
 const SECTION: Record<string, [string, string]> = {
   bookings: ["Bookings", "/bookings"], booking: ["Bookings", "/bookings"], today: ["Today", "/today"],
-  problems: ["Problems", "/problems"], dashboards: ["Dashboard", "/dashboards"], jobs: ["My jobs", "/jobs"],
+  problems: ["Needs you", "/problems"], dashboards: ["Dashboard", "/dashboards"], jobs: ["My jobs", "/jobs"],
   forms: ["Forms", "/forms"], library: ["Library", "/library"], lists: ["Master lists", "/lists"],
   pdf: ["PDF templates", "/pdf"], users: ["Users", "/users"], roles: ["Roles & permissions", "/roles"],
   integrations: ["Integrations", "/integrations"], "api-keys": ["API keys", "/api-keys"], promote: ["Promote", "/promote"],
@@ -126,12 +126,36 @@ function AccountMenu() {
   );
 }
 
-function ProblemsBell() {
-  const p = useProblems();
+/** The bell: how many things need a person, and the list itself one click away. */
+function NeedsBell() {
+  const { needs } = useNeeds();
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", away); document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
+  }, [open]);
   return (
-    <Link to="/problems" className="icon-btn bell" aria-label={p.total ? `Problems: ${p.total}` : "Problems: none"} title="Problems">
-      <Bell size={18} aria-hidden />{p.total > 0 && <span className="bell-dot">{p.total}</span>}
-    </Link>
+    <div className="menu-wrap" ref={wrap}>
+      <button className="icon-btn bell" aria-label={needs.length ? `Needs you: ${needs.length}` : "Needs you: nothing"} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)}>
+        <Bell size={18} aria-hidden />{needs.length > 0 && <span className="bell-dot">{needs.length}</span>}
+      </button>
+      {open && (
+        <div className="menu needs-pop" role="dialog" aria-label="Needs you">
+          <div className="needs-head"><strong className="grow">Needs you</strong><span className="muted small">{needs.length || "Nothing"}</span></div>
+          {needs.length === 0 && <p className="muted small" style={{ padding: "6px 10px" }}>All clear. Nothing needs a person right now.</p>}
+          {needs.slice(0, 7).map((n) => (
+            <Link key={n.key} to={n.to} className="need-item" onClick={() => setOpen(false)}>
+              <span className={`dot ${n.tone}`} aria-hidden="true" />
+              <span className="grow" style={{ minWidth: 0 }}><span className="need-title">{n.title}</span><span className="need-meta">{n.meta}</span></span>
+              <span className="need-act">{n.action}</span>
+            </Link>))}
+          <Link to="/problems" className="needs-all" onClick={() => setOpen(false)}>{needs.length > 7 ? `See all ${needs.length}` : "Open the list"}</Link>
+        </div>)}
+    </div>
   );
 }
 
@@ -144,7 +168,7 @@ export function TopBar() {
       {me && me.role !== "expert" && can("bookings.view") && <GlobalSearch />}
       <div className="right">
         {env && <span className="env" title="Which server this is">{env}</span>}
-        {me && me.role !== "expert" && can("bookings.view") && <ProblemsBell />}
+        {me && me.role !== "expert" && can("bookings.view") && <NeedsBell />}
         <AccountMenu />
       </div>
     </header>

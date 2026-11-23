@@ -33,7 +33,7 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   // the first page must be finished before moving on: odometer required
   await page.getByRole("button", { name: /Odometer/ }).first().click();
   await page.getByRole("tab", { name: "Settings" }).click();
-  await page.getByRole("checkbox", { name: "Required", exact: true }).check();
+  await page.getByRole("switch", { name: "Required", exact: true }).check();
   await page.getByRole("button", { name: "Save field" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Saved" }).first()).toBeVisible();
   await page.locator(".rail-item", { hasText: "Page 1" }).click();
