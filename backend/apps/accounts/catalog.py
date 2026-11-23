@@ -19,7 +19,8 @@ class Perm:
 
 CATALOG: list[Perm] = [
     Perm("users.view", "Users", "See the user list"),
-    Perm("users.manage", "Users", "Create, edit, deactivate users and reset passwords"),
+    Perm("users.manage", "Users", "Create, edit, deactivate users and reset passwords",
+         grantable=False),
     Perm("users.sign_out_devices", "Users", "Sign a user out of all devices"),
     Perm("roles.manage", "Users", "Edit role permissions", grantable=False),
     Perm("audit.view", "Settings", "View the configuration audit log"),

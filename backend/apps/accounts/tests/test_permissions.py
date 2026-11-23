@@ -270,40 +270,28 @@ def test_a_forced_password_change_blocks_even_permitted_users(make_user, login):
 
 # ---------------------------------------------------------------- no privilege escalation
 
-@pytest.fixture
-def ops_user_manager(api_as, make_user):
-    """An Ops user who has been granted users.manage."""
-    admin, _ = api_as(Role.ADMIN)
-    put_perms(admin, "ops", dict(DEFAULTS["ops"], **{"users.manage": "all"}))
-    ops, ops_user = api_as(Role.OPS)
-    return ops, ops_user, make_user(Role.ADMIN, username="theboss")
-
-
 NEW = {"username": "newbie", "name": "N", "role": "expert", "password": "Temp-pass-123"}
 
 
-def test_users_manage_holder_can_manage_non_admin_users(ops_user_manager, make_user):
-    ops, _, _ = ops_user_manager
-    assert ops.post("/api/v1/users", NEW, format="json").status_code == 201
+def test_users_manage_is_the_admins_alone_and_cannot_be_granted_to_ops(api_as, make_user):
+    admin, _ = api_as(Role.ADMIN)
+    refused = put_perms(admin, "ops", dict(DEFAULTS["ops"], **{"users.manage": "all"}))
+    assert refused.status_code == 400 and refused.json()["code"] == "NOT_GRANTABLE"
+    ops, _ = api_as(Role.OPS)
     target = make_user(Role.EXPERT)
-    assert ops.patch(f"/api/v1/users/{target.id}", {"name": "X"}, format="json").status_code == 200
-
-
-def test_only_an_admin_can_create_or_touch_admin_users(ops_user_manager, make_user):
-    ops, _, boss = ops_user_manager
-    expert = make_user(Role.EXPERT)
+    boss = make_user(Role.ADMIN, username="theboss")
     attempts = [
+        ops.post("/api/v1/users", NEW, format="json"),
         ops.post("/api/v1/users", {**NEW, "role": "admin"}, format="json"),
+        ops.patch(f"/api/v1/users/{target.id}", {"name": "X"}, format="json"),
         ops.patch(f"/api/v1/users/{boss.id}", {"name": "pwned"}, format="json"),
-        ops.patch(f"/api/v1/users/{expert.id}", {"role": "admin"}, format="json"),
         ops.post(f"/api/v1/users/{boss.id}/reset-password", {"password": "Temp-pass-123"},
                  format="json"),
-        ops.post(f"/api/v1/users/{boss.id}/sign-out-devices"),
     ]
-    for r in attempts:
-        assert r.status_code == 403 and r.json()["code"] == "ADMIN_ONLY"
+    assert [r.status_code for r in attempts] == [403] * 5
     boss.refresh_from_db()
     assert boss.name != "pwned"
+    assert admin.post("/api/v1/users", NEW, format="json").status_code == 201
 
 
 def test_ops_without_users_manage_cannot_manage_users(api_as, make_user):
@@ -319,6 +307,7 @@ def test_ops_without_users_manage_cannot_manage_users(api_as, make_user):
 # ------------------------------------------------------ every endpoint declares its permission
 
 PUBLIC_OR_AUTHENTICATED_ONLY = {"HealthView", "LoginView", "DeviceCheckedRefreshView", "MeView",
+                                "ProfileView", "MyPictureView",
                                 "LogoutView", "ChangePasswordView", "ZipDownload", "Verify",
                                 # API-key views: authorised by the key and its scope
                                 "Bookings", "BookingDetail", "BulkBookings", "FormAssetShow",

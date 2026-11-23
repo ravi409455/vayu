@@ -74,6 +74,7 @@ class Command(BaseCommand):
         for username, role, name, must in USERS:
             User.objects.create_user(username=username, password=PASSWORD, role=role, name=name,
                                      must_change_password=must)
+        User.objects.filter(username="expert").update(phone="+919876500111")  # for the profile
         admin = User.objects.get(username="admin")
         form_services.ensure_system_forms()
         _publish(Form.objects.get(type="booking"))

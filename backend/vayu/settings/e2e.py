@@ -24,7 +24,8 @@ CELERY_TASK_EAGER_PROPAGATES = False
 PDF_RETRY_DELAY = 0
 CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 REST_FRAMEWORK = {**REST_FRAMEWORK,  # noqa: F405
-                  "DEFAULT_THROTTLE_RATES": {"login": "100000/min", "public": "100000/min"}}
+                  "DEFAULT_THROTTLE_RATES": {"login": "100000/min", "public": "100000/min",
+                                           "avatar": "100000/min"}}
 WEBHOOK_ALLOW_HTTP = True
 WEBHOOK_ALLOW_PRIVATE = True          # the test receiver listens on localhost
 PUBLIC_BASE_URL = "http://localhost:5173"

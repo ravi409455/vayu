@@ -1,17 +1,37 @@
 from rest_framework import serializers
 
+from apps.core.phone import InvalidPhone, normalize
+
 from .models import AuditLog, Role, User
 from .services import validate_new_password
 
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
+    avatar_url = serializers.SerializerMethodField()
+    phone = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = User
         fields = ["id", "username", "name", "email", "role", "is_active",
-                  "must_change_password", "locked_until", "password"]
+                  "must_change_password", "locked_until", "password", "phone", "avatar_url"]
         read_only_fields = ["must_change_password", "locked_until"]
+
+    def get_avatar_url(self, obj):
+        """Where this person's picture is served from (the version busts the browser's cache);
+        null when they have none."""
+        if not obj.has_avatar:
+            return None
+        return f"/api/v1/users/{obj.pk}/picture?v={obj.avatar_version}"
+
+    def validate_phone(self, value):
+        """The same Indian mobile format as customer phones, stored as +91XXXXXXXXXX."""
+        if not value.strip():
+            return ""
+        try:
+            return normalize(value)
+        except InvalidPhone as e:
+            raise serializers.ValidationError(str(e)) from e
 
     def validate_username(self, value):
         value = value.strip()
@@ -36,6 +56,14 @@ class UserSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         validated_data.pop("password", None)  # passwords change via the dedicated endpoints
         return super().update(instance, validated_data)
+
+
+class MeSerializer(UserSerializer):
+    """The signed-in person's own record: adds their saved theme."""
+
+    class Meta(UserSerializer.Meta):
+        fields = [*UserSerializer.Meta.fields, "theme"]
+        read_only_fields = [*UserSerializer.Meta.read_only_fields, "theme"]
 
 
 class LoginSerializer(serializers.Serializer):

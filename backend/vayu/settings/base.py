@@ -87,7 +87,7 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 50,
     # abuse limits per client IP (views opt in with throttle_scope); counters live in Redis so
     # every gunicorn worker shares them
-    "DEFAULT_THROTTLE_RATES": {"login": "20/min", "public": "60/min"},
+    "DEFAULT_THROTTLE_RATES": {"login": "20/min", "public": "60/min", "avatar": "20/hour"},
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
         "apps.accounts.permissions.PasswordChangeNotRequired",

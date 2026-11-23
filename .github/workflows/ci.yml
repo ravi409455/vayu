@@ -57,7 +57,7 @@ jobs:
           uv run pytest -q apps/forms/tests/test_library.py apps/forms/tests/test_library_push.py apps/forms/tests/test_access_model.py --cov=apps.forms.library --cov=apps.forms.library_push --cov=apps.forms.ratings --cov-branch --cov-fail-under=100
           uv run pytest -q apps/scoring apps/bookings/tests/test_scoring.py --cov=apps.scoring --cov-branch --cov-fail-under=100
           uv run pytest -q apps/integrations --cov=apps.integrations --cov-branch --cov-fail-under=100
-          uv run pytest -q apps/accounts --cov=apps.accounts.permissions --cov=apps.accounts.roles --cov-branch --cov-fail-under=100
+          uv run pytest -q apps/accounts --cov=apps.accounts.permissions --cov=apps.accounts.roles --cov=apps.accounts.avatars --cov=apps.core.phone --cov-branch --cov-fail-under=100
   web:
     runs-on: ubuntu-latest
     defaults: {run: {working-directory: web}}

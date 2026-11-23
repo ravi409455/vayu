@@ -20,9 +20,11 @@ def migrate(targets):
 
 @pytest.fixture
 def old_world():
+    from apps.accounts.models import User
     from apps.forms.models import Form
 
     Form.objects.all().delete()                  # the system forms made for the current schema
+    User.objects.create_user(username="e", password="x", role="expert")   # made now: users keep their schema
     apps = migrate(BEFORE)
     yield apps
     migrate(AFTER)                               # leave the database at the newest state
@@ -86,7 +88,7 @@ def build_old_data(apps):
         "blocks": [{"type": "table", "rows": [{"label": "Mode", "field": "ops.payment_mode"},
                                               {"label": "Door", "field": "inspection.door"}]}]})
 
-    expert = User.objects.create(username="e", role="expert", password="x")
+    expert = User.objects.get(username="e")
     b = Booking.objects.create(booking_id="B1", inspection_type="pdi", assigned_expert=expert)
     Inspection.objects.create(booking=b, expert=expert, form_version=pv, status="submitted",
                               answers={"inspection": {"door": "ok"}, "ops": {

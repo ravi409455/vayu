@@ -2,12 +2,14 @@ from django.contrib.auth import login as django_login
 from django.contrib.auth import logout as django_logout
 from django.contrib.auth import update_session_auth_hash
 from django.db import transaction
+from django.http import HttpResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import AllowAny
+from rest_framework.exceptions import MethodNotAllowed, ValidationError
+from rest_framework.parsers import MultiPartParser
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
@@ -15,15 +17,16 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.core.errors import CodedError
 
-from . import audit, roles, services
+from . import audit, avatars, roles, services
 from .authentication import DeviceCheckedRefreshSerializer
 from .catalog import CATALOG
-from .models import AuditLog, Device, Role, User
-from .permissions import grants_for, perm
+from .models import AuditLog, Device, Role, Theme, User
+from .permissions import PasswordChangeNotRequired, grants_for, perm, scope_for
 from .serializers import (
     AuditLogSerializer,
     ChangePasswordSerializer,
     LoginSerializer,
+    MeSerializer,
     PasswordSerializer,
     UserSerializer,
 )
@@ -60,8 +63,59 @@ class MeView(APIView):
     allow_password_change_pending = True
 
     def get(self, request):
-        return Response({**UserSerializer(request.user).data,
+        return Response({**MeSerializer(request.user).data,
                          "permissions": grants_for(request.user.role)})
+
+
+class ProfileView(APIView):
+    """What a person may change about themselves: their theme, nothing else. Name, email, role and
+    phone are the Admin's to change."""
+
+    def patch(self, request):
+        body = request.data if isinstance(request.data, dict) else {}
+        extra = sorted(set(body) - {"theme"})
+        if extra:
+            raise CodedError("FIELD_NOT_EDITABLE", "Only an Admin can change that. You can change "
+                             "your theme here.", 400, keys=extra)
+        theme = body.get("theme")
+        if theme not in Theme.values:
+            raise ValidationError({"theme": f"Choose one of: {', '.join(Theme.values)}."})
+        user = request.user
+        if user.theme != theme:
+            user.theme = theme
+            user.save(update_fields=["theme"])
+            audit.record(user, "user.theme_change", "user", user.id, f"Theme set to {theme}")
+        return Response(MeSerializer(user).data)
+
+
+class MyPictureView(APIView):
+    """Your own picture: upload a file (it is cropped square and shrunk) or remove it."""
+
+    parser_classes = [MultiPartParser]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "avatar"
+
+    def put(self, request):
+        upload = request.FILES.get("file")
+        if upload is None:
+            raise CodedError("INVALID_IMAGE", "Choose a picture to upload.", 400)
+        if upload.size > avatars.MAX_BYTES:
+            raise CodedError("IMAGE_TOO_LARGE", "The picture must be 5 MB or smaller.", 413)
+        user = request.user
+        user.avatar = avatars.process(upload.read())
+        user.has_avatar, user.avatar_version = True, user.avatar_version + 1
+        user.save(update_fields=["avatar", "has_avatar", "avatar_version"])
+        audit.record(user, "user.picture_set", "user", user.id, "Set their profile picture")
+        return Response(MeSerializer(user).data)
+
+    def delete(self, request):
+        user = request.user
+        if user.has_avatar:
+            user.avatar, user.has_avatar, user.avatar_version = None, False, user.avatar_version + 1
+            user.save(update_fields=["avatar", "has_avatar", "avatar_version"])
+            audit.record(user, "user.picture_removed", "user", user.id,
+                         "Removed their profile picture")
+        return Response(MeSerializer(user).data)
 
 
 class LogoutView(APIView):
@@ -91,6 +145,7 @@ class ChangePasswordView(APIView):
         user.set_password(s.validated_data["new_password"])
         user.must_change_password = False
         user.save(update_fields=["password", "must_change_password"])
+        audit.record(user, "user.change_password", "user", user.id, "Changed their password")
         # a changed password signs out every other phone (this one keeps working)
         others = Device.objects.filter(user=user, revoked_at__isnull=True)
         if hasattr(request.auth, "get") and request.auth.get("device_id"):
@@ -109,7 +164,8 @@ def _admin_only(request, *roles) -> None:
 
 class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
-    http_method_names = ["get", "post", "patch", "head", "options"]  # users are never deleted
+    # users are never deleted (destroy answers 405); DELETE exists only for a user's picture
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
     declared_permissions = ("users.view", "users.manage", "users.sign_out_devices")
 
     def get_queryset(self):
@@ -117,7 +173,12 @@ class UserViewSet(viewsets.ModelViewSet):
         role = self.request.query_params.get("role")
         return qs.filter(role=role) if role else qs
 
+    def destroy(self, request, *args, **kwargs):
+        raise MethodNotAllowed("DELETE")
+
     def get_permissions(self):
+        if self.action == "picture" and self.request.method == "GET":
+            return [IsAuthenticated(), PasswordChangeNotRequired()]   # the handler decides who
         if self.action in ("list", "retrieve"):
             return [perm("users.view")()]
         if self.action == "sign_out_devices":
@@ -154,6 +215,30 @@ class UserViewSet(viewsets.ModelViewSet):
         else:
             audit.record(self.request.user, "user.update", "user", user.id,
                          f"Updated {user.username}")
+
+    @action(detail=True, methods=["get", "delete"], url_path="picture")
+    def picture(self, request, pk=None):
+        """GET: the picture, for the person and for anyone who may see the user list (Ops, Admin);
+        everyone else is told there is none. DELETE: an Admin removes someone's picture."""
+        user = self.get_object()
+        if request.method == "DELETE":
+            if user.has_avatar:
+                User.objects.filter(pk=user.pk).update(
+                    avatar=None, has_avatar=False, avatar_version=user.avatar_version + 1)
+                audit.record(request.user, "user.picture_removed_by_admin", "user", user.id,
+                             f"Removed the profile picture of {user.username}")
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        if request.user.pk != user.pk and not scope_for(request.user, "users.view", request):
+            raise CodedError("NOT_FOUND", "No picture.", 404)
+        row = User.objects.defer(None).filter(pk=user.pk).values("avatar", "avatar_version").first()
+        assert row is not None
+        if not row["avatar"]:
+            raise CodedError("NOT_FOUND", "No picture.", 404)
+        etag = f'W/"{user.pk}-{row["avatar_version"]}"'
+        headers = {"ETag": etag, "Cache-Control": "private, max-age=86400"}
+        if request.headers.get("If-None-Match") == etag:
+            return HttpResponse(status=304, headers=headers)
+        return HttpResponse(bytes(row["avatar"]), content_type="image/jpeg", headers=headers)
 
     @action(detail=True, methods=["post"], url_path="reset-password")
     def reset_password(self, request, pk=None):

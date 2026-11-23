@@ -12,7 +12,17 @@ class Role(models.TextChoices):
     ADMIN = "admin"
 
 
+class Theme(models.TextChoices):
+    LIGHT = "light"
+    DARK = "dark"
+    SYSTEM = "system"       # follow the device
+
+
 class UserManager(BaseUserManager):
+    def get_queryset(self):
+        # the picture bytes are only ever read by the picture endpoint, never by ordinary queries
+        return super().get_queryset().defer("avatar")
+
     def create_user(self, username, password, role, **extra):
         user: User = self.model(username=username, role=role, **extra)  # type: ignore[assignment]
         user.set_password(password)
@@ -34,6 +44,13 @@ class User(AbstractBaseUser):
     failed_attempts = models.PositiveSmallIntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
+    phone = models.CharField(max_length=20, blank=True)      # set only by an Admin
+    theme = models.CharField(max_length=10, choices=Theme.choices, default=Theme.LIGHT)
+    # the person's picture: one 256 px square JPEG kept in the database (about 15 KB), so there
+    # are no files to clean up; avatar_version changes with every change (cache busting, ETag)
+    avatar = models.BinaryField(null=True, blank=True, editable=False)
+    has_avatar = models.BooleanField(default=False)
+    avatar_version = models.PositiveIntegerField(default=0)
 
     USERNAME_FIELD = "username"
     REQUIRED_FIELDS = ["name"]
