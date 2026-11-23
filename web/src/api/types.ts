@@ -1,11 +1,12 @@
 export type Role = "admin" | "ops" | "expert";
 export type Me = {
-  id: number; username: string; name: string; role: Role; is_active?: boolean;
+  id: number; username: string; name: string; email?: string; phone?: string; role: Role; is_active?: boolean;
   must_change_password?: boolean; permissions: Record<string, "all" | "own">;
+  theme?: "light" | "dark" | "system"; avatar_url?: string | null;
 };
 export type User = {
   id: number; username: string; name: string; email: string; phone?: string; role: Role;
-  is_active: boolean; must_change_password: boolean;
+  is_active: boolean; must_change_password: boolean; avatar_url?: string | null;
 };
 export type Access = Record<string, Record<string, "hidden" | "view" | "edit">>;
 export type Option = { key: string; label: string; is_defect?: boolean; severity?: string | null };

@@ -5,6 +5,7 @@ import { Layout } from "./Layout";
 import { homeFor, RequireAuth } from "./guards";
 import { Login } from "./pages/Login";
 import { ChangePassword } from "./pages/ChangePassword";
+import { Profile } from "./pages/Profile";
 
 const Users = lazy(() => import("./pages/admin/Users").then((m) => ({ default: m.Users })));
 const Roles = lazy(() => import("./pages/admin/Roles").then((m) => ({ default: m.Roles })));
@@ -44,6 +45,7 @@ export function App() {
         <Route path="/change-password" element={<RequireAuth><ChangePassword /></RequireAuth>} />
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
           <Route path="/" element={<Home />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="/board" element={<RequireAuth perm="bookings.view" not="expert"><JobBoard /></RequireAuth>} />
           <Route path="/booking/:id" element={<RequireAuth perm="bookings.view" not="expert"><BookingPage /></RequireAuth>} />
           <Route path="/problems" element={<RequireAuth perm="bookings.view" not="expert"><Problems /></RequireAuth>} />

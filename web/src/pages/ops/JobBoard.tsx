@@ -7,6 +7,7 @@ import { STAGE_LABEL, STAGE_TONE, useInspectionTypes, useLabels, useTypeLabels }
 import type { Booking, MasterListItem, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { loadJSON, saveJSON } from "../../lib/store";
+import { ExpertCell } from "../../ui/ExpertCell";
 import { Pill, PageHeader } from "../../ui/kit";
 
 export type Filters = { search: string; city: string; expert: string; type: string; stage: string; date_from: string; date_to: string };
@@ -27,7 +28,6 @@ export function JobBoard() {
   const types = useInspectionTypes();
   const car = useLabels("car_make_model");
   const type = useTypeLabels();
-  const nameOf = new Map((experts.data ?? []).map((u) => [u.id, u.name || u.username]));
   return (
     <>
       <PageHeader title="Job board" subtitle="Every booking, with filters that are remembered for you." tip="A read-only view of the bookings. Click a row to open the full booking. Your filters stay as you left them. To create or manage bookings use the Bookings page.">
@@ -49,7 +49,7 @@ export function JobBoard() {
             <td><Link to={`/booking/${b.id}`} onClick={(e) => e.stopPropagation()}>{b.booking_id}</Link></td>
             <td>{String(b.answers.customer_name ?? "")}</td><td>{car(b.answers.car_make_model)}</td><td>{type(b.inspection_type)}</td>
             <td>{String(b.answers.inspection_date ?? "")} {String(b.answers.inspection_time ?? "")}</td>
-            <td>{b.assigned_expert ? nameOf.get(b.assigned_expert) ?? `#${b.assigned_expert}` : <span className="muted">—</span>}</td>
+            <td><ExpertCell id={b.assigned_expert} experts={experts.data ?? []} /></td>
             <td><Pill tone={STAGE_TONE[b.stage]}>{STAGE_LABEL[b.stage] ?? b.stage}</Pill>{b.conflict && <> <Pill tone="bad">Conflict</Pill></>}</td></tr>))}</tbody>
       </table>
       {q.data && q.data.results.length === 0 && <p className="muted pad">No bookings match.</p>}

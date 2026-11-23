@@ -9,7 +9,7 @@ from apps.forms.models import MasterList, MasterListItem
 
 PASSWORD = "Passw0rd-e2e"
 USERS = [("admin", Role.ADMIN, "Asha Admin"), ("ops", Role.OPS, "Priya Ops"),
-         ("expert", Role.EXPERT, "Ravi Expert")]
+         ("expert", Role.EXPERT, "Ravi Expert"), ("expert2", Role.EXPERT, "Meera Expert")]
 ITEMS = {"city": [("delhi", "Delhi"), ("pune", "Pune")],
          "car_make_model": [("maruti_victoris", "Maruti Victoris"), ("tata_nexon", "Tata Nexon")]}
 

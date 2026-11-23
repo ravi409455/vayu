@@ -1,11 +1,12 @@
 import {
   AlertTriangle, BarChart3, BookOpen, Briefcase, ChevronsLeft, ChevronsRight, FileOutput, FileText, KeyRound,
-  ClipboardList, LayoutDashboard, List, LogOut, Rocket, ScrollText, Shield, UserCog, Users, Webhook, type LucideIcon,
+  ClipboardList, LayoutDashboard, List, LogOut, Rocket, ScrollText, Shield, Users, Webhook, type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "./auth";
 import { loadJSON, saveJSON } from "./lib/store";
+import { Avatar } from "./ui/Avatar";
 
 type Item = { to: string; label: string; icon: LucideIcon; perm?: string; role?: string };
 const GROUPS: { title: string; items: Item[] }[] = [
@@ -73,8 +74,7 @@ export function Layout() {
           </div>
         ))}
         <div className="who">
-          <div className="who-name"><UserCog size={16} aria-hidden /><span className="nav-label">{me.name || me.username} · {me.role}</span></div>
-          <NavLink to="/change-password" title="Change password" aria-label="Change password"><KeyRound size={18} aria-hidden /><span className="nav-label">Change password</span></NavLink>
+          <NavLink to="/profile" className="who-name" title="Your profile" aria-label={`Your profile: ${me.name || me.username}`}><Avatar who={me} size={26} /><span className="nav-label">{me.name || me.username} · {me.role}</span></NavLink>
           <button className="nav-btn" title="Sign out" aria-label="Sign out" onClick={() => logout()}><LogOut size={18} aria-hidden /><span className="nav-label">Sign out</span></button>
         </div>
       </nav>

@@ -7,6 +7,7 @@ import { asList, useList, useRefresh } from "../../api/hooks";
 import { STAGE_LABEL, STAGE_TONE, useInspectionTypes, useLabels, useTypeLabels } from "../../api/labels";
 import type { Booking, MasterListItem, User } from "../../api/types";
 import { useAuth } from "../../auth";
+import { ExpertCell } from "../../ui/ExpertCell";
 import { Confirm, PageHeader, Pill, useToast } from "../../ui/kit";
 import { Actions } from "./Booking";
 
@@ -32,7 +33,6 @@ export function Bookings() {
   const types = useInspectionTypes();
   const car = useLabels("car_make_model");
   const type = useTypeLabels();
-  const nameOf = new Map((experts.data ?? []).map((u) => [u.id, u.name || u.username]));
   const remove = useMutation({
     mutationFn: (b: Booking) => api(`bookings/${b.id}`, { method: "DELETE" }),
     onSuccess: () => { setDeleting(null); say("Booking deleted."); void refresh("bookings-page"); },
@@ -57,7 +57,7 @@ export function Bookings() {
             <td><Link to={`/booking/${b.id}`}>{b.booking_id}</Link></td>
             <td>{String(b.answers.customer_name ?? "")}</td><td>{car(b.answers.car_make_model)}</td><td>{type(b.inspection_type)}</td>
             <td>{String(b.answers.inspection_date ?? "")} {String(b.answers.inspection_time ?? "")}</td>
-            <td>{b.assigned_expert ? nameOf.get(b.assigned_expert) ?? `#${b.assigned_expert}` : <span className="muted">—</span>}</td>
+            <td><ExpertCell id={b.assigned_expert} experts={experts.data ?? []} /></td>
             <td><Pill tone={STAGE_TONE[b.stage]}>{STAGE_LABEL[b.stage] ?? b.stage}</Pill>{b.conflict && <> <Pill tone="bad">Conflict</Pill></>}</td>
             <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
               <button className="icon-btn" aria-label={`Open ${b.booking_id}`} title="Open" onClick={() => nav(`/booking/${b.id}`)}><ExternalLink size={16} aria-hidden /></button>

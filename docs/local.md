@@ -44,6 +44,11 @@ built by you in the form builder (Admin → Forms): that is the test of the buil
    Docs: http://localhost:5173/api/v1/docs.
 9. Reassign a started job to `expert2` (Ops → "Force release", then assign) to see how conflicts show up.
 
+10. **Anyone** → click your name at the bottom of the menu → **Your profile**: upload a picture (it is
+    cropped square), switch **Dark** / **Match my device**, change your password. Ops and Admins then see
+    your picture next to your name on the Job board and Bookings pages. Only an **Admin** can change
+    names, roles, emails and phone numbers (Users → Edit) or remove someone's picture.
+
 ## Things to know
 * Files are kept in a Docker volume (`s3-data`); `reset` empties them.
 * Webhooks and the receiver may use plain `http://127.0.0.1:...` here; production requires https and

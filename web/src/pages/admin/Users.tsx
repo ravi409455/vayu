@@ -4,6 +4,7 @@ import { api } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { User } from "../../api/types";
 import { useAuth } from "../../auth";
+import { Avatar } from "../../ui/Avatar";
 import { Confirm, Field, Modal, Pill, useToast, PageHeader } from "../../ui/kit";
 
 export function Users() {
@@ -20,7 +21,7 @@ export function Users() {
 
   const save = useMutation({
     mutationFn: (u: Partial<User> & { password?: string }) =>
-      u.id ? api(`users/${u.id}`, { method: "PATCH", body: { name: u.name, email: u.email, role: u.role } })
+      u.id ? api(`users/${u.id}`, { method: "PATCH", body: { name: u.name, email: u.email, role: u.role, phone: u.phone ?? "" } })
            : api("users", { body: u }),
     onSuccess: () => { setForm(null); say("Saved."); void refresh("users"); },
     onError: fail,
@@ -33,6 +34,11 @@ export function Users() {
   const resetPw = useMutation({
     mutationFn: () => api(`users/${reset!.id}/reset-password`, { body: { password: pw } }),
     onSuccess: () => { setReset(null); setPw(""); say("Password reset. They must choose a new one at next sign-in."); },
+    onError: fail,
+  });
+  const removePicture = useMutation({
+    mutationFn: (u: User) => api(`users/${u.id}/picture`, { method: "DELETE" }),
+    onSuccess: () => { setForm((f) => (f ? { ...f, avatar_url: null } : f)); say("Picture removed. Their initials show instead."); void refresh("users"); },
     onError: fail,
   });
   const out = useMutation({
@@ -51,7 +57,7 @@ export function Users() {
         <tbody>
           {(users.data ?? []).filter((u) => u.username !== "api-key-service").map((u) => (
             <tr key={u.id}>
-              <td>{u.name}</td><td className="mono">{u.username}</td><td>{u.role}</td>
+              <td><span className="who-avatar"><Avatar who={u} size={24} />{u.name}</span></td><td className="mono">{u.username}</td><td>{u.role}</td>
               <td>{u.is_active ? <Pill tone="ok">Active</Pill> : <Pill tone="bad">Disabled</Pill>}
                 {u.must_change_password && <> <Pill tone="warn">Must change password</Pill></>}</td>
               <td style={{ textAlign: "right" }}>
@@ -74,6 +80,11 @@ export function Users() {
           <Field label="Name"><input value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
           {!form.id && <Field label="Username" help="Cannot be changed later."><input value={form.username ?? ""} onChange={(e) => setForm({ ...form, username: e.target.value })} /></Field>}
           <Field label="Email"><input value={form.email ?? ""} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+          <Field label="Phone" help="An Indian mobile number. Ops, Admins and the person themselves can see it."><input aria-label="Phone" inputMode="tel" value={form.phone ?? ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
+          {form.id && form.avatar_url && (
+            <Field label="Picture" help="They upload their own picture. You can only remove it, for example if it is not suitable.">
+              <div className="bar"><Avatar who={form as User} size={48} /><button className="danger" onClick={() => removePicture.mutate(form as User)}>Remove picture</button></div>
+            </Field>)}
           <Field label="Role">
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as User["role"] })}>
               <option value="expert">Expert</option><option value="ops">Ops</option><option value="admin">Admin</option>
