@@ -1,5 +1,6 @@
 """Promotion: export a form version as one bundle, import it as a DRAFT elsewhere."""
 import json
+from unittest import mock
 
 import pytest
 
@@ -383,4 +384,4 @@ def test_a_non_object_bundle_is_refused_by_the_checker_itself():
 
     with pytest.raises(CodedError) as e:
         promote._check_shape([])
-    assert e.value.detail["code"] == "INVALID_BUNDLE"
+    assert e.value.detail == {"code": "INVALID_BUNDLE", "detail": mock.ANY}
