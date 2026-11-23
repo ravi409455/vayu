@@ -878,3 +878,43 @@ def test_columns_contents_big_numbers_and_header_slots(renv, settings):
     unsure = source(b)
     unsure.answers["inspection"]["door"] = "not_checked"
     assert unsure.values()["sys"]["not_checked_list"] == "door"
+
+
+def test_the_designer_previews_unsaved_edits_with_where_each_part_sits(renv, settings):
+    import base64
+
+    set_template(renv)
+    b = complete_job(renv, settings=settings)
+    draft = renv.admin.post(f"/api/v1/pdf-templates/{renv.template_id}/drafts").json()
+    url = f"/api/v1/pdf-template-versions/{draft['id']}/preview"
+    edited = one_page({**table([{"field": "inspection.door"}], title="Doors"), "id": "t1"},
+                      {"type": "columns", "id": "c1", "columns": [
+                          {"parts": [{**table([{"field": "inspection.odometer"}]), "id": "t2"}]},
+                          {"parts": []}]})
+    r = renv.admin.post(url, {"booking": b["id"], "definition": edited}, format="json")
+    assert r.status_code == 200, r.json()
+    body = r.json()
+    assert base64.b64decode(body["pdf"])[:4] == b"%PDF" and body["filename"] == "SA37926.pdf"
+    page = body["pages"][0]
+    assert round(page["width"]) == 794 and {p["id"] for p in page["parts"]} == {"t1", "c1", "t2"}
+    t1 = next(p for p in page["parts"] if p["id"] == "t1")
+    assert t1["w"] > 0 and t1["h"] > 0
+    bad = renv.admin.post(url, {"booking": b["id"], "definition": {"schema": 2}}, format="json")
+    assert bad.status_code == 400 and bad.json()["code"] == "INVALID_TEMPLATE"
+
+
+def test_the_designer_checks_lists_problems_and_fields_left_out(renv):
+    url = f"/api/v1/pdf-template-versions/{renv.template_version_id}/checks"
+    r = renv.admin.post(url, {"definition": one_page(
+        table([{"field": "inspection.door"}, {"field": "inspection.ghost"}]),
+        {"type": "table", "source": {"kind": "section", "section": "inspection.extra"}})},
+        format="json")
+    assert r.status_code == 200
+    assert [i["code"] for i in r.json()["issues"]] == ["UNKNOWN_FIELD"]
+    unused = [u["key"] for u in r.json()["unused"]]
+    assert "odometer" in unused and "door" not in unused and "fuel" not in unused
+    assert r.json()["unused"][0]["section"] == "Section 1"
+    saved = renv.admin.post(url, {}, format="json")                       # the stored layout
+    assert saved.status_code == 200 and saved.json()["issues"] == []
+    bad = renv.admin.post(url, {"definition": []}, format="json")
+    assert bad.status_code == 400

@@ -1,3 +1,4 @@
+import { WEB, API_ROOT } from "./ports";
 import { expect, request, test, type Page } from "@playwright/test";
 import { apiAs, JPEG, json, PASSWORD, signIn } from "./api";
 
@@ -49,7 +50,7 @@ test("a picture: uploaded, square, in the sidebar, seen by Ops next to the exper
   expect(await big.evaluate((i: HTMLImageElement) => [i.naturalWidth, i.naturalHeight])).toEqual([256, 256]);   // cropped square
   await expect(page.locator(".who-name img.avatar")).toBeVisible();                                          // shown in the top bar too
 
-  const ops = await browser.newContext({ baseURL: "http://localhost:5173" });
+  const ops = await browser.newContext({ baseURL: WEB });
   const opsPage = await ops.newPage();
   await signIn(opsPage, "ops");
   await opsPage.goto("/bookings");
@@ -78,7 +79,7 @@ test("theme: dark at once, kept after a reload without a flash, Light when signe
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page.getByRole("heading", { name: "Vayu" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  const fresh = await browser.newContext({ baseURL: "http://localhost:5173" });          // nothing remembered in this browser
+  const fresh = await browser.newContext({ baseURL: WEB });          // nothing remembered in this browser
   const p2 = await fresh.newPage();
   await signIn(p2, "expert2");
   await expect(p2.locator("html")).toHaveAttribute("data-theme", "dark");               // it came from the server
@@ -123,7 +124,7 @@ test("password: changed on the profile, the old one stops working, the new one w
   await form.getByLabel("New password again").fill("Brand-new-pass-7");
   await form.getByRole("button", { name: "Change password" }).click();
   await expect(page.getByText(/Password changed/)).toBeVisible();
-  const ctx = await browser.newContext({ baseURL: "http://localhost:5173" });
+  const ctx = await browser.newContext({ baseURL: WEB });
   const p = await ctx.newPage();
   await p.goto("/login");
   await p.getByLabel("Username").fill("expert2");
@@ -136,7 +137,7 @@ test("password: changed on the profile, the old one stops working, the new one w
   await ctx.close();
   // put it back for later tests: reset, then choose the old password again
   await json(await admin.post(`users/${me.id}/reset-password`, { data: { password: "Temporary-pass-1" } }));
-  const ctx2 = await request.newContext({ baseURL: "http://localhost:8000/api/v1/" });
+  const ctx2 = await request.newContext({ baseURL: `${API_ROOT}/api/v1/` });
   await json(await ctx2.post("auth/login", { data: { username: "expert2", password: "Temporary-pass-1", client: "web" } }));
   const csrf = (await ctx2.storageState()).cookies.find((c) => c.name === "csrftoken")?.value ?? "";
   await json(await ctx2.post("auth/change-password", { data: { old_password: "Temporary-pass-1", new_password: PASSWORD }, headers: { "X-CSRFToken": csrf } }));
@@ -174,7 +175,7 @@ test("an Admin edits a phone and removes a picture; the expert falls back to ini
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
 
-  const ctx = await browser.newContext({ baseURL: "http://localhost:5173" });
+  const ctx = await browser.newContext({ baseURL: WEB });
   const p = await ctx.newPage();
   await signIn(p, "expert");
   await p.goto("/profile");

@@ -28,6 +28,7 @@ REST_FRAMEWORK = {**REST_FRAMEWORK,  # noqa: F405
                                            "avatar": "100000/min"}}
 WEBHOOK_ALLOW_HTTP = True
 WEBHOOK_ALLOW_PRIVATE = True          # the test receiver listens on localhost
-PUBLIC_BASE_URL = "http://localhost:5173"
-VERIFY_BASE_URL = "http://localhost:5173/verify"
-CSRF_TRUSTED_ORIGINS = ["http://localhost:5173"]   # the Vite dev server in front of the API
+WEB = os.environ.get("E2E_WEB", "http://localhost:5173")   # the Vite dev server in front of the API
+PUBLIC_BASE_URL = WEB
+VERIFY_BASE_URL = f"{WEB}/verify"
+CSRF_TRUSTED_ORIGINS = [WEB]

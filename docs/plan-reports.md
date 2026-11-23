@@ -258,6 +258,22 @@ answers in photo captions. Sample render: `docs/samples/DEMO-3PDI.pdf`.
 
 Still for Phase 4: style rules, Custom HTML, PDF bookmarks per section.
 
+### Phase 3 status (2026-11-24)
+
+Done: the designer screen (`web/src/pages/admin/PdfDesigner.tsx`, `web/src/pages/admin/report/`).
+Pages list with drag and drop and "+ Add to this page" (table, photos, text, side by side, verify
+code, contents list, space, page break); "+ Add page" from a form page (heading, a table per
+section, its issue photos), blank, divider or verify page. The real PDF drawn with pdf.js, a
+moment after each change, unsaved edits included; click a part in the PDF to select it.
+Settings per part with folded groups (when to show, page breaks, look, box); rich text with
+"Insert a value"; grid editor with "Fill automatically". Report settings: header and footer
+slots per page style, colours, fonts, watermark, paper, file name. Autosave of the draft,
+warnings (fields the form lacks, form fields not in the report), publish, discard draft.
+Backend: `POST pdf-template-versions/<id>/preview` with a definition returns the PDF and where
+each part sits; `POST .../checks` lists problems and fields left out.
+
+Browser tests can run beside a local stack: `E2E_WEB_PORT=5176 E2E_API_PORT=8003 npx playwright test`.
+
 ## 12. Questions for you
 
 1. Battery state and Generator state: keep them in the PDI form? They are not in the sample

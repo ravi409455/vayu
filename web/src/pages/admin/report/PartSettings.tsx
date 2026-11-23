@@ -1,0 +1,276 @@
+import { ArrowDown, ArrowUp, Copy, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
+import { ConditionBuilder } from "../../../ui/ConditionBuilder";
+import { Field } from "../../../ui/kit";
+import { fillGrid, PART_LABEL, type Box, type Cell, type Look, type Part, type ReportPage, type Row, type Source } from "./model";
+import { RichText } from "./RichText";
+
+export type SectionChoice = { value: string; label: string; fields: { key: string; label: string; type: string }[] };
+export type Ctx = { sections: SectionChoice[]; fields: { value: string; label: string; type: string }[]; readOnly: boolean };
+
+const MEDIA = ["photo", "video", "file", "signature", "image"];
+
+/** A row of buttons for a small set of choices. */
+function Seg<T extends string | number>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void }) {
+  return (
+    <div className="seg sm" role="group" aria-label={label}>
+      {options.map(([v, l]) => <button key={String(v)} type="button" aria-pressed={value === v} onClick={() => onChange(v)}>{l}</button>)}
+    </div>
+  );
+}
+
+/** A folded group of settings, with a one-line summary of what is set. */
+function More({ title, summary, children }: { title: string; summary: string; children: ReactNode }) {
+  return (
+    <details className="rd-more">
+      <summary><span>{title}</span><span className="muted small">{summary}</span></summary>
+      <div className="rd-more-body">{children}</div>
+    </details>
+  );
+}
+
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return <label className="check"><input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} /> {label}</label>;
+}
+
+export function PageSettings({ page, onChange, onDelete, fields }: { page: ReportPage; onChange: (p: Partial<ReportPage>) => void; onDelete: () => void; fields: Ctx["fields"] }) {
+  return (
+    <div className="rd-settings-body">
+      <Field label="Page name" help="Shown in the pages list and in a contents list."><input value={page.title} onChange={(e) => onChange({ title: e.target.value })} /></Field>
+      <Field label="Page style">
+        <Seg label="Page style" value={page.style ?? "normal"} options={[["normal", "Normal"], ["cover", "Cover"], ["full", "Full page"]]} onChange={(style) => onChange({ style })} />
+      </Field>
+      <p className="muted small">{page.style === "full" ? "No header or footer: for a divider or a full-page design." : page.style === "cover" ? "Uses the cover header and footer (Report settings)." : "Uses the normal header and footer (Report settings)."} Each page starts on a new sheet; long pages carry on over several.</p>
+      <ConditionBuilder label="Show this page only if" value={page.show_if ?? null} onChange={(r) => onChange({ show_if: r ?? undefined })} fields={fields} />
+      <button type="button" className="danger" onClick={onDelete}><Trash2 size={14} aria-hidden /> Delete page</button>
+    </div>
+  );
+}
+
+export function PartSettings({ part, onChange, onDelete, onDuplicate, onMove, ctx }: {
+  part: Part; onChange: (p: Partial<Part>) => void; onDelete: () => void; onDuplicate: () => void; onMove: (by: -1 | 1) => void; ctx: Ctx;
+}) {
+  const set = onChange as (p: Record<string, unknown>) => void;
+  const box = ("box" in part ? part.box : undefined) ?? {};
+  const setBox = (b: Partial<Box>) => set({ box: { ...box, ...b } });
+  const t = part.type;
+  const titled = t === "table" || t === "photos" || t === "contents";
+  return (
+    <div className="rd-settings-body">
+      <div className="bar" style={{ margin: 0 }}>
+        <strong className="grow">{PART_LABEL[t]}</strong>
+        <button type="button" className="icon-btn" aria-label="Move up" onClick={() => onMove(-1)}><ArrowUp size={15} aria-hidden /></button>
+        <button type="button" className="icon-btn" aria-label="Move down" onClick={() => onMove(1)}><ArrowDown size={15} aria-hidden /></button>
+        <button type="button" className="icon-btn" aria-label="Duplicate" onClick={onDuplicate}><Copy size={15} aria-hidden /></button>
+        <button type="button" className="icon-btn danger" aria-label="Delete" onClick={onDelete}><Trash2 size={15} aria-hidden /></button>
+      </div>
+      <fieldset disabled={ctx.readOnly} className="rd-fieldset">
+        {titled && <Field label="Title"><input value={("title" in part && part.title) || ""} placeholder="Optional" onChange={(e) => set({ title: e.target.value })} /></Field>}
+        {t === "table" && <TableSettings part={part} set={set} ctx={ctx} />}
+        {t === "photos" && <PhotoSettings part={part} set={set} ctx={ctx} />}
+        {t === "text" && (
+          <>
+            <RichText label="Text" value={part.html} onChange={(html) => set({ html })} choices={ctx.fields.filter((f) => !MEDIA.includes(f.type))} />
+            <Field label="Columns"><Seg label="Text columns" value={part.columns ?? 1} options={[[1, "1"], [2, "2"]]} onChange={(columns) => set({ columns })} /></Field>
+            <Field label="Size"><Seg label="Text size" value={part.size ?? "normal"} options={[["small", "Small"], ["normal", "Normal"], ["large", "Large"], ["title", "Title"]]} onChange={(size) => set({ size })} /></Field>
+            <Field label="Align"><Seg label="Align" value={part.align ?? "left"} options={[["left", "Left"], ["center", "Centre"], ["right", "Right"], ["justify", "Justify"]]} onChange={(align) => set({ align })} /></Field>
+          </>
+        )}
+        {t === "columns" && (
+          <>
+            <p className="muted small">Pick the parts inside each column in the pages list on the left; “+ Add” under a column adds to it.</p>
+            <Field label="Columns"><Seg label="Number of columns" value={part.columns.length} options={[[2, "2"], [3, "3"]]}
+              onChange={(n) => set({ columns: n > part.columns.length ? [...part.columns, { parts: [] }] : part.columns.slice(0, n) })} /></Field>
+            <div className="grid2">
+              {part.columns.map((c, i) => (
+                <Field key={i} label={`Column ${i + 1} width %`}><input type="number" min={10} max={90} placeholder="auto" value={c.width ?? ""}
+                  onChange={(e) => set({ columns: part.columns.map((x, j) => (j === i ? { ...x, width: e.target.value ? Number(e.target.value) : undefined } : x)) })} /></Field>))}
+            </div>
+            <Field label="Gap (mm)"><input type="number" min={0} max={20} value={part.gap ?? 6} onChange={(e) => set({ gap: Number(e.target.value) })} /></Field>
+            <Field label="Line up"><Seg label="Line up" value={part.align ?? "top"} options={[["top", "Top"], ["middle", "Middle"]]} onChange={(align) => set({ align })} /></Field>
+          </>
+        )}
+        {t === "verify" && <Field label="Code size (mm)"><input type="number" min={15} max={120} value={part.size ?? 40} onChange={(e) => set({ size: Number(e.target.value) })} /></Field>}
+        {t === "contents" && <Field label="Columns"><Seg label="Contents columns" value={part.columns ?? 1} options={[[1, "1"], [2, "2"]]} onChange={(columns) => set({ columns })} /></Field>}
+        {t === "spacer" && <Field label="Height (mm)"><input type="number" min={1} max={200} value={part.height ?? 10} onChange={(e) => set({ height: Number(e.target.value) })} /></Field>}
+        <More title="When to show" summary={[part.show_if ? "only sometimes" : "always", "hide_when_empty" in part && part.hide_when_empty === false ? "shown when empty" : "hidden when empty"].join(" · ")}>
+          {t !== "page_break" && t !== "spacer" && <Toggle label="Hide when there is nothing to show" checked={("hide_when_empty" in part ? part.hide_when_empty : undefined) !== false} onChange={(v) => set({ hide_when_empty: v })} />}
+          <ConditionBuilder label="Show only if" value={part.show_if ?? null} onChange={(r) => set({ show_if: r ?? undefined })} fields={ctx.fields} />
+        </More>
+        {t !== "page_break" && t !== "spacer" && (
+          <More title="Page breaks" summary={[("new_page" in part && part.new_page) ? "new page" : "", ("keep_together" in part && part.keep_together) ? "kept together" : "", ("keep_title" in part ? part.keep_title : undefined) !== false ? "title kept with rows" : ""].filter(Boolean).join(" · ") || "none"}>
+            <Toggle label="Start on a new page" checked={!!("new_page" in part && part.new_page)} onChange={(v) => set({ new_page: v || undefined })} />
+            <Toggle label="Keep together on one page" checked={!!("keep_together" in part && part.keep_together)} onChange={(v) => set({ keep_together: v || undefined })} />
+            <Toggle label="Keep the title with the first rows" checked={("keep_title" in part ? part.keep_title : undefined) !== false} onChange={(v) => set({ keep_title: v })} />
+          </More>)}
+        {t !== "page_break" && t !== "spacer" && (
+          <More title="Box" summary={[box.border && box.border !== "none" ? `${box.border} border` : "", box.background && box.background !== "none" ? "tinted" : "", box.padding ? `${box.padding} mm padding` : ""].filter(Boolean).join(" · ") || "plain"}>
+            <div className="grid2">
+              <Field label="Space above (mm)"><input type="number" min={0} max={60} value={box.space_above ?? 0} onChange={(e) => setBox({ space_above: Number(e.target.value) })} /></Field>
+              <Field label="Space below (mm)"><input type="number" min={0} max={60} value={box.space_below ?? 3} onChange={(e) => setBox({ space_below: Number(e.target.value) })} /></Field>
+              <Field label="Padding (mm)"><input type="number" min={0} max={20} value={box.padding ?? 0} onChange={(e) => setBox({ padding: Number(e.target.value) })} /></Field>
+              <Field label="Border"><select value={box.border ?? "none"} onChange={(e) => setBox({ border: e.target.value as Box["border"] })}><option value="none">None</option><option value="all">All sides</option><option value="bottom">Bottom</option><option value="left">Left</option></select></Field>
+              <Field label="Border colour"><select value={box.border_color ?? "muted"} onChange={(e) => setBox({ border_color: e.target.value })}>{TONES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+              <Field label="Background"><select value={box.background ?? "none"} onChange={(e) => setBox({ background: e.target.value })}><option value="none">None</option>{TONES.filter(([v]) => v !== "text").map(([v, l]) => <option key={v} value={v}>{l} tint</option>)}</select></Field>
+            </div>
+            <Toggle label="Round corners" checked={!!box.round} onChange={(v) => setBox({ round: v })} />
+          </More>)}
+      </fieldset>
+    </div>
+  );
+}
+
+const TONES: [string, string][] = [["brand", "Brand"], ["text", "Text"], ["ok", "Green"], ["warn", "Amber"], ["bad", "Red"], ["muted", "Grey"]];
+
+function TableSettings({ part, set, ctx }: { part: Extract<Part, { type: "table" }>; set: (p: Record<string, unknown>) => void; ctx: Ctx }) {
+  const src = part.source;
+  const look: Look = part.look ?? {};
+  const setLook = (l: Partial<Look>) => set({ look: { ...look, ...l } });
+  const setSrc = (s: Source) => set({ source: s });
+  const fields = ctx.fields.filter((f) => !MEDIA.includes(f.type));
+  const kind = src.kind;
+  const sec = kind === "section" ? ctx.sections.find((s) => s.value === src.section) : undefined;
+  return (
+    <>
+      <Field label="Which checks">
+        <div className="rd-choices">
+          {([["section", "All checks in a form section", "New checks added to the form appear by themselves."], ["fields", "Checks I pick", ""],
+            ["defects", "All problems found", "Every answer marked as a problem, with its section."], ["grid", "A grid", "Rows and columns you name; each cell is one field (e.g. tyres)."]] as const).map(([k, l, h]) => (
+            <label key={k} className={`rd-choice${kind === k ? " on" : ""}`}>
+              <input type="radio" name={`src-${part.id}`} checked={kind === k} onChange={() => setSrc(
+                k === "section" ? { kind: "section", section: ctx.sections[0]?.value ?? "inspection.section_1" }
+                  : k === "fields" ? { kind: "fields", rows: [] } : k === "defects" ? { kind: "defects" }
+                    : { kind: "grid", columns: [{ label: "Column 1" }], rows: [{ label: "Row 1", cells: [{ text: "" }] }] })} />
+              <span><strong>{l}</strong>{h && <span className="muted small"> {h}</span>}</span>
+            </label>))}
+        </div>
+      </Field>
+      {src.kind === "section" && (
+        <>
+          <Field label="Form section">
+            <select value={src.section} onChange={(e) => setSrc({ ...src, section: e.target.value, exclude: [] })}>
+              {!sec && <option value={src.section}>{src.section} (not in the form)</option>}
+              {ctx.sections.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
+          </Field>
+          {sec && (
+            <Field label="Leave out" help="Photos never print in a table; they go in a photo grid.">
+              <div className="chips">{(src.exclude ?? []).map((k) => (
+                <button key={k} type="button" className="chip" onClick={() => setSrc({ ...src, exclude: (src.exclude ?? []).filter((x) => x !== k) })}>
+                  {sec.fields.find((f) => f.key === k)?.label ?? k} ✕</button>))}
+                <select aria-label="Leave out a check" value="" onChange={(e) => e.target.value && setSrc({ ...src, exclude: [...(src.exclude ?? []), e.target.value] })} style={{ width: "auto" }}>
+                  <option value="">+ Leave out…</option>
+                  {sec.fields.filter((f) => !MEDIA.includes(f.type) && !(src.exclude ?? []).includes(f.key)).map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}</select>
+              </div>
+            </Field>)}
+          <Field label="When a check has no answer" help="Leave empty to hide the row."><input placeholder="e.g. Not mentioned" value={src.fallback ?? ""} onChange={(e) => setSrc({ ...src, fallback: e.target.value || undefined })} /></Field>
+        </>
+      )}
+      {src.kind === "fields" && <RowsEditor rows={src.rows} onChange={(rows) => setSrc({ ...src, rows })} fields={fields} sections={ctx.sections} />}
+      {src.kind === "grid" && <GridEditor src={src} onChange={setSrc} fields={fields} />}
+      {(src.kind === "fields" || src.kind === "section") && (
+        <Field label="Checks per row"><Seg label="Checks per row" value={part.per_row ?? 1} options={[[1, "1"], [2, "2"], [3, "3"], [4, "4"]]} onChange={(per_row) => set({ per_row })} /></Field>)}
+      <More title="Look" summary={[look.header ?? (src.kind === "defects" || src.kind === "grid") ? "header row" : "", look.stripes ?? true ? "stripes" : "", look.lines ?? "rows", look.emphasis ? "big numbers" : ""].filter(Boolean).join(" · ")}>
+        <Toggle label="Header row (repeats on each page)" checked={look.header ?? (src.kind === "defects" || src.kind === "grid")} onChange={(v) => setLook({ header: v })} />
+        <Toggle label="Stripes" checked={look.stripes ?? true} onChange={(v) => setLook({ stripes: v })} />
+        <Field label="Lines"><Seg label="Lines" value={look.lines ?? "rows"} options={[["all", "All cells"], ["rows", "Rows"], ["none", "None"]]} onChange={(lines) => setLook({ lines })} /></Field>
+        <Field label="Row height"><Seg label="Row height" value={look.height ?? "normal"} options={[["compact", "Compact"], ["normal", "Normal"], ["roomy", "Roomy"]]} onChange={(height) => setLook({ height })} /></Field>
+        {src.kind !== "grid" && src.kind !== "defects" && <Field label={`Label column ${look.label_width ?? 55}%`}><input type="range" min={15} max={85} value={look.label_width ?? 55} onChange={(e) => setLook({ label_width: Number(e.target.value) })} /></Field>}
+        <Toggle label="Muted labels, bold answers" checked={!!look.kv} onChange={(v) => setLook({ kv: v })} />
+        {src.kind === "grid" && <Toggle label="Big numbers (ratings, totals)" checked={!!look.emphasis} onChange={(v) => setLook({ emphasis: v })} />}
+      </More>
+    </>
+  );
+}
+
+function RowsEditor({ rows, onChange, fields, sections }: { rows: Row[]; onChange: (r: Row[]) => void; fields: Ctx["fields"]; sections: SectionChoice[] }) {
+  const setRow = (i: number, p: Partial<Row>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...p } : r)));
+  return (
+    <div className="rd-rows">
+      {rows.map((r, i) => (
+        <div key={i} className="rd-row">
+          <select aria-label="Field" value={r.field} onChange={(e) => setRow(i, { field: e.target.value })}>
+            <option value="">Choose a field…</option>{fields.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select>
+          <input aria-label="Report label" placeholder="Label (default: the field's)" value={r.label ?? ""} onChange={(e) => setRow(i, { label: e.target.value || undefined })} />
+          <input aria-label="When empty" placeholder="When empty" value={r.fallback ?? ""} onChange={(e) => setRow(i, { fallback: e.target.value || undefined })} />
+          <button type="button" className="link" aria-label="Remove row" onClick={() => onChange(rows.filter((_, j) => j !== i))}>✕</button>
+        </div>))}
+      <div className="bar" style={{ margin: 0 }}>
+        <button type="button" className="link" onClick={() => onChange([...rows, { field: "" }])}>+ Add row</button>
+        <select aria-label="Add all checks of a section" value="" style={{ width: "auto" }} onChange={(e) => {
+          const s = sections.find((x) => x.value === e.target.value);
+          if (s) onChange([...rows, ...s.fields.filter((f) => !MEDIA.includes(f.type)).map((f) => ({ field: `inspection.${f.key}` }))]);
+        }}><option value="">+ Add all from a section…</option>{sections.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
+      </div>
+    </div>
+  );
+}
+
+function GridEditor({ src, onChange, fields }: { src: Extract<Source, { kind: "grid" }>; onChange: (s: Source) => void; fields: Ctx["fields"] }) {
+  const known = new Set(fields.filter((f) => f.value.startsWith("inspection.")).map((f) => f.value.slice(11)));
+  const cellValue = (c: Cell | undefined) => (c && "field" in c ? c.field : "");
+  return (
+    <div className="rd-grid">
+      <div className="tbl-wrap">
+        <table className="rd-grid-t">
+          <thead><tr><th></th>{src.columns.map((c, i) => (
+            <th key={i}><input aria-label={`Column ${i + 1} name`} value={c.label} onChange={(e) => onChange({ ...src, columns: src.columns.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} /></th>))}
+            <th><button type="button" className="link" onClick={() => onChange({ ...src, columns: [...src.columns, { label: `Column ${src.columns.length + 1}` }], rows: src.rows.map((r) => ({ ...r, cells: [...r.cells, { text: "" }] })) })}>+ Column</button></th></tr></thead>
+          <tbody>{src.rows.map((r, i) => (
+            <tr key={i}>
+              <th><input aria-label={`Row ${i + 1} name`} value={r.label} onChange={(e) => onChange({ ...src, rows: src.rows.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} /></th>
+              {src.columns.map((_, c) => (
+                <td key={c}><select aria-label={`Row ${i + 1} column ${c + 1}`} value={cellValue(r.cells[c])} onChange={(e) => onChange({ ...src, rows: src.rows.map((x, j) => (j === i ? { ...x, cells: src.columns.map((__, k) => (k === c ? (e.target.value ? { field: e.target.value } : { text: "" }) : (x.cells[k] ?? { text: "" }))) } : x)) })}>
+                  <option value="">—</option>{fields.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}</select></td>))}
+              <td><button type="button" className="link" aria-label={`Remove row ${i + 1}`} onClick={() => onChange({ ...src, rows: src.rows.filter((_, j) => j !== i) })}>✕</button></td>
+            </tr>))}</tbody>
+        </table>
+      </div>
+      <div className="bar" style={{ margin: 0 }}>
+        <button type="button" className="link" onClick={() => onChange({ ...src, rows: [...src.rows, { label: `Row ${src.rows.length + 1}`, cells: src.columns.map(() => ({ text: "" })) }] })}>+ Row</button>
+        <form className="bar" style={{ margin: 0 }} onSubmit={(e) => { e.preventDefault(); const prefix = String(new FormData(e.currentTarget).get("prefix") ?? ""); onChange(fillGrid(src, prefix, known)); }}>
+          <input name="prefix" aria-label="Field names start with" placeholder="e.g. tyre" style={{ width: 90 }} />
+          <button type="submit" className="sm">Fill automatically</button>
+        </form>
+      </div>
+      <p className="muted small">“Fill automatically” picks the field named start_row_column for each cell, e.g. tyre_driver_front_tread.</p>
+    </div>
+  );
+}
+
+function PhotoSettings({ part, set, ctx }: { part: Extract<Part, { type: "photos" }>; set: (p: Record<string, unknown>) => void; ctx: Ctx }) {
+  const src = part.source;
+  const photos = ctx.fields.filter((f) => f.type === "photo");
+  const frame = part.frame ?? {};
+  return (
+    <>
+      <Field label="Photos from">
+        <Seg label="Photos from" value={src.kind} options={[["section", "A form section"], ["fields", "Fields I pick"], ["issues", "Every issue photo"]]}
+          onChange={(k) => set({ source: k === "section" ? { kind: "section", section: ctx.sections[0]?.value ?? "inspection.section_1" } : k === "fields" ? { kind: "fields", fields: [] } : { kind: "issues" } })} />
+      </Field>
+      {src.kind === "section" && (
+        <Field label="Form section"><select value={src.section} onChange={(e) => set({ source: { ...src, section: e.target.value } })}>
+          {ctx.sections.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></Field>)}
+      {src.kind === "fields" && (
+        <Field label="Photo fields">
+          <div className="chips">{src.fields.map((f) => (
+            <button key={f} type="button" className="chip" onClick={() => set({ source: { ...src, fields: src.fields.filter((x) => x !== f) } })}>{photos.find((p) => p.value === f)?.label ?? f} ✕</button>))}
+            <select aria-label="Add a photo field" value="" style={{ width: "auto" }} onChange={(e) => e.target.value && set({ source: { ...src, fields: [...src.fields, e.target.value] } })}>
+              <option value="">+ Add…</option>{photos.filter((p) => !src.fields.includes(p.value)).map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select>
+          </div>
+        </Field>)}
+      {src.kind !== "issues" && <Field label="Which photos"><Seg label="Which photos" value={part.which ?? "all"} options={[["all", "All"], ["issues", "Only issue photos"], ["first", "First of each"]]} onChange={(which) => set({ which })} /></Field>}
+      <Field label="Photos per row"><Seg label="Photos per row" value={part.per_row ?? 2} options={[[1, "1"], [2, "2"], [3, "3"], [4, "4"]]} onChange={(per_row) => set({ per_row })} /></Field>
+      <More title="Photo shape and caption" summary={`${part.shape ?? "4:3"} · ${({ fill: "fill and crop", whole: "whole photo", top: "crop, keep top" } as const)[part.fit ?? "fill"]} · caption: ${({ label: "photo name", check: "check and answer", custom: "own text", none: "none" } as const)[part.caption ?? "label"]}`}>
+        <Field label="Box shape"><Seg label="Box shape" value={part.shape ?? "4:3"} options={[["4:3", "4:3"], ["16:9", "16:9"], ["1:1", "Square"], ["original", "As taken"]]} onChange={(shape) => set({ shape })} /></Field>
+        <Field label="When the photo does not fit"><Seg label="Fit" value={part.fit ?? "fill"} options={[["fill", "Fill and crop"], ["whole", "Show whole"], ["top", "Crop, keep top"]]} onChange={(fit) => set({ fit })} /></Field>
+        <Field label="Caption"><Seg label="Caption" value={part.caption ?? "label"} options={[["label", "Photo name"], ["check", "Check + answer"], ["custom", "Own text"], ["none", "None"]]} onChange={(caption) => set({ caption })} /></Field>
+        {part.caption === "custom" && <Field label="Caption text"><input value={part.caption_text ?? ""} onChange={(e) => set({ caption_text: e.target.value })} /></Field>}
+        <div className="grid2">
+          <Field label="Border"><select value={frame.border ?? "none"} onChange={(e) => set({ frame: { ...frame, border: e.target.value } })}><option value="none">None</option><option value="grey">Thin grey</option><option value="brand">Thin brand</option></select></Field>
+          <Field label="Gap (mm)"><input type="number" min={0} max={12} value={frame.gap ?? 4} onChange={(e) => set({ frame: { ...frame, gap: Number(e.target.value) } })} /></Field>
+        </div>
+        <Toggle label="Round corners" checked={frame.round ?? true} onChange={(v) => set({ frame: { ...frame, round: v } })} />
+      </More>
+    </>
+  );
+}

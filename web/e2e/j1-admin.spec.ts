@@ -79,16 +79,19 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
   await expect(page.getByText("Live v1").first()).toBeVisible();
 
-  // PDF template: map Odometer to a report label
+  // PDF template: a page with a table showing Odometer under its own report label
   await page.goto("/pdf");
   await page.getByLabel("Create a template for").selectOption({ label: "Used car" });
-  await page.getByLabel("Add a block").selectOption("table");
-  await page.getByLabel("Title").first().fill("Condition");
+  await page.getByRole("button", { name: "Add page" }).click();
+  await page.getByRole("menuitem", { name: /Blank page/ }).click();
+  await page.getByRole("button", { name: "+ Add to this page" }).click();
+  await page.getByRole("menuitem", { name: /Table of checks/ }).click();
+  await page.getByLabel("Title", { exact: true }).fill("Condition");
+  await page.getByRole("radio", { name: /Checks I pick/ }).check();
   await page.getByRole("button", { name: "+ Add row" }).click();
   await page.getByLabel("Field", { exact: true }).selectOption({ label: "inspection: Odometer" });
   await page.getByLabel("Report label").fill("Kilometres driven");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Saved" }).first()).toBeVisible();
+  await expect(page.getByText("All changes saved")).toBeVisible({ timeout: 10_000 });
   await page.getByRole("button", { name: "Publish" }).click();
   await expect(page.getByText("Live v1")).toBeVisible();
 
@@ -106,13 +109,15 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   await json(await expert.post(`bookings/${b.id}/start`, { data: { client_uuid: crypto.randomUUID(), inspection_type: "used_car", start_answers: { selfie: [selfie] } } }));
   await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection: { chassis_no: "MA3ABCDEFG123456", odometer: 12345 }, start: { selfie: [selfie] }, end: { taking_payment: false } } } }));
 
-  const pdf = page.waitForResponse((r) => r.url().includes("/preview") && r.request().method() === "POST");
   await page.reload();                                                        // the picker now finds the booking
   await page.getByRole("tab", { name: "Used car" }).click();
+  const pdf = page.waitForResponse((r) => r.url().includes("/preview") && r.request().method() === "POST" && r.status() === 200);
   await page.getByLabel("Booking for the preview").selectOption(b.id);         // picked by Booking ID, not a typed internal id
   const res = await pdf;
-  expect(res.status()).toBe(200);
-  expect(res.headers()["content-type"]).toContain("application/pdf");
-  expect((await res.body()).subarray(0, 4).toString()).toBe("%PDF");
-  await expect(page.getByTitle("PDF preview")).toBeVisible();
+  const body = await res.json();
+  expect(Buffer.from(body.pdf, "base64").subarray(0, 4).toString()).toBe("%PDF");
+  expect(body.pages[0].parts.length).toBeGreaterThan(0);                       // where each part sits, for clicking
+  await expect(page.locator("canvas[aria-label=\"Page 1\"]")).toBeVisible();
+  await page.getByRole("button", { name: "Select Condition" }).click();       // click the table in the PDF
+  await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Condition");
 });

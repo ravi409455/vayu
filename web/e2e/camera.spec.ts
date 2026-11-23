@@ -1,3 +1,4 @@
+import { WEB } from "./ports";
 import { expect, test } from "@playwright/test";
 import { apiAs, expertId, JPEG, json, signIn } from "./api";
 
@@ -49,7 +50,7 @@ test("attach still works for the same field (both options are offered)", async (
 
 test("a refused camera says why and offers the other ways", async ({ browser }) => {
   const id = await job("CAM-3");
-  const ctx = await browser.newContext({ baseURL: "http://localhost:5173", permissions: ["geolocation"], geolocation: { latitude: 1, longitude: 1 },
+  const ctx = await browser.newContext({ baseURL: WEB, permissions: ["geolocation"], geolocation: { latitude: 1, longitude: 1 },
     ignoreHTTPSErrors: true });
   const page = await ctx.newPage();
   await page.addInitScript(() => { navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException("no", "NotAllowedError")); });

@@ -38,6 +38,16 @@ def build_pdf(booking: Booking, insp, tv: PdfTemplateVersion, token: str, revisi
     return render.render_pdf(html_text), definition.filename_for(tv.definition, values)
 
 
+def preview(booking: Booking, insp, definition_: dict, edge: int = 480):
+    """(pdf bytes, filename, layout) of any definition for one booking: nothing is stored."""
+    src = context.Source(booking, insp, revision=0, token="preview")
+    pages = context.build(src, definition_)
+    values = src.values()
+    pdf, layout = render.render_with_layout(render.render_html(pages, definition_, values,
+                                                               edge=edge))
+    return pdf, definition.filename_for(definition_, values), layout
+
+
 def _render_with_retries(booking, insp, tv, token: str, revision: int):
     """First try plus two retries; raises the last error if all fail."""
     for attempt in range(MAX_RETRIES + 1):

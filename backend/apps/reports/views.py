@@ -1,3 +1,5 @@
+import base64
+
 from django.conf import settings
 from django.db.models import Q
 from django.http import HttpResponse
@@ -19,6 +21,7 @@ from apps.forms.models import Form, MasterListItem
 from apps.media import storage
 
 from . import context, service, tasks
+from .definition import validate_definition
 from .models import PdfTemplate, PdfTemplateVersion, Report
 
 
@@ -96,10 +99,35 @@ class Preview(APIView):
         insp = context.latest_inspection(booking)
         if insp is None or insp.form_version.form_id != tv.template.form_id:
             raise err("INVALID_BOOKING", "Pick a submitted booking inspected with this form.")
+        if "definition" in request.data:          # the designer: unsaved edits, with positions
+            try:
+                d = validate_definition(request.data["definition"])
+            except ValueError as e:
+                raise err("INVALID_TEMPLATE", str(e)) from e
+            pdf, name, layout = tasks.preview(booking, insp, d)
+            return Response({"filename": name, "pages": layout,
+                             "pdf": base64.b64encode(pdf).decode()})
         pdf, name = tasks.build_pdf(booking, insp, tv, "preview", 0, edge=480)
         response = HttpResponse(pdf, content_type="application/pdf")
         response["Content-Disposition"] = f'inline; filename="{name}"'
         return response
+
+
+class Checks(APIView):
+    """What the designer warns about: fields or sections the form lacks (publishing is blocked)
+    and fields of the form the layout never shows."""
+
+    permission_classes = [perm("pdf_templates.view", "pdf_templates.edit")]
+
+    def post(self, request, pk):
+        tv = get_object_or_404(PdfTemplateVersion.objects.select_related("template__form"), pk=pk)
+        d = request.data.get("definition", tv.definition)
+        try:
+            d = validate_definition(d)
+        except ValueError as e:
+            raise err("INVALID_TEMPLATE", str(e)) from e
+        return Response({"issues": service.definition_issues(tv.template, d),
+                         "unused": service.unused_fields(tv.template, d)})
 
 
 def _report_booking(request, pk) -> Booking:

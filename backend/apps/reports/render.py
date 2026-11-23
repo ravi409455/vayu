@@ -242,7 +242,8 @@ def part_html(part: dict, width_mm: float, ctx: dict) -> str:
                  f'style="text-align:{part.get("align", "left")}">{part["html_out"]}</div>')
     if t == "columns":
         keep += " together"
-    return f'<section class="part{keep}" style="{_box(part)}">{title}{inner}</section>'
+    pid = f' id="part-{e(part["id"])}"' if part.get("id") else ""
+    return f'<section{pid} class="part{keep}" style="{_box(part)}">{title}{inner}</section>'
 
 
 # ---------------------------------------------------------------- bands and page
@@ -438,11 +439,36 @@ def render_html(pages: list[dict], d: dict, values: dict, *, edge: int = PRINT_E
             f'<body>{running}{"".join(body)}</body></html>')
 
 
-def render_pdf(html_text: str) -> bytes:
+def _document(html_text: str):
     if sys.platform == "darwin" and os.path.isdir("/opt/homebrew/lib"):  # pragma: no cover
         os.environ.setdefault("DYLD_FALLBACK_LIBRARY_PATH", "/opt/homebrew/lib")
     from weasyprint import HTML
     from weasyprint.urls import URLFetcher
 
     # only data URIs, which we made ourselves: never a file or anything on the network
-    return HTML(string=html_text, url_fetcher=URLFetcher(allowed_protocols={"data"})).write_pdf()
+    return HTML(string=html_text, url_fetcher=URLFetcher(allowed_protocols={"data"})).render()
+
+
+def render_pdf(html_text: str) -> bytes:
+    return _document(html_text).write_pdf()
+
+
+def render_with_layout(html_text: str) -> tuple[bytes, list[dict]]:
+    """The PDF, and where each part with an id sits on each page (CSS px, top left origin), so
+    the designer can highlight a part and pick one by clicking it."""
+    doc = _document(html_text)
+    pages = []
+    for page in doc.pages:
+        found: dict[str, list[float]] = {}
+        for box in page._page_box.descendants():
+            el = getattr(box, "element", None)
+            pid = (el.get("id") or "") if el is not None and box.element_tag == "section" else ""
+            if pid.startswith("part-"):
+                r = found.setdefault(pid[5:], [1e9, 1e9, 0, 0])
+                r[0], r[1] = min(r[0], box.position_x), min(r[1], box.position_y)
+                r[2] = max(r[2], box.position_x + box.margin_width())
+                r[3] = max(r[3], box.position_y + box.margin_height())
+        pages.append({"width": page.width, "height": page.height, "parts": [
+            {"id": k, "x": round(r[0], 1), "y": round(r[1], 1), "w": round(r[2] - r[0], 1),
+             "h": round(r[3] - r[1], 1)} for k, r in found.items()]})
+    return doc.write_pdf(), pages

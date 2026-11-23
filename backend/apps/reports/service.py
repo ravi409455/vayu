@@ -154,3 +154,16 @@ def discard_draft(actor, v: PdfTemplateVersion) -> None:
         v.delete()
         audit.record(actor, "pdf_template.draft_discard", "pdf_template", v.template_id,
                      f"Discarded {key} template draft v{number}")
+
+
+def unused_fields(template: PdfTemplate, definition: dict) -> list[dict]:
+    """Fields of the form (as it is now) that this layout never shows."""
+    latest = FormVersion.objects.filter(form=template.form).order_by("-number").first()
+    used = {key for form, key in referenced_fields(definition) if form == "inspection"}
+    whole = referenced_sections(definition)
+    return [{"key": k, "label": label, "section": title}
+            for k, label, sec, title in Field.objects.filter(version=latest)
+            .exclude(type__in=("image", "form_choice")).order_by("section__page__order",
+                                                                 "section__order", "order")
+            .values_list("key", "label", "section__key", "section__title")
+            if k not in used and sec not in whole]

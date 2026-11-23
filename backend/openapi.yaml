@@ -2328,6 +2328,25 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/pdf-template-versions/{id}/checks:
+    post:
+      operationId: pdf_template_versions_checks_create
+      description: |-
+        What the designer warns about: fields or sections the form lacks (publishing is blocked)
+        and fields of the form the layout never shows.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pdf-template-versions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/pdf-template-versions/{id}/preview:
     post:
       operationId: pdf_template_versions_preview_create

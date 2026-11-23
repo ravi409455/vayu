@@ -1,3 +1,4 @@
+import { WEB } from "./ports";
 import { expect, test } from "@playwright/test";
 import { apiAs, json, signIn } from "./api";
 
@@ -73,7 +74,7 @@ test("J3: expert completes a full inspection on the web", async ({ page }) => {
 
 test("J3b: GPS denied shows 'GPS unavailable' and does not block the job", async ({ browser }) => {
   const id = await assignedJob("J3-2");
-  const ctx = await browser.newContext({ baseURL: "http://localhost:5173", permissions: [] });
+  const ctx = await browser.newContext({ baseURL: WEB, permissions: [] });
   const page = await ctx.newPage();
   await signIn(page, "expert");
   await page.goto(`/jobs/${id}`);

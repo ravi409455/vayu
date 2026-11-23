@@ -1,7 +1,8 @@
+import { API_ROOT } from "./ports";
 // Test helpers that talk straight to the API (setup and checks), not through the screens.
 import { request, type APIRequestContext, type Page } from "@playwright/test";
 
-export const API = "http://localhost:8000/api/v1";
+export const API = `${API_ROOT}/api/v1`;
 export const PASSWORD = "Passw0rd-e2e";
 
 export async function apiAs(username: string): Promise<APIRequestContext> {

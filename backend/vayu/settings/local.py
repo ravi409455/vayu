@@ -19,7 +19,8 @@ from .base import *  # noqa: E402,F401,F403
 
 DEBUG = False
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
-CSRF_TRUSTED_ORIGINS = ["http://localhost:5173"]      # the Vite dev server in front of the API
+# the Vite dev server in front of the API, and a second one (5174) when two run side by side
+CSRF_TRUSTED_ORIGINS = ["http://localhost:5173", "http://localhost:5174"]
 PUBLIC_BASE_URL = "http://localhost:5173"
 VERIFY_BASE_URL = "http://localhost:5173/verify"
 WEBHOOK_ALLOW_HTTP = True                             # so a receiver on this laptop can be tried

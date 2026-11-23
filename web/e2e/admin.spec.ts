@@ -1,3 +1,4 @@
+import { API_ROOT } from "./ports";
 import { expect, test } from "@playwright/test";
 import { apiAs, json, signIn } from "./api";
 
@@ -106,13 +107,13 @@ test.describe("admin screens", () => {
     await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
     await expect(page.locator("tr", { hasText: "ERP" })).toContainText(`vk_${key.split("_")[1]}_…`);
     expect(await page.content()).not.toContain(key);                    // never shown again
-    const ok = await page.request.get("http://localhost:8000/api/v1/ext/bookings", { headers: { Authorization: `Api-Key ${key}` } });
+    const ok = await page.request.get(`${API_ROOT}/api/v1/ext/bookings`, { headers: { Authorization: `Api-Key ${key}` } });
     expect(ok.status()).toBe(200);
     page.once("dialog", (x) => x.accept());
     await page.locator("tr", { hasText: "ERP" }).getByRole("button", { name: "Actions for ERP" }).click();
     await page.getByRole("menuitem", { name: "Revoke…" }).click();
     await expect(page.locator("tr", { hasText: "ERP" })).toContainText("Revoked");
-    const gone = await page.request.get("http://localhost:8000/api/v1/ext/bookings", { headers: { Authorization: `Api-Key ${key}` } });
+    const gone = await page.request.get(`${API_ROOT}/api/v1/ext/bookings`, { headers: { Authorization: `Api-Key ${key}` } });
     expect(gone.status()).toBe(401);
   });
 
