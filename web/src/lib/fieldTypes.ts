@@ -35,3 +35,15 @@ export function slugKey(label: string): string {
   const k = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   return /^[a-z]/.test(k) ? k.slice(0, 63) : `f_${k}`.slice(0, 63);
 }
+
+/** The type of a field in words, with the detail that matters ("Choose one · 4 choices", "Number · km"). */
+export function typeSummary(f: { type: string; config: Record<string, unknown> }): string {
+  const name = FIELD_TYPES.find((t) => t.id === f.type)?.label ?? SYSTEM_TYPE_LABELS[f.type] ?? f.type;
+  const c = f.config ?? {};
+  const n = Array.isArray(c.options) ? c.options.length : 0;
+  if (CHOICE_TYPES.includes(f.type) || f.type === "form_choice") return n ? `${name} · ${n} choice${n === 1 ? "" : "s"}` : name;
+  if (f.type === "number" && c.unit) return `${name} · ${String(c.unit)}`;
+  if ((f.type === "photo" || f.type === "video") && c.capture === "camera") return `${name} · camera only`;
+  if (["date", "time", "datetime", "gps"].includes(f.type) && (c.auto === true || (f.type === "gps" && c.auto !== false))) return `${name} · automatic`;
+  return name;
+}

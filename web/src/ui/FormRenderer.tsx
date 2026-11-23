@@ -89,7 +89,7 @@ function FieldInput({ f, value, derived, required, error, readOnly, onChange, p 
       input = <Choices name={f.key} disabled={readOnly} label={f.label} value={value === true ? "yes" : value === false ? "no" : ""} plain options={[{ key: "yes", label: "Yes" }, { key: "no", label: "No" }]} onChange={(k) => onChange(k === "yes")} />; break;
     case "single_choice": {
       const opts = (f.config.options as Option[]) ?? [];
-      input = f.config.display === "dropdown" || opts.length > 5
+      input = f.config.display === "dropdown" || (f.config.display !== "buttons" && opts.length > 5)
         ? <select {...common} value={String(str)} onChange={(e) => onChange(e.target.value || null)}><option value="">Choose…</option>{opts.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select>
         : <Choices name={f.key} disabled={readOnly} label={f.label} value={String(str)} options={opts} onChange={(k) => onChange(value === k ? null : k)} />;
       break;

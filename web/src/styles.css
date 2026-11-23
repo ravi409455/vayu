@@ -443,3 +443,18 @@ fieldset.plain { border: 0; padding: 0; margin: 0; min-width: 0; } fieldset.plai
   .review-index { display: none; }
 }
 .secret-box { background: var(--subtle); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font-size: 14px; overflow-wrap: anywhere; white-space: pre-wrap; user-select: all; }
+.type-tag { font-size: 12px; color: var(--muted); white-space: nowrap; flex: none; }
+.type-pill { display: inline-flex; align-items: center; gap: 5px; background: var(--hover); color: var(--ink); font-weight: 500; }
+.options-editor { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 12px; background: var(--subtle); }
+.opt-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.opt-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.opt-row { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 4px; }
+.opt-main { display: flex; align-items: center; gap: 8px; }
+.opt-main input { flex: 1; min-width: 0; }
+.opt-main select { width: 150px; flex: none; font-size: 13px; }
+.opt-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--ok); }
+.opt-row.minor .opt-dot { background: var(--warn); } .opt-row.major .opt-dot, .opt-row.critical .opt-dot { background: var(--bad); }
+.opt-row.critical .opt-dot { box-shadow: 0 0 0 2px var(--bad-tint); }
+.opt-sub { display: flex; align-items: center; gap: 4px; margin: 4px 0 0 18px; }
+.opt-key { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.opt-key input { width: 130px; padding: 2px 6px; font-size: 12px; border-color: var(--line); }

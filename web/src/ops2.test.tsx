@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { FormField } from "./api/types";
 import { addDays, fmtDay, fmtPhone, fmtSlot, fmtStamp, fmtTime } from "./lib/format";
 import { activityText } from "./pages/ops/Booking";
@@ -119,5 +119,32 @@ describe("integration words", () => {
     expect(errorWord("blocked_address")).toMatch(/not allowed/);
     expect(errorWord("http_503")).toBe("Server answered 503");
     expect(errorWord("something_new")).toBe("something_new");
+  });
+});
+
+describe("field types in words", () => {
+  it("names the type with the detail that matters", async () => {
+    const { typeSummary } = await import("./lib/fieldTypes");
+    expect(typeSummary({ type: "single_choice", config: { options: [{}, {}, {}] } })).toBe("Choose one · 3 choices");
+    expect(typeSummary({ type: "number", config: { unit: "km" } })).toBe("Number · km");
+    expect(typeSummary({ type: "photo", config: { capture: "camera" } })).toBe("Photos · camera only");
+    expect(typeSummary({ type: "gps", config: {} })).toBe("GPS location · automatic");
+    expect(typeSummary({ type: "short_text", config: {} })).toBe("Short text");
+  });
+  it("a new choice's key follows its label until someone types a key", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    const onSave = vi.fn();
+    const f = { id: 1, section: 1, key: "door", label: "Door", helper_text: "", type: "single_choice", required: false, required_if: null, show_if: null,
+      config: { options: [{ key: "ok", label: "OK" }] }, visible: true, order: 0, is_system: false, access: {}, locked: false, library: null };
+    const u = userEvent.setup();
+    render(<FieldEditor field={f as never} choices={[]} lists={[]} categories={[]} onSave={onSave} onDelete={() => {}} readOnly={false} />);
+    await u.click(screen.getByRole("button", { name: "+ Add choice" }));
+    await u.type(screen.getAllByLabelText("Choice label")[1]!, "Badly dented");
+    await u.selectOptions(screen.getAllByLabelText("What this choice means")[1]!, "major");
+    await u.click(screen.getByRole("button", { name: "Dropdown" }));
+    await u.click(screen.getByRole("button", { name: "Save field" }));
+    expect(onSave.mock.calls[0]![0].config).toEqual({ options: [{ key: "ok", label: "OK" }, { key: "badly_dented", label: "Badly dented", is_defect: true, severity: "major" }], display: "dropdown" });
   });
 });

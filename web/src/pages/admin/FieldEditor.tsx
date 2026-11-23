@@ -1,4 +1,4 @@
-import { Link2, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Link2, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Access, FormField, Option } from "../../api/types";
 import { uploadFile } from "../../api/client";
@@ -6,7 +6,7 @@ import { iconFor } from "../../lib/typeIcons";
 import { AccessEditor } from "../../ui/AccessEditor";
 import { ConditionBuilder, type FieldChoice } from "../../ui/ConditionBuilder";
 import { Field, Pill, Tabs, useToast } from "../../ui/kit";
-import { CHOICE_TYPES, FIELD_TYPES, SYSTEM_TYPE_LABELS } from "../../lib/fieldTypes";
+import { CHOICE_TYPES, FIELD_TYPES, slugKey, SYSTEM_TYPE_LABELS } from "../../lib/fieldTypes";
 
 export type FieldDraft = Pick<FormField, "label" | "helper_text" | "type" | "config" | "required" | "required_if" | "show_if" | "visible" | "access">;
 type Pane = "settings" | "logic" | "access";
@@ -37,7 +37,12 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
         <span className="type-badge"><Icon size={16} aria-hidden /></span>
         <div className="grow">
           <h2>{field.label || field.key}</h2>
-          <p className="muted small">Key <code>{field.key}</code> · {type}{field.is_system && " · system field"}{field.locked && " · linked to the library"}</p>
+          <div className="chips" style={{ marginTop: 4 }}>
+            <span className="pill type-pill"><Icon size={12} aria-hidden /> {type}</span>
+            {field.is_system && <span className="pill">System field</span>}
+            {field.locked && <span className="pill">From the library</span>}
+            <span className="muted small">key <code>{field.key}</code></span>
+          </div>
         </div>
         {field.library && <Pill tone={field.library.update_available ? "warn" : "info"}><Link2 size={12} aria-hidden /> Library{field.library.update_available ? ": update available" : ""}</Pill>}
       </div>
@@ -73,7 +78,8 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
                 }} />
               </Field>
             )}
-            {!field.locked && CHOICE_TYPES.includes(field.type) && <OptionsEditor options={(cfg.options as Option[]) ?? []} onChange={(options) => setCfg({ options })} />}
+            {!field.locked && CHOICE_TYPES.includes(field.type) && <OptionsEditor options={(cfg.options as Option[]) ?? []} onChange={(options) => setCfg({ options })}
+              display={field.type === "single_choice" ? String(cfg.display ?? "") : null} onDisplay={(display) => setCfg({ display })} />}
             {!locked && field.type === "master_list" && (
               <Field label="List" tip="The master list whose items this field offers (cities, car models...).">
                 <select value={String(cfg.list ?? "")} onChange={(e) => setCfg({ list: e.target.value })}>
@@ -145,25 +151,55 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
   );
 }
 
-function OptionsEditor({ options, onChange }: { options: Option[]; onChange: (o: Option[]) => void }) {
+const OUTCOMES = [
+  { id: "fine", label: "Fine" }, { id: "minor", label: "Defect: minor" }, { id: "major", label: "Defect: major" }, { id: "critical", label: "Defect: critical" },
+] as const;
+const outcomeOf = (o: Option) => (o.is_defect ? (o.severity ?? "minor") : "fine");
+
+/** The answers people can pick: label, what it means for the rating, the order. The key (used by the
+ *  API, rules and reports) follows the label until someone types their own. */
+function OptionsEditor({ options, onChange, display, onDisplay }: { options: Option[]; onChange: (o: Option[]) => void; display: string | null; onDisplay: (d: string) => void }) {
   const set = (i: number, p: Partial<Option>) => onChange(options.map((o, j) => (j === i ? { ...o, ...p } : o)));
+  const move = (i: number, by: number) => { const j = i + by; if (j < 0 || j >= options.length) return; const out = [...options]; [out[i], out[j]] = [out[j]!, out[i]!]; onChange(out); };
+  const dupes = new Set(options.map((o) => o.key).filter((k, i, a) => k && a.indexOf(k) !== i));
   return (
-    <div className="card" style={{ marginBottom: 12 }}>
-      <strong>Choices</strong>
-      <p className="muted small" style={{ margin: "2px 0 8px" }}>Mark a choice as a <em>defect</em> to count it in the rating (Minor / Major / Critical).</p>
-      {options.map((o, i) => (
-        <div className="cond-row" key={i}>
-          <input aria-label="Choice key" value={o.key} placeholder="key" onChange={(e) => set(i, { key: e.target.value })} />
-          <input aria-label="Choice label" value={o.label} placeholder="label" onChange={(e) => set(i, { label: e.target.value })} />
-          <label className="check"><input type="checkbox" checked={!!o.is_defect} onChange={(e) => set(i, { is_defect: e.target.checked, severity: e.target.checked ? (o.severity ?? "minor") : null })} /> Defect</label>
-          {o.is_defect && (
-            <select aria-label="Severity" value={o.severity ?? "minor"} onChange={(e) => set(i, { severity: e.target.value })} style={{ maxWidth: 110 }}>
-              <option value="minor">Minor</option><option value="major">Major</option><option value="critical">Critical</option></select>
-          )}
-          <button className="link" aria-label="Remove choice" onClick={() => onChange(options.filter((_, j) => j !== i))}>✕</button>
-        </div>
-      ))}
-      <button className="link" onClick={() => onChange([...options, { key: "", label: "" }])}>+ Add choice</button>
-    </div>
+    <section className="options-editor" aria-label="Choices">
+      <div className="opt-head">
+        <strong className="grow">Choices</strong>
+        {display !== null && (
+          <div className="seg" role="group" aria-label="Show as">
+            <button type="button" aria-pressed={display !== "dropdown"} onClick={() => onDisplay("buttons")}>Buttons</button>
+            <button type="button" aria-pressed={display === "dropdown"} onClick={() => onDisplay("dropdown")}>Dropdown</button>
+          </div>)}
+      </div>
+      <p className="muted small" style={{ margin: "0 0 8px" }}>A defect counts against the rating; its severity decides how much.</p>
+      <ol className="opt-list">
+        {options.map((o, i) => {
+          const out = outcomeOf(o);
+          return (
+            <li key={i} className={`opt-row ${out}`}>
+              <div className="opt-main">
+                <span className="opt-dot" aria-hidden="true" />
+                <input aria-label="Choice label" value={o.label} placeholder="What people see"
+                  onChange={(e) => set(i, { label: e.target.value, ...(!o.key || o.key === slugKey(o.label) ? { key: slugKey(e.target.value) } : {}) })} />
+                <select aria-label="What this choice means" value={out} onChange={(e) => {
+                  const v = e.target.value;
+                  set(i, v === "fine" ? { is_defect: false, severity: null } : { is_defect: true, severity: v });
+                }}>{OUTCOMES.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select>
+              </div>
+              <div className="opt-sub">
+                <label className="opt-key"><span>key</span><input aria-label="Choice key" className="mono" value={o.key} placeholder="key" onChange={(e) => set(i, { key: e.target.value })} /></label>
+                {dupes.has(o.key) && <span className="error" style={{ margin: 0 }}>used twice</span>}
+                <span className="grow" />
+                <button type="button" className="icon-btn" aria-label={`Move ${o.label || "choice"} up`} disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp size={14} aria-hidden /></button>
+                <button type="button" className="icon-btn" aria-label={`Move ${o.label || "choice"} down`} disabled={i === options.length - 1} onClick={() => move(i, 1)}><ArrowDown size={14} aria-hidden /></button>
+                <button type="button" className="icon-btn" aria-label="Remove choice" onClick={() => onChange(options.filter((_, j) => j !== i))}><X size={14} aria-hidden /></button>
+              </div>
+            </li>);
+        })}
+      </ol>
+      <button type="button" className="link" onClick={() => onChange([...options, { key: "", label: "" }])}>+ Add choice</button>
+      {display !== null && options.length > 5 && display !== "dropdown" && <p className="muted small">More than 5 choices show as a dropdown unless you pick Buttons here.</p>}
+    </section>
   );
 }
