@@ -28,3 +28,8 @@ test-results/
 playwright-report/
 web/dist/
 .local/
+
+# Android build outputs and machine-local SDK path
+android/**/build/
+android/local.properties
+android/.kotlin/
