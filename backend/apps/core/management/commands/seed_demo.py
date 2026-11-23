@@ -4,10 +4,12 @@ few bookings in different states, so every screen has something to look at.
 The inspection forms (PDI, Used car, EV...) are meant to be built by hand in the form builder;
 the PDI form here is a small stand-in so the flow can be tried straight away."""
 import uuid
+from datetime import timedelta
 
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from apps.accounts.models import Role, User
 from apps.bookings import services, submissions
@@ -81,6 +83,8 @@ class Command(BaseCommand):
         self._system_forms(admin)
         self._inspection_forms(admin)
         self._bookings()
+        self._more_bookings()
+        self._integrations(admin)
         self.stdout.write(self.style.SUCCESS(
             f"Demo ready. Sign in as admin / ops / expert / expert2 with password {PASSWORD}"))
 
@@ -183,3 +187,184 @@ class Command(BaseCommand):
                            "remarks": "Clean car."},
             "start": {"selfie": [selfie]}, "end": {"taking_payment": False}})
         check_completion(b3.id)        # Completed: the PDF is made by the worker
+
+
+    # ---------------------------------------------------------------- more bookings and problems
+
+    def _pending_asset(self, booking, expert, field_key, status, days_old):
+        """A photo the phone never finished sending: it makes a 'stuck upload' problem."""
+        import hashlib
+
+        from apps.media.models import MediaAsset
+
+        a = MediaAsset(client_uuid=uuid.uuid4(), booking=booking, uploaded_by=expert,
+                       field_key=field_key, kind="photo", content_type="image/jpeg", size=250_000,
+                       sha256=hashlib.sha256(str(uuid.uuid4()).encode()).hexdigest(), status=status)
+        a.key = f"bookings/{booking.id}/{a.id}"
+        a.save()
+        MediaAsset.objects.filter(pk=a.pk).update(
+            created_at=timezone.now() - timedelta(days=days_old))
+        return str(a.id)
+
+    def _pdi_answers(self, chassis, odometer, door="ok", remarks="Looks fine."):
+        return {"chassis_no": chassis, "registration_no": f"MH12AB{odometer % 9000 + 1000}",
+                "odometer": odometer, "bonnet": "ok", "door_fl": door, "remarks": remarks}
+
+    def _more_bookings(self):
+        """Bookings in every stage, plus the situations that fill the Problems page."""
+        ops = User.objects.get(username="ops")
+        e1, e2 = User.objects.get(username="expert"), User.objects.get(username="expert2")
+        base = {"inspection_time": "10:30"}
+        phones = iter(["9876501001", "9876501002", "9876501003", "9876501004", "9876501005",
+                       "9876501006", "9876501007", "9876501008", "9876501009", "9876501010",
+                       "9876501011", "9876501012", "9876501013"])
+
+        def make(ref, name, city, car, day, itype="pdi", at="10:30"):
+            return services.create(ops, {**base, "inspection_time": at, "booking_id": ref,
+                                         "customer_name": name, "customer_phone": next(phones),
+                                         "address": f"{ref} lane, {city.title()}", "city": city,
+                                         "car_make_model": car, "inspection_date": day,
+                                         "inspection_type": itype})
+
+        def start(b, expert, itype="pdi"):
+            submissions.start(expert, b, uuid.uuid4(), None, itype, None)
+            b.refresh_from_db()
+
+        def submit(b, expert, answers):
+            selfie = self._selfie(b, expert)
+            submissions.submit(expert, b, uuid.uuid4(), {
+                "inspection": answers, "start": {"selfie": [selfie]},
+                "end": {"taking_payment": False}})
+
+        # waiting to be assigned
+        make("DEMO-4", "Rohit Sharma", "delhi", "hyundai_creta", "2026-12-02", "ev")
+        make("DEMO-5", "Pooja Nair", "mumbai", "tata_nexon", "2026-12-03", "used_car", "14:00")
+        # assigned (one of them rescheduled once)
+        b = make("DEMO-6", "Vikram Singh", "pune", "maruti_victoris", "2026-12-02", at="09:00")
+        services.assign(ops, b, e2.id)
+        b = make("DEMO-7", "Anita Desai", "mumbai", "hyundai_creta", "2026-12-02", "used_car")
+        services.assign(ops, b, e1.id)
+        services.reschedule(ops, b, "2026-12-04", "16:30", "customer_request")
+        # started, still being filled in
+        b = make("DEMO-8", "Farhan Ali", "pune", "tata_nexon", "2026-11-23", at="11:00")
+        services.assign(ops, b, e1.id)
+        start(b, e1)
+        self._pending_asset(b, e1, "selfie", "uploading", 2)             # a stuck upload
+        b = make("DEMO-9", "Sneha Kulkarni", "delhi", "hyundai_creta", "2026-11-23", "ev", "12:00")
+        services.assign(ops, b, e2.id)
+        start(b, e2, "ev")
+        # submitted, photos never arrived, and its report failed
+        b = make("DEMO-10", "Imran Qureshi", "mumbai", "maruti_victoris", "2026-11-22")
+        services.assign(ops, b, e1.id)
+        start(b, e1)
+        late = self._pending_asset(b, e1, "selfie", "pending", 3)
+        submissions.submit(e1, b, uuid.uuid4(), {
+            "inspection": self._pdi_answers("MA3IMRANQ0000010", 31800, "minor",
+                                            "Small scratch on the door."),
+            "start": {"selfie": [late]}, "end": {"taking_payment": False}})
+        from apps.reports.models import Report
+
+        Report.objects.update_or_create(booking=b, defaults={
+            "status": "failed", "error": "A photo could not be read, so the PDF was not made."})
+        # completed
+        for ref, name, city, car, day, expert, chassis, km in (
+                ("DEMO-11", "Deepa Menon", "pune", "tata_nexon", "2026-11-21", e1,
+                 "MA3DEEPAM0000011", 12400),
+                ("DEMO-12", "Karan Malhotra", "mumbai", "maruti_victoris", "2026-11-20", e2,
+                 "MA3KARANM0000012", 56200)):
+            b = make(ref, name, city, car, day)
+            services.assign(ops, b, expert.id)
+            start(b, expert)
+            submit(b, expert, self._pdi_answers(chassis, km))
+            check_completion(b.id)
+        # cancelled
+        b = make("DEMO-13", "Lata Joshi", "delhi", "hyundai_creta", "2026-11-25")
+        services.assign(ops, b, e2.id)
+        services.cancel(ops, b, "customer_cancelled")
+        # two experts inspected it: a conflict for Ops to resolve
+        b = make("DEMO-14", "Manoj Pillai", "delhi", "tata_nexon", "2026-11-23", at="15:00")
+        services.assign(ops, b, e1.id)
+        start(b, e1)
+        services.force_release(ops, b)
+        services.assign(ops, b, e2.id)
+        start(b, e2)
+        submit(b, e2, self._pdi_answers("MA3MANOJP0000014", 22000, remarks="Second expert."))
+        submit(b, e1, self._pdi_answers("MA3MANOJP0000014", 22010,
+                                        remarks="First expert, offline."))
+        # Ops changed the type while the expert had already started another one
+        b = make("DEMO-15", "Neha Bhat", "pune", "maruti_victoris", "2026-11-23", at="17:00")
+        services.assign(ops, b, e1.id)
+        services.change_type(ops, b, "used_car")
+        submissions.start(e1, b, uuid.uuid4(), None, "pdi", None)
+
+    # ---------------------------------------------------------------- integrations
+
+    def _integrations(self, admin):
+        """Webhooks with a mix of delivered, retrying and failed attempts, and two API keys."""
+        from apps.bookings.models import Booking
+        from apps.integrations import apikeys, webhooks
+        from apps.integrations.models import ApiKey, Delivery, Integration
+
+        forms = {f.key: f for f in Form.objects.filter(type__in=["booking", "custom"])}
+        specs = [
+            ("ERP sync", forms["booking"], "http://127.0.0.1:9099/erp",
+             ["booking.created", "booking.updated", "booking.deleted"], True),
+            ("Customer WhatsApp (PDI)", forms["pdi"], "http://127.0.0.1:9099/whatsapp",
+             ["inspection.submitted", "pdf.ready"], True),
+            ("Alerts to the ops channel", forms["pdi"], "http://127.0.0.1:9099/alerts",
+             ["alert.conflict", "alert.stuck_upload"], True),
+            ("Old CRM (switched off)", forms["booking"], "http://127.0.0.1:9099/old",
+             ["booking.created"], False),
+        ]
+        made = {}
+        for name, form, url, events, active in specs:
+            made[name] = Integration.objects.create(
+                form=form, name=name, url=url, secret=webhooks.new_secret(), events=events,
+                include_data=True, include_pdf="pdf.ready" in events, is_active=active,
+                created_by=admin)
+        refs = {b.booking_id: b for b in Booking.objects.all()}
+        now = timezone.now()
+
+        def delivery(integration, event, ref, status, attempts, **kw):
+            b = refs.get(ref)
+            d = Delivery.objects.create(
+                integration=made[integration], event=event, booking=b,
+                booking_uuid=str(b.id) if b else "", booking_ref=ref, status=status,
+                attempts=attempts, last_attempt_at=now - timedelta(minutes=kw.pop("ago", 30)),
+                **kw)
+            return d
+
+        ok = {"response_status": 200}
+        delivery("ERP sync", "booking.created", "DEMO-11", "success", 1, ago=600, **ok)
+        delivery("ERP sync", "booking.updated", "DEMO-11", "success", 1, ago=420, **ok)
+        delivery("ERP sync", "booking.created", "DEMO-12", "success", 2, ago=380, **ok)
+        delivery("ERP sync", "booking.created", "DEMO-14", "retrying", 2, response_status=503,
+                 error="http_503", next_retry_at=now + timedelta(hours=1), ago=25)
+        delivery("ERP sync", "booking.updated", "DEMO-9", "failed", 7, response_status=500,
+                 error="retries_exhausted", ago=300)
+        delivery("Customer WhatsApp (PDI)", "inspection.submitted", "DEMO-11", "success", 1,
+                 response_status=204, ago=410)
+        delivery("Customer WhatsApp (PDI)", "pdf.ready", "DEMO-11", "success", 1,
+                 response_status=204, ago=405)
+        delivery("Customer WhatsApp (PDI)", "inspection.submitted", "DEMO-12", "failed", 1,
+                 response_status=404, error="http_404", ago=370)
+        delivery("Customer WhatsApp (PDI)", "pdf.ready", "DEMO-3", "failed", 1,
+                 error="template_failed", ago=900)
+        delivery("Alerts to the ops channel", "alert.conflict", "DEMO-14", "success", 1,
+                 response_status=200, ago=20)
+        delivery("Alerts to the ops channel", "alert.stuck_upload", "DEMO-10", "retrying", 3,
+                 error="connection_error", next_retry_at=now + timedelta(minutes=30), ago=15)
+        delivery("Alerts to the ops channel", "alert.conflict", "DEMO-15", "failed", 1,
+                 error="blocked_address", ago=60)
+
+        shown, prefix, hashed = apikeys.generate()
+        ApiKey.objects.create(
+            name="ERP read access", prefix=prefix, key_hash=hashed, created_by=admin,
+            scope={"forms": {"booking": ["*"], "pdi": ["chassis_no", "odometer"]}},
+            last_used_at=now - timedelta(hours=2))
+        _, old_prefix, old_hash = apikeys.generate()
+        ApiKey.objects.create(
+            name="Old partner key (revoked)", prefix=old_prefix, key_hash=old_hash,
+            created_by=admin, scope={"forms": {"booking": ["booking_id", "stage"]}},
+            revoked_at=now - timedelta(days=9))
+        self.stdout.write(f"A demo API key to try (shown only now): {shown}")
