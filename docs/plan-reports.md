@@ -250,8 +250,13 @@ only data URIs. Old templates were removed by migration (`reports 0004`); the se
 is the full sample report (20 pages). The current PDF templates screen edits the new format in a
 simple way until Phase 3 replaces it.
 
-Moved to later phases as planned: columns (photo beside table), style rules, bundled fonts, the
-automatic section list on the divider, PDF bookmarks per section.
+Pulled forward after review (to match the approved prototype): side-by-side columns, bundled
+fonts (Inter and Barlow Semi Condensed, SIL OFL, in `backend/apps/reports/fonts`), logo and name
+on one line in the header, ring-icon headings, big rating numbers with dots, summary tiles
+(issues, not able to check, checks done), the divider's section list with page numbers, coloured
+answers in photo captions. Sample render: `docs/samples/DEMO-3PDI.pdf`.
+
+Still for Phase 4: style rules, Custom HTML, PDF bookmarks per section.
 
 ## 12. Questions for you
 

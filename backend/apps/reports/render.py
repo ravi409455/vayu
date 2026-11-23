@@ -5,7 +5,10 @@ import base64
 import html
 import io
 import os
+import re
 import sys
+from functools import cache
+from pathlib import Path
 from typing import Any
 
 import qrcode
@@ -24,6 +27,12 @@ COLORS = {"brand": "#a62830", "text": "#1b1f27", "ok": "#15703f", "warn": "#b25e
 PRINT_EDGE = 1000            # print photos: about 1000 px is plenty at 2-3 per row on A4
 PADS = {"compact": 0.6, "normal": 1.2, "roomy": 2.0}
 RATIO = {"4:3": 0.75, "16:9": 0.5625, "1:1": 1.0}
+FONTS_DIR = Path(__file__).parent / "fonts"
+FONT_FILES = {"Inter": (400, 600, 700), "Barlow Semi Condensed": (500, 600, 700)}
+STACK = {"Inter": '"Inter", Helvetica, Arial, sans-serif',
+         "Barlow Semi Condensed": '"Barlow Semi Condensed", "Inter", Helvetica, sans-serif',
+         "Helvetica": "Helvetica, Arial, sans-serif"}
+SCORE = re.compile(r"^(\d)/5$")
 
 
 def e(s: Any) -> str:
@@ -106,28 +115,38 @@ def _box(part: dict) -> str:
     return ";".join(css)
 
 
-def _value(r: dict) -> str:
+def _value(r: dict, emphasis: bool = False) -> str:
+    if emphasis and (m := SCORE.match(r["text"])):                 # 4/5 as a big 4 and dots
+        n = int(m[1])
+        dots = "".join(f'<i class="{"" if k < n else "off"}"></i>' for k in range(5))
+        return f'<span class="big">{n}<small>/5</small></span><span class="dots">{dots}</span>'
     if r.get("problem"):
         return f'<span class="chip tone-{r["tone"] or "bad"}">{e(r["text"])}</span>'
-    tone = f' class="tone-{r["tone"]}"' if r.get("tone") else ""
-    return f"<span{tone}>{e(r['text'])}</span>"
+    classes = " ".join(c for c in ("big" if emphasis else "",
+                                   f"tone-{r['tone']}" if r.get("tone") else "") if c)
+    return f'<span class="{classes}">{e(r["text"])}</span>' if classes \
+        else f"<span>{e(r['text'])}</span>"
 
 
 def _table(part: dict) -> str:
     look = part.get("look", {})
     kind = part["source"]["kind"]
-    cls = (f"t lines-{look.get('lines', 'rows')}" + (" stripes" if look.get("stripes", True) else ""))
+    cls = (f"t lines-{look.get('lines', 'rows')}" + (" stripes" if look.get("stripes", True) else "")
+           + (" emphasis" if look.get("emphasis") else "") + (" kv" if look.get("kv") else ""))
     pad = PADS[look.get("height", "normal")]
     style = f' style="--pad:{pad}mm"'
     rows = part["rows"]
+    big = bool(look.get("emphasis"))
     if kind == "grid":
         cols = part["source"]["columns"]
+        labels = any(r["label"] for r in rows)
         widths = [f' style="width:{c["width"]}%"' if c.get("width") else "" for c in cols]
-        head = "<th></th>" + "".join(f"<th{wd}>{e(c['label'])}</th>"
-                                     for c, wd in zip(cols, widths, strict=True))
-        body = "".join("<tr><th class='l'>" + e(r["label"]) + "</th>" + "".join(
-            f"<td>{_value(c)}</td>" for c in r["cells"]) + "</tr>" for r in rows)
-        return f'<table class="{cls} grid"{style}><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>'
+        head = ("<th></th>" if labels else "") + "".join(
+            f"<th{wd}>{e(c['label'])}</th>" for c, wd in zip(cols, widths, strict=True))
+        thead = f"<thead><tr>{head}</tr></thead>" if look.get("header", True) else ""
+        body = "".join("<tr>" + (f"<th class='l'>{e(r['label'])}</th>" if labels else "") + "".join(
+            f"<td>{_value(c, big)}</td>" for c in r["cells"]) + "</tr>" for r in rows)
+        return f'<table class="{cls} grid"{style}>{thead}<tbody>{body}</tbody></table>'
     headers = look.get("headers") or (["Section", "Check", "Result"] if kind == "defects"
                                       else ["Check", "Result"])
     if kind == "defects":
@@ -171,13 +190,17 @@ def _photos(part: dict, width_mm: float, edge: int) -> str:
         uri = print_image(it["media"], edge)
         img = (f'<img src="{uri}" style="{size}{obj};{border};{radius}">' if uri
                else f'<div class="noimg" style="{size}{radius}">Photo not available</div>')
-        cap = f"<figcaption>{e(it['caption'])}</figcaption>" if it["caption"] else ""
-        figs.append(f"<figure>{img}{cap}</figure>")
+        cap = ""
+        if it["caption"]:
+            answer = (f'<span class="ans tone-{it["tone"] or "text"}">{e(it["answer"])}</span>'
+                      if it.get("answer") else "")
+            cap = f"<figcaption><span>{e(it['caption'])}</span>{answer}</figcaption>"
+        figs.append(f'<figure style="width:{cell:.2f}mm">{img}{cap}</figure>')
     return (f'<div class="photos" style="grid-template-columns:repeat({n},{cell:.2f}mm);'
             f'gap:{gap}mm">{"".join(figs)}</div>')
 
 
-def part_html(part: dict, width_mm: float, edge: int, verify_url: str) -> str:
+def part_html(part: dict, width_mm: float, ctx: dict) -> str:
     t = part["type"]
     if t == "page_break":
         return '<div class="pb"></div>'
@@ -189,30 +212,63 @@ def part_html(part: dict, width_mm: float, edge: int, verify_url: str) -> str:
         inner = _table(part)
     elif t == "photos":
         pad = part.get("box", {}).get("padding", 0) * 2
-        inner = _photos(part, width_mm - pad, edge)
+        inner = _photos(part, width_mm - pad, ctx["edge"])
     elif t == "verify":
         size = part.get("size", 40)
-        inner = (f'<div class="verify"><img src="{qr_uri(verify_url)}" style="width:{size}mm;'
-                 f'height:{size}mm"><div class="url">{e(verify_url)}</div></div>')
+        url = ctx["verify_url"]
+        inner = (f'<div class="verify"><img src="{qr_uri(url)}" style="width:{size}mm;'
+                 f'height:{size}mm"><div class="url">{e(url)}</div></div>')
+    elif t == "columns":
+        gap = part.get("gap", 6)
+        cols = part["columns"]
+        rest = 100 - sum(c.get("width", 0) for c in cols)
+        free = sum(1 for c in cols if "width" not in c)
+        cells = []
+        for k, c in enumerate(cols):
+            pct = c.get("width", rest / free if free else 0)
+            inner_w = width_mm * pct / 100 - gap * (len(cols) - 1) / len(cols)
+            pad = f"padding-left:{gap / 2}mm;" if k else ""
+            pad += f"padding-right:{gap / 2}mm;" if k < len(cols) - 1 else ""
+            body = "".join(part_html(p, inner_w, ctx) for p in c["parts"])
+            cells.append(f'<td style="width:{pct:.2f}%;{pad}vertical-align:'
+                         f'{part.get("align", "top")}">{body}</td>')
+        inner = f'<table class="cols"><tr>{"".join(cells)}</tr></table>'
+    elif t == "contents":
+        items = "".join(f'<li><a href="#{pid}">{e(name)}</a></li>' for pid, name in ctx["toc"])
+        inner = f'<ol class="toc cols{part.get("columns", 1)}">{items}</ol>'
     else:
         cols = f" cols{part.get('columns', 1)}"
         inner = (f'<div class="text size-{part.get("size", "normal")}{cols}" '
                  f'style="text-align:{part.get("align", "left")}">{part["html_out"]}</div>')
+    if t == "columns":
+        keep += " together"
     return f'<section class="part{keep}" style="{_box(part)}">{title}{inner}</section>'
 
 
 # ---------------------------------------------------------------- bands and page
 
 def _slot(items: list[dict], values: dict) -> str:
-    out = []
+    """Pictures and text side by side, centred on one line; texts next to each other stack."""
+    out: list[str] = []
+    texts: list[str] = []
+
+    def flush():
+        if texts:
+            out.append(f'<span class="stack">{"".join(texts)}</span>')
+            texts.clear()
+
     for it in items:
         if "text" in it:
-            out.append(f"<div>{placeholders.render(it['text'], values)}</div>")
-        else:
-            uri = asset_uri(it["image"])
-            if uri:
-                out.append(f'<img src="{uri}" style="height:{it.get("height", 10)}mm">')
-    return "".join(out)
+            texts.append(f'<span class="line">{placeholders.render(it["text"], values)}</span>')
+            continue
+        flush()
+        uri = asset_uri(it["image"])
+        if uri:
+            tile = " tile" if it.get("tile") else ""
+            out.append(f'<img class="logo{tile}" src="{uri}" '
+                       f'style="height:{it.get("height", 10)}mm">')
+    flush()
+    return f'<span class="slot">{"".join(out)}</span>'
 
 
 def _band(name: str, band: dict, values: dict, margins: dict, page_w: float) -> str:
@@ -227,12 +283,28 @@ def _band(name: str, band: dict, values: dict, margins: dict, page_w: float) -> 
             f'<table><tr>{cells}</tr></table></div>')
 
 
+@cache
+def font_faces() -> str:
+    """The bundled fonts (SIL Open Font License, apps/reports/fonts) as data URIs."""
+    out = []
+    for family, weights in FONT_FILES.items():
+        for w in weights:
+            data = (FONTS_DIR / f"{family.replace(' ', '')}-{w}.ttf").read_bytes()
+            uri = "data:font/ttf;base64," + base64.b64encode(data).decode()
+            out.append(f'@font-face {{ font-family: "{family}"; font-weight: {w}; '
+                       f'src: url({uri}) format("truetype") }}')
+    return "\n".join(out)
+
+
 def css(d: dict, colors: dict, margins: dict, bands: dict) -> str:
     paper = d.get("paper", {})
     orient = paper.get("orientation", "portrait")
     size = f"{paper.get('size', 'A4')} {orient}"
     tones = "".join(f"--{k}:{v};" for k, v in colors.items())
     tints = "".join(f"--{k}-tint:{v}1a;" for k, v in colors.items())
+    fonts = d.get("theme", {}).get("fonts", {})
+    body_font = STACK[fonts.get("body", "Inter")]
+    head_font = STACK[fonts.get("headings", "Barlow Semi Condensed")]
 
     def page_rule(name: str) -> str:
         sel = "@page" if name == "normal" else f"@page {name}"
@@ -252,52 +324,84 @@ def css(d: dict, colors: dict, margins: dict, bands: dict) -> str:
                 f"{boxes} }}")
 
     return f"""
+{font_faces()}
 @page {{ size: {size} }}
 {page_rule("normal")} {page_rule("cover")} {page_rule("full")}
-:root {{ {tones} {tints} --line: #d9dde3 }}
-html {{ color: var(--text); font-family: Helvetica, Arial, sans-serif;
-  font-size: {d.get("theme", {}).get("size", 9.5)}pt; line-height: 1.35 }}
+:root {{ {tones} {tints} --line: #d9dde3; --head: {head_font} }}
+html {{ color: var(--text); font-family: {body_font};
+  font-size: {d.get("theme", {}).get("size", 9.5)}pt; line-height: 1.38 }}
 body {{ margin: 0 }}
 .pg-normal {{ page: normal }} .pg-cover {{ page: cover }} .pg-full {{ page: full }}
 .pg + .pg {{ break-before: page }}
 .pb {{ break-after: page }}
 #h_normal {{ position: running(h_normal) }} #h_cover {{ position: running(h_cover) }}
 #f_normal {{ position: running(f_normal) }} #f_cover {{ position: running(f_cover) }}
-.band {{ display: block; box-sizing: border-box }} .band table {{ width: 100%; height: 100%; border-collapse: collapse }}
-.band td {{ vertical-align: middle; padding: 0 }} .band .center {{ text-align: center }} .band .right {{ text-align: right }}
+.band {{ display: block; box-sizing: border-box; font-size: 8pt }}
+.band table {{ width: 100%; height: 100%; border-collapse: collapse }}
+.band td {{ vertical-align: middle; padding: 0 }} .band .center {{ text-align: center }}
+.band .right {{ text-align: right }}
 .band.brand {{ background: var(--brand); color: #fff }}
+.slot {{ display: inline-flex; align-items: center; gap: 2.6mm; vertical-align: middle }}
+.right .slot {{ justify-content: flex-end }}
+.stack {{ display: inline-block; line-height: 1.15 }} .stack .line {{ display: block }}
+.band strong {{ font-family: var(--head); font-weight: 700; letter-spacing: .06em; font-size: 1.35em }}
+.band .large {{ font-family: var(--head); font-weight: 700; letter-spacing: .08em; font-size: 2.1em }}
+.band .small {{ font-size: .8em; letter-spacing: .16em; opacity: .85 }}
+.logo {{ display: block }} .logo.tile {{ background: #fff; border-radius: 1.4mm; padding: .8mm }}
 .pageno::after {{ content: counter(page) }} .pages::after {{ content: counter(pages) }}
 .part {{ display: block }}
-.ptitle {{ font-size: 1.35em; margin: 0 0 1.5mm; color: var(--text); bookmark-level: 2 }}
+.part.together {{ break-inside: avoid }}
+.ptitle {{ font-size: .78em; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted); margin: 0 0 1mm; bookmark-level: 2 }}
 .part.keep .ptitle {{ break-after: avoid }}
+table.cols {{ width: 100%; border-collapse: collapse }} table.cols > tr > td, table.cols td {{ padding-top: 0 }}
 table.t {{ width: 100%; border-collapse: collapse; page-break-inside: auto }}
 table.t thead {{ display: table-header-group }} table.t tr {{ break-inside: avoid }}
 table.t th, table.t td {{ padding: var(--pad) 1.6mm; text-align: left; vertical-align: top }}
 table.t th.l {{ font-weight: 400; color: var(--text) }}
-table.t thead th {{ font-size: .8em; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
-  border-bottom: .4mm solid var(--text) }}
+table.t thead th {{ font-size: .74em; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); border-bottom: .45mm solid var(--text) }}
 table.t.lines-rows td, table.t.lines-rows th.l {{ border-bottom: .2mm solid var(--line) }}
 table.t.lines-all td, table.t.lines-all th {{ border: .2mm solid var(--line) }}
 table.t.stripes tbody tr:nth-child(even) td, table.t.stripes tbody tr:nth-child(even) th {{ background: rgba(27,31,39,.035) }}
-table.t.grid thead th {{ text-align: left }}
+table.t.kv th.l {{ color: var(--muted) }} table.t.kv td {{ font-weight: 600 }}
+table.t.emphasis {{ border: .2mm solid var(--line); border-radius: 1.5mm }}
+table.t.emphasis th, table.t.emphasis td {{ text-align: center; vertical-align: middle; border: .2mm solid var(--line) }}
+table.t.emphasis thead th {{ border-bottom: .2mm solid var(--line); color: var(--muted) }}
+.big {{ font-family: var(--head); font-weight: 700; font-size: 2.2em; line-height: 1.1; display: block }}
+.big small {{ font-size: .5em; color: var(--muted); font-weight: 500 }}
+.dots {{ display: block; margin-top: .6mm }} .dots i {{ display: inline-block; width: 1.6mm; height: 1.6mm;
+  border-radius: 50%; background: var(--ok); margin: 0 .35mm }} .dots i.off {{ background: var(--line) }}
 .tone-ok {{ color: var(--ok); font-weight: 600 }} .tone-warn {{ color: var(--warn); font-weight: 600 }}
 .tone-bad {{ color: var(--bad); font-weight: 600 }} .tone-muted {{ color: var(--muted) }}
 .tone-brand {{ color: var(--brand) }} .tone-text {{ color: var(--text) }}
-.chip {{ padding: .3mm 1.6mm; border-radius: 3mm; font-weight: 600 }}
+.chip {{ padding: .3mm 1.8mm; border-radius: 3mm; font-weight: 600 }}
 .chip.tone-bad {{ background: var(--bad-tint) }} .chip.tone-warn {{ background: var(--warn-tint) }}
 .chip.tone-ok {{ background: var(--ok-tint) }} .chip.tone-muted {{ background: var(--muted-tint) }}
 .photos {{ display: grid }}
 .photos figure {{ margin: 0; break-inside: avoid }}
 .photos img {{ display: block; background: #eef0f3 }}
-.photos figcaption {{ font-size: .85em; color: var(--text); margin-top: .8mm }}
+.photos figcaption {{ display: flex; justify-content: space-between; gap: 2mm; font-size: .85em;
+  color: var(--text); margin-top: .8mm }}
 .noimg {{ background: #eef0f3; color: var(--muted); display: flex; align-items: center; justify-content: center; font-size: .8em }}
 .text.cols2 {{ columns: 2; column-gap: 6mm }}
 .text.size-small {{ font-size: .85em }} .text.size-large {{ font-size: 1.25em }}
-.text.size-title {{ font-size: 2.6em; font-weight: 700; color: var(--brand); line-height: 1.05 }}
+.text.size-title {{ font-family: var(--head); font-size: 3.4em; font-weight: 700; color: var(--brand); line-height: 1 }}
 .text p {{ margin: 0 0 1.4mm }} .text ul, .text ol {{ margin: 0 0 1.4mm; padding-left: 5mm }}
-.text h2 {{ font-size: 1.5em; margin: 0 0 1.5mm; bookmark-level: 1 }} .text h3 {{ font-size: 1.2em; margin: 1.5mm 0 1mm }}
+.text h2 {{ font-family: var(--head); font-size: 1.55em; font-weight: 700; margin: 0 0 1.5mm;
+  bookmark-level: 1; break-after: avoid }}
+.text h2::before {{ content: ""; display: inline-block; width: 2.6mm; height: 2.6mm; margin-right: 1.6mm;
+  border: .7mm solid var(--brand); border-radius: 50%; vertical-align: .1mm; box-sizing: border-box }}
+.text h2 .small {{ font-size: .55em; font-weight: 500; color: var(--muted); margin-left: 2mm }}
+.text h3 {{ font-family: var(--head); font-size: 1.2em; margin: 1.5mm 0 1mm }}
 .text li {{ break-inside: avoid }}
-.verify {{ text-align: center }} .verify .url {{ font-family: monospace; margin-top: 2mm }}
+.verify {{ text-align: center }} .verify img {{ display: block; margin: 0 auto }}
+.verify .url {{ font-family: monospace; margin: 2.5mm auto 0; display: inline-block; padding: 1.4mm 3mm;
+  background: rgba(27,31,39,.05); border-radius: 1.4mm }}
+ol.toc {{ list-style: none; padding: 0; margin: 0 }} ol.toc.cols2 {{ columns: 2; column-gap: 10mm }}
+ol.toc li {{ padding: 1mm 0; border-bottom: .2mm dotted var(--line); break-inside: avoid }}
+ol.toc a {{ color: var(--text); text-decoration: none }}
+ol.toc a::after {{ content: leader(" ") target-counter(attr(href), page); color: var(--muted) }}
 """
 
 
@@ -320,11 +424,14 @@ def render_html(pages: list[dict], d: dict, values: dict, *, edge: int = PRINT_E
                 f"@page cover {{ background: url({uri}) no-repeat center / {size}% auto }}")
     width = w - margins["left"] - margins["right"]
     body = []
-    for page in pages:
+    for n, page in enumerate(pages):
         style = page.get("style", "normal")
-        inner = "".join(part_html(p, w if style == "full" else width, edge,
-                                  values["sys"]["verify_url"]) for p in page["parts"])
-        body.append(f'<div class="pg pg-{style}">{inner}</div>')
+        # the contents list names the pages after this one that are not full-page designs
+        toc = [(f"pg-{k}", p["title"]) for k, p in enumerate(pages)
+               if k > n and p.get("style", "normal") != "full"]
+        ctx = {"edge": edge, "verify_url": values["sys"]["verify_url"], "toc": toc}
+        inner = "".join(part_html(p, w if style == "full" else width, ctx) for p in page["parts"])
+        body.append(f'<div id="pg-{n}" class="pg pg-{style}">{inner}</div>')
     title = e(f"{values['sys']['booking_id']} {values['sys']['inspection_type']} report")
     return (f'<html><head><meta charset="utf-8"><title>{title}</title>'
             f'<style>{css(d, colors, margins, bands)}{mark}</style></head>'

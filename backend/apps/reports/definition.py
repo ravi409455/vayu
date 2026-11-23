@@ -24,10 +24,17 @@ def _where(path) -> str:
     return text.lstrip(".") or "template"
 
 
+def _walk(items: list, path: str) -> Iterator[tuple[str, dict]]:
+    for j, part in enumerate(items):
+        yield f"{path}[{j}]", part
+        for c, col in enumerate(part.get("columns", []) if part.get("type") == "columns" else []):
+            yield from _walk(col.get("parts", []), f"{path}[{j}].columns[{c}].parts")
+
+
 def parts(d: dict) -> Iterator[tuple[str, dict]]:
+    """Every part of every page, the parts inside columns too."""
     for i, page in enumerate(d.get("pages", [])):
-        for j, part in enumerate(page.get("parts", [])):
-            yield f"pages[{i}].parts[{j}]", part
+        yield from _walk(page.get("parts", []), f"pages[{i}].parts")
 
 
 def texts(d: dict) -> Iterator[tuple[str, str]]:

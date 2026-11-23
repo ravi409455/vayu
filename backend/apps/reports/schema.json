@@ -71,6 +71,26 @@
      "type": "number",
      "minimum": 7,
      "maximum": 14
+    },
+    "fonts": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "body": {
+       "enum": [
+        "Inter",
+        "Barlow Semi Condensed",
+        "Helvetica"
+       ]
+      },
+      "headings": {
+       "enum": [
+        "Inter",
+        "Barlow Semi Condensed",
+        "Helvetica"
+       ]
+      }
+     }
     }
    }
   },
@@ -173,7 +193,7 @@
   },
   "slot": {
    "type": "array",
-   "maxItems": 4,
+   "maxItems": 6,
    "items": {
     "oneOf": [
      {
@@ -203,6 +223,9 @@
         "type": "number",
         "minimum": 3,
         "maximum": 40
+       },
+       "tile": {
+        "type": "boolean"
        }
       }
      }
@@ -605,6 +628,12 @@
         "type": "string",
         "maxLength": 60
        }
+      },
+      "emphasis": {
+       "type": "boolean"
+      },
+      "kv": {
+       "type": "boolean"
       }
      }
     }
@@ -860,6 +889,12 @@
     },
     {
      "$ref": "#/$defs/verify"
+    },
+    {
+     "$ref": "#/$defs/columns"
+    },
+    {
+     "$ref": "#/$defs/contents"
     }
    ]
   },
@@ -884,6 +919,92 @@
      "type": "number",
      "minimum": 15,
      "maximum": 120
+    }
+   }
+  },
+  "columns": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "columns"
+   ],
+   "properties": {
+    "id": true,
+    "show_if": true,
+    "hide_when_empty": true,
+    "new_page": true,
+    "keep_together": true,
+    "keep_title": true,
+    "box": true,
+    "type": {
+     "const": "columns"
+    },
+    "columns": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 3,
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "parts"
+      ],
+      "properties": {
+       "width": {
+        "type": "number",
+        "minimum": 10,
+        "maximum": 90
+       },
+       "parts": {
+        "type": "array",
+        "maxItems": 30,
+        "items": {
+         "$ref": "#/$defs/part"
+        }
+       }
+      }
+     }
+    },
+    "gap": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 20
+    },
+    "align": {
+     "enum": [
+      "top",
+      "middle"
+     ]
+    }
+   }
+  },
+  "contents": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type"
+   ],
+   "properties": {
+    "id": true,
+    "show_if": true,
+    "hide_when_empty": true,
+    "new_page": true,
+    "keep_together": true,
+    "keep_title": true,
+    "box": true,
+    "type": {
+     "const": "contents"
+    },
+    "title": {
+     "type": "string",
+     "maxLength": 200
+    },
+    "columns": {
+     "enum": [
+      1,
+      2
+     ]
     }
    }
   }

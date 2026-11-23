@@ -116,12 +116,12 @@ def test_the_pdi_report_of_the_sample_booking_reads_like_the_sample():
     numbered = [t for t in pages if f"of {n}" in t]
     assert len(numbered) == n - 1                                        # all but the divider
     for title, first_row in (("Front", "Front bonnet top"), ("Driver side", "Driver front fender"),
-                             ("Tyres", "Tyre size"), ("Warning lights", "Check engine light"),
+                             ("Tyres", "Driver front"), ("Warning lights", "Check engine light"),
                              ("Key checks", "Control panel lights"),
                              ("Issues found", "Driver front door window")):
         assert any(title in t and first_row in t for t in pages), title
     text = "\n".join(pages)
-    for needle in ("PRE DELIVERY INSPECTION REPORT", "MA1NS2NP1T2H75335", "Deep Forest",
+    for needle in ("PRE DELIVERY", "INSPECTION REPORT", "MA1NS2NP1T2H75335", "Deep Forest",
                    "Not Available", "Loose", "Detailed Report", "Verify this report",
                    "Arbitration and Conciliation Act, 1996", "+91-9429690830",
                    "The left front door glass outer weatherstrip is loose."):

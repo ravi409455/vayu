@@ -170,6 +170,14 @@ class Source:
             "overall": word.capitalize(), "verify_url": f"{settings.VERIFY_BASE_URL}/{self.token}",
             "car": _label("car_make_model", b.answers.get("car_make_model", "")),
         }
+        checks = [(f, self.cell(f"inspection.{f.key}")) for f in self.form_fields()
+                  if f.type in ("single_choice", "multi_choice")]
+        answered = self.answers["inspection"]
+        checks = [(f, c) for f, c in checks if c.text and c.tone]      # answered checks only
+        # "Not able to check" is the answer keyed not_checked (the option sets' convention)
+        unsure = [f.label for f, _ in checks if answered.get(f.key) == "not_checked"]
+        out["sys"].update(checks=str(len(checks)), not_checked=str(len(unsure)),
+                          not_checked_list=", ".join(unsure))
         return out
 
     def media(self, ref: str) -> list[str]:
@@ -268,13 +276,43 @@ def photo_items(src: Source, part: dict) -> list[dict]:
         ids = src.media(ref)
         if which == "first":
             ids = ids[:1]
+        kind = part.get("caption", "label")
+        answer = check if kind == "check" and check_field and check and check.text else None
         caption = {
             "label": f.label,
-            "check": (f"{check_field.label}: {check.text}" if check_field and check and check.text
-                      else f.label),
+            "check": check_field.label if answer and check_field else f.label,
             "custom": placeholders.render(part.get("caption_text", ""), values, html=False),
-            "none": ""}[part.get("caption", "label")]
-        out += [{"media": mid, "caption": caption} for mid in ids]
+            "none": ""}[kind]
+        out += [{"media": mid, "caption": caption, "answer": answer.text if answer else "",
+                 "tone": answer.tone if answer else None} for mid in ids]
+    return out
+
+
+def _resolve(src: Source, parts: list[dict], data: dict, values: dict) -> list[dict]:
+    out = []
+    for part in parts:
+        if not truthy(part.get("show_if"), data):
+            continue
+        item = {**part}
+        t = part["type"]
+        if t == "table":
+            item["rows"] = table_rows(src, part, data)
+            empty = not item["rows"]
+        elif t == "photos":
+            item["items"] = photo_items(src, part)
+            empty = not item["items"]
+        elif t == "text":
+            item["html_out"] = placeholders.render(part["html"], values)
+            empty = not part["html"].strip()
+        elif t == "columns":
+            item["columns"] = [{**c, "parts": _resolve(src, c["parts"], data, values)}
+                               for c in part["columns"]]
+            empty = not any(c["parts"] for c in item["columns"])
+        else:
+            empty = False
+        if empty and part.get("hide_when_empty", True):
+            continue
+        out.append(item)
     return out
 
 
@@ -284,28 +322,8 @@ def build(src: Source, definition: dict) -> list[dict]:
     values = src.values()
     pages = []
     for page in definition.get("pages", []):
-        if not truthy(page.get("show_if"), data):
-            continue
-        out = []
-        for part in page["parts"]:
-            if not truthy(part.get("show_if"), data):
-                continue
-            item = {**part}
-            t = part["type"]
-            if t == "table":
-                item["rows"] = table_rows(src, part, data)
-                empty = not item["rows"]
-            elif t == "photos":
-                item["items"] = photo_items(src, part)
-                empty = not item["items"]
-            elif t == "text":
-                item["html_out"] = placeholders.render(part["html"], values)
-                empty = not part["html"].strip()
-            else:
-                empty = False
-            if empty and part.get("hide_when_empty", True):
-                continue
-            out.append(item)
-        if out:
-            pages.append({**page, "parts": out})
+        if truthy(page.get("show_if"), data):
+            out = _resolve(src, page["parts"], data, values)
+            if out:
+                pages.append({**page, "parts": out})
     return pages

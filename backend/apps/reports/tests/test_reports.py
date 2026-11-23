@@ -22,7 +22,8 @@ V = lambda k: {"var": k}  # noqa: E731
 CHOICES = [{"key": "ok", "label": "Ok", "tone": "ok"},
            {"key": "scratch", "label": "Scratch", "is_defect": True, "severity": "minor"},
            {"key": "dent", "label": "Dent", "is_defect": True, "severity": "major"},
-           {"key": "na", "label": "Not available", "tone": "muted"}]
+           {"key": "na", "label": "Not available", "tone": "muted"},
+           {"key": "not_checked", "label": "Not able to check", "tone": "warn"}]
 DENT = {"==": [V("inspection.door"), "dent"]}
 BAND = {"header": {"left": [{"text": "<strong>PRE DELIVERY CAR INSPECTION REPORT</strong>"}],
                    "right": [{"text": "{{ sys.booking_id }}"}], "background": "brand"},
@@ -417,7 +418,8 @@ def test_photo_grids_pick_issue_photos_and_captions(renv, settings):
 
     def items(**part):
         d = one_page({"type": "photos", "hide_when_empty": False, **part})
-        return [(i["media"], i["caption"]) for i in context.build(src, d)[0]["parts"][0]["items"]]
+        return [(i["media"], i["caption"] + (f": {i['answer']}" if i["answer"] else ""))
+                for i in context.build(src, d)[0]["parts"][0]["items"]]
 
     assert items(source={"kind": "issues"}, caption="check") == [
         (door_pic, "door: Dent"), (issue, "issue_pics")]          # no check: its own label
@@ -589,8 +591,8 @@ def test_a_completed_booking_gets_a_pdf_automatically(renv, settings):
     assert len(r.token) >= 32 and storage.exists(r.key) and r.template_version_id
     text, reader = pdf_text(b["id"])
     for needle in ("PRE DELIVERY CAR INSPECTION REPORT", "Booking ID", "SA37926", "Chassis Number",
-                   "MA3YPKCSKTJ273129", "Driver Front Door", "Dent", "45 km", "Overall Rating",
-                   "Car Pictures", "Please refer to the last page", "rev 1"):
+                   "MA3YPKCSKTJ273129", "Driver Front Door", "Dent", "45 km", "OVERALL RATING",
+                   "CAR PICTURES", "Please refer to the last page", "rev 1"):
         assert needle in text, needle
     assert "Page 1 of 2" in text and "Page 2 of 2" in text
     assert f"verify.carcid.in/{r.token}" in text
@@ -822,3 +824,57 @@ def test_a_real_logo_and_watermark_reach_the_page(renv, settings):
     assert [p["type"] for p in pages[0]["parts"]] == ["text"]         # the hidden part is gone
     html = render.render_html(pages, d, src.values())
     assert 'style="height:12mm"' in html and "@page { background: url(data:image/png" in html
+
+
+
+def test_columns_contents_big_numbers_and_header_slots(renv, settings):
+    from PIL import Image
+
+    from apps.forms import assets
+
+    buf = io.BytesIO()
+    Image.new("RGBA", (40, 40), (166, 40, 48, 255)).save(buf, "PNG")
+    pic = str(assets.create_asset(renv.admin_user, buf.getvalue()).id)
+    b = complete_job(renv, door="dent", photos=1, settings=settings, fuel="petrol")
+    src = source(b)
+    d = definition.validate_definition({
+        "schema": 2, "theme": {"fonts": {"body": "Helvetica", "headings": "Inter"}},
+        "bands": {"normal": {"header": {
+            "left": [{"image": pic, "tile": True}, {"text": "<strong>A</strong>"},
+                     {"text": "<span class='small'>B</span>"}, {"image": pic},
+                     {"image": "00000000-0000-0000-0000-000000000000"}]}}},
+        "pages": [
+            {"title": "Front", "style": "full", "parts": [{"type": "contents", "columns": 2}]},
+            {"title": "One", "parts": [
+                {"type": "columns", "align": "middle", "columns": [
+                    {"width": 30, "parts": [table([{"field": "inspection.door"}],
+                                                  look={"kv": True})]},
+                    {"parts": [{"type": "photos", "caption": "check", "source": {
+                        "kind": "fields", "fields": ["inspection.door_photo"]}}]},
+                    {"parts": [table([{"field": "inspection.ghost"}])]}]},
+                {"type": "columns", "columns": [{"parts": [table([{"field": "inspection.fuel"},
+                                                                  {"field": "inspection.ghost"}])]},
+                                                {"parts": []}]},
+                {"type": "columns", "columns": [{"parts": []}, {"parts": []}]},     # dropped
+                {"type": "table", "look": {"emphasis": True, "header": False}, "source": {
+                    "kind": "grid", "columns": [{"label": "Engine"}, {"label": "Word"}],
+                    "rows": [{"label": "", "cells": [{"field": "inspection.engine_rating"},
+                                                     {"text": "{{ sys.checks }}"}]}]}}]},
+            {"title": "Two", "parts": [{"type": "spacer"}]}]})
+    assert definition.referenced_fields(d) >= {("inspection", "door_photo")}
+    pages = context.build(src, d)
+    assert [p["type"] for p in pages[1]["parts"]] == ["columns", "columns", "table"]
+    html = render.render_html(pages, d, src.values())
+    for needle in ('href="#pg-1">One', 'href="#pg-2">Two', "toc cols2", 'class="cols"',
+                   "width:30.00%", "vertical-align:middle", "kv", "emphasis",
+                   'class="big">4<small>/5</small>', '<i class="off"></i>', 'class="ans tone-bad"',
+                   "logo tile", 'class="stack"', 'class="line"', "Helvetica, Arial, sans-serif;",
+                   '"Inter", Helvetica'):
+        assert needle in html, needle
+    assert html.count('class="logo') == 2 and '<span class="big">' in html
+    assert render.font_faces().count("@font-face") == 6
+    sys_values = src.values()["sys"]
+    assert sys_values["checks"] == "1" and sys_values["not_checked"] == "0"   # fuel is a fact
+    unsure = source(b)
+    unsure.answers["inspection"]["door"] = "not_checked"
+    assert unsure.values()["sys"]["not_checked_list"] == "door"
