@@ -78,7 +78,8 @@ def export_bundle(version: FormVersion) -> dict:
                 "library": {"key": link.key, "revision": s.library_revision} if link else None,
                 "fields": [_field(f) for f in fields]})
         pages.append({"title": page.title, "order": page.order, "visible": page.visible,
-                      "show_if": page.show_if, "access": page.access, "sections": sections})
+                      "gate": page.gate, "show_if": page.show_if, "access": page.access,
+                      "sections": sections})
     library = [{"kind": i.kind, "key": i.key, "name": i.name, "definition": i.definition,
                 "revision": i.revision, "archived": i.archived}
                for _, i in sorted(items.items())]
@@ -152,6 +153,8 @@ def _check_content(b: dict) -> None:
             raise ValueError("Invalid form key.")
         validate_rating(b["version"].get("rating_config", {}))
         for p in b["version"]["pages"]:
+            if not isinstance(p.get("gate", False), bool):
+                raise ValueError("A page's gate must be true or false.")
             validate_access(p["access"])
             rules(("page.show_if", p["show_if"]))
             for s in p["sections"]:
@@ -284,8 +287,8 @@ def import_bundle(actor, b: Any) -> dict:
                                              rating_config=b["version"].get("rating_config", {}))
         for p in b["version"]["pages"]:
             page = Page.objects.create(version=version, title=p["title"], order=p["order"],
-                                       visible=p["visible"], show_if=p["show_if"],
-                                       access=p["access"])
+                                       visible=p["visible"], gate=p.get("gate", False),
+                                       show_if=p["show_if"], access=p["access"])
             for s in p["sections"]:
                 link = s.get("library")
                 section = Section.objects.create(

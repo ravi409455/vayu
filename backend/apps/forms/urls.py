@@ -12,6 +12,7 @@ router.register("library", views.LibraryViewSet, basename="library")
 urlpatterns = [
     path("form-versions/<int:pk>", views.VersionDetail.as_view()),
     path("form-versions/<int:pk>/pages", views.PageCreate.as_view()),
+    path("form-versions/<int:pk>/reorder", views.ReorderVersion.as_view()),
     path("pages/<int:pk>", views.PageDetail.as_view()),
     path("pages/<int:pk>/sections", views.SectionCreate.as_view()),
     path("sections/<int:pk>", views.SectionDetail.as_view()),

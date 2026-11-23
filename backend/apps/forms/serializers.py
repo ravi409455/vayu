@@ -233,7 +233,7 @@ class PageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Page
-        fields = ["id", "title", "order", "visible", "show_if", "access", "sections"]
+        fields = ["id", "title", "order", "visible", "gate", "show_if", "access", "sections"]
 
     def validate(self, attrs):
         _check_rules(attrs, "show_if")

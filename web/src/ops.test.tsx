@@ -85,7 +85,7 @@ const fld = (key: string, type: string, over: Partial<FormField> = {}): FormFiel
   id: ++n, section: 1, key, label: key, helper_text: "", type, config: {}, required: false, required_if: null, show_if: null, visible: true, order: 0,
   is_system: false, access: {}, locked: false, library: null, ...over,
 });
-const pageOf = (fields: FormField[]): FormPage => ({ id: 1, title: "P", order: 0, visible: true, show_if: null, access: {}, sections: [{ id: 1, page: 1, title: "S", order: 0, visible: true, show_if: null, access: {}, fields, locked: false, library: null }] });
+const pageOf = (fields: FormField[]): FormPage => ({ id: 1, title: "P", order: 0, visible: true, gate: false, show_if: null, access: {}, sections: [{ id: 1, page: 1, title: "S", order: 0, visible: true, show_if: null, access: {}, fields, locked: false, library: null }] });
 
 describe("form renderer", () => {
   const tree = { pages: [pageOf([fld("door", "short_text"), fld("kc", "derived", { config: { rule: { "!!": [1] }, true_label: "Found" } }), fld("engine", "rating"), fld("view_only", "short_text", { level: "view" })])], checks: [] };
@@ -126,7 +126,47 @@ describe("form renderer", () => {
     expect(onChange).toHaveBeenCalledWith("note", "a");
     await u.click(screen.getByRole("radio", { name: "Diesel" }));
     expect(onChange).toHaveBeenCalledWith("fuel", "d");
-    await u.click(screen.getByRole("button", { name: "Capture my location" }));
-    expect(await screen.findByText("GPS unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("GPS unavailable")).toBeInTheDocument();        // asked by itself, no button needed
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+  it("takes the location by itself and reports it once", async () => {
+    const onChange = vi.fn();
+    Object.defineProperty(globalThis.navigator, "geolocation", { configurable: true, value: { getCurrentPosition: (ok: (p: unknown) => void) => ok({ coords: { latitude: 28.61394, longitude: 77.20902, accuracy: 12.4 } }) } });
+    render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="inspection" tree={{ pages: [pageOf([fld("loc", "gps")])], checks: [] }} values={{}} onChange={onChange} /></QueryClientProvider>);
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith("loc", { lat: 28.61394, lng: 77.20902, accuracy: 12 }));
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+  it("does not ask for the location when a value exists, in read-only mode, or in the builder's preview", () => {
+    const ask = vi.fn();
+    Object.defineProperty(globalThis.navigator, "geolocation", { configurable: true, value: { getCurrentPosition: ask } });
+    const t = { pages: [pageOf([fld("loc", "gps")])], checks: [] };
+    const wrap = (props: { values: Record<string, unknown>; readOnly?: boolean; preview?: boolean }) => <QueryClientProvider client={new QueryClient()}><FormRenderer kind="inspection" tree={t} onChange={() => {}} {...props} /></QueryClientProvider>;
+    render(wrap({ values: { loc: { lat: 1, lng: 2 } } }));
+    render(wrap({ values: {}, readOnly: true }));
+    render(wrap({ values: {}, preview: true }));
+    expect(ask).not.toHaveBeenCalled();
+    expect(screen.getByText(/Taken automatically/)).toBeInTheDocument();
+  });
+  it.each([["both", true, true], ["camera", true, false], ["upload", false, true]])("capture mode %s shows camera=%s attach=%s", (mode, camera, attach) => {
+    const t = { pages: [pageOf([fld("shot", "photo", { config: { max_count: 2, capture: mode } })])], checks: [] };
+    render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="inspection" tree={t} values={{}} bookingId="b1" onChange={() => {}} /></QueryClientProvider>);
+    expect(!!screen.queryByRole("button", { name: /Open camera/ })).toBe(camera);
+    expect(!!screen.queryByRole("button", { name: /Attach a photo/ })).toBe(attach);
+  });
+  it("videos offer Record instead of Camera, and files only ever offer Attach", () => {
+    const t = { pages: [pageOf([fld("clip", "video", { config: { max_count: 1 } }), fld("doc", "file", { config: { max_count: 1 } })])], checks: [] };
+    render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="inspection" tree={t} values={{}} bookingId="b1" onChange={() => {}} /></QueryClientProvider>);
+    expect(screen.getByRole("button", { name: "Open camera: video" })).toHaveTextContent("Record");
+    expect(screen.getByRole("button", { name: "Attach a video" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open camera: file" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Attach a file" })).toBeInTheDocument();
+  });
+  it("a preview adds stand-in media without uploading anything", async () => {
+    const onChange = vi.fn();
+    const u = userEvent.setup();
+    const t = { pages: [pageOf([fld("shot", "photo", { config: { max_count: 2, capture: "upload" } })])], checks: [] };
+    render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="inspection" tree={t} values={{}} preview onChange={onChange} /></QueryClientProvider>);
+    await u.upload(screen.getByTestId("file-shot"), new File(["x"], "a.jpg", { type: "image/jpeg" }));
+    expect(onChange).toHaveBeenCalledWith("shot", [expect.stringMatching(/^preview-/)]);
   });
 });

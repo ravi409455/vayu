@@ -1,10 +1,12 @@
-import { useRef, useState, type ReactNode } from "react";
+import { Camera, Image as ImageIcon, MapPin, Paperclip, Video as VideoIcon } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { asList } from "../api/hooks";
 import type { FormField, FormPage, FormVersion, MasterListItem, Option, User } from "../api/types";
 import { addFile, useUploads } from "../lib/uploadManager";
 import { evaluateTree, type Answers, type Ctx, type Kind } from "../lib/formSpec";
+import { CameraCapture } from "./CameraCapture";
 import { Field } from "./kit";
 
 export type RenderProps = {
@@ -18,6 +20,7 @@ export type RenderProps = {
   readOnlyKeys?: string[];            // fields changed only through their own action (expert, type)
   role?: string;
   bookingId?: string;                 // needed for photo / video / file fields
+  preview?: boolean;                  // the builder's preview: nothing is uploaded or located
   pages?: FormPage[];                 // render only these pages (the wizard shows one at a time)
   mediaUrl?: (id: string) => Promise<{ url: string; preview_url: string | null } | null>;
   onMediaRemove?: (field: FormField, id: string) => void;
@@ -89,7 +92,7 @@ function FieldInput({ f, value, derived, required, error, readOnly, onChange, p 
     }
     case "master_list": input = <ListSelect list={String(f.config.list ?? "")} value={String(str)} disabled={readOnly} label={f.label} onChange={(v) => onChange(v || null)} />; break;
     case "user_picker": input = <UserSelect role={String(f.config.role ?? "expert")} value={value as number | null} disabled={readOnly} label={f.label} onChange={onChange} />; break;
-    case "gps": input = <Gps value={value as { lat: number; lng: number } | undefined} disabled={readOnly} onChange={onChange} />; break;
+    case "gps": input = <Gps value={value as { lat: number; lng: number } | undefined} disabled={readOnly} onChange={onChange} preview={p.preview} />; break;
     case "photo": case "video": case "file": case "signature":
       input = <MediaField f={f} value={value} readOnly={readOnly} onChange={onChange} p={p} />; break;
     case "derived":
@@ -124,9 +127,11 @@ function UserSelect({ role, value, onChange, disabled, label }: { role: string; 
     <option value="">Choose…</option>{(q.data ?? []).filter((u) => u.is_active).map((u) => <option key={u.id} value={u.id}>{u.name || u.username}</option>)}</select>;
 }
 
-/** Browser location. If it is refused or unavailable the field just says so: it never blocks the job. */
-function Gps({ value, onChange, disabled }: { value?: { lat: number; lng: number; accuracy?: number }; onChange: (v: unknown) => void; disabled: boolean }) {
+/** Browser location, taken by itself as soon as the field appears. If it is refused or not
+ *  available the field just says so (and offers another try): it never blocks the job. */
+function Gps({ value, onChange, disabled, preview }: { value?: { lat: number; lng: number; accuracy?: number }; onChange: (v: unknown) => void; disabled: boolean; preview?: boolean }) {
   const [state, setState] = useState<"idle" | "busy" | "unavailable">("idle");
+  const asked = useRef(false);
   function capture() {
     if (!("geolocation" in navigator)) return setState("unavailable");
     setState("busy");
@@ -134,10 +139,18 @@ function Gps({ value, onChange, disabled }: { value?: { lat: number; lng: number
       (pos) => { setState("idle"); onChange({ lat: +pos.coords.latitude.toFixed(6), lng: +pos.coords.longitude.toFixed(6), accuracy: Math.round(pos.coords.accuracy) }); },
       () => setState("unavailable"), { enableHighAccuracy: true, timeout: 10_000 });
   }
+  useEffect(() => {
+    if (asked.current || value || disabled || preview) return;
+    asked.current = true;
+    capture();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div>
-      {value ? <p className="ok" data-testid="gps-value">📍 {value.lat}, {value.lng}</p> : state === "unavailable" ? <p className="muted" role="status">GPS unavailable</p> : null}
-      {!disabled && <button type="button" onClick={capture} disabled={state === "busy"}>{value ? "Capture again" : state === "busy" ? "Finding you…" : "Capture my location"}</button>}
+    <div aria-live="polite">
+      {value ? <p className="ok" data-testid="gps-value"><MapPin size={14} aria-hidden /> {value.lat}, {value.lng}{value.accuracy !== undefined && <span className="muted small"> (±{value.accuracy} m)</span>}</p>
+        : state === "busy" ? <p className="muted" role="status">Finding your location…</p>
+        : state === "unavailable" ? <p className="muted" role="status">GPS unavailable</p>
+        : preview ? <p className="muted small">Taken automatically when the expert opens this page.</p> : null}
+      {!disabled && !preview && (value || state === "unavailable") && state !== "busy" && <button type="button" className="link" onClick={capture}>{value ? "Update location" : "Try again"}</button>}
     </div>
   );
 }
@@ -146,25 +159,30 @@ function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: 
   const single = f.type === "signature";
   const ids = (single ? (value ? [String(value)] : []) : Array.isArray(value) ? (value as string[]) : []);
   const max = single ? 1 : Number(f.config.max_count ?? (f.type === "video" ? 3 : 10));
+  const mode = f.type === "file" ? "upload" : String(f.config.capture ?? "both");     // both | camera | upload
   const uploads = useUploads(p.bookingId);
   const input = useRef<HTMLInputElement>(null);
   const cam = useRef<HTMLInputElement>(null);
   const [err, setErr] = useState("");
+  const [camera, setCamera] = useState(false);
   const accept = f.type === "photo" || f.type === "signature" ? "image/*" : f.type === "video" ? "video/*" : "image/*,application/pdf";
+  const kind = f.type === "video" ? "video" : "photo";
 
-  async function pick(files: FileList | null, source: "camera" | "gallery") {
-    if (!files || !p.bookingId) return;
+  async function pick(files: FileList | File[] | null, source: "camera" | "gallery") {
+    if (!files) return;
     setErr("");
     let next = [...ids];
     for (const file of Array.from(files).slice(0, Math.max(0, max - ids.length))) {
       try {
-        const id = await addFile({ bookingId: p.bookingId, fieldKey: f.key, kind: f.type as "photo", file, name: file.name, source });
+        const id = p.preview ? `preview-${Date.now()}-${next.length}` : await addFile({ bookingId: p.bookingId!, fieldKey: f.key, kind: f.type as "photo", file, name: file.name, source });
         next = single ? [id] : [...next, id];
         onChange(single ? id : next);
       } catch { setErr("That file could not be added. Check its type and size, then try again."); }
     }
   }
   const mine = new Map(uploads.map((u) => [u.assetId, u]));
+  const room = ids.length < max;
+  const noun = f.type === "video" ? "video" : f.type === "file" ? "file" : "photo";
   return (
     <div>
       <div className="photo-grid">
@@ -172,7 +190,7 @@ function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: 
           const u = mine.get(id);
           return (
             <div key={id} data-testid="media-item" style={{ position: "relative" }}>
-              {u?.preview ? <img src={u.preview} alt="" /> : <RemoteThumb id={id} kind={f.type} mediaUrl={p.mediaUrl} />}
+              {u?.preview ? <img src={u.preview} alt="" /> : id.startsWith("preview-") ? <div className="fake-photo"><ImageIcon size={22} aria-hidden /></div> : <RemoteThumb id={id} kind={f.type} mediaUrl={p.mediaUrl} />}
               {u && u.status !== "done" && <div className="progress" aria-label={`Upload ${u.status}`}><div style={{ width: `${Math.round(u.progress * 100)}%` }} /></div>}
               {u?.status === "failed" && <span className="error small">Will retry</span>}
               {!readOnly && <button type="button" className="link" aria-label="Remove" onClick={() => { const rest = ids.filter((x) => x !== id); onChange(single ? null : rest); p.onMediaRemove?.(f, id); }}>Remove</button>}
@@ -180,16 +198,20 @@ function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: 
           );
         })}
       </div>
-      {!readOnly && ids.length < max && (
-        <div className="bar" style={{ marginTop: 8 }}>
-          {(f.type === "photo" || f.type === "video" || f.type === "signature") && (
-            <button type="button" onClick={() => cam.current?.click()}>{f.type === "video" ? "Record" : "Take photo"}</button>)}
-          <button type="button" onClick={() => input.current?.click()}>{f.type === "file" ? "Add file" : "Choose from device"}</button>
+      {!readOnly && room && (
+        <div className="media-actions">
+          {mode !== "upload" && (
+            <button type="button" className="btn-icon primary" onClick={() => setCamera(true)} aria-label={`Open camera: ${noun}`}>
+              {kind === "video" ? <VideoIcon size={18} aria-hidden /> : <Camera size={18} aria-hidden />}<span>{kind === "video" ? "Record" : "Camera"}</span></button>)}
+          {mode !== "camera" && (
+            <button type="button" className="btn-icon" onClick={() => input.current?.click()} aria-label={`Attach a ${noun}`}><Paperclip size={18} aria-hidden /><span>Attach</span></button>)}
           <span className="muted small">{ids.length}/{max}</span>
-          <input ref={cam} type="file" hidden accept={accept} capture="environment" data-testid={`camera-${f.key}`} onChange={(e) => { void pick(e.target.files, "camera"); e.target.value = ""; }} />
-          <input ref={input} type="file" hidden multiple={!single} accept={accept} data-testid={`file-${f.key}`} onChange={(e) => { void pick(e.target.files, "gallery"); e.target.value = ""; }} />
+          {mode !== "camera" && <input ref={input} type="file" hidden multiple={!single} accept={accept} data-testid={`file-${f.key}`} onChange={(e) => { void pick(e.target.files, "gallery"); e.target.value = ""; }} />}
+          {mode !== "upload" && <input ref={cam} type="file" hidden accept={accept} capture="environment" data-testid={`camera-${f.key}`} onChange={(e) => { void pick(e.target.files, "camera"); e.target.value = ""; }} />}
         </div>
       )}
+      {camera && <CameraCapture kind={kind} label={`${f.label || f.key}: ${kind === "video" ? "record" : "take a photo"}`} onClose={() => setCamera(false)}
+        onFallback={() => { setCamera(false); cam.current?.click(); }} onDone={(file) => { setCamera(false); void pick([file], "camera"); }} />}
       {err && <p className="error" role="alert">{err}</p>}
     </div>
   );

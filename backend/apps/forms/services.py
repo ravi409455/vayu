@@ -15,6 +15,7 @@ from .models import (
     Section,
     VersionCheck,
     VersionStatus,
+    lock_draft,
 )
 from .system_fields import SYSTEM_FIELDS
 
@@ -110,3 +111,80 @@ def publish_version(actor, version_id: int, row_version: int) -> FormVersion:
         audit.record(actor, "form.publish", "form_version", version.id,
                      f"Published {version.form.key} v{version.number}")
     return version
+
+
+@transaction.atomic
+def reorder(actor, version_id: int, body) -> FormVersion:
+    """Set the order of pages, of sections inside pages, and of fields inside sections in one
+    step (what dragging does). Sections and fields may move to another page or section, except
+    into or out of a section linked to the library."""
+    from . import library
+
+    lock_draft(version_id)
+    version = FormVersion.objects.select_for_update().get(pk=version_id)
+    if not isinstance(body, dict) or set(body) - {"pages", "sections", "fields"}:
+        raise CodedError("INVALID_REORDER", "Send pages, sections and/or fields.", 400)
+
+    def ids(value, label):
+        if not isinstance(value, list) or not all(isinstance(i, int) for i in value) \
+                or len(set(value)) != len(value):
+            raise CodedError("INVALID_REORDER", f"{label} must be a list of distinct ids.", 400)
+        return value
+
+    def mine(model, wanted, label):
+        found = {o.pk: o for o in model.objects.filter(version=version, pk__in=wanted)}
+        if set(found) != set(wanted):
+            raise CodedError("INVALID_REORDER", f"Some {label} are not part of this version.", 400)
+        return found
+
+    if "pages" in body:
+        order = ids(body["pages"], "pages")
+        pages = mine(Page, order, "pages")
+        for n, pk in enumerate(order):
+            if pages[pk].order != n:
+                pages[pk].order = n
+                pages[pk].save()
+    for key, model, parent, label in (("sections", Section, "page", "sections"),
+                                      ("fields", Field, "section", "fields")):
+        for parent_id, order in (body.get(key) or {}).items():
+            if not str(parent_id).isdigit():
+                raise CodedError("INVALID_REORDER", f"{label} must be keyed by id.", 400)
+            order = ids(order, label)
+            owner_model = Page if parent == "page" else Section
+            owner = owner_model.objects.filter(version=version, pk=int(parent_id)).first()
+            if owner is None:
+                raise CodedError("INVALID_REORDER", "Unknown page or section.", 400)
+            found = mine(model, order, label)
+            for n, pk in enumerate(order):
+                obj = found[pk]
+                if getattr(obj, f"{parent}_id") != owner.pk:
+                    if isinstance(owner, Section):                 # a field is moving
+                        library.ensure_not_locked(owner)
+                        library.ensure_not_locked(obj.section)
+                    setattr(obj, parent, owner)
+                    obj.order = n
+                    obj.save()
+                elif obj.order != n:
+                    obj.order = n
+                    obj.save()
+    version.row_version += 1
+    version.save(update_fields=["row_version"])
+    audit.record(actor, "form.reorder", "form_version", version.id, "Reordered the form")
+    return version
+
+
+@transaction.atomic
+def discard_draft(actor, form: Form) -> None:
+    """Throw the open draft away. The published version is untouched. A form that was never
+    published has nothing to fall back to, so its first draft cannot be discarded."""
+    draft = form.versions.filter(status=VersionStatus.DRAFT).first()
+    if draft is None:
+        raise CodedError("NO_DRAFT", "There is no draft to discard.", 409)
+    if not form.versions.filter(status=VersionStatus.PUBLISHED).exists():
+        raise CodedError("FIRST_DRAFT", "This form has never been published: there is nothing to "
+                         "go back to. Publish it, or ask an Admin to deactivate the form.", 409)
+    lock_draft(draft.id)
+    number = draft.number
+    draft.delete()
+    audit.record(actor, "form.draft_discard", "form", form.id,
+                 f"Discarded draft v{number} of {form.key}")

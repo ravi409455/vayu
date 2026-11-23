@@ -74,3 +74,9 @@ export function submittable(kind: Kind, tree: Pick<FormVersion, "pages" | "check
   }
   return out;
 }
+
+/** What is still missing on ONE page (the page gate: "finish this before you move on"). */
+export function pageGaps(kind: Kind, tree: Pick<FormVersion, "pages" | "checks">, page: FormPage, values: Answers, ctx: Ctx = {}): Gap[] {
+  const index = tree.pages.findIndex((p) => p.id === page.id);
+  return missingFields(kind, tree, values, ctx).filter((g) => g.page === index);
+}

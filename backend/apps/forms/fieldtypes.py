@@ -20,6 +20,7 @@ SEVERITIES = ("minor", "major", "critical")
 ROLES = ("expert", "ops", "admin")
 REGEX_TIMEOUT_S = 0.1
 DEFAULT_MAX_LENGTH = {"short_text": 200, "long_text": 5000}
+CAPTURE_MODES = ("both", "camera", "upload")   # how an expert may add a photo or video
 DEFAULT_MAX_COUNT = {"photo": 10, "video": 3, "file": 5}
 
 ALLOWED_KEYS: dict[str, set[str]] = {
@@ -32,8 +33,8 @@ ALLOWED_KEYS: dict[str, set[str]] = {
     "short_text": {"max_length", "pattern", "pattern_message"},
     "long_text": {"max_length"},
     "number": {"unit", "min", "max", "decimals"},
-    "photo": {"min_count", "max_count"},
-    "video": {"min_count", "max_count"},
+    "photo": {"min_count", "max_count", "capture"},
+    "video": {"min_count", "max_count", "capture"},
     "file": {"max_count", "allowed"},
     "derived": {"rule", "true_label", "false_label"},
     "rating": {"category"},
@@ -115,6 +116,8 @@ def validate_config(type: str, config: Any) -> None:
             raise ConfigError("min must not be greater than max.")
         _int_in(config, "decimals", 0, 4)
     elif type in ("photo", "video"):
+        if config.get("capture", "both") not in CAPTURE_MODES:
+            raise ConfigError(f"capture must be one of {', '.join(CAPTURE_MODES)}.")
         _int_in(config, "min_count", 0, 30)
         _int_in(config, "max_count", 1, 30)
         if config.get("min_count", 0) > config.get("max_count", DEFAULT_MAX_COUNT[type]):

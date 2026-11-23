@@ -1,10 +1,11 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { cloneElement, createContext, isValidElement, useCallback, useContext, useId, useState, type ReactElement, type ReactNode } from "react";
 import { explain } from "../api/client";
+import { InfoTip } from "./InfoTip";
 
-export function Modal({ title, children, onClose, actions }: { title: string; children: ReactNode; onClose: () => void; actions?: ReactNode }) {
+export function Modal({ title, children, onClose, actions, wide }: { title: string; children: ReactNode; onClose: () => void; actions?: ReactNode; wide?: boolean }) {
   return (
     <div className="modal-back" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className={`modal${wide ? " wide" : ""}`} onClick={(e) => e.stopPropagation()}>
         <h2>{title}</h2>
         {children}
         <div className="actions">{actions ?? <button onClick={onClose}>Close</button>}</div>
@@ -43,18 +44,27 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** A labelled input. `bare` uses a plain box instead of a <label> wrapper: needed when the
- *  content has its own buttons (a label would swallow their accessible names). */
-export function Field({ label, help, error, children, bare }: { label: string; help?: string; error?: string; children: ReactNode; bare?: boolean }) {
-  const body = (
-    <>
-      <span>{label}</span>
-      {children}
+/** A labelled input. The label points at the input by id (so the little "i" next to it is not
+ *  mistaken for the control). `bare` skips the label element when the content has its own buttons. */
+export function Field({ label, help, error, children, bare, tip }: { label: string; help?: string; error?: string; children: ReactNode; bare?: boolean; tip?: ReactNode }) {
+  const auto = useId();
+  const single = isValidElement<{ id?: string }>(children) && typeof children.type === "string";
+  const id = single ? (children.props.id ?? auto) : undefined;
+  const control = single && !bare ? cloneElement(children as ReactElement<{ id?: string }>, { id }) : children;
+  const head = (
+    <span className="label-row">
+      {bare || !id ? <span>{label}</span> : <label htmlFor={id}>{label}</label>}
+      {tip && <InfoTip>{tip}</InfoTip>}
+    </span>
+  );
+  return (
+    <div className="field">
+      {head}
+      {control}
       {help && <span className="help">{help}</span>}
       {error && <span className="error" role="alert">{error}</span>}
-    </>
+    </div>
   );
-  return bare ? <div className="field">{body}</div> : <label className="field">{body}</label>;
 }
 
 export function Pill({ children, tone }: { children: ReactNode; tone?: "ok" | "warn" | "bad" | "info" }) {
@@ -93,3 +103,18 @@ export function NameDialog({ title, label, onOk, onCancel }: { title: string; la
     </Modal>
   );
 }
+
+/** Page title row: title, a one-line explanation, an optional "i", and the page's buttons. */
+export function PageHeader({ title, subtitle, tip, children }: { title: ReactNode; subtitle?: ReactNode; tip?: ReactNode; children?: ReactNode }) {
+  return (
+    <header className="page-head">
+      <div className="grow">
+        <h1>{title}{tip && <InfoTip>{tip}</InfoTip>}</h1>
+        {subtitle && <p className="muted subtitle">{subtitle}</p>}
+      </div>
+      {children && <div className="page-actions">{children}</div>}
+    </header>
+  );
+}
+
+export { InfoTip };

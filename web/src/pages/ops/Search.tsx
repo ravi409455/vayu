@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { api, type Page } from "../../api/client";
 import { STAGE_LABEL, STAGE_TONE, useLabels } from "../../api/labels";
 import type { Booking } from "../../api/types";
-import { Pill } from "../../ui/kit";
+import { Pill, PageHeader } from "../../ui/kit";
 
 export function Search() {
   const [term, setTerm] = useState("");
@@ -12,7 +12,7 @@ export function Search() {
   const q = useQuery({ queryKey: ["search", term], enabled: term.trim().length >= 2, queryFn: () => api<Page<Booking>>("bookings", { query: { search: term.trim() } }) });
   return (
     <>
-      <h1>Search</h1>
+      <PageHeader title="Search" subtitle="Find any booking by ID, customer, phone, chassis number or car." tip="Phone search needs at least the last 4 digits. You only match fields your role is allowed to see." />
       <input autoFocus aria-label="Search everything" placeholder="Booking ID, customer name, phone (last 4+ digits), chassis number, car" value={term} onChange={(e) => setTerm(e.target.value)} style={{ maxWidth: 560 }} />
       {term.trim().length >= 2 && (
         <table style={{ marginTop: 14 }}>

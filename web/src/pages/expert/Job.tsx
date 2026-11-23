@@ -5,7 +5,7 @@ import { api, ApiError, explain } from "../../api/client";
 import { STAGE_LABEL, STAGE_TONE, useLabels } from "../../api/labels";
 import type { Booking, FormVersion } from "../../api/types";
 import { useRefresh } from "../../api/hooks";
-import { missingFields, splitOpsPages, submittable, visiblePages, type Answers } from "../../lib/formSpec";
+import { missingFields, pageGaps, splitOpsPages, submittable, visiblePages, type Answers } from "../../lib/formSpec";
 import { loadJSON, removeKey, saveJSON } from "../../lib/store";
 import { resumeUploads, summary, useUploads, retryFailed } from "../../lib/uploadManager";
 import { FormRenderer } from "../../ui/FormRenderer";
@@ -107,7 +107,16 @@ function Wizard({ booking, session, onSubmitted }: { booking: Booking; session: 
   const step = Math.min(draft.step, steps.length - 1);
   const cur = steps[step]!;
   const set = (kind: "ops" | "inspection") => (key: string, v: unknown) => setDraft((d) => ({ ...d, [kind]: { ...d[kind], [key]: v } }));
-  const go = (n: number) => { setMsg(""); setDraft((d) => ({ ...d, step: Math.max(0, Math.min(steps.length - 1, n)) })); window.scrollTo?.(0, 0); };
+  const [blocked, setBlocked] = useState<string[]>([]);
+  const go = (n: number) => { setMsg(""); setBlocked([]); setDraft((d) => ({ ...d, step: Math.max(0, Math.min(steps.length - 1, n)) })); window.scrollTo?.(0, 0); };
+  /** Next: a page the Admin marked "must be finished" holds the person until its required fields are filled. */
+  function next() {
+    if (cur.kind !== "review" && cur.page?.gate) {
+      const gaps = pageGaps(cur.kind, cur.kind === "ops" ? ops! : insp, cur.page, draft[cur.kind], ctx);
+      if (gaps.length > 0) { setBlocked(gaps.map((g) => g.label)); return; }
+    }
+    go(step + 1);
+  }
 
   const gaps = [
     ...missingFields("inspection", insp, draft.inspection, ctx).map((g) => ({ ...g, kind: "inspection" as const })),
@@ -154,10 +163,11 @@ function Wizard({ booking, session, onSubmitted }: { booking: Booking; session: 
           <button className="primary bigbtn" disabled={busy || gaps.length > 0} onClick={submit}>Submit inspection</button>
         </div>
       )}
+      {blocked.length > 0 && <div className="card" role="alert"><strong>Finish this step first</strong><p className="muted small">You cannot move on until these are done:</p><ul>{blocked.map((b) => <li key={b}>{b}</li>)}</ul></div>}
       <div className="bar" style={{ marginTop: 16 }}>
         <button onClick={() => go(step - 1)} disabled={step === 0}>Back</button>
         <span className="grow" />
-        {cur.kind !== "review" && <button className="primary" onClick={() => go(step + 1)}>Next</button>}
+        {cur.kind !== "review" && <button className="primary" onClick={next}>Next</button>}
       </div>
     </div>
   );

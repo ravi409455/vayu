@@ -50,6 +50,10 @@ class VersionDetail(APIView):
     def get(self, request, pk):
         return Response(_version_body(get_object_or_404(PdfTemplateVersion, pk=pk)))
 
+    def delete(self, request, pk):
+        service.discard_draft(request.user, get_object_or_404(PdfTemplateVersion, pk=pk))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     def patch(self, request, pk):
         if "row_version" not in request.data or "definition" not in request.data:
             raise ValidationError({"detail": "definition and row_version are required."})

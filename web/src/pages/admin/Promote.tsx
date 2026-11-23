@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { api, ApiError } from "../../api/client";
 import { useList } from "../../api/hooks";
 import type { FormSummary } from "../../api/types";
-import { Pill, useToast } from "../../ui/kit";
+import { Pill, useToast, PageHeader } from "../../ui/kit";
 
 type ImportResult = { form: number; draft_version: number; created: { form: boolean; master_list_items: number; library_items: number }; notes: string[] };
 
@@ -28,8 +28,8 @@ export function Promote() {
   }
   return (
     <>
-      <h1>Promote forms</h1>
-      <p className="muted">Build and test a form on staging, export it as a bundle, then import it here on production. An import always creates a <strong>draft</strong>: you review it and publish yourself. If anything conflicts, nothing is written.</p>
+      <PageHeader title="Promote forms" subtitle="Move a tested form from staging to production as a file."
+        tip="Build and test on staging, export a bundle, import it here. An import always creates a draft: you review it and publish yourself. If anything conflicts, nothing is written." />
       <div className="grid2">
         <div className="card">
           <h2>Export from this server</h2>

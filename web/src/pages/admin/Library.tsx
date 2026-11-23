@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import { useAuth } from "../../auth";
-import { Modal, Pill, useToast } from "../../ui/kit";
+import { Modal, Pill, useToast, PageHeader } from "../../ui/kit";
 
 type Item = { id: number; kind: "field" | "section"; key: string; name: string; revision: number; archived: boolean; definition: unknown };
 type Usage = { form: string; version: number; status: string; kind?: string; key?: string; label?: string };
@@ -22,8 +22,10 @@ export function Library() {
   });
   return (
     <>
-      <h1>Library</h1>
-      <p className="muted">Reusable fields and sections. A form can link to an item (changes arrive as an “update available” you accept) or copy it. Add items from the form builder with “Save to library”.</p>
+      <PageHeader title="Library" subtitle="Reusable fields and sections, so the same question is built once and used in many forms."
+        tip="Linked items stay in sync: when you improve a library item, every form that links it shows “update available” and an Admin accepts it. Copies are independent. To add an item, open any form in the builder and use “Save to library” on a field or a section.">
+        {(items.data ?? []).length > 0 && <span className="chip">{(items.data ?? []).length} items</span>}</PageHeader>
+      {(items.data ?? []).length === 0 && <div className="card empty-state"><strong>The library is empty</strong><p>Open a form in the builder, select a field or section, and choose “Save to library”. It will appear here for every form to reuse.</p></div>}
       <table><thead><tr><th>Name</th><th>Kind</th><th>Key</th><th>Revision</th><th /></tr></thead>
         <tbody>{(items.data ?? []).map((i) => (
           <tr key={i.id} className="click" onClick={() => setOpen(i)}>

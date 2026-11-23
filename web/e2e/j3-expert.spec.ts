@@ -33,8 +33,7 @@ test("J3: expert completes a full inspection on the web", async ({ page }) => {
 
   // check-in: location + selfie
   await expect(page.getByText(/Step 1 of/)).toBeVisible();
-  await page.getByRole("button", { name: "Capture my location" }).click();
-  await expect(page.getByTestId("gps-value")).toContainText("28.6139");
+  await expect(page.getByTestId("gps-value")).toContainText("28.6139");           // taken by itself
   await page.getByTestId("camera-selfie").setInputFiles(file("selfie.jpg"));
   await expect(page.getByTestId("media-item")).toHaveCount(1);
   await page.getByRole("button", { name: "Next" }).click();
@@ -79,8 +78,7 @@ test("J3b: GPS denied shows 'GPS unavailable' and does not block the job", async
   await signIn(page, "expert");
   await page.goto(`/jobs/${id}`);
   await page.getByRole("button", { name: "Start inspection" }).click();
-  await page.getByRole("button", { name: "Capture my location" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "GPS unavailable" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "GPS unavailable" })).toBeVisible();   // asked by itself, refused
   await page.getByRole("button", { name: "Next" }).click();             // not blocked
   await expect(page.getByText(/Step 2 of/)).toBeVisible();
   await ctx.close();

@@ -5,7 +5,7 @@ import { api, type Page } from "../../api/client";
 import { asList, useList, useRefresh } from "../../api/hooks";
 import type { FormSummary, MasterListItem } from "../../api/types";
 import { useAuth } from "../../auth";
-import { Field, Modal, Pill, useToast } from "../../ui/kit";
+import { Field, Modal, Pill, useToast, PageHeader } from "../../ui/kit";
 import { slugKey } from "../../lib/fieldTypes";
 import { useQuery } from "@tanstack/react-query";
 
@@ -27,8 +27,9 @@ export function Forms() {
   });
   return (
     <>
-      <div className="bar"><h1 className="grow">Forms</h1>
-        {can("forms.edit") && <button className="primary" onClick={() => setOpen(true)}>New form</button>}</div>
+      <PageHeader title="Forms" subtitle="The booking form, the check-in and wrap-up form, and one inspection form per type."
+        tip="The booking form is what Ops fill to create a booking. The check-in and wrap-up form is filled by experts before and after the inspection (location, payment, review). Each inspection type (PDI, Used car, EV) has its own inspection form.">
+        {can("forms.edit") && <button className="primary" onClick={() => setOpen(true)}>New form</button>}</PageHeader>
       <table>
         <thead><tr><th>Name</th><th>Kind</th><th>Type</th><th>Live version</th><th>Draft</th></tr></thead>
         <tbody>{(forms.data ?? []).map((x) => (

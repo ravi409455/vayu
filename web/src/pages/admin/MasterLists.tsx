@@ -4,7 +4,7 @@ import { api } from "../../api/client";
 import { asList, useList, useRefresh } from "../../api/hooks";
 import type { MasterList, MasterListItem } from "../../api/types";
 import { useAuth } from "../../auth";
-import { Field, Modal, Pill, useToast } from "../../ui/kit";
+import { Field, Modal, Pill, useToast, PageHeader } from "../../ui/kit";
 
 export function MasterLists() {
   const { can } = useAuth();
@@ -31,8 +31,8 @@ export function MasterLists() {
   });
   return (
     <>
-      <h1>Master lists</h1>
-      <p className="muted">Lists used by dropdowns: cities, inspection types, cancel reasons, car models. Keys never change; archive items you no longer want offered.</p>
+      <PageHeader title="Master lists" subtitle="The choices that dropdowns offer: cities, inspection types, cancel reasons, car models."
+        tip="Each item has a permanent key (used by reports and the API) and a label people see. Keys never change; to stop offering something, archive it: old bookings keep showing it." />
       <table><thead><tr><th>List</th><th>Key</th><th /></tr></thead>
         <tbody>{(lists.data ?? []).map((l) => (
           <tr key={l.id} className="click" onClick={() => setOpen(l)}><td>{l.name}</td><td className="mono">{l.key}</td><td><button className="link">Open</button></td></tr>

@@ -22,7 +22,7 @@ export type FormSection = {
   library: { item: number; revision: number | null; update_available: boolean } | null;
 };
 export type FormPage = {
-  id: number; title: string; order: number; visible: boolean; show_if: unknown; access: Access;
+  id: number; title: string; order: number; visible: boolean; gate: boolean; show_if: unknown; access: Access;
   sections: FormSection[];
 };
 export type Check = { id: number; rule: unknown; message: string; fields: string[]; order: number };

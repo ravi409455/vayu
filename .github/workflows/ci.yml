@@ -48,7 +48,7 @@ jobs:
           uv run pytest -q apps/bookings apps/forms/tests/test_access_model.py --cov=apps.bookings --cov=apps.forms.access --cov-branch --cov-fail-under=100
           uv run pytest -q apps/media --cov=apps.media --cov-branch --cov-fail-under=100
           uv run pytest -q apps/reports --cov=apps.reports --cov-branch --cov-fail-under=100
-          uv run pytest -q apps/forms/tests/test_promote.py --cov=apps.forms.promote --cov-branch --cov-fail-under=100
+          uv run pytest -q apps/forms/tests/test_promote.py apps/forms/tests/test_builder_support.py --cov=apps.forms.promote --cov-branch --cov-fail-under=100
           uv run pytest -q apps/scoring apps/bookings/tests/test_scoring.py --cov=apps.scoring --cov-branch --cov-fail-under=100
           uv run pytest -q apps/integrations --cov=apps.integrations --cov-branch --cov-fail-under=100
           uv run pytest -q apps/accounts --cov=apps.accounts.permissions --cov=apps.accounts.roles --cov-branch --cov-fail-under=100

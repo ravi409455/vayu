@@ -154,3 +154,25 @@ def test_the_slow_verdict_is_reported(renv, monkeypatch):
     out = StringIO()
     call_command("bench_pdf", photos=1, form="pdi", field="photo_a", stdout=out)
     assert "TOO SLOW" in out.getvalue()
+
+
+# ---------------------------------------------------------------- discarding a template draft
+
+def test_a_template_draft_can_be_discarded_but_never_the_first_unpublished_one(renv):
+    from apps.accounts.models import AuditLog
+    from apps.reports.models import PdfTemplateVersion
+    from apps.reports.tests.test_reports import set_template
+
+    admin = renv.admin
+    first = renv.template_version_id
+    r = admin.delete(f"/api/v1/pdf-template-versions/{first}")
+    assert r.status_code == 409 and r.json()["code"] == "FIRST_DRAFT"       # never published
+    set_template(renv)                                                    # v1 published
+    r = admin.delete(f"/api/v1/pdf-template-versions/{first}")
+    assert r.status_code == 409 and r.json()["code"] == "NOT_A_DRAFT"
+    draft = admin.post(f"/api/v1/pdf-templates/{renv.template_id}/drafts").json()
+    assert admin.delete(f"/api/v1/pdf-template-versions/{draft['id']}").status_code == 204
+    assert not PdfTemplateVersion.objects.filter(pk=draft["id"]).exists()
+    assert PdfTemplateVersion.objects.filter(pk=first, status="published").exists()
+    assert AuditLog.objects.filter(action="pdf_template.draft_discard").exists()
+    assert renv.ops.delete(f"/api/v1/pdf-template-versions/{first}").status_code == 403

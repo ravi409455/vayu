@@ -32,3 +32,19 @@ def test_the_demo_seed_can_be_told_to_leave_existing_data_alone():
     call_command("seed_demo")
     call_command("seed_demo", "--if-empty")                  # no error, nothing duplicated
     assert User.objects.filter(username="admin").count() == 1
+
+
+def test_the_demo_forms_are_large_and_the_library_is_not_empty():
+    from apps.forms.models import Field, Form, LibraryItem, Page, Section
+
+    call_command("seed_demo")
+    for key, minimum in (("pdi", 150), ("used_car", 150), ("ev", 120)):
+        form = Form.objects.get(key=key)
+        v = form.versions.get(status="published")
+        assert Field.objects.filter(version=v).count() >= minimum
+        assert Page.objects.filter(version=v).count() >= 8
+        assert Section.objects.filter(version=v).count() >= 10
+        assert v.rating_config["categories"]
+    assert LibraryItem.objects.count() >= 7
+    assert Page.objects.filter(version__form__key="pdi", gate=True).exists()
+    assert Section.objects.filter(version__form__key="pdi", library_item__isnull=False).exists()

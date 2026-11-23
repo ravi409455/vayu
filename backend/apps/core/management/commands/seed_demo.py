@@ -78,7 +78,7 @@ class Command(BaseCommand):
         booking = form_services.create_form(admin, key="booking", kind="booking", name="Booking")
         _publish(booking)
         self._ops_form(admin)
-        self._pdi(admin)
+        self._inspection_forms(admin)
         self._bookings()
         self.stdout.write(self.style.SUCCESS(
             f"Demo ready. Sign in as admin / ops / expert / expert2 with password {PASSWORD}"))
@@ -103,49 +103,23 @@ class Command(BaseCommand):
         _field(v, pay, "google_review", "Google review taken", "yes_no")
         _publish(form)
 
-    def _pdi(self, admin):
-        form = form_services.create_form(admin, key="pdi", kind="inspection", name="PDI",
-                                         inspection_type="pdi")
-        v = form.versions.get(status="draft")
-        page = Page.objects.get(version=v)
-        page.title = "Exterior"
-        page.save()
-        body = Section.objects.get(page=page)
-        body.title = "Body"
-        body.save()
-        dent = {"==": [{"var": "inspection.door"}, "dent"]}
-        _field(v, body, "door", "Driver front door", "single_choice", required=True, config=DEFECT)
-        _field(v, body, "door_photo", "Door photo", "photo", required_if=dent, show_if=dent,
-               config={"max_count": 3})
-        _field(v, body, "odometer", "Odometer", "number", config={"unit": "km", "min": 0})
-        _field(v, body, "engine_rating", "Engine rating", "rating", config={"category": "exterior"})
-        final = Page.objects.create(version=v, title="Final", order=1)
-        notes = Section.objects.create(version=v, page=final, title="Notes", order=0)
-        _field(v, notes, "remarks", "Remarks", "long_text")
-        v.rating_config = {"categories": [{"key": "exterior", "label": "Exterior",
-                                           "sections": ["Body"]}]}
-        v.save()
-        _publish(form)
+    def _inspection_forms(self, admin):
+        from apps.core import demo_forms as d
         from apps.reports import service as reports
 
-        template = reports.create_template(admin, form)
-        draft = template.versions.get(status="draft")
-        definition = {
-            "filename": "{booking_id}PDI.pdf",
-            "branding": {"title": "PRE DELIVERY CAR INSPECTION REPORT", "color": "#a62830"},
-            "blocks": [
-                {"type": "cover", "photo": "inspection.door_photo", "rows": [
-                    {"label": "Booking ID", "field": "booking.booking_id"},
-                    {"label": "Customer", "field": "booking.customer_name"},
-                    {"label": "Chassis Number", "field": "inspection.chassis_no"}]},
-                {"type": "table", "title": "Exterior", "rows": [
-                    {"label": "Driver Front Door", "field": "inspection.door"},
-                    {"label": "Odometer", "field": "inspection.odometer"}]},
-                {"type": "ratings", "title": "Overall Rating"},
-                {"type": "photos", "title": "Photos", "columns": 2, "items": [
-                    {"field": "inspection.door_photo", "index": 0, "caption": "Door"}]}]}
-        saved = reports.save_definition(admin, draft, definition, draft.row_version)
-        reports.publish(admin, saved, saved.row_version)
+        d.library_items(admin)
+        for key, name, itype, pages, code, title in (
+                ("pdi", "PDI", "pdi", d.pdi_pages(), "PDI",
+                 "PRE DELIVERY CAR INSPECTION REPORT"),
+                ("used_car", "Used car", "used_car", d.used_pages(), "UC",
+                 "USED CAR INSPECTION REPORT"),
+                ("ev", "EV", "ev", d.ev_pages(), "EV", "ELECTRIC CAR INSPECTION REPORT")):
+            form, keys = d.build_inspection(admin, key=key, name=name, itype=itype, pages=pages)
+            template = reports.create_template(admin, form)
+            draft = template.versions.get(status="draft")
+            definition = d.pdf_definition(code, title, keys, pages)
+            saved = reports.save_definition(admin, draft, definition, draft.row_version)
+            reports.publish(admin, saved, saved.row_version)
 
     def _bookings(self):
         ops = User.objects.get(username="ops")
@@ -168,7 +142,8 @@ class Command(BaseCommand):
         _, _ = submissions.start(expert, b3, uuid.uuid4(), None, "pdi", None)
         b3.refresh_from_db()
         submissions.submit(expert, b3, uuid.uuid4(), {
-            "inspection": {"chassis_no": "MA3YPKCSKTJ273129", "door": "ok", "odometer": 4200,
+            "inspection": {"chassis_no": "MA3YPKCSKTJ273129", "registration_no": "DL1CAB1234",
+                           "odometer": 4200, "bonnet": "ok", "door_fl": "minor",
                            "remarks": "Clean car."},
             "ops": {"payment_status": "pay_later"}})
         check_completion(b3.id)        # Completed: the PDF is made by the worker

@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useRefresh } from "../../api/hooks";
 import type { PermissionRow } from "../../api/types";
-import { Tabs, useToast } from "../../ui/kit";
+import { Tabs, useToast, PageHeader } from "../../ui/kit";
 
 type Grants = Record<string, "all" | "own">;
 type RoleRow = { role: string; locked: boolean; permissions: Grants };
@@ -34,8 +34,9 @@ export function Roles() {
   const groups = [...new Set((perms.data ?? []).map((p) => p.group))];
   return (
     <>
-      <div className="bar"><h1 className="grow">Roles &amp; permissions</h1><button className="primary" onClick={() => save.mutate()}>Save changes</button></div>
-      <p className="muted">Admin always has everything. Click a row to cycle: off → own → all. “Own” means only bookings assigned to that person.</p>
+      <PageHeader title="Roles &amp; permissions" subtitle="Decide what Ops and Experts may do. Admin always has everything."
+        tip="Click a button to cycle: off → own → all. “Own” means only bookings assigned to that person; “all” means every booking. Changes apply to everyone in that role as soon as you save.">
+        <button className="primary" onClick={() => save.mutate()}>Save changes</button></PageHeader>
       <Tabs tabs={[{ id: "ops", label: "Ops" }, { id: "expert", label: "Expert" }]} value={role} onChange={setRole} />
       {groups.map((g) => (
         <div className="card" key={g}>

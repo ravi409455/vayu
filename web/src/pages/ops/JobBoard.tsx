@@ -7,7 +7,7 @@ import { STAGE_LABEL, STAGE_TONE, useLabels } from "../../api/labels";
 import type { Booking, MasterListItem, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { loadJSON, saveJSON } from "../../lib/store";
-import { Pill } from "../../ui/kit";
+import { Pill, PageHeader } from "../../ui/kit";
 
 export type Filters = { search: string; city: string; expert: string; type: string; stage: string; date_from: string; date_to: string };
 export const EMPTY: Filters = { search: "", city: "", expert: "", type: "", stage: "", date_from: "", date_to: "" };
@@ -30,10 +30,10 @@ export function JobBoard() {
   const nameOf = new Map((experts.data ?? []).map((u) => [u.id, u.name || u.username]));
   return (
     <>
-      <div className="bar"><h1 className="grow">Job board</h1>
+      <PageHeader title="Job board" subtitle="Every booking, with filters that are remembered for you." tip="Click a row to open the booking. Your filters stay as you left them, so the board looks the same tomorrow.">
         <button onClick={() => set({ date_from: todayIso(), date_to: todayIso() })}>Today</button>
         <button onClick={() => setF(EMPTY)}>Clear filters</button>
-        {can("bookings.create") && <button className="primary" onClick={() => nav("/booking/new")}>New booking</button>}</div>
+        {can("bookings.create") && <button className="primary" onClick={() => nav("/booking/new")}>New booking</button>}</PageHeader>
       <div className="card"><div className="grid2">
         <input aria-label="Search" placeholder="Search booking ID, customer, phone, chassis, car" value={f.search} onChange={(e) => set({ search: e.target.value })} />
         <select aria-label="City" value={f.city} onChange={(e) => set({ city: e.target.value })}><option value="">All cities</option>{(cities.data ?? []).map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select>

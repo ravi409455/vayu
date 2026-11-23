@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, type Page } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { Delivery, FormSummary, Integration } from "../../api/types";
-import { Field, Modal, Pill, Tabs, useToast, when } from "../../ui/kit";
+import { Field, Modal, Pill, Tabs, useToast, when, PageHeader } from "../../ui/kit";
 
 const EVENT_LABEL: Record<string, string> = {
   "booking.created": "Booking created", "booking.updated": "Booking updated (incl. assignment and stage)", "booking.deleted": "Booking deleted",
@@ -46,9 +46,9 @@ export function Integrations() {
 
   return (
     <>
-      <div className="bar"><h1 className="grow">Integrations</h1>
-        <button className="primary" disabled={eligible.length === 0} onClick={() => setEdit(blank(eligible[0]!.id))}>New integration</button></div>
-      <p className="muted">Webhooks send events to another system, signed with a secret. An integration on the booking form gets booking events; on an inspection form it gets every event for that inspection type.</p>
+      <PageHeader title="Integrations" subtitle="Send events to other systems the moment they happen."
+        tip="A webhook posts a message to a web address when something happens (a booking is created, a PDF is ready...). Every message is signed with a secret so the receiver can trust it. An integration on the booking form gets booking events; on an inspection form it gets every event for that inspection type.">
+        <button className="primary" disabled={eligible.length === 0} onClick={() => setEdit(blank(eligible[0]!.id))}>New integration</button></PageHeader>
       <table><thead><tr><th>Name</th><th>Form</th><th>URL</th><th>Events</th><th /></tr></thead>
         <tbody>{(list.data ?? []).map((i) => (
           <tr key={i.id}>

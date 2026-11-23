@@ -104,3 +104,19 @@ def warnings(version: FormVersion) -> list[dict]:
              "message": f"Field '{k}' is not shown in the PDF template."}
             for k in Field.objects.filter(version=version).order_by("id")
             .values_list("key", flat=True) if k not in used]
+
+
+def discard_draft(actor, v: PdfTemplateVersion) -> None:
+    """Throw an unpublished layout away. The first version has nothing to fall back to."""
+    with transaction.atomic():
+        v = PdfTemplateVersion.objects.select_for_update().select_related(
+            "template__form").get(pk=v.pk)
+        if v.status != "draft":
+            raise err("NOT_A_DRAFT", "Only a draft can be discarded.", 409)
+        if not v.template.versions.filter(status="published").exists():
+            raise err("FIRST_DRAFT", "This template was never published: there is nothing to go "
+                      "back to.", 409)
+        number, key = v.number, v.template.form.key
+        v.delete()
+        audit.record(actor, "pdf_template.draft_discard", "pdf_template", v.template_id,
+                     f"Discarded {key} template draft v{number}")

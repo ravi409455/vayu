@@ -3,9 +3,10 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, csrfToken } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { FormSummary } from "../../api/types";
+import { Trash2 } from "lucide-react";
 import { useAuth } from "../../auth";
 import { ConditionBuilder } from "../../ui/ConditionBuilder";
-import { Field, Pill, useToast } from "../../ui/kit";
+import { Confirm, Field, PageHeader, Pill, useToast } from "../../ui/kit";
 import { useRefChoices, type RefChoice } from "../../lib/useChoices";
 
 type Row = { label: string; field: string };
@@ -55,11 +56,12 @@ export function PdfDesigner() {
   const make = useMutation({ mutationFn: (form: number) => api<Template>("pdf-templates", { body: { form } }), onSuccess: (r) => { void refresh("pdf-templates"); setTid(r.id); }, onError: fail });
   return (
     <>
-      <div className="bar"><h1 className="grow">PDF templates</h1>
+      <PageHeader title="PDF templates" subtitle="How each inspection becomes a report: the blocks, the labels, the branding."
+        tip="Every inspection form has one template. Build a draft, preview it with a real booking, then publish. Reports made afterwards use the new layout; old reports are not changed until regenerated.">
         {editable && withoutTemplate.length > 0 && (
           <select aria-label="Create a template for" value="" onChange={(e) => e.target.value && make.mutate(Number(e.target.value))} style={{ maxWidth: 240 }}>
             <option value="">+ New template for…</option>{withoutTemplate.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select>)}
-      </div>
+      </PageHeader>
       <div className="bar">{(templates.data ?? []).map((x) => <button key={x.id} className={tid === x.id ? "primary" : ""} onClick={() => setTid(x.id)}>{x.form_key}</button>)}</div>
       {t ? <Designer key={t.id} template={t} editable={editable} say={say} fail={fail} refresh={() => refresh("pdf-templates")} /> : <p className="muted">Pick a template, or create one for an inspection form.</p>}
     </>
@@ -81,6 +83,11 @@ function Designer({ template, editable, say, fail, refresh }: { template: Templa
   useEffect(() => { if (v) setDef({ ...v.definition, blocks: v.definition.blocks ?? [] }); }, [v]);
   const draft = v?.status === "draft";
   const ok = editable && draft;
+  const [discard, setDiscard] = useState(false);
+  async function discardDraft() {
+    try { await api(`pdf-template-versions/${v!.id}`, { method: "DELETE" }); setDiscard(false); say("Draft discarded. The live layout is unchanged."); await reload("pdf-version"); await reload("pdf-templates"); await refresh(); }
+    catch (e) { setDiscard(false); fail(e); }
+  }
 
   const save = async (): Promise<TVersion | null> => {
     try {
@@ -112,11 +119,14 @@ function Designer({ template, editable, say, fail, refresh }: { template: Templa
       <div className="bar">
         {draftMeta ? <Pill tone="info">Draft v{draftMeta.number}</Pill> : <Pill tone="ok">Live v{latest?.number}</Pill>}
         {editable && !draftMeta && <button onClick={async () => { try { await api(`pdf-templates/${template.id}/drafts`, { body: {} }); await refresh(); } catch (e) { fail(e); } }}>Start a new draft</button>}
-        {ok && <><button onClick={async () => { if (await save()) say("Saved."); }}>Save</button><button className="primary" onClick={publish}>Publish</button></>}
+        {ok && <><button onClick={async () => { if (await save()) say("Saved."); }}>Save</button>
+          {template.versions.some((x) => x.status === "published") && <button className="danger" onClick={() => setDiscard(true)}><Trash2 size={14} aria-hidden /> Discard draft</button>}
+          <button className="primary" onClick={publish}>Publish</button></>}
         <span className="grow" />
         <input style={{ maxWidth: 300 }} placeholder="Booking (internal id) for the preview" value={bookingId} onChange={(e) => setBookingId(e.target.value)} />
         <button onClick={preview} disabled={!bookingId}>Preview PDF</button>
       </div>
+      {discard && <Confirm title="Discard this draft?" danger confirmLabel="Discard draft" onCancel={() => setDiscard(false)} onConfirm={discardDraft}><p>Your unpublished changes to this layout are thrown away. The live layout is not affected.</p></Confirm>}
       <div className="split">
         <div className="card">
           <h3>Layout</h3>

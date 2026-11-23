@@ -4,7 +4,7 @@ import { api } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { User } from "../../api/types";
 import { useAuth } from "../../auth";
-import { Confirm, Field, Modal, Pill, useToast } from "../../ui/kit";
+import { Confirm, Field, Modal, Pill, useToast, PageHeader } from "../../ui/kit";
 
 export function Users() {
   const { can } = useAuth();
@@ -43,8 +43,9 @@ export function Users() {
 
   return (
     <>
-      <div className="bar"><h1 className="grow">Users</h1>
-        {manage && <button className="primary" onClick={() => setForm({ role: "expert" })}>New user</button>}</div>
+      <PageHeader title="Users" subtitle="Everyone who can sign in, and what they are."
+        tip="Admin sees and changes everything. Ops run bookings every day. Experts do inspections. Exactly what each role may do is set under Roles & permissions.">
+        {manage && <button className="primary" onClick={() => setForm({ role: "expert" })}>New user</button>}</PageHeader>
       <table>
         <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th /></tr></thead>
         <tbody>

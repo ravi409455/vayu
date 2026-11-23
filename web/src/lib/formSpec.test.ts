@@ -8,7 +8,7 @@ const field = (key: string, over: Partial<FormField> = {}): FormField => ({
   visible: true, order: 0, is_system: false, access: {}, locked: false, library: null, ...over,
 });
 const page = (title: string, fields: FormField[], over: Partial<FormPage> = {}): FormPage => ({
-  id: ++n, title, order: 0, visible: true, show_if: null, access: {}, sections: [{ id: ++n, page: 1, title: "S", order: 0, visible: true, show_if: null, access: {}, fields, locked: false, library: null }], ...over,
+  id: ++n, title, order: 0, visible: true, gate: false, show_if: null, access: {}, sections: [{ id: ++n, page: 1, title: "S", order: 0, visible: true, show_if: null, access: {}, fields, locked: false, library: null }], ...over,
 });
 
 // the payment rule: slot 1 amount is needed unless "pay later" was chosen
@@ -78,5 +78,18 @@ describe("check-in and wrap-up pages", () => {
     expect(splitOpsPages([mk("Start"), mk("Pay")]).checkIn.map((p) => p.title)).toEqual(["Start"]);
     expect(splitOpsPages([mk("Payment")])).toEqual({ checkIn: [expect.anything()].slice(0, 0), wrapUp: [expect.objectContaining({ title: "Payment" })] });
     expect(splitOpsPages([])).toEqual({ checkIn: [], wrapUp: [] });
+  });
+});
+
+import { pageGaps } from "./formSpec";
+
+describe("page gate", () => {
+  it("lists only what is missing on that page", () => {
+    const p1 = page("Check-in", [field("gps", { required: true })]);
+    const p2 = page("Body", [field("door", { required: true })]);
+    const t = { pages: [p1, p2], checks: [] };
+    expect(pageGaps("ops", t, p1, {}).map((g) => g.key)).toEqual(["gps"]);
+    expect(pageGaps("ops", t, p2, {}).map((g) => g.key)).toEqual(["door"]);
+    expect(pageGaps("ops", t, p1, { gps: { lat: 1, lng: 2 } })).toEqual([]);
   });
 });

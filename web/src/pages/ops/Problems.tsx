@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api, type Page } from "../../api/client";
 import type { Booking } from "../../api/types";
-import { Empty, Pill, Tabs, when } from "../../ui/kit";
+import { Empty, Pill, Tabs, when, PageHeader } from "../../ui/kit";
 
 type Tab = "stuck" | "conflicts" | "types" | "pdf";
 type Stuck = { id: string; booking: string; booking_id: string; field_key: string; status: string; expert: string; created_at: string };
@@ -19,8 +19,8 @@ export function Problems() {
   const label = (t: string, n: number) => `${t}${n ? ` (${n})` : ""}`;
   return (
     <>
-      <h1>Problems</h1>
-      <p className="muted">Things that need a person. Each row opens the booking.</p>
+      <PageHeader title="Problems" subtitle="Things that need a person. Each row opens the booking."
+        tip="Stuck uploads: a file never finished. Conflicts: two experts inspected the same booking. Rejected type changes: Ops changed the type after the expert had started. PDF problems: a report failed or is out of date." />
       <Tabs value={tab} onChange={setTab} tabs={[{ id: "stuck", label: label("Stuck uploads", counts.stuck) }, { id: "conflicts", label: label("Conflicts", counts.conflicts) }, { id: "types", label: label("Rejected type changes", counts.types) }, { id: "pdf", label: label("PDF problems", counts.pdf) }]} />
       {tab === "stuck" && <Rows empty="No uploads are stuck." head={["Booking", "File", "Expert", "Since"]} rows={(stuck.data ?? []).map((s) => [<Link to={`/booking/${s.booking}`}>{s.booking_id}</Link>, `${s.field_key} · ${s.status}`, s.expert, when(s.created_at)])} />}
       {tab === "conflicts" && <Rows empty="No conflicts." head={["Booking", "Conflict", "Stage"]} rows={(conflicts.data?.results ?? []).map((b) => [<Link to={`/booking/${b.id}`}>{b.booking_id}</Link>, <Pill tone="bad">{b.conflict === "TWO_EXPERTS" ? "Two experts inspected it" : "A released draft arrived"}</Pill>, b.stage])} />}

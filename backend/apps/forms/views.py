@@ -92,7 +92,7 @@ class FormViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
     queryset = Form.objects.order_by("kind", "key")
     serializer_class = FormSerializer
     permission_classes = [perm("forms.view", "forms.edit")]
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]  # delete: the draft
 
     def create(self, request, *args, **kwargs):
         s = self.get_serializer(data=request.data)
@@ -101,6 +101,11 @@ class FormViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
         form = services.create_form(request.user, key=d["key"], kind=d["kind"], name=d["name"],
                                     inspection_type=d.get("inspection_type", ""))
         return Response(self.get_serializer(form).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["delete"], url_path="draft")
+    def discard_draft(self, request, pk=None):
+        services.discard_draft(request.user, self.get_object())
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["post"])
     def drafts(self, request, pk=None):
@@ -112,6 +117,15 @@ class VersionDetail(generics.RetrieveAPIView):
     queryset = FormVersion.objects.all()
     serializer_class = VersionTreeSerializer
     permission_classes = [perm("forms.view")]
+
+
+class ReorderVersion(generics.GenericAPIView):
+    permission_classes = [perm("forms.edit")]
+    serializer_class = serializers.Serializer
+
+    def post(self, request, pk):
+        v = services.reorder(request.user, pk, request.data)
+        return Response({"row_version": v.row_version})
 
 
 class PageCreate(generics.CreateAPIView):

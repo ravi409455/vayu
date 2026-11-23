@@ -44,19 +44,22 @@ test("the expert completes DEMO-2 with a real upload to the file store and a PDF
   await signIn(page, "expert");
   await page.getByRole("link", { name: "Job DEMO-2" }).click();
   await page.getByRole("button", { name: "Start inspection" }).click();
-  await page.getByRole("button", { name: "Capture my location" }).click();
   await expect(page.getByTestId("gps-value")).toBeVisible();
   await page.getByTestId("camera-selfie").setInputFiles(file("selfie.jpg"));
   await expect(page.getByTestId("media-item")).toHaveCount(1);
   await expect(page.getByText(/files 1\/1 sent/)).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "Next" }).click();
+  // the first inspection page is gated: it holds the expert until the required fields are filled
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByRole("alert")).toContainText("Finish this step first");
   await page.getByLabel("Chassis number").fill("MA3LOCALTEST000001");
-  await page.getByRole("radio", { name: "OK" }).click();
+  await page.getByLabel("Registration number").fill("DL1CZ0001");
   await page.getByLabel("Odometer").fill("321");
-  await page.getByRole("button", { name: "Next" }).click();
-  await page.getByRole("button", { name: "Next" }).click();
-  await page.getByRole("radio", { name: "Pay later" }).click();
-  await page.getByRole("button", { name: "Next" }).click();
+  while (!(await page.getByRole("heading", { name: "Before you submit" }).isVisible())) {
+    const later = page.getByRole("radio", { name: "Pay later" });
+    if (await later.isVisible()) await later.click();
+    await page.getByRole("button", { name: "Next" }).click();
+  }
   await page.getByRole("button", { name: "Submit inspection" }).click();
   await expect(page.getByText("Completed. Everything arrived")).toBeVisible({ timeout: 60_000 });
   void request;

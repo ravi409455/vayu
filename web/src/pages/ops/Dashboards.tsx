@@ -4,6 +4,7 @@ import { api } from "../../api/client";
 import { useList } from "../../api/hooks";
 import type { User } from "../../api/types";
 import { useAuth } from "../../auth";
+import { PageHeader } from "../../ui/kit";
 
 type Row = { period: string; key: string; count: number };
 const BY = { type: "Inspection type", city: "City", expert: "Expert", stage: "Stage", lead_owner: "Lead owner" } as const;
@@ -31,7 +32,8 @@ export function Dashboards() {
   const csv = `/api/v1/dashboards/volume?${new URLSearchParams({ group, by, date_from: from, date_to: to, export: "csv" })}`;
   return (
     <>
-      <div className="bar"><h1 className="grow">Dashboards</h1>{can("dashboards.export") && <a className="btn" href={csv} download>Export CSV</a>}</div>
+      <PageHeader title="Dashboards" subtitle="How many bookings, by day, week or month." tip="Split the numbers by inspection type, city, expert, stage or lead owner. The CSV has exactly what the table shows.">
+        {can("dashboards.export") && <a className="btn" href={csv} download>Export CSV</a>}</PageHeader>
       <div className="card"><div className="grid2">
         <select aria-label="Group by time" value={group} onChange={(e) => setGroup(e.target.value)}><option value="day">By day</option><option value="week">By week</option><option value="month">By month</option></select>
         <select aria-label="Split by" value={by} onChange={(e) => setBy(e.target.value as keyof typeof BY)}>{Object.entries(BY).map(([k, l]) => <option key={k} value={k}>Split by {l.toLowerCase()}</option>)}</select>

@@ -154,6 +154,8 @@ class Page(DraftOnly):
     title = models.CharField(max_length=150)
     order = models.IntegerField(default=0)
     visible = models.BooleanField(default=True)
+    # the person cannot move on from this page until everything required on it is filled in
+    gate = models.BooleanField(default=False)
     show_if = models.JSONField(null=True, blank=True)
     access = models.JSONField(default=dict, blank=True)
 

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { useList } from "../../api/hooks";
 import { STAGE_LABEL, STAGE_TONE, useLabels } from "../../api/labels";
 import type { Booking } from "../../api/types";
-import { Empty, Pill } from "../../ui/kit";
+import { Empty, Pill, PageHeader } from "../../ui/kit";
 
 const OPEN = ["assigned", "in_progress", "submitted"];
 
@@ -26,7 +26,7 @@ export function MyJobs() {
   );
   return (
     <div style={{ maxWidth: 640 }}>
-      <h1>My jobs</h1>
+      <PageHeader title="My jobs" subtitle="Your inspections, soonest first." tip="Open a job to see the address and call the customer. Start the inspection when you reach the car: photos upload as you go." />
       {jobs.isLoading && <p className="muted">Loading…</p>}
       {!jobs.isLoading && open.length === 0 && <Empty>No jobs right now.</Empty>}
       {open.map(card)}

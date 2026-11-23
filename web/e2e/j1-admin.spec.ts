@@ -9,40 +9,68 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   await page.getByLabel("Name", { exact: true }).fill("Used car");
   await page.getByLabel("Inspection type").selectOption("used_car");
   await page.getByRole("button", { name: "Create" }).click();
-  await expect(page.getByText("Editing draft v1")).toBeVisible();
+  await expect(page.getByText("Draft v1")).toBeVisible();
 
   // page 1: an accident question and a follow-up that only shows when it is "yes"
-  const addField = async (label: string, type: string) => {
-    await page.getByRole("button", { name: "+ Add field" }).first().click();
+  const addField = async (label: string, type: string, nth = 0) => {
+    await page.getByRole("button", { name: "Add field" }).nth(nth).click();
+    await page.getByRole("button", { name: type, exact: true }).click();
     await page.getByRole("dialog").getByLabel("Label", { exact: true }).fill(label);
-    await page.getByRole("dialog").getByLabel("Type").selectOption(type);
-    await page.getByRole("dialog").getByRole("button", { name: "Add", exact: true }).click();
-    await expect(page.locator(".tree-item", { hasText: label })).toBeVisible();
+    await page.getByRole("dialog").getByRole("button", { name: "Add field" }).click();
+    await expect(page.getByRole("button", { name: new RegExp(label) }).first()).toBeVisible();
   };
-  await addField("Odometer", "number");
-  await addField("Accident history", "yes_no");
-  await addField("Accident details", "short_text");
-  await page.locator(".tree-item", { hasText: "Accident details" }).click();
+  await addField("Odometer", "Number");
+  await addField("Accident history", "Yes / No");
+  await addField("Accident details", "Short text");
+  await page.getByRole("button", { name: /Accident details/ }).first().click();
+  await page.getByRole("tab", { name: "Logic" }).click();
   await page.getByRole("button", { name: "+ Add condition" }).last().click();
   await page.getByLabel("Field", { exact: true }).last().selectOption({ label: "inspection: Accident history" });
   await page.getByLabel("Operator", { exact: true }).last().selectOption("==");
   await page.getByLabel("Value", { exact: true }).last().fill("true");
   await page.getByRole("button", { name: "Save field" }).click();
-  await expect(page.getByRole("status")).toContainText("Saved");
+  await expect(page.getByRole("status").filter({ hasText: "Saved" }).first()).toBeVisible();
+
+  // the first page must be finished before moving on: odometer required
+  await page.getByRole("button", { name: /Odometer/ }).first().click();
+  await page.getByRole("tab", { name: "Logic" }).click();
+  await page.getByRole("checkbox", { name: "Always required" }).check();
+  await page.getByRole("button", { name: "Save field" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Saved" }).first()).toBeVisible();
+  await page.locator(".rail-item", { hasText: "Page 1" }).click();
+  await page.getByRole("checkbox", { name: /Must be finished before moving on/ }).check();
+  await page.getByRole("button", { name: "Save page" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Saved" }).first()).toBeVisible();
 
   // page 2
-  await page.getByRole("button", { name: "+ Add page" }).click();
+  await page.getByRole("button", { name: "Add page" }).click();
   await page.getByLabel("Page name").fill("Final");
   await page.getByRole("dialog").getByRole("button", { name: "Add", exact: true }).click();
-  await expect(page.locator(".tree-item", { hasText: "Final" })).toBeVisible();
-  await page.getByRole("button", { name: "+ Add section" }).last().click();
+  await page.locator(".rail-item", { hasText: "Final" }).click();
+  await page.getByRole("button", { name: "Add section" }).click();
   await page.getByLabel("Section name").fill("Notes");
-  await page.getByRole("dialog").getByRole("button", { name: "Add", exact: true }).click();
-  await page.getByRole("button", { name: "+ Add field" }).last().click();
+  await page.getByRole("dialog").getByRole("button", { name: "Add blank section" }).click();
+  await page.getByRole("button", { name: "Add field" }).last().click();
+  await page.getByRole("button", { name: "Long text", exact: true }).click();
   await page.getByRole("dialog").getByLabel("Label", { exact: true }).fill("Remarks");
-  await page.getByRole("dialog").getByLabel("Type").selectOption("long_text");
-  await page.getByRole("dialog").getByRole("button", { name: "Add", exact: true }).click();
-  await expect(page.locator(".tree-item", { hasText: "Remarks" })).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "Add field" }).click();
+  await expect(page.getByRole("button", { name: /Remarks/ }).first()).toBeVisible();
+
+  // preview: the gate holds an expert on page 1 until the odometer is filled
+  await page.getByRole("button", { name: "Preview" }).click();
+  const preview = page.getByRole("dialog", { name: "Preview" });
+  await expect(preview.getByText("Page 1 of 2")).toBeVisible();
+  await preview.getByRole("button", { name: "Next" }).click();
+  await expect(preview.getByRole("alert")).toContainText("Finish this page first");
+  await expect(preview.getByRole("alert")).toContainText("Odometer");
+  await expect(preview.getByRole("alert")).toContainText("Chassis number");          // a required system field too
+  await preview.getByLabel("Chassis number").fill("MA3TEST");
+  await preview.getByLabel("Odometer").fill("1200");
+  await preview.getByRole("radio", { name: "Yes" }).click();
+  await expect(preview.getByLabel("Accident details")).toBeVisible();              // the rule showed it
+  await preview.getByRole("button", { name: "Next" }).click();
+  await expect(preview.getByText("Page 2 of 2")).toBeVisible();
+  await preview.getByRole("button", { name: "Close preview" }).click();
 
   // publish
   await page.getByRole("button", { name: /Check & publish/ }).click();
@@ -61,7 +89,7 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   await page.getByLabel("Field", { exact: true }).selectOption({ label: "inspection: Odometer" });
   await page.getByLabel("Report label").fill("Kilometres driven");
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Saved");
+  await expect(page.getByRole("status").filter({ hasText: "Saved" }).first()).toBeVisible();
   await page.getByRole("button", { name: "Publish" }).click();
   await expect(page.getByText("Live v1")).toBeVisible();
 

@@ -56,6 +56,7 @@ ignore = ["DJ008"]  # no Django admin, so no __str__ boilerplate
 [tool.ruff.lint.per-file-ignores]
 "**/tests/*" = ["E501", "F811"]  # F811: fixtures imported, used by name
 "apps/reports/render.py" = ["E501"]  # embedded CSS/HTML
+"apps/core/demo_forms.py" = ["E501"]  # a data table
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
