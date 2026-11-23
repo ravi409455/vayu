@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FormField, FormPage } from "../api/types";
-import { wizardSteps, type Tree } from "./wizard";
+import { lockedFrom, unvisited, wizardSteps, type Step, type Tree } from "./wizard";
 
 let n = 0;
 const field = (key: string, over: Partial<FormField> = {}): FormField => ({
@@ -36,5 +36,19 @@ describe("the expert's steps", () => {
   });
   it("always ends with the review, even when nothing else shows", () => {
     expect(wizardSteps({ start: null, inspection: tree(), end: null }, none, {}).map((s) => s.kind)).toEqual(["review"]);
+  });
+});
+
+describe("moving around freely", () => {
+  const st = (id: string, gate = false): Step => ({ id, title: id, kind: "inspection", page: { ...page(id, []), gate } });
+  const steps = [st("checkin", true), st("exterior"), st("interior"), { id: "review", title: "Review", kind: "review" } as Step];
+  it("every page is open unless a must-finish page before it still has gaps", () => {
+    expect(lockedFrom(steps, () => 0)).toBe(4);                                  // nothing locked
+    expect(lockedFrom(steps, (s) => (s.id === "checkin" ? 2 : 0))).toBe(1);      // all after check-in wait
+    expect(lockedFrom(steps, (s) => (s.id === "exterior" ? 3 : 0))).toBe(4);     // an ordinary page never locks others
+  });
+  it("lists the pages not opened yet, never the review", () => {
+    expect(unvisited(steps, ["checkin", "interior", "review"]).map((s) => s.id)).toEqual(["exterior"]);
+    expect(unvisited(steps, ["checkin", "exterior", "interior"])).toEqual([]);
   });
 });

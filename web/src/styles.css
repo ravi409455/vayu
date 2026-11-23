@@ -536,3 +536,9 @@ input.switch:focus-visible { outline: 2px solid var(--info); outline-offset: 2px
 .login .bigbtn { height: 46px; margin-top: 8px; }
 @media (max-width: 860px) { .login { grid-template-columns: 1fr; } .login-brand { display: none; } .login-logo { display: block; } }
 .lib-box { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; } .lib-box .bar { margin-bottom: 6px; }
+.step-item.unseen { color: var(--ink-2); } .step-item.unseen .step-dot { border-style: dashed; }
+.unseen-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--info); flex: none; }
+.wizard-jump { display: none; align-items: center; gap: 8px; margin-bottom: 12px; } .wizard-jump select { flex: 1; }
+@media (max-width: 900px) { .wizard-jump { display: flex; } }
+button.link.danger-link, .link.danger-link { color: var(--bad); }
+.rail-note { font-size: 12px; color: var(--muted); padding: 6px 10px 2px; margin: 0; }

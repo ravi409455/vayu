@@ -19,3 +19,17 @@ export function wizardSteps(trees: Trees, answers: Record<Part, Answers>, ctx: C
   out.push({ id: "review", title: "Review", kind: "review" });
   return out;
 }
+
+/** Steps the expert may open now. Any order is fine, except that a page the Admin marked "must be
+ *  finished before moving on" holds everything after it until its required fields are filled.
+ *  Returns the index of the first step that is locked (steps.length when nothing is). */
+export function lockedFrom(steps: Step[], missingOn: (s: Step) => number): number {
+  const gate = steps.findIndex((s) => s.kind !== "review" && s.page?.gate && missingOn(s) > 0);
+  return gate === -1 ? steps.length : gate + 1;
+}
+
+/** Pages the expert has not opened yet (the review is not a page). */
+export function unvisited(steps: Step[], visited: string[]): Step[] {
+  const seen = new Set(visited);
+  return steps.filter((s) => s.kind !== "review" && !seen.has(s.id));
+}

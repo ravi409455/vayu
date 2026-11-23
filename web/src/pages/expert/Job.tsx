@@ -6,18 +6,18 @@ import { STAGE_LABEL, STAGE_TONE, useLabels, useTypeLabels } from "../../api/lab
 import type { Booking } from "../../api/types";
 import { useRefresh } from "../../api/hooks";
 import { missingFields, pageGaps, submittable, type Answers } from "../../lib/formSpec";
-import { wizardSteps, type Part, type Tree } from "../../lib/wizard";
+import { lockedFrom, unvisited, wizardSteps, type Part, type Tree } from "../../lib/wizard";
 import { loadJSON, removeKey, saveJSON } from "../../lib/store";
-import { resumeUploads, summary, useUploads, retryFailed } from "../../lib/uploadManager";
+import { discardFile, resumeUploads, summary, useUploads, retryFailed } from "../../lib/uploadManager";
 import { FormRenderer } from "../../ui/FormRenderer";
-import { Pill } from "../../ui/kit";
+import { Confirm, Pill } from "../../ui/kit";
 import { useCrumb } from "../../ui/crumb";
 import { MapPin, Phone } from "lucide-react";
 import { fmtPhone, fmtSlot, mapsUrl } from "../../lib/format";
 
 type Session = { startUuid: string; submitUuid: string; inspectionId: string; form: Tree; startForm: Tree | null; endForm: Tree | null; versionId: number };
-type Draft = { inspection: Answers; start: Answers; end: Answers; step: number };
-const EMPTY_DRAFT: Draft = { inspection: {}, start: {}, end: {}, step: 0 };
+type Draft = { inspection: Answers; start: Answers; end: Answers; step: number; visited?: string[] };
+const EMPTY_DRAFT: Draft = { inspection: {}, start: {}, end: {}, step: 0, visited: [] };
 const sKey = (id: string) => `vayu:job:${id}`;
 const dKey = (id: string) => `vayu:draft:${id}`;
 
@@ -112,6 +112,11 @@ function Wizard({ booking, session, onSubmitted }: { booking: Booking; session: 
   const cur = steps[step]!;
   const set = (kind: Part) => (key: string, v: unknown) => setDraft((d) => ({ ...d, [kind]: { ...d[kind], [key]: v } }));
   const [blocked, setBlocked] = useState<string[]>([]);
+  const [confirm, setConfirm] = useState<null | "discard" | "submit">(null);
+  const stepId = steps[Math.min(draft.step, steps.length - 1)]?.id;
+  useEffect(() => {                                   // remember which pages the expert has opened
+    if (stepId && !(draft.visited ?? []).includes(stepId)) setDraft((d) => ({ ...d, visited: [...(d.visited ?? []), stepId] }));
+  }, [stepId]); // eslint-disable-line react-hooks/exhaustive-deps
   const go = (n: number) => { setMsg(""); setBlocked([]); setDraft((d) => ({ ...d, step: Math.max(0, Math.min(steps.length - 1, n)) })); window.scrollTo?.(0, 0); };
   /** Next: a page the Admin marked "must be finished" holds the person until its required fields are filled. */
   function next() {
@@ -149,23 +154,43 @@ function Wizard({ booking, session, onSubmitted }: { booking: Booking; session: 
   const { done, total } = summary(ups);
   const progress = Math.round((step / (steps.length - 1)) * 100);
   const missingOn = (s: (typeof steps)[number]) => (s.kind !== "review" && s.page ? pageGaps(s.kind, trees[s.kind]!, s.page, draft[s.kind], ctx).length : 0);
+  const lock = lockedFrom(steps, missingOn);
+  const gateTitle = steps[lock - 1]?.title ?? "";
+  const notOpened = unvisited(steps, draft.visited ?? []);
+  async function discard() {
+    for (const u of ups) if (u.status !== "done") await discardFile(u.assetId).catch(() => {});
+    removeKey(dKey(id));
+    setDraft({ ...EMPTY_DRAFT, visited: [] });
+    setErrors({}); setBlocked([]); setConfirm(null);
+    setMsg(""); window.scrollTo?.(0, 0);
+  }
   return (
     <div className="wizard">
       <nav className="card wizard-rail" aria-label="Steps">
         {steps.map((s, i) => {
           const miss = missingOn(s);
+          const seen = (draft.visited ?? []).includes(s.id);
+          const locked = i >= lock;
           return (
-            <button key={i} className={`step-item${i === step ? " on" : ""}`} aria-current={i === step ? "step" : undefined} disabled={i > step} onClick={() => go(i)}>
-              <span className={`step-dot${i < step && miss === 0 ? " done" : ""}`} aria-hidden="true">{i < step && miss === 0 ? "✓" : i + 1}</span>
+            <button key={i} className={`step-item${i === step ? " on" : ""}${seen ? "" : " unseen"}`} aria-current={i === step ? "step" : undefined} disabled={locked}
+              title={locked ? `Finish ${gateTitle} first` : seen ? undefined : "Not opened yet"} onClick={() => go(i)}>
+              <span className={`step-dot${seen && miss === 0 && s.kind !== "review" ? " done" : ""}`} aria-hidden="true">{seen && miss === 0 && s.kind !== "review" ? "✓" : i + 1}</span>
               <span className="grow ellipsis">{s.title}</span>
-              {i < step && miss > 0 && <span className="pill warn" title="Still needed">{miss}</span>}
+              {seen && miss > 0 && <span className="pill warn" title="Still needed">{miss}</span>}
+              {!seen && !locked && s.kind !== "review" && <span className="unseen-dot" aria-label="not opened yet" />}
             </button>);
         })}
+        {lock < steps.length && <p className="rail-note">Finish {gateTitle} to open the other pages.</p>}
+        <button className="link danger-link" style={{ margin: "8px 8px 2px" }} onClick={() => setConfirm("discard")}>Discard draft…</button>
       </nav>
       <div className="wizard-main">
       <h1>{String(booking.answers.customer_name ?? "")} <span className="muted small">{booking.booking_id}</span></h1>
       <div className="progress" aria-label={`Step ${step + 1} of ${steps.length}`}><div style={{ width: `${progress}%` }} /></div>
       <p className="muted small" style={{ margin: "6px 0 14px" }}>Step {step + 1} of {steps.length}: {cur.title}{total > 0 && ` · files ${done}/${total} sent`}</p>
+      <label className="wizard-jump"><span className="muted small">Go to</span>
+        <select aria-label="Go to page" value={step} onChange={(e) => go(Number(e.target.value))}>
+          {steps.map((s, i) => <option key={s.id} value={i} disabled={i >= lock}>{i + 1}. {s.title}{missingOn(s) ? ` (${missingOn(s)} needed)` : ""}{(draft.visited ?? []).includes(s.id) || s.kind === "review" ? "" : " · not opened"}</option>)}
+        </select></label>
       {cur.kind !== "review" && cur.page && (
         <FormRenderer kind={cur.kind} tree={trees[cur.kind]!} values={draft[cur.kind]} ctx={ctx} pages={[cur.page]} role="expert"
           bookingId={id} errors={errors[cur.kind]} onChange={set(cur.kind)} />
@@ -173,15 +198,27 @@ function Wizard({ booking, session, onSubmitted }: { booking: Booking; session: 
       {cur.kind === "review" && (
         <div>
           <h2>Before you submit</h2>
+          {notOpened.length > 0 && (
+            <div className="banner warn" role="status"><strong>{notOpened.length} page{notOpened.length === 1 ? "" : "s"} not opened yet.</strong> Check {notOpened.length === 1 ? "it" : "them"} before you submit:{" "}
+              {notOpened.map((s, i) => <span key={s.id}>{i > 0 && ", "}<button className="link" onClick={() => go(steps.indexOf(s))}>{s.title}</button></span>)}</div>)}
           {gaps.length === 0 ? <p className="ok" role="status">Everything required is filled in.</p> : (
             <div className="card" role="alert"><strong>{gaps.length} thing{gaps.length === 1 ? "" : "s"} still needed</strong>
               <ul>{gaps.map((g) => <li key={`${g.kind}.${g.key}`}><button className="link" onClick={() => go(stepOf(g))}>{g.label}</button> <span className="muted small">({g.pageTitle})</span></li>)}</ul></div>)}
           {ups.some((u) => u.status !== "done") && <p className="muted">Photos still uploading: {total - done}. You can submit now; they keep sending.</p>}
           {msg && <p className="error" role="alert">{msg}</p>}
-          <button className="primary bigbtn" disabled={busy || gaps.length > 0} onClick={submit}>Submit inspection</button>
+          <button className="primary bigbtn" disabled={busy || gaps.length > 0} onClick={() => (notOpened.length ? setConfirm("submit") : void submit())}>Submit inspection</button>
         </div>
       )}
       {blocked.length > 0 && <div className="card" role="alert"><strong>Finish this step first</strong><p className="muted small">You cannot move on until these are done:</p><ul>{blocked.map((b) => <li key={b}>{b}</li>)}</ul></div>}
+      {confirm === "discard" && (
+        <Confirm title="Start this inspection again?" danger confirmLabel="Discard draft" onCancel={() => setConfirm(null)} onConfirm={() => void discard()}>
+          <p>Every answer saved on this device for {booking.booking_id} is cleared and you start again at step 1. Photos that have not finished sending are dropped. This cannot be undone.</p>
+          <p className="muted small">The job stays yours and stays started; nothing has been sent to the office yet.</p>
+        </Confirm>)}
+      {confirm === "submit" && (
+        <Confirm title={`Submit with ${notOpened.length} page${notOpened.length === 1 ? "" : "s"} not opened?`} confirmLabel="Submit anyway" onCancel={() => setConfirm(null)} onConfirm={() => { setConfirm(null); void submit(); }}>
+          <p>You have not opened: {notOpened.map((s) => s.title).join(", ")}. Their questions are sent unanswered.</p>
+        </Confirm>)}
       <div className="wizard-foot">
         <button onClick={() => go(step - 1)} disabled={step === 0}>Back</button>
         <span className="grow muted small" style={{ textAlign: "center" }}>Saved on this device</span>
