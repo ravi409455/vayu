@@ -102,8 +102,9 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
     booking_id: "UC-1", customer_name: "Meera", customer_phone: "9876543210", address: "1 Ring Rd", city: "delhi",
     inspection_date: "2026-11-24", inspection_time: "10:00", inspection_type: "used_car", car_make_model: "tata_nexon" } } }));
   await json(await ops.post(`bookings/${b.id}/assign`, { data: { expert: expertId } }));
-  await json(await expert.post(`bookings/${b.id}/start`, { data: { client_uuid: crypto.randomUUID(), inspection_type: "used_car" } }));
-  await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection: { chassis_no: "MA3ABCDEFG123456", odometer: 12345 }, start: { selfie: [await uploadFile(expert, b.id, "selfie", "photo", "image/jpeg", JPEG)] }, end: { taking_payment: false } } } }));
+  const selfie = await uploadFile(expert, b.id, "selfie", "photo", "image/jpeg", JPEG);
+  await json(await expert.post(`bookings/${b.id}/start`, { data: { client_uuid: crypto.randomUUID(), inspection_type: "used_car", start_answers: { selfie: [selfie] } } }));
+  await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection: { chassis_no: "MA3ABCDEFG123456", odometer: 12345 }, start: { selfie: [selfie] }, end: { taking_payment: false } } } }));
 
   const pdf = page.waitForResponse((r) => r.url().includes("/preview") && r.request().method() === "POST");
   await page.reload();                                                        // the picker now finds the booking

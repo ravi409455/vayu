@@ -85,6 +85,18 @@ def hidden_fields(user, booking: Booking) -> set[str]:
     return out
 
 
+def booking_media(request, booking_id) -> list[dict]:
+    """The files this person put on the booking (media managers: every file), oldest first, so a
+    phone that lost its draft can pick them up again. Fields they may not see are left out."""
+    booking = writable_booking(request, booking_id)
+    qs = MediaAsset.objects.filter(booking=booking).order_by("created_at")
+    if scope_for(request.user, "media.manage", request) is None:
+        qs = qs.filter(uploaded_by=request.user)
+    hidden = hidden_fields(request.user, booking)
+    return [{"id": str(a.id), "field_key": a.field_key, "kind": a.kind, "status": a.status}
+            for a in qs if a.field_key not in hidden]
+
+
 def _urls(asset: MediaAsset) -> list[dict]:
     parts = math.ceil(asset.size / settings.MEDIA_PART_SIZE)
     return [{"part_number": n, "url": storage.presign_part(asset.key, asset.upload_id, n)}

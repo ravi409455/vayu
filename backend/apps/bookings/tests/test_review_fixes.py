@@ -6,6 +6,7 @@ from apps.bookings import submissions
 from apps.bookings.models import Booking
 from apps.bookings.tests.test_submissions import ienv, started  # noqa: F401
 from apps.core.errors import CodedError
+from apps.media.tests.conftest import s3  # noqa: F401  (in-memory S3 for the selfie)
 
 pytestmark = pytest.mark.django_db
 
@@ -40,7 +41,15 @@ def _publish_system(admin, ftype, field_key):
                       format="json").status_code == 200
 
 
-def test_start_returns_the_start_and_end_forms_the_inspection_is_pinned_to(ienv, booking):
+def _checkin(ienv, booking, settings) -> dict:
+    """What an expert sends to start a job whose check-in has a selfie."""
+    from apps.media.tests.conftest import jpeg, upload
+
+    sid = upload(ienv.expert, booking["id"], jpeg(), settings, field_key="selfie").json()["id"]
+    return {"start_answers": {"selfie": [sid]}}
+
+
+def test_start_returns_the_start_and_end_forms_the_inspection_is_pinned_to(ienv, booking, settings):
     from apps.bookings.models import Inspection
     from apps.bookings.tests.test_submissions import assign, start
 
@@ -51,7 +60,10 @@ def test_start_returns_the_start_and_end_forms_the_inspection_is_pinned_to(ienv,
     Booking.objects.filter(pk=booking["id"]).update(stage="assigned")
     _publish_system(ienv.admin, "start", "paid_start")
     _publish_system(ienv.admin, "end", "paid_end")
-    out = start(ienv.expert, booking).json()
+    refused = start(ienv.expert, booking)             # the check-in is not done: the job does not start
+    assert refused.status_code == 400 and refused.json()["errors"]["selfie"]
+    assert Booking.objects.get(pk=booking["id"]).stage == "assigned" and not Inspection.objects.exists()
+    out = start(ienv.expert, booking, **_checkin(ienv, booking, settings)).json()
     for part, key in (("start_form", "paid_start"), ("end_form", "paid_end")):
         keys = [f["key"] for p in out[part]["pages"] for s in p["sections"] for f in s["fields"]]
         assert key in keys and "rating_config" not in out[part]
@@ -59,13 +71,23 @@ def test_start_returns_the_start_and_end_forms_the_inspection_is_pinned_to(ienv,
     assert insp.start_version_id and insp.end_version_id
 
 
-def test_the_pinned_start_form_does_not_change_when_a_newer_one_is_published(ienv, booking):
+def test_the_expert_can_see_the_forms_before_the_job_is_started(ienv, booking):
+    from apps.bookings.tests.test_submissions import assign
+
+    _publish_system(ienv.admin, "start", "paid_start")
+    assign(ienv, booking)
+    out = ienv.expert.get(f"/api/v1/bookings/{booking['id']}/forms").json()
+    assert out["start_form"] is not None and out["form"]["pages"] and out["end_form"] is None
+    assert Booking.objects.get(pk=booking["id"]).stage == "assigned"      # looking does not start it
+
+
+def test_the_pinned_start_form_does_not_change_when_a_newer_one_is_published(ienv, booking, settings):
     from apps.bookings.models import Inspection
     from apps.bookings.tests.test_submissions import assign, start
 
     _publish_system(ienv.admin, "start", "first_q")
     assign(ienv, booking)
-    out = start(ienv.expert, booking).json()
+    out = start(ienv.expert, booking, **_checkin(ienv, booking, settings)).json()
     pinned = Inspection.objects.get(booking_id=booking["id"]).start_version_id
     from apps.forms.models import Form
 

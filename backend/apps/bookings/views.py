@@ -24,7 +24,8 @@ ACTION_PERMISSIONS = {
     "assign": "bookings.assign", "reschedule": "bookings.reschedule", "cancel": "bookings.cancel",
     "force_release": "bookings.force_release", "destroy": "bookings.delete",
     "resolve_conflict": "bookings.edit", "activity": "bookings.view",
-    "start": "submissions.fill", "submit": "submissions.fill", "inspections": "submissions.view",
+    "start": "submissions.fill", "forms": "submissions.fill", "submit": "submissions.fill",
+    "inspections": "submissions.view",
 }
 
 
@@ -155,17 +156,27 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         b, insp = submissions.start(
             request.user, self.get_object(), self._uuid("client_uuid"),
             parse_datetime(started) if isinstance(started, str) else None,
-            request.data.get("inspection_type"), app_version)
+            request.data.get("inspection_type"), app_version, request.data.get("start_answers"))
         ctx = self.get_serializer_context()
         return Response({
             "booking": BookingSerializer(Booking.objects.get(pk=b.pk), context=ctx).data,
             "inspection": InspectionSerializer(insp, context=ctx).data,
-            "form": submissions.form_for_role(insp.form_version, request.user.role, "in_progress"),
-            # the start form (check-in) and end form (wrap-up) this inspection goes through; null
-            # when the form does not use it. Pinned: they never change under a started job.
-            "start_form": _pinned_form(insp.start_version, request.user.role),
-            "end_form": _pinned_form(insp.end_version, request.user.role),
+            **self._forms(insp.pinned(), request.user.role),
             "server_time": timezone.now().isoformat()})
+
+    def _forms(self, pinned, role):
+        return {"form": submissions.form_for_role(pinned["inspection"], role, "in_progress"),
+                # the start form (check-in) and end form (wrap-up) an inspection goes through;
+                # null when the form does not use it. Pinned at start: they never change after.
+                "start_form": _pinned_form(pinned["start"], role),
+                "end_form": _pinned_form(pinned["end"], role)}
+
+    @action(detail=True, methods=["get"])
+    def forms(self, request, pk=None):
+        """The forms the expert fills in, before the job is started (it only becomes in progress
+        once the check-in is done)."""
+        b = self.get_object()
+        return Response(self._forms(submissions.current_versions(b), request.user.role))
 
     @action(detail=True, methods=["post"])
     def submit(self, request, pk=None):

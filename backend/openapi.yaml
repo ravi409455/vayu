@@ -486,6 +486,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/Booking'
           description: ''
+  /api/v1/bookings/{id}/forms:
+    get:
+      operationId: bookings_forms_retrieve
+      description: |-
+        The forms the expert fills in, before the job is started (it only becomes in progress
+        once the check-in is done).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
   /api/v1/bookings/{id}/inspections:
     get:
       operationId: bookings_inspections_retrieve
@@ -506,6 +529,23 @@ paths:
               schema:
                 $ref: '#/components/schemas/Booking'
           description: ''
+  /api/v1/bookings/{id}/media:
+    get:
+      operationId: bookings_media_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/bookings/{id}/media-zip:
     post:
       operationId: bookings_media_zip_create

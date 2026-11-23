@@ -44,6 +44,13 @@ class Detail(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class BookingMedia(APIView):
+    permission_classes = [perm_any("submissions.fill", "media.manage")]
+
+    def get(self, request, pk):
+        return Response(services.booking_media(request, pk))
+
+
 class Complete(APIView):
     permission_classes = [perm_any("submissions.fill", "media.manage")]
 

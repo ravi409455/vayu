@@ -107,7 +107,8 @@ def _alert(b: Booking, code: str, detail: str) -> None:
 
 
 @transaction.atomic
-def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, app_version):
+def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, app_version,
+          start_answers=None):
     b = _lock(b)
     existing = Inspection.objects.filter(client_start_uuid=client_uuid).first()
     if existing is not None:
@@ -139,6 +140,10 @@ def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, ap
         b.answers = {**b.answers, "inspection_type": inspection_type}
         sync_columns(b)
     pinned = versions_to_pin(inspection_version(b.inspection_type))
+    if pinned["start"] is not None:
+        # a job is only "in progress" once the check-in is done (nothing changes if it is not)
+        check_shape({"start": start_answers})
+        _clean_all(b, {**pinned, "inspection": None, "end": None}, {"start": start_answers or {}})
     b.stage, b.started_at = "in_progress", timezone.now()
     insp = Inspection.objects.create(booking=b, expert=actor, form_version=pinned["inspection"],
                                      start_version=pinned["start"], end_version=pinned["end"],

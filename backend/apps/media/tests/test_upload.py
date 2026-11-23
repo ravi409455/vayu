@@ -522,9 +522,9 @@ def test_start_form_media_is_validated_and_awaited_for_completion(menv, settings
     publish_draft(menv.admin, Form.objects.get(type="end").id)
     b = create(menv.ops, booking_id="MD1").json()
     assign(menv, b)
-    start(menv.expert, b)
     env = menv
-    sid = upload(env.expert, b["id"], jpeg(), settings, field_key="selfie").json()["id"]
+    sid = upload(env.expert, b["id"], jpeg(), settings, field_key="selfie").json()["id"]   # taken before the job starts
+    assert start(env.expert, b, start_answers={"selfie": [sid]}).status_code == 200
     body = {"client_submission_uuid": str(uuid.uuid4()), "answers": {
         "inspection": {"chassis_no": "MA3YPKCSKTJ273129"},
         "start": {"selfie": [sid]}, "end": {"taking_payment": False}}}
@@ -536,7 +536,8 @@ def test_start_form_media_is_validated_and_awaited_for_completion(menv, settings
         "start": {"selfie": [str(uuid.uuid4())]}, "end": {"taking_payment": False}}}
     other = create(env.ops, booking_id="MD3").json()
     assign(env, other)
-    start(env.expert, other)
+    other_selfie = upload(env.expert, other["id"], jpeg(), settings, field_key="selfie").json()["id"]
+    start(env.expert, other, start_answers={"selfie": [other_selfie]})
     r = env.expert.post(f"/api/v1/bookings/{other['id']}/submit", bad, format="json")
     assert r.status_code == 400 and r.json()["errors"] == {"selfie": "UNKNOWN_MEDIA"}
 
@@ -555,3 +556,26 @@ def test_verifying_twice_is_harmless(job, settings):
     env, b = job
     media_id = upload(env.expert, b["id"], jpeg(), settings).json()["id"]
     assert verify_asset(media_id) == "verified"
+
+
+# ------------------------------------------------- a phone that lost its draft asks what is on the server
+
+def test_the_expert_can_list_the_files_on_the_booking_and_others_cannot(job, settings):
+    from rest_framework.test import APIClient
+
+    env, b = job
+    done = upload(env.expert, b["id"], jpeg(), settings).json()["id"]
+    pending = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()), format="json").json()["id"]
+    ops_file = env.ops.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg(), field_key="clip", kind="video",
+                                                                    content_type="video/mp4"), format="json").json()["id"]
+    mine = env.expert.get(f"/api/v1/bookings/{b['id']}/media").json()
+    assert [(m["id"], m["field_key"], m["status"]) for m in mine] == [
+        (done, "photo_a", "verified"), (pending, "photo_a", "pending")]
+    assert {m["id"] for m in env.ops.get(f"/api/v1/bookings/{b['id']}/media").json()} == {done, pending, ops_file}
+    other = APIClient()
+    other.force_authenticate(user=env.make_user("expert", username="e7"))
+    assert other.get(f"/api/v1/bookings/{b['id']}/media").status_code == 404
+    from apps.forms.models import Field
+
+    Field.objects.filter(key="photo_a").update(access={"expert": {"in_progress": "hidden"}})
+    assert env.expert.get(f"/api/v1/bookings/{b['id']}/media").json() == []

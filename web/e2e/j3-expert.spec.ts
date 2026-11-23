@@ -116,3 +116,39 @@ test("J3d: an upload that could not reach storage resumes by itself after a refr
   await page.reload();                                                          // the page forgot everything in memory
   await expect(page.getByText(/files 1\/1 sent/)).toBeVisible({ timeout: 30_000 });
 });
+
+test("J3e: the job is not in progress until the check-in is done", async ({ page }) => {
+  const id = await assignedJob("J3-5");
+  const ops = await apiAs("ops");
+  const stage = async () => (await json(await ops.get(`bookings/${id}`))).stage;
+  await signIn(page, "expert");
+  await page.goto(`/jobs/${id}`);
+  await page.getByRole("button", { name: "Start inspection" }).click();
+  await expect(page.getByText(/Step 1 of/)).toBeVisible();
+  await expect(page.getByText("Not started yet.")).toBeVisible();
+  expect(await stage()).toBe("assigned");                                       // the wizard is open, the job is not started
+  await page.reload();                                                          // still the same: nothing was started behind our back
+  await expect(page.getByText("Not started yet.")).toBeVisible();
+  expect(await stage()).toBe("assigned");
+  await page.getByTestId("camera-selfie").setInputFiles(file("selfie.jpg"));    // the check-in is complete
+  await expect(page.getByText("Not started yet.")).toHaveCount(0);
+  await expect.poll(stage).toBe("in_progress");
+});
+
+test("J3f: continuing on a phone that lost its draft shows the photo already sent and lets the expert retake it", async ({ page }) => {
+  const id = await assignedJob("J3-6");
+  await signIn(page, "expert");
+  await page.goto(`/jobs/${id}`);
+  await page.getByRole("button", { name: "Start inspection" }).click();
+  await page.getByTestId("camera-selfie").setInputFiles(file("selfie.jpg"));
+  await expect(page.getByText(/files 1\/1 sent/)).toBeVisible({ timeout: 30_000 });
+  await page.evaluate(() => { localStorage.clear(); });                         // a new phone: no saved session, no draft
+  await page.goto(`/jobs/${id}`);
+  await page.getByRole("button", { name: "Continue inspection" }).click();
+  await expect(page.getByText(/Step 1 of/)).toBeVisible();
+  await expect(page.getByTestId("media-item")).toHaveCount(1);                  // the selfie is back, not "0/1"
+  await page.getByRole("button", { name: "Remove" }).click();
+  await page.getByTestId("camera-selfie").setInputFiles(file("again.jpg"));     // and a retake is not refused
+  await expect(page.getByTestId("media-item")).toHaveCount(1);
+  await expect(page.getByRole("alert").filter({ hasText: "takes at most" })).toHaveCount(0);
+});

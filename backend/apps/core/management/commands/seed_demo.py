@@ -178,9 +178,9 @@ class Command(BaseCommand):
         b3 = make("DEMO-3", "Sunita Iyer (completed, has a PDF)", "delhi", "hyundai_creta",
                   "2026-11-24")
         services.assign(ops, b3, expert.id)
-        _, _ = submissions.start(expert, b3, uuid.uuid4(), None, "pdi", None)
+        selfie = self._selfie(b3, expert)          # the check-in selfie: the job starts with it
+        submissions.start(expert, b3, uuid.uuid4(), None, "pdi", None, {"selfie": [selfie]})
         b3.refresh_from_db()
-        selfie = self._selfie(b3, expert)
         submissions.submit(expert, b3, uuid.uuid4(), {
             "inspection": {"chassis_no": "MA3YPKCSKTJ273129", "registration_no": "DL1CAB1234",
                            "odometer": 4200, "bonnet": "ok", "door_fl": "minor",
@@ -227,8 +227,10 @@ class Command(BaseCommand):
                                          "inspection_type": itype})
 
         def start(b, expert, itype="pdi"):
-            submissions.start(expert, b, uuid.uuid4(), None, itype, None)
+            selfie = self._selfie(b, expert)       # a job only starts once the check-in is done
+            submissions.start(expert, b, uuid.uuid4(), None, itype, None, {"selfie": [selfie]})
             b.refresh_from_db()
+            return selfie
 
         def submit(b, expert, answers):
             selfie = self._selfie(b, expert)
@@ -295,7 +297,8 @@ class Command(BaseCommand):
         b = make("DEMO-15", "Neha Bhat", "pune", "maruti_victoris", "2026-11-23", at="17:00")
         services.assign(ops, b, e1.id)
         services.change_type(ops, b, "used_car")
-        submissions.start(e1, b, uuid.uuid4(), None, "pdi", None)
+        submissions.start(e1, b, uuid.uuid4(), None, "pdi", None,
+                          {"selfie": [self._selfie(b, e1)]})
 
     # ---------------------------------------------------------------- integrations
 

@@ -119,8 +119,8 @@ export async function submittedJob(o: JobOptions): Promise<string> {
     booking_id: o.bookingId, customer_name: "Test Customer", customer_phone: "9876500099", address: "9 Test Street", city: "delhi",
     inspection_date: "2026-11-25", inspection_time: "09:30", inspection_type: o.type ?? "pdi", car_make_model: "maruti_victoris" } } }));
   await json(await ops.post(`bookings/${b.id}/assign`, { data: { expert: await expertId() } }));
-  await json(await expert.post(`bookings/${b.id}/start`, { data: { client_uuid: crypto.randomUUID(), inspection_type: o.type ?? "pdi" } }));
-  const selfie = await uploadFile(expert, b.id, "selfie", "photo", "image/jpeg", JPEG);
+  const selfie = await uploadFile(expert, b.id, "selfie", "photo", "image/jpeg", JPEG);      // the check-in comes first
+  await json(await expert.post(`bookings/${b.id}/start`, { data: { client_uuid: crypto.randomUUID(), inspection_type: o.type ?? "pdi", start_answers: { selfie: [selfie] } } }));
   const inspection: Record<string, unknown> = { chassis_no: "MA3YPKCSKTJ273129", door: o.door ?? "ok", odometer: o.odometer ?? 100 };
   if (o.photo) inspection.door_photo = [await uploadFile(expert, b.id, "door_photo", "photo", "image/jpeg", JPEG)];
   await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection, start: { selfie: [selfie] }, end: { taking_payment: false } } } }));

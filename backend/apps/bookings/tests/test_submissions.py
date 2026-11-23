@@ -435,8 +435,10 @@ def test_start_and_end_forms_are_validated_stored_and_access_controlled(ienv, bo
                    "access": {"expert": {"in_progress": "hidden"}}})
     _publish_with(admin, "end")
     assign(ienv, booking)
-    start(ienv.expert, booking)
     selfie = upload(ienv.expert, booking["id"], jpeg(), settings, field_key="selfie").json()["id"]
+    assert start(ienv.expert, booking, start_answers={"selfie": [selfie]}).status_code == 400   # pay_mode missing
+    assert Booking.objects.get(pk=booking["id"]).stage == "assigned"
+    assert start(ienv.expert, booking, start_answers={"selfie": [selfie], "pay_mode": "upi"}).status_code == 200
     bad = submit(ienv.expert, booking, {**GOOD, "start": {}, "end": {}})
     assert bad.status_code == 400
     assert set(bad.json()["errors"]) == {"pay_mode", "selfie", "taking_payment"}   # all required
@@ -451,10 +453,13 @@ def test_start_and_end_forms_are_validated_stored_and_access_controlled(ienv, bo
     assert stored["end"] == {"taking_payment": False}
 
 
-def test_a_form_the_inspection_does_not_use_takes_no_answers(ienv, booking):
+def test_a_form_the_inspection_does_not_use_takes_no_answers(ienv, booking, settings):
+    from apps.media.tests.conftest import jpeg, upload
+
     _publish_with(ienv.admin, "start")
     assign(ienv, booking)
-    start(ienv.expert, booking)
+    sid = upload(ienv.expert, booking["id"], jpeg(), settings, field_key="selfie").json()["id"]
+    start(ienv.expert, booking, start_answers={"selfie": [sid]})
     Inspection.objects.update(start_version=None)               # this inspection skips the start form
     r = submit(ienv.expert, booking, {**GOOD, "start": {"selfie": []}, "end": {}})
     assert r.status_code == 400 and r.json()["errors"] == {"selfie": "NOT_USED"}
