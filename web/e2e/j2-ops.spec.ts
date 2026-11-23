@@ -134,3 +134,25 @@ test("delete rules: Ops may delete only a draft, Admin any booking", async ({ pa
   await expect(page.getByText("Booking deleted.")).toBeVisible();
   expect((await admin.get(`bookings/${assigned.id}`)).status()).toBe(404);
 });
+
+test("every number on Today is the count of the list it opens, even with filters saved on the Bookings page", async ({ page }) => {
+  const ops = await apiAs("ops");
+  const day = new Date().toISOString().slice(0, 10);
+  const make = async (id: string, date: string, city: string) => json(await ops.post("bookings", { data: { answers: {
+    booking_id: id, customer_name: "Count Check", customer_phone: "9876500055", address: "1 Count St", city, inspection_date: date,
+    inspection_time: "10:00", inspection_type: "pdi", car_make_model: "maruti_victoris" } } }));
+  await make(`CNT-${Date.now()}-a`, day, "delhi");            // unassigned today
+  await make(`CNT-${Date.now()}-b`, "2026-12-20", "pune");    // unassigned, another day
+  await signIn(page, "ops");
+  await page.goto("/bookings?view=all");
+  await page.getByLabel("City").selectOption("pune");         // a filter left behind on the Bookings page
+  await page.goto("/today");
+  for (const name of ["Today's jobs", "Unassigned", "In progress", "Uploading", "Completed"]) {
+    await page.goto("/today");
+    const card = page.getByRole("link", { name: new RegExp(`^${name}`) });
+    await expect(card.locator(".kpi-value")).not.toHaveText("—");          // wait for the number to arrive
+    const shown = (await card.locator(".kpi-value").innerText()).trim();
+    await card.click();
+    await expect(page.locator("h1 .count")).toHaveText(shown);
+  }
+});

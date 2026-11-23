@@ -12,6 +12,7 @@ import { useNeeds } from "../../lib/problems";
 import { Avatar } from "../../ui/Avatar";
 import { Empty, PageHeader, useToast } from "../../ui/kit";
 import { Actions } from "./Booking";
+import { useCount, viewQuery } from "./Bookings";
 
 const SLOT_HOURS = 1.5;            // ponytail: bookings have a start time only; a job is drawn 1.5 h long
 const SLOT_PX = 76;                // width of 30 minutes; the day scrolls sideways
@@ -45,12 +46,19 @@ export function Today() {
   const [assigning, setAssigning] = useState<Booking | null>(null);
   const all = (q.data?.results ?? []).filter((b) => b.stage !== "cancelled");
   const by = (stage: string) => all.filter((b) => b.stage === stage).length;
+  // Every number is the count of the very list its card opens (same question, same answer).
+  const todayN = useCount(viewQuery("today", new Date()));
+  const doneToday = useCount({ ...viewQuery("today", new Date()), stage: "completed" });
+  const unassigned = useCount(viewQuery("unassigned"));
+  const inProgress = useCount(viewQuery("in_progress"));
+  const uploading = useCount(viewQuery("uploading"));
+  const cancelled = (q.data?.results ?? []).length - all.length;
   const kpis = [
-    { label: "Today's jobs", value: q.data ? all.length : "—", sub: `${by("completed")} done · ${by("in_progress")} in progress`, to: "/bookings" },
-    { label: "Unassigned", value: by("draft"), sub: all.find((b) => b.stage === "draft") ? `next at ${fmtTime(all.find((b) => b.stage === "draft")!.answers.inspection_time)}` : "all assigned", to: "/bookings?view=unassigned", tone: by("draft") ? "warn" : "" },
-    { label: "In progress", value: by("in_progress"), sub: "experts on site", to: "/bookings?view=in_progress", tone: "info" },
-    { label: "Uploading", value: by("submitted"), sub: "files still coming", to: "/bookings?view=uploading" },
-    { label: "Completed", value: by("completed"), sub: "today", to: "/bookings?view=completed", tone: "ok" },
+    { label: "Today's jobs", value: todayN ?? "—", sub: `${by("completed")} done · ${by("in_progress")} in progress${cancelled ? ` · ${cancelled} cancelled` : ""}`, to: "/bookings?all=1" },
+    { label: "Unassigned", value: unassigned ?? "—", sub: unassigned ? "on any day, need an expert" : "all assigned", to: "/bookings?view=unassigned&all=1", tone: unassigned ? "warn" : "" },
+    { label: "In progress", value: inProgress ?? "—", sub: "experts on site", to: "/bookings?view=in_progress&all=1", tone: "info" },
+    { label: "Uploading", value: uploading ?? "—", sub: "files still coming", to: "/bookings?view=uploading&all=1" },
+    { label: "Completed", value: doneToday ?? "—", sub: "today", to: "/bookings?view=today&stage=completed&all=1", tone: "ok" },
     { label: "Needs you", value: needs.length, sub: needs.length ? "open the list" : "all clear", to: "/problems", tone: needs.length ? "bad" : "" },
   ];
   const starts = all.map((b) => toHours(b.answers.inspection_time)).filter((x): x is number => x !== null);

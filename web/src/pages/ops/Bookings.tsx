@@ -44,12 +44,13 @@ const VIEWS: { id: View; label: string; counted?: boolean }[] = [
 ];
 const BOARD: string[] = ["draft", "assigned", "in_progress", "submitted", "completed"];
 
-function useCount(view: View) {
-  return useQuery({ queryKey: ["bookings-page", "count", view], staleTime: 30_000, queryFn: () => api<Page<Booking>>("bookings", { query: viewQuery(view) }) }).data?.count;
+/** How many bookings a query matches: the same question the list asks, so a number and its list agree. */
+export function useCount(query: Record<string, string>) {
+  return useQuery({ queryKey: ["bookings-page", "count", query], staleTime: 30_000, queryFn: () => api<Page<Booking>>("bookings", { query }) }).data?.count;
 }
 
-function ViewTab({ v, on, onPick }: { v: (typeof VIEWS)[number]; on: boolean; onPick: () => void }) {
-  const n = useCount(v.id);
+function ViewTab({ v, on, onPick, own }: { v: (typeof VIEWS)[number]; on: boolean; onPick: () => void; own: Record<string, string> }) {
+  const n = useCount({ ...own, ...viewQuery(v.id) });          // the person's filters apply to the numbers too
   return (
     <button role="tab" aria-selected={on} className={on ? "on" : ""} onClick={onPick}>
       {v.label}{v.counted && n !== undefined && <span className={`count-pill${v.id === "unassigned" && n > 0 ? " warn" : ""}`}>{n}</span>}
@@ -66,7 +67,8 @@ export function Bookings() {
   const [sp, setSp] = useSearchParams();
   const view = (sp.get("view") as View | null) ?? (sp.get("search") ? "all" : "today");
   const key = `vayu:bookings:${me?.id}`;
-  const [f, setF] = useState<Filters>(() => ({ ...loadJSON<Filters>(key, EMPTY), search: sp.get("search") ?? "" }));
+  // Arriving from a number on Today (?all=1) shows exactly what that number counted: saved filters are set aside.
+  const [f, setF] = useState<Filters>(() => ({ ...(sp.get("all") ? EMPTY : loadJSON<Filters>(key, EMPTY)), search: sp.get("search") ?? "", ...(sp.get("stage") ? { stage: sp.get("stage")! } : {}) }));
   const [layout, setLayout] = useState<"list" | "board">(() => loadJSON(`${key}:layout`, "list"));
   const [page, setPage] = useState(1);
   const [acting, setActing] = useState<{ kind: "assign" | "reschedule" | "cancel"; b: Booking } | null>(null);
@@ -116,7 +118,7 @@ export function Bookings() {
         {can("bookings.create") && <button className="primary" onClick={() => nav("/booking/new")}><Plus size={15} aria-hidden /> New booking</button>}
       </PageHeader>
       <div className="tabs" role="tablist" aria-label="Views">
-        {VIEWS.map((v) => <ViewTab key={v.id} v={v} on={view === v.id} onPick={() => pick(v.id)} />)}
+        {VIEWS.map((v) => <ViewTab key={v.id} v={v} on={view === v.id} onPick={() => pick(v.id)} own={own} />)}
       </div>
       <div className="filters">
         <input aria-label="Filter bookings" className="filter-search" placeholder="Filter: booking ID, customer, phone, chassis" value={f.search} onChange={(e) => { set({ search: e.target.value }); if (e.target.value && view !== "all") setSp({ view: "all" }); }} />
