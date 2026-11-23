@@ -333,3 +333,41 @@ def test_a_library_field_with_a_different_type_is_a_conflict(admin, staging):
     r = admin.post("/api/v1/promote/import", bundle, format="json")
     assert r.status_code == 400 and any("Library field 'tyre_depth'" in c
                                         for c in r.json()["conflicts"])
+
+
+# ---------------------------------------------------------------- review: bundles are validated like edits
+
+def _first_field(b):
+    return b["version"]["pages"][0]["sections"][0]["fields"][0]
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda b: b["version"]["pages"][0].__setitem__("access", {"nobody": {"draft": "edit"}}),
+    lambda b: b["version"]["pages"][0]["sections"][0].__setitem__("show_if", {"a": 1, "b": 2}),
+    lambda b: _first_field(b).__setitem__("type", "bogus"),
+    lambda b: _first_field(b).__setitem__("config", {"x": 1}),
+    lambda b: b["version"].__setitem__("rating_config", {"nope": 1}),
+    lambda b: b["form"].__setitem__("key", "Bad Key!"),
+    lambda b: _first_field(b).pop("access"),
+    lambda b: b["pdf_template"].__setitem__("definition", {"junk": 1}),
+    lambda b: b["version"]["checks"].append({"rule": {"a": 1, "b": 2}, "message": "m",
+                                             "fields": [], "order": 9}),
+    lambda b: b["library"][0].__setitem__("definition", {"type": "bogus"}),
+])
+def test_invalid_content_is_refused_and_nothing_is_written(admin, staging, mutate):
+    bundle = export(admin, staging["version"])
+    wipe()
+    mutate(bundle)
+    r = admin.post("/api/v1/promote/import", bundle, format="json")
+    assert r.status_code == 400 and r.json()["code"] == "INVALID_BUNDLE", r.content
+    assert not Form.objects.exists() and not MasterList.objects.exists()
+    assert not LibraryItem.objects.exists()
+
+
+def test_a_bundle_cannot_make_a_field_a_system_field(admin, staging):
+    bundle = export(admin, staging["version"])
+    wipe()
+    _first_field(bundle)["is_system"] = True
+    _first_field(bundle)["key"] = "not_a_system_key"
+    assert admin.post("/api/v1/promote/import", bundle, format="json").status_code == 201
+    assert not Field.objects.filter(key="not_a_system_key", is_system=True).exists()

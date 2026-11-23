@@ -10,9 +10,13 @@ from django.db.models import Max
 from apps.accounts import audit
 from apps.core.errors import CodedError
 
+from .access import validate_access
+from .fieldtypes import validate_config as validate_field_config
 from .models import (
+    KEY_RE,
     Field,
     FieldKey,
+    FieldType,
     Form,
     FormKind,
     FormVersion,
@@ -24,6 +28,8 @@ from .models import (
     VersionCheck,
     VersionStatus,
 )
+from .rules import rule_syntax_issues
+from .system_fields import SYSTEM_FIELDS
 
 SCHEMA = 1
 
@@ -124,6 +130,47 @@ def _check_shape(b: Any) -> None:
                               "from the bundle.")
 
 
+def _check_content(b: dict) -> None:
+    """Same checks as the normal editing paths: a bundle is not a way around them."""
+    from apps.reports.definition import validate_definition
+    from apps.scoring.engine import validate_config as validate_rating
+
+    def rules(*pairs):
+        for name, rule in pairs:
+            if rule_syntax_issues(rule, name):
+                raise ValueError(f"{name} is not a valid rule.")
+
+    def field(f):
+        if f["type"] not in FieldType.values or not KEY_RE.fullmatch(f["key"]):
+            raise ValueError(f"Field '{f['key']}' has an invalid key or type.")
+        validate_field_config(f["type"], f["config"])
+        validate_access(f["access"])
+        rules(("show_if", f["show_if"]), ("required_if", f["required_if"]))
+
+    try:
+        if not KEY_RE.fullmatch(b["form"]["key"]):
+            raise ValueError("Invalid form key.")
+        validate_rating(b["version"].get("rating_config", {}))
+        for p in b["version"]["pages"]:
+            validate_access(p["access"])
+            rules(("page.show_if", p["show_if"]))
+            for s in p["sections"]:
+                validate_access(s["access"])
+                rules(("section.show_if", s["show_if"]))
+                for f in s["fields"]:
+                    field(f)
+        for c in b["version"].get("checks", []):
+            rules(("check.rule", c["rule"]))
+        for it in b["library"]:
+            if it["kind"] == "field":
+                field({"key": "lib_field", "access": {}, "show_if": None, "required_if": None,
+                       "config": {}, **it["definition"]})
+        if b.get("pdf_template"):
+            validate_definition(b["pdf_template"]["definition"])
+    except (ValueError, KeyError, TypeError, AttributeError) as e:
+        raise bad("INVALID_BUNDLE", f"The bundle's content is not valid: {e}") from e
+
+
 def _conflicts(b: dict, existing: Form | None) -> list[str]:
     out: list[str] = []
     form = b["form"]
@@ -192,12 +239,18 @@ def _import_library(b: dict, notes: list[str]) -> tuple[dict, int]:
     return items, created
 
 
+def _is_system(version, f: dict) -> bool:
+    """Only the platform's own fields are system fields; a bundle cannot grant that flag."""
+    return any(f["key"] == spec["key"] for spec in SYSTEM_FIELDS[version.form.kind])
+
+
 def _build_field(version, section, f: dict, items: dict) -> None:
     link = f.get("library")
     Field(version=version, section=section, key=f["key"], label=f["label"],
           helper_text=f["helper_text"], type=f["type"], config=f["config"],
           required=f["required"], required_if=f["required_if"], show_if=f["show_if"],
-          visible=f["visible"], order=f["order"], access=f["access"], is_system=f["is_system"],
+          visible=f["visible"], order=f["order"], access=f["access"],
+          is_system=_is_system(version, f),
           library_item=items[("field", link["key"])] if link else None,
           library_revision=link["revision"] if link else None).save()
 
@@ -222,6 +275,7 @@ def import_bundle(actor, b: Any) -> dict:
     with transaction.atomic():
         list_items = _import_lists(b, notes)
         items, library_created = _import_library(b, notes)
+        _check_content(b)       # needs the lists; failure rolls all back
         form = existing or Form.objects.create(
             key=form_data["key"], kind=form_data["kind"], name=form_data["name"],
             inspection_type=form_data["inspection_type"])
