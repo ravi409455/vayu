@@ -451,3 +451,11 @@ def test_a_save_may_rename_the_item_at_the_same_time(admin):
         "name": "Tread depth item"}, format="json")
     assert r.status_code == 200 and r.json()["name"] == "Tread depth item"
     assert LibraryRevision.objects.get(item_id=item["id"], revision=2).name == "Tread depth item"
+
+
+def test_the_list_says_how_many_forms_use_each_item(admin, make_form, tree):
+    item = lib_field(admin)
+    linked_form(admin, make_form, tree, "pdi", item)
+    linked_form(admin, make_form, tree, "ev", item)
+    rows = admin.get("/api/v1/library").json()["results"]
+    assert rows[0]["used_in"] == 2

@@ -24,7 +24,7 @@ export function ContainerEditor({ kind, item, pages, choices, formKind, parentAc
     <div>
       <div className="insp-head"><div className="grow"><h2>{item.title}</h2><p className="muted small">{kind === "page" ? "Page" : "Section"}</p></div></div>
       <Tabs value={pane} onChange={setPane} tabs={[{ id: "settings", label: "Settings" }, { id: "logic", label: "Logic" }, { id: "access", label: "Access" }]} />
-      <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      <fieldset disabled={readOnly || locked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         {pane === "settings" && (
           <>
             <Field label="Title"><input value={d.title} disabled={locked} onChange={(e) => setD({ ...d, title: e.target.value })} /></Field>
@@ -38,7 +38,6 @@ export function ContainerEditor({ kind, item, pages, choices, formKind, parentAc
               <Field label="Move to page"><select aria-label="Move to page" value={section.page} onChange={(e) => onMove(Number(e.target.value))}>
                 {pages.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}</select></Field>
             )}
-            {section && <LibraryBox kind="section" id={section.id} library={section.library} readOnly={readOnly} onDone={onChanged} />}
           </>
         )}
         {pane === "logic" && (
@@ -54,6 +53,7 @@ export function ContainerEditor({ kind, item, pages, choices, formKind, parentAc
           </>
         )}
       </fieldset>
+      {section && <LibraryBox kind="section" id={section.id} library={section.library} readOnly={readOnly} onDone={onChanged} />}
       {!readOnly && (
         <div className="insp-foot">
           <button className="primary" disabled={!dirty} onClick={() => onSave(d)}>Save {kind}</button>

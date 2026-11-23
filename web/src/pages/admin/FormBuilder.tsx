@@ -1,4 +1,4 @@
-import { Download, Eye, Rocket, Trash2, Users } from "lucide-react";
+import { Copy, Download, Eye, Rocket, Trash2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
@@ -15,6 +15,7 @@ import { Checks, Ratings } from "./builder/FormExtras";
 import { ContainerEditor } from "./builder/Inspector";
 import { LibraryBox } from "./builder/LibraryBox";
 import { PreviewDialog } from "./builder/PreviewDialog";
+import { DuplicateDialog } from "./ImportForm";
 import { FieldEditor, type FieldDraft } from "./FieldEditor";
 
 type Issue = { path: string; code: string; message: string };
@@ -39,6 +40,7 @@ export function FormBuilder() {
   const [adding, setAdding] = useState<null | { kind: "field" | "section" | "page"; id: number }>(null);
   const [preview, setPreview] = useState(false);
   const [discard, setDiscard] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const [visibility, setVisibility] = useState<string[] | null>(null);
   const [confirmDel, setConfirmDel] = useState<null | (() => void)>(null);
   const edit = can("forms.edit") && draft;
@@ -124,6 +126,7 @@ export function FormBuilder() {
         {f.type === "custom" && <button onClick={() => setVisibility(f.submission_roles ?? ["expert", "ops"])}><Users size={15} aria-hidden /> Who sees submissions</button>}
         {f.published_version && can("forms.promote") && (
           <a className="btn" href={`/api/v1/promote/export?version=${f.published_version.id}`} download><Download size={15} aria-hidden /> Export</a>)}
+        {f.type === "custom" && can("forms.edit") && <button onClick={() => setDuplicating(true)}><Copy size={15} aria-hidden /> Duplicate as new form</button>}
         {draft && can("forms.edit") && <button className="danger" onClick={() => setDiscard(true)}><Trash2 size={15} aria-hidden /> Discard draft</button>}
         {!draft && can("forms.edit") && <button className="primary" onClick={startDraft}>Start a new draft</button>}
         {draft && can("forms.publish") && <button className="primary" onClick={checkAndPublish}><Rocket size={15} aria-hidden /> Check &amp; publish…</button>}
@@ -144,7 +147,7 @@ export function FormBuilder() {
               <aside className="card inspector" aria-label="Settings">
                 {!found && <div className="empty-state"><p><strong>Nothing selected</strong></p><p>Click a page, a section or a field to change its settings. Drag the grips to reorder.</p></div>}
                 {found?.field && (
-                  <FieldEditor field={found.field} choices={choices} readOnly={!edit} kind={f.type}
+                  <FieldEditor field={found.field} choices={choices} readOnly={!edit || !!found.field.library || found.section!.locked} kind={f.type}
                     parents={{ section: found.section!.access, page: found.page.access }}
                     lists={(lists.data ?? []).map((l) => ({ key: l.key, name: l.name }))} categories={categories}
                     onSave={(d: FieldDraft) => run(() => api(`fields/${found.field!.id}`, { method: "PATCH", body: d }), "Saved.")}
@@ -154,8 +157,8 @@ export function FormBuilder() {
                         <div className="field"><span className="label-row"><label htmlFor="move-field">Move to section</label></span>
                           <select id="move-field" value={found.section!.id} onChange={(e) => move({ kind: "field", id: found.field!.id }, { kind: "section", id: Number(e.target.value) })}>
                             {sectionOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></div>)}
-                      <LibraryBox kind="field" id={found.field.id} library={found.field.library} readOnly={!edit} onDone={reload} />
-                    </>} />
+                    </>}
+                    outside={<LibraryBox kind="field" id={found.field.id} library={found.field.library} readOnly={!edit} onDone={reload} />} />
                 )}
                 {found?.section && !found.field && (
                   <ContainerEditor kind="section" item={found.section} pages={pages} choices={choices} formKind={f.type} parentAccess={found.page.access} readOnly={!edit}
@@ -199,6 +202,7 @@ export function FormBuilder() {
           ))}
         </Modal>
       )}
+      {duplicating && <DuplicateDialog form={f} onClose={() => setDuplicating(false)} />}
       {preview && v && <PreviewDialog tree={{ pages, checks: v.checks }} kind={ns} onClose={() => setPreview(false)} />}
       {discard && (
         <Confirm title="Discard this draft?" danger confirmLabel="Discard draft" onCancel={() => setDiscard(false)} onConfirm={() => discardDraft.mutate()}>

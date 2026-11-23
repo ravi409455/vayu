@@ -13,10 +13,10 @@ type Pane = "settings" | "logic" | "access";
 
 /** The settings of one field, in three tabs. The key and type are fixed once a field exists
  *  (answers, PDFs and integrations rely on them); everything else can change while the version is a draft. */
-export function FieldEditor({ field, choices, lists, categories, onSave, onDelete, readOnly, kind = "inspection", parents, extra }: {
+export function FieldEditor({ field, choices, lists, categories, onSave, onDelete, readOnly, kind = "inspection", parents, extra, outside }: {
   field: FormField; choices: FieldChoice[]; lists: { key: string; name: string }[]; categories: string[];
   onSave: (d: FieldDraft) => void; onDelete: () => void; readOnly: boolean; kind?: string;
-  parents?: { section?: Access; page?: Access }; extra?: React.ReactNode;
+  parents?: { section?: Access; page?: Access }; extra?: React.ReactNode; outside?: React.ReactNode;
 }) {
   const [d, setD] = useState<FieldDraft>(field);
   const [pane, setPane] = useState<Pane>("settings");
@@ -134,6 +134,7 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
         )}
         {pane === "access" && <AccessEditor value={d.access} onChange={(a) => set({ access: a })} kind={kind} ftype={field.type} parents={parents} />}
       </fieldset>
+      {outside}
       {!readOnly && (
         <div className="insp-foot">
           <button className="primary" disabled={!dirty} onClick={() => onSave(d)}>Save field</button>

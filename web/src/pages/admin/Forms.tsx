@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../api/client";
@@ -7,6 +7,7 @@ import type { FormSummary, FormType } from "../../api/types";
 import { useAuth } from "../../auth";
 import { Field, Modal, Pill, useToast, PageHeader } from "../../ui/kit";
 import { slugKey } from "../../lib/fieldTypes";
+import { ImportDialog } from "./ImportForm";
 
 export const TYPE_LABEL: Record<FormType, string> = { booking: "Booking form", start: "Start form (check-in)", end: "End form (wrap-up)", custom: "Custom form" };
 const SYSTEM_ORDER: FormType[] = ["booking", "start", "end"];
@@ -25,6 +26,8 @@ export function Forms() {
   const refresh = useRefresh();
   const forms = useList<FormSummary>("forms", "forms");
   const [open, setOpen] = useState(false);
+  const file = useRef<HTMLInputElement>(null);
+  const [bundle, setBundle] = useState<unknown>(null);
   const [f, setF] = useState({ name: "", key: "" });
   const [keyEdited, setKeyEdited] = useState(false);     // until the Admin types a key, it follows the name
   const create = useMutation({
@@ -38,7 +41,14 @@ export function Forms() {
     <>
       <PageHeader title="Forms" subtitle="Three forms that are always there, and a custom form for each kind of inspection."
         tip="The booking form is what Ops fill to create a booking. The start form is the check-in an expert does before the inspection (location, time, selfie); the end form is the wrap-up after it (payment). Custom forms (PDI, Used car, EV...) are the inspections themselves; each can choose whether it begins with the start form and ends with the end form.">
+        {can("forms.promote") && <button onClick={() => file.current?.click()}>Import</button>}
         {can("forms.edit") && <button className="primary" onClick={() => setOpen(true)}>New custom form</button>}</PageHeader>
+      <input ref={file} type="file" accept="application/json,.json" aria-label="Form file to import" hidden onChange={async (e) => {
+        const f = e.target.files?.[0];
+        e.target.value = "";
+        if (!f) return;
+        try { setBundle(JSON.parse(await f.text())); } catch { fail(new Error("That file is not a Vayu form file.")); }
+      }} />
       <h2>System forms</h2>
       <table aria-label="System forms">
         <thead><tr><th>Name</th><th>What it is</th><th>Live version</th><th>Draft</th></tr></thead>
@@ -58,6 +68,7 @@ export function Forms() {
           </tr>))}</tbody>
       </table>
       {custom.length === 0 && <p className="muted pad">No custom forms yet. Create one for each kind of inspection.</p>}
+      {bundle !== null && <ImportDialog bundle={bundle as never} forms={forms.data ?? []} onClose={() => setBundle(null)} />}
       {open && (
         <Modal title="New custom form" onClose={() => setOpen(false)}
           actions={<><button onClick={() => setOpen(false)}>Cancel</button><button className="primary" disabled={!f.name || !f.key} onClick={() => create.mutate()}>Create</button></>}>

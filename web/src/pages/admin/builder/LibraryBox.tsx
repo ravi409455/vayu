@@ -1,5 +1,6 @@
 import { Link2, Unlink } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../../../api/client";
 import { Field, InfoTip, useToast } from "../../../ui/kit";
 
@@ -20,7 +21,8 @@ export function LibraryBox({ kind, id, library, readOnly, onDone }: {
         <InfoTip>The library holds reusable {kind}s. A linked {kind} stays in sync with the library: when someone improves the library item you see “update available” and accept it. Copies are independent.</InfoTip></div>
       {library ? (
         <>
-          <p className="small">Linked to a library item (revision {library.revision}). {library.update_available ? "A newer revision is available." : "Up to date."}</p>
+          <p className="small">Linked to a library item (revision {library.revision}). {library.update_available ? "A newer revision is available." : "Up to date."} Its settings come from the library and cannot be changed here.</p>
+          <p className="small"><Link to={`/library/${library.item}`}>Edit in library</Link></p>
           {!readOnly && <div className="bar">
             {library.update_available && <button className="primary" onClick={() => call("accept-update", {}, "Updated from the library.")}>Accept update</button>}
             <button onClick={() => call("unlink", {}, "Unlinked: now a plain copy.")}><Unlink size={14} aria-hidden /> Unlink</button></div>}

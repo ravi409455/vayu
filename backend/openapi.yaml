@@ -3089,12 +3089,16 @@ components:
           minimum: 0
         archived:
           type: boolean
+        used_in:
+          type: string
+          readOnly: true
       required:
       - definition
       - id
       - key
       - kind
       - name
+      - used_in
     LibraryItemDetail:
       type: object
       properties:
@@ -3116,6 +3120,9 @@ components:
           minimum: 0
         archived:
           type: boolean
+        used_in:
+          type: string
+          readOnly: true
         usages:
           type: string
           readOnly: true
@@ -3126,6 +3133,7 @@ components:
       - kind
       - name
       - usages
+      - used_in
     MasterList:
       type: object
       properties:
@@ -3539,6 +3547,9 @@ components:
           minimum: 0
         archived:
           type: boolean
+        used_in:
+          type: string
+          readOnly: true
     PatchedMasterList:
       type: object
       properties:

@@ -285,9 +285,15 @@ class VersionTreeSerializer(serializers.ModelSerializer):
 
 
 class LibraryItemSerializer(serializers.ModelSerializer):
+    used_in = serializers.SerializerMethodField()
+
     class Meta:
         model = LibraryItem
-        fields = ["id", "kind", "key", "name", "definition", "revision", "archived"]
+        fields = ["id", "kind", "key", "name", "definition", "revision", "archived", "used_in"]
+
+    def get_used_in(self, obj):
+        """How many forms use this item."""
+        return len({u["form"] for u in library.usages(obj)})
 
 
 class LibraryItemDetailSerializer(LibraryItemSerializer):
