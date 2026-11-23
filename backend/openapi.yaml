@@ -1,0 +1,3597 @@
+openapi: 3.0.3
+info:
+  title: Vayu API
+  version: 1.0.0
+paths:
+  /api/v1/api-keys:
+    get:
+      operationId: api_keys_retrieve
+      tags:
+      - api-keys
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: api_keys_create
+      tags:
+      - api-keys
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/api-keys/{id}:
+    get:
+      operationId: api_keys_retrieve_2
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api-keys
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: api_keys_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api-keys
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/api-keys/{id}/revoke:
+    post:
+      operationId: api_keys_revoke_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api-keys
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/audit-logs:
+    get:
+      operationId: audit_logs_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - audit-logs
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAuditLogList'
+          description: ''
+  /api/v1/audit-logs/{id}:
+    get:
+      operationId: audit_logs_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this audit log.
+        required: true
+      tags:
+      - audit-logs
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLog'
+          description: ''
+  /api/v1/auth/change-password:
+    post:
+      operationId: auth_change_password_create
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/login:
+    post:
+      operationId: auth_login_create
+      tags:
+      - auth
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/logout:
+    post:
+      operationId: auth_logout_create
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/me:
+    get:
+      operationId: auth_me_retrieve
+      tags:
+      - auth
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/refresh:
+    post:
+      operationId: auth_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCheckedRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeviceCheckedRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeviceCheckedRefresh'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCheckedRefresh'
+          description: ''
+  /api/v1/bookings:
+    get:
+      operationId: bookings_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBookingList'
+          description: ''
+    post:
+      operationId: bookings_create
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Booking'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+  /api/v1/bookings/{id}:
+    get:
+      operationId: bookings_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+    patch:
+      operationId: bookings_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBooking'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBooking'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBooking'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+    delete:
+      operationId: bookings_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this booking.
+        required: true
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/bookings/{id}/assign:
+    post:
+      operationId: bookings_assign_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this booking.
+        required: true
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Booking'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+  /api/v1/bookings/{id}/cancel:
+    post:
+      operationId: bookings_cancel_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this booking.
+        required: true
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Booking'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+  /api/v1/bookings/{id}/change-type:
+    post:
+      operationId: bookings_change_type_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Booking'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+  /api/v1/bookings/{id}/force-release:
+    post:
+      operationId: bookings_force_release_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this booking.
+        required: true
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Booking'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+  /api/v1/bookings/{id}/inspections:
+    get:
+      operationId: bookings_inspections_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+  /api/v1/bookings/{id}/media-zip:
+    post:
+      operationId: bookings_media_zip_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/bookings/{id}/report:
+    get:
+      operationId: bookings_report_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/bookings/{id}/report/regenerate:
+    post:
+      operationId: bookings_report_regenerate_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/bookings/{id}/reschedule:
+    post:
+      operationId: bookings_reschedule_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this booking.
+        required: true
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Booking'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+  /api/v1/bookings/{id}/resolve-conflict:
+    post:
+      operationId: bookings_resolve_conflict_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Booking'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+  /api/v1/bookings/{id}/start:
+    post:
+      operationId: bookings_start_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Booking'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+  /api/v1/bookings/{id}/submit:
+    post:
+      operationId: bookings_submit_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Booking'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+  /api/v1/checks/{id}:
+    get:
+      operationId: checks_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - checks
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Check'
+          description: ''
+    patch:
+      operationId: checks_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - checks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCheck'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCheck'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCheck'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Check'
+          description: ''
+    delete:
+      operationId: checks_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - checks
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/dashboards/volume:
+    get:
+      operationId: dashboards_volume_retrieve
+      tags:
+      - dashboards
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/deliveries/{id}/resend:
+    post:
+      operationId: deliveries_resend_create
+      description: 'Manual re-send: a new delivery of the same event, built from today''s
+        data.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - deliveries
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/ext/bookings:
+    get:
+      operationId: ext_bookings_retrieve
+      tags:
+      - ext
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: ext_bookings_create
+      tags:
+      - ext
+      responses:
+        '200':
+          description: No response body
+  /api/v1/ext/bookings/{ref}:
+    get:
+      operationId: ext_bookings_retrieve_2
+      parameters:
+      - in: path
+        name: ref
+        schema:
+          type: string
+        required: true
+      tags:
+      - ext
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: ext_bookings_partial_update
+      parameters:
+      - in: path
+        name: ref
+        schema:
+          type: string
+        required: true
+      tags:
+      - ext
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: ext_bookings_destroy
+      parameters:
+      - in: path
+        name: ref
+        schema:
+          type: string
+        required: true
+      tags:
+      - ext
+      responses:
+        '204':
+          description: No response body
+  /api/v1/ext/bookings/{ref}/inspection:
+    get:
+      operationId: ext_bookings_inspection_retrieve
+      parameters:
+      - in: path
+        name: ref
+        schema:
+          type: string
+        required: true
+      tags:
+      - ext
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: ext_bookings_inspection_partial_update
+      parameters:
+      - in: path
+        name: ref
+        schema:
+          type: string
+        required: true
+      tags:
+      - ext
+      responses:
+        '200':
+          description: No response body
+  /api/v1/ext/bookings/bulk:
+    post:
+      operationId: ext_bookings_bulk_create
+      description: PATCH many bookings. Each item succeeds or fails on its own; the
+        reply lists both.
+      tags:
+      - ext
+      responses:
+        '200':
+          description: No response body
+  /api/v1/fields/{id}:
+    get:
+      operationId: fields_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - fields
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Field'
+          description: ''
+    patch:
+      operationId: fields_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - fields
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedField'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedField'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedField'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Field'
+          description: ''
+    delete:
+      operationId: fields_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - fields
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/fields/{id}/accept-update:
+    post:
+      operationId: fields_accept_update_create
+      description: accept-update / unlink / save-to-library on a field or a section.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - fields
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/fields/{id}/save-to-library:
+    post:
+      operationId: fields_save_to_library_create
+      description: accept-update / unlink / save-to-library on a field or a section.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - fields
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/fields/{id}/unlink:
+    post:
+      operationId: fields_unlink_create
+      description: accept-update / unlink / save-to-library on a field or a section.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - fields
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/form-versions/{id}:
+    get:
+      operationId: form_versions_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - form-versions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionTree'
+          description: ''
+  /api/v1/form-versions/{id}/checks:
+    post:
+      operationId: form_versions_checks_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - form-versions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Check'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Check'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Check'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Check'
+          description: ''
+  /api/v1/form-versions/{id}/pages:
+    post:
+      operationId: form_versions_pages_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - form-versions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Page'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Page'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Page'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+          description: ''
+  /api/v1/form-versions/{id}/publish:
+    post:
+      operationId: form_versions_publish_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - form-versions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/_PublishBody'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/_PublishBody'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/_PublishBody'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/_PublishBody'
+          description: ''
+  /api/v1/form-versions/{id}/rating-config:
+    patch:
+      operationId: form_versions_rating_config_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - form-versions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/form-versions/{id}/validate:
+    post:
+      operationId: form_versions_validate_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - form-versions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/forms:
+    get:
+      operationId: forms_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - forms
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFormList'
+          description: ''
+    post:
+      operationId: forms_create
+      tags:
+      - forms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Form'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Form'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Form'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Form'
+          description: ''
+  /api/v1/forms/{id}:
+    get:
+      operationId: forms_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this form.
+        required: true
+      tags:
+      - forms
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Form'
+          description: ''
+    patch:
+      operationId: forms_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this form.
+        required: true
+      tags:
+      - forms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedForm'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedForm'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedForm'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Form'
+          description: ''
+  /api/v1/forms/{id}/drafts:
+    post:
+      operationId: forms_drafts_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this form.
+        required: true
+      tags:
+      - forms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Form'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Form'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Form'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Form'
+          description: ''
+  /api/v1/health:
+    get:
+      operationId: health_retrieve
+      tags:
+      - health
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/inspections/{id}:
+    get:
+      operationId: inspections_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - inspections
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inspection'
+          description: ''
+    patch:
+      operationId: inspections_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - inspections
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedInspection'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedInspection'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedInspection'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inspection'
+          description: ''
+  /api/v1/inspections/{id}/overrides:
+    patch:
+      operationId: inspections_overrides_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - inspections
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedInspection'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedInspection'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedInspection'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inspection'
+          description: ''
+  /api/v1/integrations:
+    get:
+      operationId: integrations_retrieve
+      tags:
+      - integrations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: integrations_create
+      tags:
+      - integrations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/integrations/{id}:
+    get:
+      operationId: integrations_retrieve_2
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - integrations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: integrations_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - integrations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: integrations_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - integrations
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/integrations/{id}/deliveries:
+    get:
+      operationId: integrations_deliveries_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - integrations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/integrations/{id}/rotate-secret:
+    post:
+      operationId: integrations_rotate_secret_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - integrations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/integrations/{id}/test:
+    post:
+      operationId: integrations_test_create
+      description: 'The test button: sends a `test.ping` now, with a real booking''s
+        data if there is one.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - integrations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/integrations/events:
+    get:
+      operationId: integrations_events_retrieve
+      tags:
+      - integrations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/integrations/render-sample:
+    post:
+      operationId: integrations_render_sample_create
+      description: 'Template preview for the editor: render an unsaved template with
+        a real booking.'
+      tags:
+      - integrations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/library:
+    get:
+      operationId: library_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - library
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLibraryItemList'
+          description: ''
+    post:
+      operationId: library_create
+      tags:
+      - library
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LibraryItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LibraryItem'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LibraryItem'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryItem'
+          description: ''
+  /api/v1/library/{id}:
+    get:
+      operationId: library_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this library item.
+        required: true
+      tags:
+      - library
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryItemDetail'
+          description: ''
+    patch:
+      operationId: library_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this library item.
+        required: true
+      tags:
+      - library
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedLibraryItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedLibraryItem'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedLibraryItem'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryItem'
+          description: ''
+    delete:
+      operationId: library_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this library item.
+        required: true
+      tags:
+      - library
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/master-list-items/{id}:
+    patch:
+      operationId: master_list_items_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this master list item.
+        required: true
+      tags:
+      - master-list-items
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMasterListItem'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMasterListItem'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMasterListItem'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MasterListItem'
+          description: ''
+  /api/v1/master-lists:
+    get:
+      operationId: master_lists_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - master-lists
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMasterListList'
+          description: ''
+    post:
+      operationId: master_lists_create
+      tags:
+      - master-lists
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MasterList'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MasterList'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MasterList'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MasterList'
+          description: ''
+  /api/v1/master-lists/{key}:
+    get:
+      operationId: master_lists_retrieve
+      parameters:
+      - in: path
+        name: key
+        schema:
+          type: string
+        required: true
+      tags:
+      - master-lists
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MasterList'
+          description: ''
+    patch:
+      operationId: master_lists_partial_update
+      parameters:
+      - in: path
+        name: key
+        schema:
+          type: string
+        required: true
+      tags:
+      - master-lists
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMasterList'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMasterList'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMasterList'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MasterList'
+          description: ''
+  /api/v1/master-lists/{key}/items:
+    get:
+      operationId: master_lists_items_retrieve
+      parameters:
+      - in: path
+        name: key
+        schema:
+          type: string
+        required: true
+      tags:
+      - master-lists
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MasterList'
+          description: ''
+    post:
+      operationId: master_lists_items_create
+      parameters:
+      - in: path
+        name: key
+        schema:
+          type: string
+        required: true
+      tags:
+      - master-lists
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MasterList'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MasterList'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MasterList'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MasterList'
+          description: ''
+  /api/v1/media/{id}:
+    get:
+      operationId: media_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - media
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: media_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - media
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/media/{id}/complete:
+    post:
+      operationId: media_complete_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - media
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/media/{id}/url:
+    get:
+      operationId: media_url_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - media
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/media/initiate:
+    post:
+      operationId: media_initiate_create
+      tags:
+      - media
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/pages/{id}:
+    get:
+      operationId: pages_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pages
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+          description: ''
+    patch:
+      operationId: pages_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pages
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPage'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPage'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPage'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page'
+          description: ''
+    delete:
+      operationId: pages_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pages
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/pages/{id}/sections:
+    post:
+      operationId: pages_sections_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pages
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Section'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Section'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Section'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Section'
+          description: ''
+  /api/v1/pages/{id}/sections/from-library:
+    post:
+      operationId: pages_sections_from_library_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pages
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/_FromLibraryBody'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/_FromLibraryBody'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/_FromLibraryBody'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/_FromLibraryBody'
+          description: ''
+  /api/v1/pdf-template-versions/{id}:
+    get:
+      operationId: pdf_template_versions_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pdf-template-versions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: pdf_template_versions_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pdf-template-versions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/pdf-template-versions/{id}/preview:
+    post:
+      operationId: pdf_template_versions_preview_create
+      description: Render this template version with a real booking's data (nothing
+        is stored).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pdf-template-versions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/pdf-template-versions/{id}/publish:
+    post:
+      operationId: pdf_template_versions_publish_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pdf-template-versions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/pdf-templates:
+    get:
+      operationId: pdf_templates_retrieve
+      tags:
+      - pdf-templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: pdf_templates_create
+      tags:
+      - pdf-templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/pdf-templates/{id}/drafts:
+    post:
+      operationId: pdf_templates_drafts_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pdf-templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/permissions:
+    get:
+      operationId: permissions_retrieve
+      tags:
+      - permissions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/problems/reports:
+    get:
+      operationId: problems_reports_retrieve
+      tags:
+      - problems
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/problems/stuck-uploads:
+    get:
+      operationId: problems_stuck_uploads_retrieve
+      tags:
+      - problems
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/promote/export:
+    get:
+      operationId: promote_export_retrieve
+      tags:
+      - promote
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/promote/import:
+    post:
+      operationId: promote_import_create
+      tags:
+      - promote
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/roles:
+    get:
+      operationId: roles_retrieve
+      tags:
+      - roles
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/roles/{role}/permissions:
+    put:
+      operationId: roles_permissions_update
+      parameters:
+      - in: path
+        name: role
+        schema:
+          type: string
+        required: true
+      tags:
+      - roles
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/sections/{id}:
+    get:
+      operationId: sections_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sections
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Section'
+          description: ''
+    patch:
+      operationId: sections_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sections
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSection'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSection'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSection'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Section'
+          description: ''
+    delete:
+      operationId: sections_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sections
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/sections/{id}/accept-update:
+    post:
+      operationId: sections_accept_update_create
+      description: accept-update / unlink / save-to-library on a field or a section.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sections
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/sections/{id}/fields:
+    post:
+      operationId: sections_fields_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sections
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Field'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Field'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Field'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Field'
+          description: ''
+  /api/v1/sections/{id}/fields/from-library:
+    post:
+      operationId: sections_fields_from_library_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sections
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/_FromLibraryBody'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/_FromLibraryBody'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/_FromLibraryBody'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/_FromLibraryBody'
+          description: ''
+  /api/v1/sections/{id}/save-to-library:
+    post:
+      operationId: sections_save_to_library_create
+      description: accept-update / unlink / save-to-library on a field or a section.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sections
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/sections/{id}/unlink:
+    post:
+      operationId: sections_unlink_create
+      description: accept-update / unlink / save-to-library on a field or a section.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sections
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/users:
+    get:
+      operationId: users_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - users
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserList'
+          description: ''
+    post:
+      operationId: users_create
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}:
+    get:
+      operationId: users_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - users
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    patch:
+      operationId: users_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/reset-password:
+    post:
+      operationId: users_reset_password_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/sign-out-devices:
+    post:
+      operationId: users_sign_out_devices_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/verify/{token}:
+    get:
+      operationId: verify_retrieve
+      description: |-
+        Public page behind the QR code: proves a report is genuine. Summary only, no customer
+        data.
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - verify
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/zips/{token}:
+    get:
+      operationId: zips_retrieve
+      description: 'Opened from a link in Slack: no login, the signed token is the
+        credential.'
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - zips
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+components:
+  schemas:
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        actor:
+          type: integer
+          nullable: true
+        actor_username:
+          type: string
+          readOnly: true
+        action:
+          type: string
+          maxLength: 64
+        target_type:
+          type: string
+          maxLength: 64
+        target_id:
+          type: string
+          maxLength: 64
+        summary:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - action
+      - actor_username
+      - id
+      - summary
+      - target_id
+      - target_type
+    Booking:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        booking_id:
+          type: string
+          maxLength: 64
+        stage:
+          $ref: '#/components/schemas/StageEnum'
+        ops_status:
+          type: string
+          maxLength: 64
+        inspection_type:
+          type: string
+          maxLength: 64
+        assigned_expert:
+          type: integer
+          nullable: true
+        answers: {}
+        row_version:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancel_reason:
+          type: string
+          maxLength: 64
+        released_by:
+          type: string
+        released_draft_expected:
+          type: boolean
+        last_edited_by:
+          type: string
+        last_edited_at:
+          type: string
+          format: date-time
+          nullable: true
+        reschedules:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reschedule'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+        conflict:
+          type: string
+          maxLength: 40
+        alerts: {}
+        withdrawn_expert:
+          type: integer
+          nullable: true
+      required:
+      - booking_id
+      - id
+      - reschedules
+    Check:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        rule: {}
+        message:
+          type: string
+          maxLength: 300
+        fields: {}
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+      required:
+      - id
+      - message
+      - rule
+    DeviceCheckedRefresh:
+      type: object
+      properties:
+        refresh:
+          type: string
+        access:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - refresh
+    Field:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        section:
+          type: integer
+        key:
+          type: string
+          maxLength: 63
+        label:
+          type: string
+          maxLength: 200
+        helper_text:
+          type: string
+        type:
+          $ref: '#/components/schemas/TypeEnum'
+        config: {}
+        required:
+          type: boolean
+        required_if:
+          nullable: true
+        show_if:
+          nullable: true
+        visible:
+          type: boolean
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        is_system:
+          type: boolean
+          readOnly: true
+        access: {}
+        library:
+          type: string
+          readOnly: true
+        locked:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - is_system
+      - key
+      - label
+      - library
+      - locked
+      - type
+    Form:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        key:
+          type: string
+          maxLength: 64
+        kind:
+          $ref: '#/components/schemas/FormKindEnum'
+        name:
+          type: string
+          maxLength: 150
+        is_active:
+          type: boolean
+          default: true
+        inspection_type:
+          type: string
+          default: ''
+          maxLength: 64
+        draft_version:
+          type: string
+          readOnly: true
+        published_version:
+          type: string
+          readOnly: true
+      required:
+      - draft_version
+      - id
+      - key
+      - kind
+      - name
+      - published_version
+    FormKindEnum:
+      enum:
+      - booking
+      - ops
+      - inspection
+      type: string
+      description: |-
+        * `booking` - Booking
+        * `ops` - Ops
+        * `inspection` - Inspection
+    Inspection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        booking:
+          type: string
+          format: uuid
+        expert:
+          type: integer
+        status:
+          type: string
+          maxLength: 10
+        answers: {}
+        scores: {}
+        overrides: {}
+        row_version:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        form_version:
+          type: integer
+        submitted_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_edited_by:
+          type: string
+        last_edited_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - booking
+      - expert
+      - form_version
+      - id
+    Kind4e2Enum:
+      enum:
+      - field
+      - section
+      type: string
+      description: |-
+        * `field` - Field
+        * `section` - Section
+    LibraryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          $ref: '#/components/schemas/Kind4e2Enum'
+        key:
+          type: string
+          maxLength: 64
+        name:
+          type: string
+          maxLength: 200
+        definition: {}
+        revision:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        archived:
+          type: boolean
+      required:
+      - definition
+      - id
+      - key
+      - kind
+      - name
+    LibraryItemDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          $ref: '#/components/schemas/Kind4e2Enum'
+        key:
+          type: string
+          maxLength: 64
+        name:
+          type: string
+          maxLength: 200
+        definition: {}
+        revision:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        archived:
+          type: boolean
+        usages:
+          type: string
+          readOnly: true
+      required:
+      - definition
+      - id
+      - key
+      - kind
+      - name
+      - usages
+    MasterList:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        key:
+          type: string
+          maxLength: 64
+        name:
+          type: string
+          maxLength: 150
+      required:
+      - id
+      - key
+      - name
+    MasterListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        key:
+          type: string
+          maxLength: 64
+        label:
+          type: string
+          maxLength: 200
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        archived:
+          type: boolean
+      required:
+      - id
+      - key
+      - label
+    Page:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        visible:
+          type: boolean
+        show_if:
+          nullable: true
+        access: {}
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/Section'
+          readOnly: true
+      required:
+      - id
+      - sections
+      - title
+    PaginatedAuditLogList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+    PaginatedBookingList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Booking'
+    PaginatedFormList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Form'
+    PaginatedLibraryItemList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LibraryItem'
+    PaginatedMasterListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MasterList'
+    PaginatedUserList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+    PatchedBooking:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        booking_id:
+          type: string
+          maxLength: 64
+        stage:
+          $ref: '#/components/schemas/StageEnum'
+        ops_status:
+          type: string
+          maxLength: 64
+        inspection_type:
+          type: string
+          maxLength: 64
+        assigned_expert:
+          type: integer
+          nullable: true
+        answers: {}
+        row_version:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancel_reason:
+          type: string
+          maxLength: 64
+        released_by:
+          type: string
+        released_draft_expected:
+          type: boolean
+        last_edited_by:
+          type: string
+        last_edited_at:
+          type: string
+          format: date-time
+          nullable: true
+        reschedules:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reschedule'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+        conflict:
+          type: string
+          maxLength: 40
+        alerts: {}
+        withdrawn_expert:
+          type: integer
+          nullable: true
+    PatchedCheck:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        rule: {}
+        message:
+          type: string
+          maxLength: 300
+        fields: {}
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+    PatchedField:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        section:
+          type: integer
+        key:
+          type: string
+          maxLength: 63
+        label:
+          type: string
+          maxLength: 200
+        helper_text:
+          type: string
+        type:
+          $ref: '#/components/schemas/TypeEnum'
+        config: {}
+        required:
+          type: boolean
+        required_if:
+          nullable: true
+        show_if:
+          nullable: true
+        visible:
+          type: boolean
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        is_system:
+          type: boolean
+          readOnly: true
+        access: {}
+        library:
+          type: string
+          readOnly: true
+        locked:
+          type: string
+          readOnly: true
+    PatchedForm:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        key:
+          type: string
+          maxLength: 64
+        kind:
+          $ref: '#/components/schemas/FormKindEnum'
+        name:
+          type: string
+          maxLength: 150
+        is_active:
+          type: boolean
+          default: true
+        inspection_type:
+          type: string
+          default: ''
+          maxLength: 64
+        draft_version:
+          type: string
+          readOnly: true
+        published_version:
+          type: string
+          readOnly: true
+    PatchedInspection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        booking:
+          type: string
+          format: uuid
+        expert:
+          type: integer
+        status:
+          type: string
+          maxLength: 10
+        answers: {}
+        scores: {}
+        overrides: {}
+        row_version:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        form_version:
+          type: integer
+        submitted_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_edited_by:
+          type: string
+        last_edited_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    PatchedLibraryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          $ref: '#/components/schemas/Kind4e2Enum'
+        key:
+          type: string
+          maxLength: 64
+        name:
+          type: string
+          maxLength: 200
+        definition: {}
+        revision:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        archived:
+          type: boolean
+    PatchedMasterList:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        key:
+          type: string
+          maxLength: 64
+        name:
+          type: string
+          maxLength: 150
+    PatchedMasterListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        key:
+          type: string
+          maxLength: 64
+        label:
+          type: string
+          maxLength: 200
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        archived:
+          type: boolean
+    PatchedPage:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        visible:
+          type: boolean
+        show_if:
+          nullable: true
+        access: {}
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/Section'
+          readOnly: true
+    PatchedSection:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        page:
+          type: integer
+        title:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        visible:
+          type: boolean
+        show_if:
+          nullable: true
+        access: {}
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/Field'
+          readOnly: true
+        library:
+          type: string
+          readOnly: true
+        locked:
+          type: string
+          readOnly: true
+    PatchedUser:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+          maxLength: 150
+        name:
+          type: string
+          maxLength: 150
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_active:
+          type: boolean
+        must_change_password:
+          type: boolean
+          readOnly: true
+        locked_until:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        password:
+          type: string
+          writeOnly: true
+    Reschedule:
+      type: object
+      properties:
+        old_date:
+          type: string
+          maxLength: 10
+        old_time:
+          type: string
+          maxLength: 5
+        new_date:
+          type: string
+          maxLength: 10
+        new_time:
+          type: string
+          maxLength: 5
+        reason:
+          type: string
+          maxLength: 64
+        by:
+          type: string
+        at:
+          type: string
+          format: date-time
+      required:
+      - by
+      - new_date
+      - new_time
+      - old_date
+      - old_time
+      - reason
+    RoleEnum:
+      enum:
+      - expert
+      - ops
+      - admin
+      type: string
+      description: |-
+        * `expert` - Expert
+        * `ops` - Ops
+        * `admin` - Admin
+    Section:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        page:
+          type: integer
+        title:
+          type: string
+          maxLength: 150
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        visible:
+          type: boolean
+        show_if:
+          nullable: true
+        access: {}
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/Field'
+          readOnly: true
+        library:
+          type: string
+          readOnly: true
+        locked:
+          type: string
+          readOnly: true
+      required:
+      - fields
+      - id
+      - library
+      - locked
+      - title
+    StageEnum:
+      enum:
+      - draft
+      - assigned
+      - in_progress
+      - submitted
+      - completed
+      - cancelled
+      type: string
+      description: |-
+        * `draft` - draft
+        * `assigned` - assigned
+        * `in_progress` - in_progress
+        * `submitted` - submitted
+        * `completed` - completed
+        * `cancelled` - cancelled
+    StatusEnum:
+      enum:
+      - draft
+      - published
+      type: string
+      description: |-
+        * `draft` - Draft
+        * `published` - Published
+    TypeEnum:
+      enum:
+      - single_choice
+      - multi_choice
+      - yes_no
+      - master_list
+      - user_picker
+      - short_text
+      - long_text
+      - number
+      - currency
+      - phone
+      - date
+      - time
+      - datetime
+      - gps
+      - photo
+      - video
+      - file
+      - signature
+      - derived
+      - rating
+      type: string
+      description: |-
+        * `single_choice` - Single Choice
+        * `multi_choice` - Multi Choice
+        * `yes_no` - Yes No
+        * `master_list` - Master List
+        * `user_picker` - User Picker
+        * `short_text` - Short Text
+        * `long_text` - Long Text
+        * `number` - Number
+        * `currency` - Currency
+        * `phone` - Phone
+        * `date` - Date
+        * `time` - Time
+        * `datetime` - Datetime
+        * `gps` - Gps
+        * `photo` - Photo
+        * `video` - Video
+        * `file` - File
+        * `signature` - Signature
+        * `derived` - Derived
+        * `rating` - Rating
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+          maxLength: 150
+        name:
+          type: string
+          maxLength: 150
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_active:
+          type: boolean
+        must_change_password:
+          type: boolean
+          readOnly: true
+        locked_until:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - id
+      - locked_until
+      - must_change_password
+      - role
+      - username
+    VersionTree:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        form:
+          type: integer
+        number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusEnum'
+          default: draft
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        row_version:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        pages:
+          type: string
+          readOnly: true
+        checks:
+          type: string
+          readOnly: true
+        rating_config: {}
+      required:
+      - checks
+      - form
+      - id
+      - number
+      - pages
+    _FromLibraryBody:
+      type: object
+      properties:
+        library_item:
+          type: integer
+        link:
+          type: boolean
+          default: true
+      required:
+      - library_item
+    _PublishBody:
+      type: object
+      properties:
+        row_version:
+          type: integer
+      required:
+      - row_version
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid

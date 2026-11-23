@@ -99,3 +99,18 @@ test("J3c: a refresh keeps the draft and the pending upload carries on", async (
   await page.getByRole("button", { name: "Back" }).click();
   await expect(page.getByLabel("Odometer")).toHaveValue("77");     // same answer
 });
+
+test("J3d: an upload that could not reach storage resumes by itself after a refresh", async ({ page }) => {
+  const id = await assignedJob("J3-4");
+  await signIn(page, "expert");
+  await page.goto(`/jobs/${id}`);
+  await page.getByRole("button", { name: "Start inspection" }).click();
+  await page.route("http://localhost:5055/**", (r) => r.abort());               // storage is unreachable
+  await page.getByTestId("camera-selfie").setInputFiles(file("selfie.jpg"));
+  await expect(page.getByTestId("media-item")).toHaveCount(1);
+  await expect(page.getByText("Will retry")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/files 0\/1 sent/)).toBeVisible();
+  await page.unroute("http://localhost:5055/**");                               // back online
+  await page.reload();                                                          // the page forgot everything in memory
+  await expect(page.getByText(/files 1\/1 sent/)).toBeVisible({ timeout: 30_000 });
+});

@@ -306,7 +306,7 @@ def resolve_conflict(actor, b: Booking, inspection_id) -> Booking:
     keep = b.inspections.filter(pk=inspection_id, status="submitted").first()
     if keep is None:
         raise err("INVALID_INSPECTION", "Choose one of this booking's submitted inspections.")
-    b.inspections.exclude(pk=keep.pk).update(status="superseded")
+    b.inspections.filter(status="submitted").exclude(pk=keep.pk).update(status="superseded")
     changes: dict = {"conflict": [b.conflict, ""],
                      "inspection": [None, str(keep.id)]}
     if b.assigned_expert_id != keep.expert_id:

@@ -149,3 +149,33 @@ def test_the_problem_queue_filters_conflicts_and_rejected_type_changes(conflict)
         alerts=[{"code": "TYPE_CHANGE_REJECTED", "detail": "x", "at": "2026-01-01T00:00:00Z"}])
     assert ienv.ops.get("/api/v1/bookings?problem=type_change").json()["count"] == 1
     assert ienv.ops.get("/api/v1/bookings?problem=nope").status_code == 400
+
+
+def test_resolving_needs_the_assign_permission_too(conflict):
+    from apps.accounts.catalog import DEFAULTS
+    from apps.bookings.models import Booking, Inspection
+
+    ienv, booking, _ = conflict
+    perms = {k: v for k, v in DEFAULTS["ops"].items() if k != "bookings.assign"}
+    assert ienv.admin.put("/api/v1/roles/ops/permissions", {"permissions": perms},
+                          format="json").status_code == 200
+    keep = Inspection.objects.get(booking_id=booking["id"], expert=ienv.expert_user)
+    r = ienv.ops.post(f"/api/v1/bookings/{booking['id']}/resolve-conflict",
+                      {"inspection": str(keep.id)}, format="json")
+    assert r.status_code == 403
+    assert Booking.objects.get(pk=booking["id"]).conflict == "TWO_EXPERTS"        # untouched
+
+
+def test_resolving_leaves_other_experts_drafts_alone(conflict):
+    import uuid
+
+    from apps.bookings.models import Inspection
+
+    ienv, booking, b_user = conflict
+    third = ienv.make_user("expert", username="cee")
+    keep = Inspection.objects.get(booking_id=booking["id"], expert=ienv.expert_user)
+    draft = Inspection.objects.create(booking_id=booking["id"], expert=third,
+                                      form_version=keep.form_version, client_start_uuid=uuid.uuid4())
+    assert ienv.ops.post(f"/api/v1/bookings/{booking['id']}/resolve-conflict",
+                         {"inspection": str(keep.id)}, format="json").status_code == 200
+    assert Inspection.objects.get(pk=draft.pk).status == "draft"                   # not set aside

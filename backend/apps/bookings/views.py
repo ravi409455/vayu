@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import generics, mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from apps.accounts.permissions import perm, scope_for
@@ -120,6 +120,9 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
 
     @action(detail=True, methods=["post"], url_path="resolve-conflict")
     def resolve_conflict(self, request, pk=None):
+        # keeping the other expert's inspection hands them the booking: that is an assignment too
+        if scope_for(request.user, "bookings.assign", request) is None:
+            raise PermissionDenied("Resolving a conflict also needs the assign permission.")
         return self._out(submissions.resolve_conflict(request.user, self.get_object(),
                                                       request.data.get("inspection")))
 

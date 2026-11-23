@@ -100,3 +100,57 @@ def test_the_report_info_carries_the_public_verify_link(report_env, settings):
     got = env.ops.get(f"/api/v1/bookings/{b['id']}/report").json()
     token = Report.objects.get(booking_id=b["id"]).token
     assert got["verify_url"] == f"{settings.VERIFY_BASE_URL}/{token}"
+
+
+# ---------------------------------------------------------------- the benchmark command
+
+def test_the_pdf_benchmark_renders_cleans_up_and_reports(renv):
+    from io import StringIO
+
+    from django.core.management import call_command
+
+    from apps.bookings.models import Booking
+    from apps.media import storage
+    from apps.media.models import MediaAsset
+
+    out = StringIO()
+    call_command("bench_pdf", photos=3, form="pdi", field="photo_a", stdout=out)
+    assert "3 photos ->" in out.getvalue() and "PASS" in out.getvalue()
+    assert not Booking.objects.filter(booking_id__startswith="BENCH").exists()      # rolled back
+    assert not MediaAsset.objects.exists()
+    assert not storage.exists("bench/x")
+
+
+def test_the_pdf_benchmark_needs_a_published_form_and_a_user(db):
+    from django.core.management import call_command
+    from django.core.management.base import CommandError
+
+    with pytest.raises(CommandError, match="published inspection form"):
+        call_command("bench_pdf", photos=1, form="nope")
+
+
+def test_the_pdf_benchmark_needs_someone_to_own_the_data(renv):
+    from unittest import mock
+
+    from django.core.management import call_command
+    from django.core.management.base import CommandError
+
+    nobody = mock.MagicMock()
+    nobody.objects.filter.return_value.first.return_value = None
+    nobody.objects.first.return_value = None
+    with mock.patch("apps.reports.management.commands.bench_pdf.User", nobody), \
+            pytest.raises(CommandError, match="no users"):
+        call_command("bench_pdf", photos=1, form="pdi", field="photo_a")
+
+
+def test_the_slow_verdict_is_reported(renv, monkeypatch):
+    from io import StringIO
+
+    from django.core.management import call_command
+
+    from apps.reports.management.commands import bench_pdf
+
+    monkeypatch.setattr(bench_pdf, "LIMIT_SECONDS", -1)
+    out = StringIO()
+    call_command("bench_pdf", photos=1, form="pdi", field="photo_a", stdout=out)
+    assert "TOO SLOW" in out.getvalue()

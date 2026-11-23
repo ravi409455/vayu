@@ -16,6 +16,7 @@ jobs:
     defaults: {run: {working-directory: backend}}
     steps:
       - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
       - uses: astral-sh/setup-uv@v5
       - name: PDF system libraries (WeasyPrint)
         run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b fonts-dejavu-core
@@ -24,6 +25,19 @@ jobs:
       - run: uv run mypy apps vayu
       - run: uv run python manage.py makemigrations --check --dry-run
         env: {DJANGO_SETTINGS_MODULE: vayu.settings.test}
+      - name: the committed OpenAPI file matches the code
+        run: |
+          uv run python manage.py spectacular --file /tmp/openapi.yaml
+          diff openapi.yaml /tmp/openapi.yaml || (echo "Run: cd backend && DJANGO_SETTINGS_MODULE=vayu.settings.test uv run python manage.py spectacular --file openapi.yaml" && exit 1)
+        env: {DJANGO_SETTINGS_MODULE: vayu.settings.test}
+      - name: no breaking API changes (oasdiff)
+        run: |
+          base=$([ "${{ github.event_name }}" = "pull_request" ] && echo "origin/${{ github.base_ref }}" || echo "HEAD~1")
+          if git cat-file -e "$base:backend/openapi.yaml" 2>/dev/null; then
+            git show "$base:backend/openapi.yaml" > /tmp/base.yaml
+            cp openapi.yaml /tmp/new.yaml
+            docker run --rm -v /tmp:/t tufin/oasdiff breaking /t/base.yaml /t/new.yaml --fail-on ERR
+          else echo "no earlier schema to compare with"; fi
       - run: uv run pytest --cov --cov-fail-under=85
       - name: critical areas need 100% branch coverage
         run: |
@@ -45,6 +59,36 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run build
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: {POSTGRES_USER: vayu, POSTGRES_PASSWORD: vayu, POSTGRES_DB: vayu_e2e}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U vayu" --health-interval 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json}
+      - name: PDF system libraries (WeasyPrint)
+        run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b fonts-dejavu-core
+      - run: uv sync --frozen
+        working-directory: backend
+      - run: npm ci
+        working-directory: web
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - name: browser journeys J1-J5 (real API, fake S3, real browser)
+        run: npx playwright test
+        working-directory: web
+        env: {CI: "true"}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: {name: playwright-report, path: "web/test-results", retention-days: 7}
   docker:
     runs-on: ubuntu-latest
     steps:
