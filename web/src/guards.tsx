@@ -7,13 +7,13 @@ export function homeFor(role: string): string {
   return role === "expert" ? "/jobs" : role === "ops" ? "/board" : "/forms";
 }
 
-export function RequireAuth({ children, perm, not }: { children: ReactNode; perm?: string; not?: string }) {
+export function RequireAuth({ children, perm, not, adminOnly }: { children: ReactNode; perm?: string; not?: string; adminOnly?: boolean }) {
   const { me, loading, can } = useAuth();
   const loc = useLocation();
   if (loading) return <p className="muted pad">Loading…</p>;
   if (!me) return <Navigate to="/login" state={{ from: loc.pathname }} replace />;
   if (me.must_change_password && loc.pathname !== "/change-password")
     return <Navigate to="/change-password" replace />;
-  if ((perm && !can(perm)) || (not && me.role === not)) return <Navigate to={homeFor(me.role)} replace />;
+  if ((perm && !can(perm)) || (not && me.role === not) || (adminOnly && me.role !== "admin")) return <Navigate to={homeFor(me.role)} replace />;
   return <>{children}</>;
 }

@@ -41,7 +41,7 @@ CATALOG: list[Perm] = [
     Perm("bookings.reschedule", "Bookings", "Reschedule bookings"),
     Perm("bookings.cancel", "Bookings", "Cancel bookings"),
     Perm("bookings.force_release", "Bookings", "Force-release a started job"),
-    Perm("bookings.delete", "Bookings", "Delete bookings"),
+    Perm("bookings.delete", "Bookings", "Delete bookings (non-Admins: only unassigned drafts)"),
     Perm("submissions.view", "Inspections", "View inspection submissions", scoped=True),
     Perm("submissions.fill", "Inspections", "Fill in and submit inspections", scoped=True),
     Perm("submissions.edit", "Inspections", "Edit submitted inspection data", scoped=True),
@@ -63,7 +63,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
     "ops": {k: "all" for k in (
         "users.view", "users.sign_out_devices", "forms.view", "library.view",
         "bookings.view", "bookings.create", "bookings.edit", "bookings.assign",
-        "bookings.reschedule", "bookings.cancel", "bookings.force_release",
+        "bookings.reschedule", "bookings.cancel", "bookings.force_release", "bookings.delete",
         "submissions.view", "submissions.edit", "media.manage", "media.download",
         "payments.verify", "ratings.override", "reports.view", "reports.regenerate",
         "dashboards.view", "dashboards.export")},

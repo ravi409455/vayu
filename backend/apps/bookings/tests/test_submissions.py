@@ -7,6 +7,7 @@ from rest_framework.exceptions import APIException
 from apps.accounts.models import Role
 from apps.bookings.models import Booking, Inspection
 from apps.core import events
+from apps.media.tests.conftest import s3  # noqa: F401  (in-memory S3 for the selfie)
 
 from .conftest import create
 
@@ -405,7 +406,9 @@ def test_the_experts_form_drops_sections_and_pages_with_nothing_to_show(ienv, bo
     assert len(form["pages"]) == 1
 
 
-def test_an_ops_form_is_validated_stored_and_access_controlled(ienv, booking):
+def test_an_ops_form_is_validated_stored_and_access_controlled(ienv, booking, settings):
+    from apps.media.tests.conftest import jpeg, upload
+
     admin = ienv.admin
     ops_form = admin.post("/api/v1/forms", {"key": "ops", "kind": "ops", "name": "Ops"},
                           format="json").json()
@@ -418,13 +421,18 @@ def test_an_ops_form_is_validated_stored_and_access_controlled(ienv, booking):
     publish_form(admin, ops_form["id"])
     assign(ienv, booking)
     start(ienv.expert, booking)
+    selfie = upload(ienv.expert, booking["id"], jpeg(), settings, field_key="selfie").json()["id"]
+    system = {"taking_payment": False, "selfie": [selfie]}
     bad = submit(ienv.expert, booking, {**GOOD, "ops": {}})
-    assert bad.status_code == 400 and bad.json()["errors"] == {"pay_mode": "required"}
+    assert bad.status_code == 400
+    assert set(bad.json()["errors"]) == {"pay_mode", "selfie", "taking_payment"}   # all required
     sneaky = submit(ienv.expert, booking, {**GOOD, "ops": {"pay_mode": "upi", "ops_only": "x"}})
     assert sneaky.status_code == 403 and sneaky.json()["keys"] == ["ops_only"]
-    ok = submit(ienv.expert, booking, {**GOOD, "ops": {"pay_mode": "upi"}})
+    ok = submit(ienv.expert, booking, {**GOOD, "ops": {"pay_mode": "upi", **system}})
     assert ok.status_code == 200
-    assert ok.json()["inspection"]["answers"]["ops"] == {"pay_mode": "upi"}
+    stored = ok.json()["inspection"]["answers"]["ops"]
+    assert stored.pop("checkin_time").endswith("+05:30")          # stamped by the server
+    assert stored == {"pay_mode": "upi", **system}
 
 
 def test_an_ops_edit_that_changes_nothing_keeps_the_row_version(started):

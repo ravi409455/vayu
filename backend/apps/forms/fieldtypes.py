@@ -12,6 +12,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import regex
+from django.core.exceptions import ValidationError
 
 from .models import LIST_KEY_RE, MasterList, MasterListItem
 
@@ -26,8 +27,9 @@ DEFAULT_MAX_COUNT = {"photo": 10, "video": 3, "file": 5}
 ALLOWED_KEYS: dict[str, set[str]] = {
     "single_choice": {"options", "display"},
     "multi_choice": {"options", "display"},
-    "yes_no": set(), "currency": set(), "phone": set(), "date": set(), "time": set(),
-    "datetime": set(), "gps": set(), "signature": set(),
+    "yes_no": set(), "currency": set(), "phone": set(), "signature": set(),
+    "date": {"auto"}, "time": {"auto"}, "datetime": {"auto"}, "gps": {"auto"},
+    "image": {"asset", "name"},
     "master_list": {"list"},
     "user_picker": {"role"},
     "short_text": {"max_length", "pattern", "pattern_message"},
@@ -69,6 +71,8 @@ def validate_config(type: str, config: Any) -> None:
     unknown = set(config) - ALLOWED_KEYS[type]
     if unknown:
         raise ConfigError(f"Unknown config keys for {type}: {', '.join(sorted(unknown))}.")
+    if "auto" in config and not isinstance(config["auto"], bool):
+        raise ConfigError("auto must be true or false.")
 
     if type in ("single_choice", "multi_choice"):
         options = config.get("options")
@@ -115,6 +119,16 @@ def validate_config(type: str, config: Any) -> None:
         if "min" in config and "max" in config and config["min"] > config["max"]:
             raise ConfigError("min must not be greater than max.")
         _int_in(config, "decimals", 0, 4)
+    elif type == "image":
+        from .models import FormAsset
+
+        asset = config.get("asset")
+        try:
+            known = isinstance(asset, str) and FormAsset.objects.filter(pk=asset).exists()
+        except ValidationError:                       # not a UUID at all
+            known = False
+        if not known:
+            raise ConfigError("Upload the picture first: asset must be an uploaded image.")
     elif type in ("photo", "video"):
         if config.get("capture", "both") not in CAPTURE_MODES:
             raise ConfigError(f"capture must be one of {', '.join(CAPTURE_MODES)}.")
@@ -203,6 +217,8 @@ def _options(field) -> dict[str, dict]:
 def clean_answer(field, value: Any, *, override: bool = False) -> Any:
     """Validate one non-empty answer and return its stored form. Raises AnswerError."""
     t, c = field.type, field.config
+    if t == "image":
+        raise AnswerError("NOT_ANSWERABLE", "This field only shows a picture; it takes no answer.")
     if t in ("derived", "rating"):
         if not override:
             raise AnswerError("SYSTEM_FILLED", "This value is filled by the system.")

@@ -1,6 +1,6 @@
 import {
   AlertTriangle, BarChart3, BookOpen, Briefcase, ChevronsLeft, ChevronsRight, FileOutput, FileText, KeyRound,
-  LayoutDashboard, List, LogOut, Rocket, ScrollText, Search, Shield, UserCog, Users, Webhook, type LucideIcon,
+  ClipboardList, LayoutDashboard, List, LogOut, Rocket, ScrollText, Shield, UserCog, Users, Webhook, type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
@@ -11,9 +11,9 @@ type Item = { to: string; label: string; icon: LucideIcon; perm?: string; role?:
 const GROUPS: { title: string; items: Item[] }[] = [
   { title: "Work", items: [
     { to: "/jobs", label: "My jobs", icon: Briefcase, role: "expert" },
+    { to: "/bookings", label: "Bookings", icon: ClipboardList, perm: "bookings.view", role: "ops-admin" },
     { to: "/board", label: "Job board", icon: LayoutDashboard, perm: "bookings.view", role: "ops-admin" },
     { to: "/problems", label: "Problems", icon: AlertTriangle, perm: "bookings.view", role: "ops-admin" },
-    { to: "/search", label: "Search", icon: Search, perm: "bookings.view", role: "ops-admin" },
     { to: "/dashboards", label: "Dashboards", icon: BarChart3, perm: "dashboards.view" },
   ] },
   { title: "Templates", items: [
@@ -32,13 +32,18 @@ const GROUPS: { title: string; items: Item[] }[] = [
   ] },
 ];
 
-/** Which links a person sees: by permission, and a few by role (the expert has a different home). */
+/** Ops only ever work with bookings: these four pages and nothing else (no templates, lists,
+ *  users or settings), whatever permissions their role has behind the scenes. */
+export const OPS_PAGES = ["/bookings", "/board", "/problems", "/dashboards"];
+
+/** Which links a person sees: by permission, and by role (the expert has a different home). */
 export function visibleNav(role: string, can: (p: string) => boolean): { title: string; items: Item[] }[] {
   return GROUPS.map((g) => ({
     title: g.title,
     items: g.items.filter((i) => {
       if (i.role === "expert") return role === "expert";
       if (i.role === "ops-admin" && role === "expert") return false;
+      if (role === "ops" && !OPS_PAGES.includes(i.to)) return false;
       return !i.perm || can(i.perm);
     }),
   })).filter((g) => g.items.length > 0);

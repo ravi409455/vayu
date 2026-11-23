@@ -99,7 +99,8 @@ def wipe():
 def test_export_is_self_contained_and_has_no_environment_ids(admin, staging):
     b = export(admin, staging["version"])
     assert b["schema"] == 1 and b["form"] == {"key": "pdi", "kind": "inspection", "name": "PDI",
-                                              "inspection_type": ""}
+                                              "inspection_type": "",
+                                              "submission_roles": ["expert", "ops"]}
     sections = {s["title"]: s for p in b["version"]["pages"] for s in p["sections"]}
     assert set(sections) == {"Section 1", "Brakes"}
     fields = {f["key"]: f for f in sections["Section 1"]["fields"]}

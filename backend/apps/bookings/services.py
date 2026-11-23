@@ -221,6 +221,10 @@ def change_type(actor, b: Booking, inspection_type) -> Booking:
 
 
 def delete(actor, b: Booking) -> None:
+    """Admin may delete any booking; anyone else only a draft that nobody has worked on."""
+    if actor.role != Role.ADMIN and (b.stage != "draft" or b.inspections.exists()):
+        raise err("DELETE_NOT_ALLOWED", "Only an Admin can delete a booking that has been "
+                  "assigned or worked on. Cancel it instead.", 403)
     audit.record(actor, "booking.delete", "booking", b.id, f"Deleted booking {b.booking_id}")
     events.emit("booking.deleted", booking=str(b.id), booking_id=b.booking_id)
     b.delete()

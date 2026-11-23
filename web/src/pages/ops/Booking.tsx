@@ -301,7 +301,7 @@ function HistoryTab({ booking, insps, experts, onResolved }: { booking: Booking;
   );
 }
 
-function Actions({ kind, booking, experts, onClose, onDone, fail }: { kind: "assign" | "reschedule" | "cancel" | "release" | "type"; booking: Booking; experts: User[]; onClose: () => void; onDone: () => void; fail: (e: unknown) => void }) {
+export function Actions({ kind, booking, experts, onClose, onDone, fail }: { kind: "assign" | "reschedule" | "cancel" | "release" | "type"; booking: Booking; experts: User[]; onClose: () => void; onDone: () => void; fail: (e: unknown) => void }) {
   const [expert, setExpert] = useState(String(booking.assigned_expert ?? ""));
   const [date, setDate] = useState(String(booking.answers.inspection_date ?? ""));
   const [time, setTime] = useState(String(booking.answers.inspection_time ?? ""));

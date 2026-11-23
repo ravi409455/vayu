@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FormField, FormPage } from "../api/types";
-import { evaluateTree, missingFields, splitOpsPages, submittable, visiblePages } from "./formSpec";
+import { evaluateTree, missingFields, pageGaps, splitOpsPages, submittable, visiblePages } from "./formSpec";
 
 let n = 0;
 const field = (key: string, over: Partial<FormField> = {}): FormField => ({
@@ -69,19 +69,21 @@ describe("what gets sent", () => {
 });
 
 describe("check-in and wrap-up pages", () => {
-  const mk = (t: string) => page(t, [field("x")]);
-  it("splits by title", () => {
-    const { checkIn, wrapUp } = splitOpsPages([mk("Check-in"), mk("Wrap-up")]);
-    expect([checkIn.map((p) => p.title), wrapUp.map((p) => p.title)]).toEqual([["Check-in"], ["Wrap-up"]]);
+  const mk = (t: string, slot?: string) => ({ ...page(t, [field("x")]), slot });
+  it("splits by the slot the Admin chose, not by the title", () => {
+    const { checkIn, wrapUp } = splitOpsPages([mk("Wrap-up", "after"), mk("Welcome", "before"), mk("Pay", "after")]);
+    expect([checkIn.map((p) => p.title), wrapUp.map((p) => p.title)]).toEqual([["Welcome"], ["Wrap-up", "Pay"]]);
   });
-  it("with no 'check' title the first of several is the check-in; a single page is the wrap-up", () => {
-    expect(splitOpsPages([mk("Start"), mk("Pay")]).checkIn.map((p) => p.title)).toEqual(["Start"]);
-    expect(splitOpsPages([mk("Payment")])).toEqual({ checkIn: [expect.anything()].slice(0, 0), wrapUp: [expect.objectContaining({ title: "Payment" })] });
+  it("a page without a slot is part of the wrap-up", () => {
+    expect(splitOpsPages([mk("Old")])).toEqual({ checkIn: [], wrapUp: [expect.objectContaining({ title: "Old" })] });
     expect(splitOpsPages([])).toEqual({ checkIn: [], wrapUp: [] });
   });
+  it("picture fields never count as missing and are never sent", () => {
+    const t = { pages: [page("P", [field("qr", { type: "image", required: true, config: { asset: "x" } }), field("a")])], checks: [] };
+    expect(missingFields("ops", t, {})).toEqual([]);
+    expect(submittable("ops", t, { qr: "something", a: "y" })).toEqual({ a: "y" });
+  });
 });
-
-import { pageGaps } from "./formSpec";
 
 describe("page gate", () => {
   it("lists only what is missing on that page", () => {

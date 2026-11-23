@@ -13,6 +13,7 @@ from apps.accounts.permissions import perm, scope_for
 from apps.bookings.models import Booking
 from apps.bookings.services import err
 from apps.bookings.submissions import own_filter
+from apps.forms.access import may_see_submissions
 from apps.forms.models import Form, MasterListItem
 from apps.media import storage
 
@@ -104,7 +105,12 @@ def _report_booking(request, pk) -> Booking:
     qs = Booking.objects.all()
     if scope_for(request.user, "reports.view", request) == "own":
         qs = qs.filter(own_filter(request.user)).distinct()
-    return get_object_or_404(qs, pk=pk)
+    b = get_object_or_404(qs, pk=pk)
+    form = Form.objects.filter(kind="inspection", is_active=True,
+                               inspection_type=b.inspection_type).first()
+    if form is not None and not may_see_submissions(request.user, form):
+        raise err("NOT_FOUND", "Booking not found.", 404)      # the report is the submission
+    return b
 
 
 class BookingReport(APIView):

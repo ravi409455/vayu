@@ -27,10 +27,13 @@ def test_new_form_gets_a_draft_v1(make_form, tree):
     t = tree(form["draft_version"]["id"])
     assert t["status"] == "draft" and t["number"] == 1
 
+OPS_SYSTEM_KEYS = {"checkin_gps", "checkin_time", "selfie", "taking_payment", "payment_mode",
+                   "payment_amount", "payment_screenshot"}
+
 
 @pytest.mark.parametrize(
     "kind,expected",
-    [("booking", BOOKING_SYSTEM_KEYS), ("inspection", {"chassis_no"}), ("ops", set())],
+    [("booking", BOOKING_SYSTEM_KEYS), ("inspection", {"chassis_no"}), ("ops", OPS_SYSTEM_KEYS)],
 )
 def test_system_fields_are_created_per_kind(make_form, tree, kind, expected):
     form = make_form(key=f"{kind}_form", kind=kind)

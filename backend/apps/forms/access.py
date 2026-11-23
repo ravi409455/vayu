@@ -75,3 +75,18 @@ def visible_answers(levels: dict[str, str], answers: dict, role: str) -> dict:
     """Drop answers the role may not see (unknown keys are visible to Admin only)."""
     return {k: v for k, v in answers.items()
             if levels.get(k, "edit" if role == "admin" else "hidden") != "hidden"}
+
+
+def may_see_submissions(user, form) -> bool:
+    """Admin always; others only if the form's "who can see submissions" list names their role."""
+    return user.role == "admin" or user.role in (form.submission_roles or [])
+
+
+def hidden_inspection_forms(user) -> list[int]:
+    """Ids of inspection forms whose submissions this user may not see at all."""
+    from .models import Form, FormKind
+
+    if user.role == "admin":
+        return []
+    return [f.id for f in Form.objects.filter(kind=FormKind.INSPECTION)
+            if not may_see_submissions(user, f)]

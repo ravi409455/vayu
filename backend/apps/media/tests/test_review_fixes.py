@@ -288,3 +288,19 @@ def test_the_zip_link_can_answer_in_json_for_the_preparing_page(job, settings):
     assert out.status_code == 200 and out.json()["status"] == "ready"
     assert out.json()["url"].startswith("https://") and out.json()["progress"] == 100
     assert anon.get(link).status_code == 302                        # without it: a plain redirect
+
+
+def test_every_photo_field_of_a_form_hidden_from_a_role_is_hidden_for_that_role(job, settings):
+    from apps.forms.models import Form
+    from apps.media.services import hidden_fields
+
+    env, b = job
+    upload(env.expert, b["id"], jpeg(), settings)
+    booking = Booking.objects.get(pk=b["id"])
+    assert "photo_a" not in hidden_fields(env.ops_user, booking)
+    form = Form.objects.get(kind="inspection")
+    env.admin.patch(f"/api/v1/forms/{form.id}", {"submission_roles": ["expert"]}, format="json")
+    assert {"photo_a", "clip", "doc", "sign"} <= hidden_fields(env.ops_user, booking)
+    assert hidden_fields(env.admin_user, booking) == set()                 # Admin always sees
+    a = MediaAsset.objects.get()
+    assert env.ops.get(f"/api/v1/media/{a.id}/url").status_code == 404

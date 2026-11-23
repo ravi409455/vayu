@@ -1,10 +1,11 @@
 import { Link2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Access, FormField, Option } from "../../api/types";
+import { uploadFile } from "../../api/client";
 import { iconFor } from "../../lib/typeIcons";
 import { AccessEditor } from "../../ui/AccessEditor";
 import { ConditionBuilder, type FieldChoice } from "../../ui/ConditionBuilder";
-import { Field, Pill, Tabs } from "../../ui/kit";
+import { Field, Pill, Tabs, useToast } from "../../ui/kit";
 import { CHOICE_TYPES, FIELD_TYPES } from "../../lib/fieldTypes";
 
 export type FieldDraft = Pick<FormField, "label" | "helper_text" | "type" | "config" | "required" | "required_if" | "show_if" | "visible" | "access">;
@@ -19,6 +20,7 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
 }) {
   const [d, setD] = useState<FieldDraft>(field);
   const [pane, setPane] = useState<Pane>("settings");
+  const { fail } = useToast();
   useEffect(() => setD(field), [field]);
   const set = (p: Partial<FieldDraft>) => setD({ ...d, ...p });
   const cfg = d.config as Record<string, unknown>;
@@ -49,6 +51,28 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
             <Field label="Help text" tip="Small grey text under the field: an example or a reminder.">
               <input value={d.helper_text} onChange={(e) => set({ helper_text: e.target.value })} />
             </Field>
+            {!field.is_system && (
+              <div className="bar" style={{ gap: 18, marginBottom: 10 }}>
+                <label className="check"><input type="checkbox" checked={d.required} onChange={(e) => set({ required: e.target.checked })} /> Required</label>
+                <label className="check"><input type="checkbox" checked={d.visible} onChange={(e) => set({ visible: e.target.checked })} /> Visible</label>
+              </div>
+            )}
+            {["gps", "date", "time", "datetime"].includes(field.type) && (
+              <label className="check" style={{ alignItems: "flex-start" }}>
+                <input type="checkbox" disabled={locked} checked={cfg.auto === undefined ? field.type === "gps" : cfg.auto === true} onChange={(e) => setCfg({ auto: e.target.checked })} />
+                <span><strong>Fill in automatically</strong><br /><span className="muted small">{field.type === "gps" ? "The location is taken as soon as the page opens." : "The date and time are stamped when the page opens (server-corrected)."} The person cannot edit it. Leave off if they should enter it themselves.</span></span>
+              </label>
+            )}
+            {field.type === "image" && (
+              <Field label="Picture" tip="A picture shown to the expert in the form, for example a QR code to scan. PNG or JPEG, up to 2 MB. It is not an answer and not part of the report.">
+                {typeof cfg.asset === "string" && <img src={`/api/v1/form-assets/${cfg.asset}`} alt="The uploaded picture" style={{ maxWidth: 220, maxHeight: 220, display: "block", marginBottom: 8, border: "1px solid var(--line)", borderRadius: 8 }} />}
+                <input type="file" accept="image/png,image/jpeg" aria-label="Upload the picture" onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try { const r = await uploadFile<{ id: string }>("form-assets", file); setCfg({ asset: r.id }); } catch (err) { fail(err); }
+                }} />
+              </Field>
+            )}
             {!locked && CHOICE_TYPES.includes(field.type) && <OptionsEditor options={(cfg.options as Option[]) ?? []} onChange={(options) => setCfg({ options })} />}
             {!locked && field.type === "master_list" && (
               <Field label="List" tip="The master list whose items this field offers (cities, car models...).">
@@ -101,11 +125,10 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
         {pane === "logic" && (
           field.is_system ? <p className="muted">System fields are always shown and always required: the platform relies on them.</p> : (
             <>
-              <label className="check"><input type="checkbox" checked={d.required} onChange={(e) => set({ required: e.target.checked })} /> Always required</label>
+              <p className="muted small">Rules make a field appear or become required only in some situations.</p>
               <ConditionBuilder label="Required only if" value={d.required_if} onChange={(r) => set({ required_if: r })} fields={choices} />
               <ConditionBuilder label="Show only if" value={d.show_if} onChange={(r) => set({ show_if: r })} fields={choices} />
-              <label className="check"><input type="checkbox" checked={d.visible} onChange={(e) => set({ visible: e.target.checked })} /> Visible</label>
-              <p className="muted small">A field that is hidden by a rule is never required, even if it says “always required”.</p>
+              <p className="muted small">A field that is hidden by a rule is never required, even if it says “required”.</p>
             </>
           )
         )}

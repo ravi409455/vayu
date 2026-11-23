@@ -84,23 +84,36 @@ class Command(BaseCommand):
             f"Demo ready. Sign in as admin / ops / expert / expert2 with password {PASSWORD}"))
 
     def _ops_form(self, admin):
+        """The check-in/wrap-up system form comes with its locked fields; add a few custom ones
+        and a payment QR picture beside them."""
+        import io
+
+        from PIL import Image
+
+        from apps.forms import assets
+
         form = form_services.create_form(admin, key="checkin", kind="ops",
                                          name="Check-in and wrap-up")
         v = form.versions.get(status="draft")
-        page = Page.objects.get(version=v)
-        page.title = "Check-in"
-        page.save()
-        sec = Section.objects.get(page=page)
-        _field(v, sec, "checkin_gps", "Your location", "gps")
-        _field(v, sec, "selfie", "Selfie at the car", "photo", config={"max_count": 1})
-        wrap = Page.objects.create(version=v, title="Wrap-up", order=1)
-        pay = Section.objects.create(version=v, page=wrap, title="Payment", order=0)
-        _field(v, pay, "payment_status", "Payment", "single_choice", required=True, config={
-            "options": [{"key": "paid", "label": "Taking payment"},
-                        {"key": "pay_later", "label": "Pay later"}]})
-        paid = {"==": [{"var": "ops.payment_status"}, "paid"]}
-        _field(v, pay, "payment_amount", "Amount", "currency", required_if=paid, show_if=paid)
-        _field(v, pay, "google_review", "Google review taken", "yes_no")
+        pay = Section.objects.get(version=v, title="Payment")
+        paid = {"==": [{"var": "ops.taking_payment"}, True]}
+        qr = Image.new("RGB", (25, 25), "white")
+        for x in range(25):
+            for y in range(25):
+                if (x * 7 + y * 13 + x * y) % 3 == 0:
+                    qr.putpixel((x, y), (0, 0, 0))
+        buf = io.BytesIO()
+        qr.resize((250, 250), Image.Resampling.NEAREST).save(buf, "PNG")
+        asset = assets.create_asset(admin, buf.getvalue())
+        _field(v, pay, "pay_qr", "Scan to pay", "image", show_if=paid,
+               config={"asset": str(asset.id)})
+        wrap = Page.objects.get(version=v, slot="after")
+        review = Section.objects.create(version=v, page=wrap, title="Review", order=1)
+        _field(v, review, "google_review", "Google review taken", "yes_no")
+        shot = {"==": [{"var": "ops.google_review"}, True]}
+        _field(v, review, "review_screenshot", "Review screenshot", "photo", show_if=shot,
+               config={"max_count": 1})
+        _field(v, review, "perfume_given", "Car perfume given", "yes_no")
         _publish(form)
 
     def _inspection_forms(self, admin):
@@ -120,6 +133,27 @@ class Command(BaseCommand):
             definition = d.pdf_definition(code, title, keys, pages)
             saved = reports.save_definition(admin, draft, definition, draft.row_version)
             reports.publish(admin, saved, saved.row_version)
+
+    def _selfie(self, booking, expert) -> str:
+        """A real (tiny) verified picture, so the completed demo booking has its selfie."""
+        import hashlib
+        import io
+
+        from PIL import Image
+
+        from apps.media import storage
+        from apps.media.models import MediaAsset
+
+        buf = io.BytesIO()
+        Image.new("RGB", (120, 90), (166, 40, 48)).save(buf, "JPEG")
+        data = buf.getvalue()
+        a = MediaAsset(client_uuid=uuid.uuid4(), booking=booking, uploaded_by=expert,
+                       field_key="selfie", kind="photo", content_type="image/jpeg",
+                       size=len(data), sha256=hashlib.sha256(data).hexdigest(), status="verified")
+        a.key = f"bookings/{booking.id}/{a.id}"
+        storage.put(a.key, data, "image/jpeg")
+        a.save()
+        return str(a.id)
 
     def _bookings(self):
         ops = User.objects.get(username="ops")
@@ -141,9 +175,10 @@ class Command(BaseCommand):
         services.assign(ops, b3, expert.id)
         _, _ = submissions.start(expert, b3, uuid.uuid4(), None, "pdi", None)
         b3.refresh_from_db()
+        selfie = self._selfie(b3, expert)
         submissions.submit(expert, b3, uuid.uuid4(), {
             "inspection": {"chassis_no": "MA3YPKCSKTJ273129", "registration_no": "DL1CAB1234",
                            "odometer": 4200, "bonnet": "ok", "door_fl": "minor",
                            "remarks": "Clean car."},
-            "ops": {"payment_status": "pay_later"}})
+            "ops": {"taking_payment": False, "selfie": [selfie]}})
         check_completion(b3.id)        # Completed: the PDF is made by the worker

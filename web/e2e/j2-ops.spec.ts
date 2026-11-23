@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { apiAs, json, signIn } from "./api";
+import { apiAs, expertId, json, signIn } from "./api";
 
 // J2: create a booking -> assign -> reschedule -> cancel; a duplicate Booking ID is refused
 test("J2: Ops run a booking from creation to cancellation", async ({ page }) => {
   await signIn(page, "ops");
   await expect(page).toHaveURL(/\/board$/);
+  await page.getByRole("link", { name: "Bookings" }).click();                  // bookings are made here, not on the read-only board
   await page.getByRole("button", { name: "New booking" }).click();
   await page.getByLabel("Booking ID").fill("J2-100");
   await page.getByLabel("Customer name").fill("Sunita Rao");
@@ -51,7 +52,7 @@ test("J2: Ops run a booking from creation to cancellation", async ({ page }) => 
 
   // cancel
   await page.goto("/board");
-  await page.getByRole("link", { name: "J2-100" }).click();
+  await page.getByRole("link", { name: "J2-100" }).click();                    // the board opens the same booking page
   await page.getByRole("button", { name: "Cancel booking" }).click();
   await page.getByRole("dialog").getByLabel("Reason").selectOption({ index: 1 });
   await page.getByRole("dialog").getByRole("button", { name: "Cancel this booking" }).click();
@@ -73,13 +74,56 @@ test("job board filters are remembered per person", async ({ page }) => {
   await expect(page.getByLabel("City")).toHaveValue("");
 });
 
-test("global search finds a booking by customer, and an expert cannot open the board", async ({ page }) => {
+test("the Bookings page finds a booking by customer, and an expert cannot open the board", async ({ page }) => {
   await signIn(page, "ops");
-  await page.goto("/search");
-  await page.getByLabel("Search everything").fill("Sunita");
+  await page.goto("/bookings");
+  await page.getByLabel("Search").fill("Sunita");
   await expect(page.getByRole("link", { name: "J2-100" })).toBeVisible();
+  await page.goto("/search");                                                  // the old Search page is gone
+  await expect(page).toHaveURL(/\/board$/);
   await page.getByRole("button", { name: "Sign out" }).click();
   await signIn(page, "expert");
   await page.goto("/board");
   await expect(page).toHaveURL(/\/jobs$/);
+});
+
+test("the menu and pages: Ops see only four, nothing of the admin side", async ({ page }) => {
+  await signIn(page, "ops");
+  for (const name of ["Bookings", "Job board", "Problems", "Dashboards"]) await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
+  for (const name of ["Library", "Master lists", "Users", "Forms", "PDF templates", "Promote", "Integrations", "API keys", "Search"]) await expect(page.getByRole("link", { name })).toHaveCount(0);
+  for (const path of ["/library", "/lists", "/users", "/forms", "/pdf", "/promote", "/integrations"]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(/\/board$/);
+  }
+});
+
+test("delete rules: Ops may delete only a draft, Admin any booking", async ({ page }) => {
+  const ops = await apiAs("ops");
+  const admin = await apiAs("admin");
+  const mk = async (id: string) => json(await ops.post("bookings", { data: { answers: {
+    booking_id: id, customer_name: "Del Test", customer_phone: "9876500777", address: "3 Road", city: "delhi",
+    inspection_date: "2026-12-05", inspection_time: "09:00", inspection_type: "pdi", car_make_model: "maruti_victoris" } } }));
+  const draft = await mk("J2-DEL-A");
+  const assigned = await mk("J2-DEL-B");
+  await json(await ops.post(`bookings/${assigned.id}/assign`, { data: { expert: await expertId() } }));
+
+  await signIn(page, "ops");
+  await page.goto("/bookings");
+  await page.getByLabel("Search").fill("J2-DEL");
+  await expect(page.getByRole("link", { name: "J2-DEL-B" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete J2-DEL-B" })).toHaveCount(0);          // assigned: cancel only
+  expect((await ops.delete(`bookings/${assigned.id}`)).status()).toBe(403);
+  await page.getByRole("button", { name: "Delete J2-DEL-A" }).click();                         // untouched draft: allowed
+  await page.getByRole("dialog").getByRole("button", { name: "Delete booking" }).click();
+  await expect(page.getByText("Booking deleted.")).toBeVisible();
+  expect((await admin.get(`bookings/${draft.id}`)).status()).toBe(404);
+
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await signIn(page, "admin");
+  await page.goto("/bookings");
+  await page.getByLabel("Search").fill("J2-DEL-B");
+  await page.getByRole("button", { name: "Delete J2-DEL-B" }).click();                         // Admin can delete any
+  await page.getByRole("dialog").getByRole("button", { name: "Delete booking" }).click();
+  await expect(page.getByText("Booking deleted.")).toBeVisible();
+  expect((await admin.get(`bookings/${assigned.id}`)).status()).toBe(404);
 });

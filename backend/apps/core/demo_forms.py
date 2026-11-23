@@ -79,7 +79,7 @@ def vehicle(extra=()):
 
 
 def pdi_pages():
-    return [("Vehicle", [("Vehicle details", vehicle()), ("Photos", PHOTOS)]),
+    return [("Vehicle", [("Vehicle details", vehicle())]),
             ("Exterior", [("Body panels", BODY), ("Paint and glass", PAINT), ("Lights", LIGHTS)]),
             ("Interior", [("Seats and trim", SEATS), ("Controls", CONTROLS)]),
             ("Engine", [("Engine bay", ENGINE), ("Transmission and clutch", GEARBOX), ("OBD", OBD)]),
@@ -89,19 +89,21 @@ def pdi_pages():
                                   ("Brakes and suspension", BRAKES)]),
             ("Underbody", [("Underbody", UNDERBODY)]),
             ("Documents and drive", [("Documents", DOCS), ("Road test", ROAD)]),
+            ("Photos", [("Photos", PHOTOS)]),
             ("Summary", [("Summary", [("l", "remarks", "Overall remarks"), ("g", "customer_sign", "Customer signature")])])]
 
 
 def used_pages():
     pages = pdi_pages()
     pages[0] = ("Vehicle", [("Vehicle details", vehicle([
-        ("n", "owner_count", "Previous owners", "", 0, 10), ("y", "accident_history", "Accident history declared"),
-        ("y", "loan", "Loan or hypothecation"), ("t", "city_used", "City used in")])), ("Photos", PHOTOS)])
+        ("n", "owner_count", "Previous owners", "", 0, 10),
+        ("y", "accident_history", "Accident history declared"),
+        ("y", "loan", "Loan or hypothecation"), ("t", "city_used", "City used in")]))])
     return pages
 
 
 def ev_pages():
-    return [("Vehicle", [("Vehicle details", vehicle()), ("Photos", PHOTOS)]),
+    return [("Vehicle", [("Vehicle details", vehicle())]),
             ("Battery and charging", [("Battery and charging", BATTERY)]),
             ("Exterior", [("Body panels", BODY), ("Paint and glass", PAINT), ("Lights", LIGHTS)]),
             ("Interior", [("Seats and trim", SEATS), ("Controls", CONTROLS)]),
@@ -109,6 +111,7 @@ def ev_pages():
             ("Air conditioning", [("Air conditioning", AC)]),
             ("Tyres and brakes", [("Tyres", "LIBRARY:tyres_standard"),
                                   ("Brakes and suspension", BRAKES)]),
+            ("Photos", [("Photos", PHOTOS)]),
             ("Summary", [("Summary", [("l", "remarks", "Overall remarks"), ("g", "customer_sign", "Customer signature")])])]
 
 

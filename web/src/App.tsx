@@ -21,14 +21,15 @@ const Job = lazy(() => import("./pages/expert/Job").then((m) => ({ default: m.Jo
 const JobBoard = lazy(() => import("./pages/ops/JobBoard").then((m) => ({ default: m.JobBoard })));
 const BookingPage = lazy(() => import("./pages/ops/Booking").then((m) => ({ default: m.BookingPage })));
 const Problems = lazy(() => import("./pages/ops/Problems").then((m) => ({ default: m.Problems })));
-const Search = lazy(() => import("./pages/ops/Search").then((m) => ({ default: m.Search })));
+const Bookings = lazy(() => import("./pages/ops/Bookings").then((m) => ({ default: m.Bookings })));
 const Dashboards = lazy(() => import("./pages/ops/Dashboards").then((m) => ({ default: m.Dashboards })));
 const VerifyPage = lazy(() => import("./pages/Public").then((m) => ({ default: m.VerifyPage })));
 const ZipPage = lazy(() => import("./pages/Public").then((m) => ({ default: m.ZipPage })));
 const FormBuilder = lazy(() => import("./pages/admin/FormBuilder").then((m) => ({ default: m.FormBuilder })));
 
 function Home() {
-  const { me } = useAuth();
+  const { me, loading } = useAuth();
+  if (loading) return <p className="muted pad">Loading…</p>;
   return <Navigate to={me ? homeFor(me.role) : "/login"} replace />;
 }
 
@@ -45,21 +46,21 @@ export function App() {
           <Route path="/board" element={<RequireAuth perm="bookings.view" not="expert"><JobBoard /></RequireAuth>} />
           <Route path="/booking/:id" element={<RequireAuth perm="bookings.view" not="expert"><BookingPage /></RequireAuth>} />
           <Route path="/problems" element={<RequireAuth perm="bookings.view" not="expert"><Problems /></RequireAuth>} />
-          <Route path="/search" element={<RequireAuth perm="bookings.view" not="expert"><Search /></RequireAuth>} />
+          <Route path="/bookings" element={<RequireAuth perm="bookings.view" not="expert"><Bookings /></RequireAuth>} />
           <Route path="/dashboards" element={<RequireAuth perm="dashboards.view"><Dashboards /></RequireAuth>} />
           <Route path="/jobs" element={<RequireAuth perm="submissions.fill"><MyJobs /></RequireAuth>} />
           <Route path="/jobs/:id" element={<RequireAuth perm="submissions.fill"><Job /></RequireAuth>} />
-          <Route path="/users" element={<RequireAuth perm="users.view"><Users /></RequireAuth>} />
-          <Route path="/roles" element={<RequireAuth perm="roles.manage"><Roles /></RequireAuth>} />
-          <Route path="/lists" element={<RequireAuth perm="forms.view"><MasterLists /></RequireAuth>} />
-          <Route path="/audit" element={<RequireAuth perm="audit.view"><Audit /></RequireAuth>} />
-          <Route path="/library" element={<RequireAuth perm="library.view"><Library /></RequireAuth>} />
-          <Route path="/pdf" element={<RequireAuth perm="pdf_templates.view"><PdfDesigner /></RequireAuth>} />
-          <Route path="/integrations" element={<RequireAuth perm="integrations.manage"><Integrations /></RequireAuth>} />
-          <Route path="/api-keys" element={<RequireAuth perm="api_keys.manage"><ApiKeys /></RequireAuth>} />
-          <Route path="/promote" element={<RequireAuth perm="forms.promote"><Promote /></RequireAuth>} />
-          <Route path="/forms" element={<RequireAuth perm="forms.view"><Forms /></RequireAuth>} />
-          <Route path="/forms/:id" element={<RequireAuth perm="forms.view"><FormBuilder /></RequireAuth>} />
+          <Route path="/users" element={<RequireAuth adminOnly perm="users.view"><Users /></RequireAuth>} />
+          <Route path="/roles" element={<RequireAuth adminOnly perm="roles.manage"><Roles /></RequireAuth>} />
+          <Route path="/lists" element={<RequireAuth adminOnly perm="forms.view"><MasterLists /></RequireAuth>} />
+          <Route path="/audit" element={<RequireAuth adminOnly perm="audit.view"><Audit /></RequireAuth>} />
+          <Route path="/library" element={<RequireAuth adminOnly perm="library.view"><Library /></RequireAuth>} />
+          <Route path="/pdf" element={<RequireAuth adminOnly perm="pdf_templates.view"><PdfDesigner /></RequireAuth>} />
+          <Route path="/integrations" element={<RequireAuth adminOnly perm="integrations.manage"><Integrations /></RequireAuth>} />
+          <Route path="/api-keys" element={<RequireAuth adminOnly perm="api_keys.manage"><ApiKeys /></RequireAuth>} />
+          <Route path="/promote" element={<RequireAuth adminOnly perm="forms.promote"><Promote /></RequireAuth>} />
+          <Route path="/forms" element={<RequireAuth adminOnly perm="forms.view"><Forms /></RequireAuth>} />
+          <Route path="/forms/:id" element={<RequireAuth adminOnly perm="forms.view"><FormBuilder /></RequireAuth>} />
         </Route>
         <Route path="*" element={<Home />} />
       </Routes>

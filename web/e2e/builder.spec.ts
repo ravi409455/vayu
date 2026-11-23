@@ -30,12 +30,12 @@ test.describe("form builder", () => {
     await drag(page, grip, page.locator(".field-row", { hasText: "Chassis number" }).locator(".grip"));
     await expect.poll(async () => (await page.locator(".field-row").allInnerTexts()).join("|")).not.toBe(before.join("|"));
     const draftId = (await json(await admin.get(`forms/${form.id}`))).draft_version.id;
-    const tree = await json(await admin.get(`form-versions/${draftId}`));
-    const sections = tree.pages.flatMap((p: { sections: { fields: { key: string }[] }[] }) => p.sections);
-    const sec = sections.find((x: { fields: { key: string }[] }) => x.fields.some((f) => f.key === "odometer"));
-    const keys = sec.fields.map((f: { key: string }) => f.key);
-    expect(keys, JSON.stringify(keys)).toContain("chassis_no");
-    expect(keys.indexOf("odometer")).toBeLessThan(keys.indexOf("chassis_no"));      // moved above it, on the server
+    const serverKeys = async () => {
+      const tree = await json(await admin.get(`form-versions/${draftId}`));
+      const sections = tree.pages.flatMap((p: { sections: { fields: { key: string }[] }[] }) => p.sections);
+      return sections.find((x: { fields: { key: string }[] }) => x.fields.some((f) => f.key === "odometer")).fields.map((f: { key: string }) => f.key) as string[];
+    };
+    await expect.poll(async () => { const k = await serverKeys(); return k.indexOf("odometer") < k.indexOf("chassis_no"); }).toBe(true);   // moved above it, on the server
     await page.reload();
     expect((await page.locator(".field-row").allInnerTexts()).join("|")).not.toBe(before.join("|"));   // and it stays
   });
@@ -124,8 +124,10 @@ test.describe("layout", () => {
   test("the little i explains things", async ({ page }) => {
     await signIn(page, "admin");
     await page.goto("/roles");
-    await page.getByRole("button", { name: "More info" }).first().click();
+    await page.getByRole("button", { name: "More info" }).first().hover();                 // hover shows it, no click needed
     await expect(page.getByRole("tooltip")).toContainText("cycle");
+    await page.getByRole("button", { name: "More info" }).first().click();                 // a click on top keeps it open
+    await expect(page.getByRole("tooltip")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("tooltip")).toHaveCount(0);
   });

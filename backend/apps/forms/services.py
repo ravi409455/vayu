@@ -30,11 +30,25 @@ def item_label(list_key: str, item_key: str) -> str | None:
 def create_form(actor, *, key: str, kind: str, name: str, inspection_type: str = "") -> Form:
     form = Form.objects.create(key=key, kind=kind, name=name, inspection_type=inspection_type)
     version = FormVersion.objects.create(form=form, number=1)
-    page = Page.objects.create(version=version, title="Page 1", order=0)
-    section = Section.objects.create(version=version, page=page, title="Section 1", order=0)
+    if kind == "ops":
+        titles = {"before": "Check-in", "after": "Wrap-up"}
+        pages = {slot: Page.objects.create(version=version, title=t, order=n, slot=slot,
+                                           gate=slot == "before")
+                 for n, (slot, t) in enumerate(titles.items())}
+    else:
+        pages = {"": Page.objects.create(version=version, title="Page 1", order=0)}
+    sections: dict[tuple[str, str], Section] = {}
     for order, spec in enumerate(SYSTEM_FIELDS[kind]):
-        Field.objects.create(version=version, section=section, order=order, is_system=True,
-                             **{"config": {}, **spec})
+        spec = dict(spec)
+        slot, title = spec.pop("page", ""), spec.pop("section", "Section 1")
+        if (slot, title) not in sections:
+            sections[(slot, title)] = Section.objects.create(
+                version=version, page=pages[slot], title=title, order=len(
+                    [1 for k in sections if k[0] == slot]))
+        Field.objects.create(version=version, section=sections[(slot, title)], order=order,
+                             is_system=True, **{"config": {}, **spec})
+    if not sections:                                          # no system fields: one empty section
+        Section.objects.create(version=version, page=pages[""], title="Section 1", order=0)
     audit.record(actor, "form.create", "form", form.id, f"Created {kind} form {key}")
     return form
 
@@ -158,6 +172,9 @@ def reorder(actor, version_id: int, body) -> FormVersion:
             for n, pk in enumerate(order):
                 obj = found[pk]
                 if getattr(obj, f"{parent}_id") != owner.pk:
+                    if (isinstance(obj, Field) and obj.is_system and isinstance(owner, Section)
+                            and owner.page_id != obj.section.page_id):
+                        raise CodedError("SYSTEM_FIELD", "System fields stay on their page.", 400)
                     if isinstance(owner, Section):                 # a field is moving
                         library.ensure_not_locked(owner)
                         library.ensure_not_locked(obj.section)

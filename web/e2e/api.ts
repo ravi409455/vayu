@@ -46,19 +46,6 @@ export async function seedForms(): Promise<Pdi> {
   const booking = await mk({ key: "booking", kind: "booking", name: "Booking" });
   await publish(admin, booking.id);
   const ops = await mk({ key: "checkin", kind: "ops", name: "Check-in and wrap-up" });
-  const ov = await json(await admin.get(`form-versions/${ops.draft_version.id}`));
-  await json(await admin.patch(`pages/${ov.pages[0].id}`, { data: { title: "Check-in" } }));
-  await addFields(admin, ov.pages[0].sections[0].id, [
-    { key: "checkin_gps", label: "Your location", type: "gps" },
-    { key: "selfie", label: "Selfie at the car", type: "photo", config: { max_count: 1 } },
-  ]);
-  const wrapPage = await json(await admin.post(`form-versions/${ov.id}/pages`, { data: { title: "Wrap-up" } }));
-  const wrapSec = await json(await admin.post(`pages/${wrapPage.id}/sections`, { data: { title: "Payment" } }));
-  await addFields(admin, wrapSec.id, [
-    { key: "payment_status", label: "Payment", type: "single_choice", required: true, config: { options: [{ key: "paid", label: "Taking payment" }, { key: "pay_later", label: "Pay later" }] } },
-    { key: "payment_amount", label: "Amount", type: "currency", required_if: { "==": [{ var: "ops.payment_status" }, "paid"] }, show_if: { "==": [{ var: "ops.payment_status" }, "paid"] } },
-    { key: "google_review", label: "Google review taken", type: "yes_no" },
-  ]);
   await publish(admin, ops.id);
   const pdi = await mk({ key: "pdi", kind: "inspection", name: "PDI", inspection_type: "pdi" });
   const v = await json(await admin.get(`form-versions/${pdi.draft_version.id}`));
@@ -130,9 +117,10 @@ export async function submittedJob(o: JobOptions): Promise<string> {
     inspection_date: "2026-11-25", inspection_time: "09:30", inspection_type: o.type ?? "pdi", car_make_model: "maruti_victoris" } } }));
   await json(await ops.post(`bookings/${b.id}/assign`, { data: { expert: await expertId() } }));
   await json(await expert.post(`bookings/${b.id}/start`, { data: { client_uuid: crypto.randomUUID(), inspection_type: o.type ?? "pdi" } }));
+  const selfie = await uploadFile(expert, b.id, "selfie", "photo", "image/jpeg", JPEG);
   const inspection: Record<string, unknown> = { chassis_no: "MA3YPKCSKTJ273129", door: o.door ?? "ok", odometer: o.odometer ?? 100 };
   if (o.photo) inspection.door_photo = [await uploadFile(expert, b.id, "door_photo", "photo", "image/jpeg", JPEG)];
-  await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection, ops: { payment_status: "pay_later" } } } }));
+  await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection, ops: { taking_payment: false, selfie: [selfie] } } } }));
   return b.id as string;
 }
 

@@ -222,13 +222,39 @@ def test_reassign_is_blocked_once_started_until_force_released(env, booking):
     assert assign(env.ops, booking, other.id).status_code == 200
 
 
-def test_only_admin_by_default_can_delete_and_it_is_hard_and_audited(env, booking):
+def test_admin_deletes_any_booking_ops_only_untouched_drafts_and_it_is_audited(env, booking):
     url = f"/api/v1/bookings/{booking['id']}"
-    assert env.ops.delete(url).status_code == 403
     assert env.expert.delete(url).status_code == 403
-    assert env.admin.delete(url).status_code == 204
+    assign(env.ops, booking, env.expert_user.id)                       # no longer an untouched draft
+    r = env.ops.delete(url)
+    assert r.status_code == 403 and r.json()["code"] == "DELETE_NOT_ALLOWED"
+    assert Booking.objects.filter(pk=booking["id"]).exists()
+    assert env.admin.delete(url).status_code == 204                    # Admin: any booking
     assert not Booking.objects.filter(pk=booking["id"]).exists()
     assert AuditLog.objects.filter(action="booking.delete").exists()
+
+
+def test_ops_may_delete_a_draft_nobody_has_touched(env):
+    b = create(env.ops, booking_id="DEL-1").json()
+    assert env.ops.delete(f"/api/v1/bookings/{b['id']}").status_code == 204
+    assert not Booking.objects.filter(booking_id="DEL-1").exists()
+    kept = create(env.ops, booking_id="DEL-2").json()
+    Booking.objects.filter(pk=kept["id"]).update(stage="cancelled")
+    assert env.ops.delete(f"/api/v1/bookings/{kept['id']}").status_code == 403
+    again = create(env.ops, booking_id="DEL-3").json()
+    from apps.bookings.models import Inspection
+
+    Inspection.objects.create(booking_id=again["id"], expert=env.expert_user,
+                              form_version_id=_any_version())
+    assert env.ops.delete(f"/api/v1/bookings/{again['id']}").status_code == 403    # has an inspection
+
+
+def _any_version():
+    from apps.forms.models import FormVersion
+
+    version = FormVersion.objects.first()
+    assert version is not None
+    return version.id
 
 
 # ---------------------------------------------------------------- visibility

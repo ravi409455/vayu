@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { apiAs, json, signIn } from "./api";
+import { apiAs, JPEG, json, signIn, uploadFile } from "./api";
 
 // J1: build a 2-page form with a condition, publish it, map it in a PDF template, preview the PDF.
 test("J1: admin builds, publishes and maps a form, then previews its PDF", async ({ page }) => {
@@ -33,8 +33,8 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
 
   // the first page must be finished before moving on: odometer required
   await page.getByRole("button", { name: /Odometer/ }).first().click();
-  await page.getByRole("tab", { name: "Logic" }).click();
-  await page.getByRole("checkbox", { name: "Always required" }).check();
+  await page.getByRole("tab", { name: "Settings" }).click();
+  await page.getByRole("checkbox", { name: "Required", exact: true }).check();
   await page.getByRole("button", { name: "Save field" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Saved" }).first()).toBeVisible();
   await page.locator(".rail-item", { hasText: "Page 1" }).click();
@@ -104,7 +104,7 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
     inspection_date: "2026-11-24", inspection_time: "10:00", inspection_type: "used_car", car_make_model: "tata_nexon" } } }));
   await json(await ops.post(`bookings/${b.id}/assign`, { data: { expert: expertId } }));
   await json(await expert.post(`bookings/${b.id}/start`, { data: { client_uuid: crypto.randomUUID(), inspection_type: "used_car" } }));
-  await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection: { chassis_no: "MA3ABCDEFG123456", odometer: 12345 }, ops: { payment_status: "pay_later" } } } }));
+  await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection: { chassis_no: "MA3ABCDEFG123456", odometer: 12345 }, ops: { taking_payment: false, selfie: [await uploadFile(expert, b.id, "selfie", "photo", "image/jpeg", JPEG)] } } } }));
 
   await page.getByPlaceholder("Booking (internal id) for the preview").fill(b.id);
   const pdf = page.waitForResponse((r) => r.url().includes("/preview") && r.request().method() === "POST");

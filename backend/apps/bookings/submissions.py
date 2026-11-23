@@ -6,8 +6,8 @@ from django.utils import timezone
 
 from apps.core import events
 from apps.core import tasks as core_tasks
-from apps.forms.access import STAGES, levels_for
-from apps.forms.models import Form, FormKind, FormVersion, VersionStatus
+from apps.forms.access import STAGES, levels_for, may_see_submissions
+from apps.forms.models import Field, Form, FormKind, FormVersion, VersionStatus
 from apps.forms.rules import validate_answers
 from apps.forms.serializers import VersionTreeSerializer
 from apps.scoring import service as scoring
@@ -33,6 +33,12 @@ def inspection_version(inspection_type: str) -> FormVersion:
 def ops_version() -> FormVersion | None:
     form = Form.objects.filter(kind=FormKind.OPS, is_active=True).first()
     return latest_published(form) if form else None
+
+
+class _Role:
+    """Just a role name, so the visibility rule can be asked about a role without a user."""
+    def __init__(self, role: str):
+        self.role = role
 
 
 def own_filter(user) -> Q:
@@ -112,6 +118,21 @@ def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, ap
     return b, insp
 
 
+def stamp_auto(version: FormVersion | None, answers: dict) -> dict:
+    """Date and time fields set to 'automatic' that the phone did not fill in are stamped with
+    the server's own time, so a missing or tampered value never leaves them empty."""
+    if version is None:
+        return answers
+    now = timezone.localtime()
+    stamp = {"date": now.date().isoformat(), "time": now.strftime("%H:%M"),
+             "datetime": now.isoformat(timespec="seconds")}
+    out = dict(answers)
+    for f in Field.objects.filter(version=version, type__in=stamp):
+        if f.config.get("auto") and not out.get(f.key):
+            out[f.key] = stamp[f.type]
+    return out
+
+
 def _clean_both(b: Booking, version: FormVersion, answers: dict):
     ans_i, ans_o = answers.get("inspection") or {}, answers.get("ops") or {}
     cleaned_i, errors = validate_answers(
@@ -170,6 +191,8 @@ def submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id=No
     locked = _locked_keys(actor.role, "in_progress", version, ov, answers, {})
     if locked:
         raise err("FIELD_ACCESS", "You cannot change these fields.", 403, keys=locked)
+    answers = {"inspection": stamp_auto(version, answers.get("inspection") or {}),
+               "ops": stamp_auto(ov, answers.get("ops") or {})}
     cleaned_i, cleaned_o, _ = _clean_both(b, version, answers)
     insp.answers = {"inspection": cleaned_i, "ops": cleaned_o}
     insp.status, insp.submitted_at = "submitted", timezone.now()
@@ -270,6 +293,9 @@ def searchable_stages(role: str) -> dict[str, list[str]]:
     chassis = {s: [levels_for(v, role, s).get("chassis_no", "hidden") for v in versions]
                or ["hidden"] for s in STAGES}                    # no form to say: closed
     out["chassis_no"] = [s for s in STAGES if "hidden" not in chassis[s]]
+    if any(not may_see_submissions(_Role(role), f) for f in Form.objects.filter(
+            kind=FormKind.INSPECTION, is_active=True)):
+        out["chassis_no"] = []                  # a hidden submission must not be searchable
     return out
 
 

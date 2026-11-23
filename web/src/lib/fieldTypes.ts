@@ -9,6 +9,7 @@ export const FIELD_TYPES: { id: string; label: string; group: string }[] = [
   { id: "photo", label: "Photos", group: "Media" }, { id: "video", label: "Videos", group: "Media" },
   { id: "file", label: "Files", group: "Media" }, { id: "signature", label: "Signature", group: "Media" },
   { id: "gps", label: "GPS location", group: "Media" },
+  { id: "image", label: "Picture (shown to the expert)", group: "Display" },
   { id: "derived", label: "Key Check (automatic)", group: "Automatic" }, { id: "rating", label: "Rating (automatic)", group: "Automatic" },
 ];
 export const CHOICE_TYPES = ["single_choice", "multi_choice"];
@@ -21,6 +22,7 @@ export function defaultConfig(type: string): Record<string, unknown> {
     case "master_list": return { list: "" };
     case "user_picker": return { role: "expert" };
     case "photo": case "video": case "file": return { max_count: type === "video" ? 1 : 5 };
+    case "image": return {};
     case "derived": return { rule: { "!!": [{ var: "inspection.chassis_no" }] }, true_label: "Yes", false_label: "No" };
     case "rating": return { category: "" };
     default: return {};

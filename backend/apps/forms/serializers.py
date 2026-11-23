@@ -82,8 +82,8 @@ class FormSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Form
-        fields = ["id", "key", "kind", "name", "is_active", "inspection_type", "draft_version",
-                  "published_version"]
+        fields = ["id", "key", "kind", "name", "is_active", "inspection_type", "submission_roles",
+                  "draft_version", "published_version"]
         read_only_fields = ["kind"]
 
     def get_fields(self):
@@ -97,8 +97,16 @@ class FormSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("A form's key can never change.")
         return _list_key(value)
 
+    def validate_submission_roles(self, value):
+        if (not isinstance(value, list) or set(value) - {"expert", "ops"}
+                or len(set(value)) != len(value)):
+            raise serializers.ValidationError("Choose from expert and ops (Admin always can).")
+        return value
+
     def validate(self, attrs):
         kind = attrs.get("kind") or (self.instance and self.instance.kind)
+        if "submission_roles" in attrs and kind != FormKind.INSPECTION:
+            raise serializers.ValidationError("Only inspection forms have submissions to share.")
         active = attrs.get("is_active", self.instance.is_active if self.instance else True)
         itype = attrs.get("inspection_type", self.instance.inspection_type if self.instance else "")
         if itype:
@@ -233,11 +241,19 @@ class PageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Page
-        fields = ["id", "title", "order", "visible", "gate", "show_if", "access", "sections"]
+        fields = ["id", "title", "order", "visible", "gate", "slot", "show_if", "access",
+                  "sections"]
 
     def validate(self, attrs):
         _check_rules(attrs, "show_if")
         _check_access(attrs)
+        if "slot" in attrs and self.instance is not None and attrs["slot"] != self.instance.slot:
+            if self.instance.version.form.kind != "ops":
+                raise CodedError("INVALID_SLOT", "Only the check-in/wrap-up form has page slots.",
+                                 400)
+            if Field.objects.filter(section__page=self.instance, is_system=True).exists():
+                raise CodedError("SYSTEM_PAGE", "This page holds system fields: it stays where "
+                                 "it is.", 400)
         return attrs
 
 

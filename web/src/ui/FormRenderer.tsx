@@ -70,9 +70,18 @@ function FieldInput({ f, value, derived, required, error, readOnly, onChange, p 
       input = <input {...common} type="number" inputMode="decimal" value={String(str)} placeholder={f.type === "currency" ? "₹" : String(f.config.unit ?? "")}
         onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))} />; break;
     case "phone": input = <input {...common} type="tel" value={String(str)} onChange={(e) => onChange(e.target.value)} />; break;
-    case "date": input = <input {...common} type="date" value={String(str)} onChange={(e) => onChange(e.target.value)} />; break;
-    case "time": input = <input {...common} type="time" value={String(str)} onChange={(e) => onChange(e.target.value)} />; break;
-    case "datetime": input = <input {...common} type="datetime-local" value={String(str).slice(0, 16)} onChange={(e) => onChange(e.target.value)} />; break;
+    case "date": case "time": case "datetime":
+      input = f.config.auto === true
+        ? <AutoStamp type={f.type} value={value as string | undefined} label={f.label || f.key} disabled={readOnly} preview={p.preview} onChange={onChange} />
+        : f.type === "date" ? <input {...common} type="date" value={String(str)} onChange={(e) => onChange(e.target.value)} />
+        : f.type === "time" ? <input {...common} type="time" value={String(str)} onChange={(e) => onChange(e.target.value)} />
+        : <input {...common} type="datetime-local" value={String(str).slice(0, 16)} onChange={(e) => onChange(e.target.value)} />;
+      break;
+    case "image": {
+      if (p.role !== "expert" && !p.preview) return null;                 // shown to the expert, not in Ops' views
+      const asset = typeof f.config.asset === "string" ? f.config.asset : "";
+      return <div className="field"><span className="label-row">{f.label}</span>{asset ? <img className="static-image" src={`/api/v1/form-assets/${asset}`} alt={f.label || "Picture"} /> : <p className="muted">No picture yet.</p>}{f.helper_text && <span className="help">{f.helper_text}</span>}</div>;
+    }
     case "yes_no":
       input = <Choices name={f.key} disabled={readOnly} label={f.label} value={value === true ? "yes" : value === false ? "no" : ""} options={[{ key: "yes", label: "Yes" }, { key: "no", label: "No" }]} onChange={(k) => onChange(k === "yes")} />; break;
     case "single_choice": {
@@ -92,7 +101,7 @@ function FieldInput({ f, value, derived, required, error, readOnly, onChange, p 
     }
     case "master_list": input = <ListSelect list={String(f.config.list ?? "")} value={String(str)} disabled={readOnly} label={f.label} onChange={(v) => onChange(v || null)} />; break;
     case "user_picker": input = <UserSelect role={String(f.config.role ?? "expert")} value={value as number | null} disabled={readOnly} label={f.label} onChange={onChange} />; break;
-    case "gps": input = <Gps value={value as { lat: number; lng: number } | undefined} disabled={readOnly} onChange={onChange} preview={p.preview} />; break;
+    case "gps": input = <Gps value={value as { lat: number; lng: number } | undefined} disabled={readOnly} onChange={onChange} preview={p.preview} auto={f.config.auto !== false} />; break;
     case "photo": case "video": case "file": case "signature":
       input = <MediaField f={f} value={value} readOnly={readOnly} onChange={onChange} p={p} />; break;
     case "derived":
@@ -129,7 +138,30 @@ function UserSelect({ role, value, onChange, disabled, label }: { role: string; 
 
 /** Browser location, taken by itself as soon as the field appears. If it is refused or not
  *  available the field just says so (and offers another try): it never blocks the job. */
-function Gps({ value, onChange, disabled, preview }: { value?: { lat: number; lng: number; accuracy?: number }; onChange: (v: unknown) => void; disabled: boolean; preview?: boolean }) {
+const pad = (n: number) => String(n).padStart(2, "0");
+/** "Now" in the shapes the server stores: 2026-11-23, 15:30, 2026-11-23T15:30:00+05:30. */
+export function nowAs(type: string, d = new Date()): string {
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (type === "date") return date;
+  if (type === "time") return time;
+  const off = -d.getTimezoneOffset();
+  return `${date}T${time}:${pad(d.getSeconds())}${off >= 0 ? "+" : "-"}${pad(Math.floor(Math.abs(off) / 60))}:${pad(Math.abs(off) % 60)}`;
+}
+
+/** A date or time the Admin set to "automatic": stamped when the page opens, never typed. */
+function AutoStamp({ type, value, label, disabled, preview, onChange }: { type: string; value?: string; label: string; disabled: boolean; preview?: boolean; onChange: (v: unknown) => void }) {
+  const done = useRef(false);
+  useEffect(() => {
+    if (done.current || value || disabled || preview) return;
+    done.current = true;
+    onChange(nowAs(type));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = value ? (type === "datetime" ? new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : value) : preview ? "Stamped when the expert opens this page" : "…";
+  return <p className="auto-stamp" data-testid={`auto-${label}`}>{shown} <span className="muted small">(automatic)</span></p>;
+}
+
+function Gps({ value, onChange, disabled, preview, auto = true }: { value?: { lat: number; lng: number; accuracy?: number }; onChange: (v: unknown) => void; disabled: boolean; preview?: boolean; auto?: boolean }) {
   const [state, setState] = useState<"idle" | "busy" | "unavailable">("idle");
   const asked = useRef(false);
   function capture() {
@@ -140,7 +172,7 @@ function Gps({ value, onChange, disabled, preview }: { value?: { lat: number; ln
       () => setState("unavailable"), { enableHighAccuracy: true, timeout: 10_000 });
   }
   useEffect(() => {
-    if (asked.current || value || disabled || preview) return;
+    if (asked.current || value || disabled || preview || !auto) return;
     asked.current = true;
     capture();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -149,7 +181,8 @@ function Gps({ value, onChange, disabled, preview }: { value?: { lat: number; ln
       {value ? <p className="ok" data-testid="gps-value"><MapPin size={14} aria-hidden /> {value.lat}, {value.lng}{value.accuracy !== undefined && <span className="muted small"> (±{value.accuracy} m)</span>}</p>
         : state === "busy" ? <p className="muted" role="status">Finding your location…</p>
         : state === "unavailable" ? <p className="muted" role="status">GPS unavailable</p>
-        : preview ? <p className="muted small">Taken automatically when the expert opens this page.</p> : null}
+        : preview ? <p className="muted small">{auto ? "Taken automatically when the expert opens this page." : "The expert taps a button to capture it."}</p> : null}
+      {!disabled && !preview && !auto && !value && state === "idle" && <button type="button" onClick={capture}>Capture my location</button>}
       {!disabled && !preview && (value || state === "unavailable") && state !== "busy" && <button type="button" className="link" onClick={capture}>{value ? "Update location" : "Try again"}</button>}
     </div>
   );

@@ -22,6 +22,8 @@ urlpatterns = [
     path("checks/<int:pk>", views.CheckDetail.as_view()),
     path("form-versions/<int:pk>/validate", views.ValidateVersion.as_view()),
     path("form-versions/<int:pk>/publish", views.PublishVersion.as_view()),
+    path("form-assets", views.FormAssetUpload.as_view()),
+    path("form-assets/<uuid:pk>", views.FormAssetShow.as_view()),
     path("promote/export", views.PromoteExport.as_view()),
     path("promote/import", views.PromoteImport.as_view()),
     path("form-versions/<int:pk>/rating-config", views.RatingConfigView.as_view()),

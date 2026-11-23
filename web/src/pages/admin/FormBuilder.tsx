@@ -1,14 +1,14 @@
-import { Download, Eye, Rocket, Trash2 } from "lucide-react";
+import { Download, Eye, Rocket, Trash2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
-import { api, ApiError } from "../../api/client";
+import { api, ApiError, uploadFile } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { FormField, FormPage, FormSummary, FormVersion, MasterList } from "../../api/types";
 import { useAuth } from "../../auth";
 import { applyDrag, isEmptyBody, reorderBody, type Ref } from "../../lib/tree";
 import { type FieldChoice } from "../../ui/ConditionBuilder";
-import { Confirm, Modal, NameDialog, PageHeader, Pill, Tabs, useToast } from "../../ui/kit";
+import { Confirm, InfoTip, Modal, NameDialog, PageHeader, Pill, Tabs, useToast } from "../../ui/kit";
 import { AddFieldDialog, AddSectionDialog } from "./builder/AddDialogs";
 import { Canvas, type Sel } from "./builder/Canvas";
 import { Checks, Ratings } from "./builder/FormExtras";
@@ -39,6 +39,7 @@ export function FormBuilder() {
   const [adding, setAdding] = useState<null | { kind: "field" | "section" | "page"; id: number }>(null);
   const [preview, setPreview] = useState(false);
   const [discard, setDiscard] = useState(false);
+  const [visibility, setVisibility] = useState<string[] | null>(null);
   const [confirmDel, setConfirmDel] = useState<null | (() => void)>(null);
   const edit = can("forms.edit") && draft;
   const pages: FormPage[] = local ?? v?.pages ?? [];
@@ -114,6 +115,7 @@ export function FormBuilder() {
         {f.published_version && <Pill tone="ok">Live: v{f.published_version.number}</Pill>}
         {draft && <Pill tone="info">Draft v{f.draft_version!.number}</Pill>}
         {v && <button onClick={() => setPreview(true)}><Eye size={15} aria-hidden /> Preview</button>}
+        {f.kind === "inspection" && <button onClick={() => setVisibility(f.submission_roles ?? ["expert", "ops"])}><Users size={15} aria-hidden /> Who sees submissions</button>}
         {f.kind === "inspection" && f.published_version && can("forms.promote") && (
           <a className="btn" href={`/api/v1/promote/export?version=${f.published_version.id}`} download><Download size={15} aria-hidden /> Export</a>)}
         {draft && can("forms.edit") && <button className="danger" onClick={() => setDiscard(true)}><Trash2 size={15} aria-hidden /> Discard draft</button>}
@@ -166,8 +168,25 @@ export function FormBuilder() {
         onBlank={(title) => { const pid = adding.id; setAdding(null); void run(() => api(`pages/${pid}/sections`, { body: { title } })); }}
         onLibrary={(item, link) => { const pid = adding.id; setAdding(null); void run(() => api(`pages/${pid}/sections/from-library`, { body: { library_item: item, link } })); }} />}
       {adding?.kind === "field" && <AddFieldDialog sectionTitle={pages.flatMap((p) => p.sections).find((s) => s.id === adding.id)?.title ?? ""} onClose={() => setAdding(null)}
-        onAdd={(body) => { const sid = adding.id; setAdding(null); void run(async () => { const r = await api<FormField>(`sections/${sid}/fields`, { body }); setSel({ kind: "field", id: r.id }); }); }}
+        onAdd={(body) => { const sid = adding.id; setAdding(null); void run(async () => {
+          const { __file, ...rest } = body as { __file?: File } & Record<string, unknown>;
+          if (__file) { const up = await uploadFile<{ id: string }>("form-assets", __file); rest.config = { asset: up.id }; }
+          const r = await api<FormField>(`sections/${sid}/fields`, { body: rest }); setSel({ kind: "field", id: r.id });
+        }); }}
         onLibrary={(item, link) => { const sid = adding.id; setAdding(null); void run(async () => { const r = await api<FormField>(`sections/${sid}/fields/from-library`, { body: { library_item: item, link } }); setSel({ kind: "field", id: r.id }); }); }} />}
+      {visibility && (
+        <Modal title="Who can see this form's submissions" onClose={() => setVisibility(null)}
+          actions={<><button onClick={() => setVisibility(null)}>Cancel</button>
+            <button className="primary" disabled={!can("forms.edit")} onClick={async () => { try { await api(`forms/${id}`, { method: "PATCH", body: { submission_roles: visibility } }); say("Saved."); setVisibility(null); await reload(); } catch (e) { fail(e); } }}>Save</button></>}>
+          <p className="muted">Choose who can open the answers of this form after they are submitted. Someone left out sees nothing of it: not on the booking, not in search, not in the report, not in downloads.
+            <InfoTip>This is about seeing the finished submission. Experts can always fill in and submit their own jobs. Per-field access (the Access tab on each field) still applies on top for everyone who is allowed.</InfoTip></p>
+          <label className="check"><input type="checkbox" checked disabled /> Admin (always)</label>
+          {(["ops", "expert"] as const).map((r) => (
+            <label className="check" key={r}><input type="checkbox" checked={visibility.includes(r)}
+              onChange={(e) => setVisibility(e.target.checked ? [...visibility, r] : visibility.filter((x) => x !== r))} /> {r === "ops" ? "Ops" : "Experts (their own jobs only)"}</label>
+          ))}
+        </Modal>
+      )}
       {preview && v && <PreviewDialog tree={{ pages, checks: v.checks }} kind={f.kind} onClose={() => setPreview(false)} />}
       {discard && (
         <Confirm title="Discard this draft?" danger confirmLabel="Discard draft" onCancel={() => setDiscard(false)} onConfirm={() => discardDraft.mutate()}>

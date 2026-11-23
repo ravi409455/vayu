@@ -56,8 +56,8 @@ test("the expert completes DEMO-2 with a real upload to the file store and a PDF
   await page.getByLabel("Registration number").fill("DL1CZ0001");
   await page.getByLabel("Odometer").fill("321");
   while (!(await page.getByRole("heading", { name: "Before you submit" }).isVisible())) {
-    const later = page.getByRole("radio", { name: "Pay later" });
-    if (await later.isVisible()) await later.click();
+    const pay = page.getByRole("radiogroup", { name: "Taking payment?" }).getByRole("radio", { name: "No" });
+    if (await pay.isVisible()) await pay.click();
     await page.getByRole("button", { name: "Next" }).click();
   }
   await page.getByRole("button", { name: "Submit inspection" }).click();

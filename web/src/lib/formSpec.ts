@@ -42,7 +42,7 @@ export function missingFields(kind: Kind, tree: Pick<FormVersion, "pages" | "che
   tree.pages.forEach((p, i) =>
     p.sections.forEach((s) =>
       s.fields.forEach((f) => {
-        if (f.type === "derived" || f.type === "rating") return;
+        if (f.type === "derived" || f.type === "rating" || f.type === "image") return;
         if (r.visible[f.key] && r.required[f.key] && isEmpty(values[f.key]))
           out.push({ key: f.key, label: f.label || f.key, page: i, pageTitle: p.title });
       })));
@@ -55,12 +55,11 @@ export function visiblePages(kind: Kind, tree: Pick<FormVersion, "pages" | "chec
   return tree.pages.filter((p) => p.sections.some((s) => s.fields.some((f) => r.visible[f.key])));
 }
 
-/** The check-in form's pages split into "before the inspection" (title mentions check) and
- *  "wrap-up" (the rest: payment, review). With a single page it is the wrap-up. */
+/** The check-in/wrap-up form's pages split by where the Admin put them: "before" the inspection
+ *  (check-in) and "after" it (wrap-up). A page with no slot counts as wrap-up. */
 export function splitOpsPages(pages: FormPage[]): { checkIn: FormPage[]; wrapUp: FormPage[] } {
-  const checkIn = pages.filter((p) => /check/i.test(p.title));
-  if (checkIn.length === 0 && pages.length > 1) return { checkIn: [pages[0]!], wrapUp: pages.slice(1) };
-  return { checkIn, wrapUp: pages.filter((p) => !checkIn.includes(p)) };
+  const checkIn = pages.filter((p) => p.slot === "before");
+  return { checkIn, wrapUp: pages.filter((p) => p.slot !== "before") };
 }
 
 /** Only the answers of fields that exist, are visible, and are not system-computed. */
@@ -68,7 +67,7 @@ export function submittable(kind: Kind, tree: Pick<FormVersion, "pages" | "check
   const r = evaluateTree(kind, tree, values, ctx);
   const out: Answers = {};
   for (const p of tree.pages) for (const s of p.sections) for (const f of s.fields) {
-    if (f.type === "derived" || f.type === "rating") continue;
+    if (f.type === "derived" || f.type === "rating" || f.type === "image") continue;
     const v = values[f.key];
     if (r.visible[f.key] && !isEmpty(v)) out[f.key] = v;
   }

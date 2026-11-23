@@ -10,6 +10,7 @@ export function LibraryBox({ kind, id, library, readOnly, onDone }: {
   const { say, fail } = useToast();
   const [name, setName] = useState("");
   const path = `${kind}s/${id}`;
+  if (readOnly && !library) return null;          // nothing to show on a field that is not linked
   const call = async (action: string, body: unknown, done: string) => {
     try { await api(`${path}/${action}`, { body }); say(done); onDone(); } catch (e) { fail(e); }
   };

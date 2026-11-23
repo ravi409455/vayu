@@ -84,3 +84,17 @@ export function staleInfo(e: unknown): { by: string; at: string; keys: string[];
     rowVersion: Number(b.row_version ?? 0),
   };
 }
+
+/** Upload one file as multipart form data (the builder's pictures). */
+export async function uploadFile<T>(path: string, file: File): Promise<T> {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`/api/v1/${path.replace(/^\//, "")}`, { method: "POST", body, credentials: "same-origin", headers: { "X-CSRFToken": csrfToken(), Accept: "application/json" } });
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    const err = new ApiError(res.status, data);
+    if (res.status === 401) handlers.onUnauthorized?.();
+    throw err;
+  }
+  return data as T;
+}

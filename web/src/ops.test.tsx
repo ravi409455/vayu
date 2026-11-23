@@ -170,3 +170,100 @@ describe("form renderer", () => {
     expect(onChange).toHaveBeenCalledWith("shot", [expect.stringMatching(/^preview-/)]);
   });
 });
+
+import { nowAs } from "./ui/FormRenderer";
+import { canDelete } from "./pages/ops/Bookings";
+import { InfoTip } from "./ui/InfoTip";
+import { OPS_PAGES, visibleNav } from "./Layout";
+
+describe("picture, automatic and manual fields", () => {
+  const render1 = (fields: FormField[], props: Record<string, unknown> = {}) =>
+    render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="ops" tree={{ pages: [pageOf(fields)], checks: [] }} values={{}} onChange={(props.onChange as () => void) ?? (() => {})} {...props} /></QueryClientProvider>);
+
+  it("a picture field shows its image to the expert, read-only, and nowhere else", () => {
+    const qr = fld("qr", "image", { label: "Scan to pay", config: { asset: "abc-123" } });
+    const { unmount } = render1([qr], { role: "expert" });
+    expect(screen.getByAltText("Scan to pay")).toHaveAttribute("src", "/api/v1/form-assets/abc-123");
+    expect(screen.queryByRole("textbox")).toBeNull();                              // nothing to fill in
+    unmount();
+    render1([qr], { role: "ops" });
+    expect(screen.queryByAltText("Scan to pay")).toBeNull();
+  });
+  it("the builder's preview shows the picture too", () => {
+    render1([fld("qr", "image", { label: "QR", config: { asset: "z" } })], { preview: true, role: "ops" });
+    expect(screen.getByAltText("QR")).toBeInTheDocument();
+  });
+  it("an automatic date and time is stamped once and cannot be typed", async () => {
+    const onChange = vi.fn();
+    render1([fld("arrived", "datetime", { label: "Arrived", config: { auto: true } })], { onChange });
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith("arrived", expect.stringMatching(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/)));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText("Arrived")).toBeNull();                          // no input to edit
+    expect(screen.getByText("(automatic)")).toBeInTheDocument();
+  });
+  it("automatic date and time do not stamp in preview, read-only mode or when a value exists", () => {
+    const onChange = vi.fn();
+    const t = [fld("d", "date", { config: { auto: true } })];
+    render1(t, { onChange, preview: true });
+    render1(t, { onChange, readOnly: true });
+    render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="ops" tree={{ pages: [pageOf(t)], checks: [] }} values={{ d: "2026-01-02" }} onChange={onChange} /></QueryClientProvider>);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByText("2026-01-02")).toBeInTheDocument();
+  });
+  it("without the automatic setting a date is an ordinary input", () => {
+    render1([fld("d", "date", { label: "Day" })]);
+    expect(screen.getByLabelText("Day")).toHaveAttribute("type", "date");
+  });
+  it("a location set to manual waits for the button instead of asking by itself", async () => {
+    const ask = vi.fn((ok: (p: unknown) => void) => ok({ coords: { latitude: 1, longitude: 2, accuracy: 3 } }));
+    Object.defineProperty(globalThis.navigator, "geolocation", { configurable: true, value: { getCurrentPosition: ask } });
+    const onChange = vi.fn();
+    const u = userEvent.setup();
+    render1([fld("loc", "gps", { config: { auto: false } })], { onChange });
+    expect(ask).not.toHaveBeenCalled();
+    await u.click(screen.getByRole("button", { name: "Capture my location" }));
+    expect(onChange).toHaveBeenCalledWith("loc", { lat: 1, lng: 2, accuracy: 3 });
+  });
+  it("nowAs gives the shapes the server stores", () => {
+    const d = new Date(2026, 10, 23, 9, 5, 7);
+    expect(nowAs("date", d)).toBe("2026-11-23");
+    expect(nowAs("time", d)).toBe("09:05");
+    expect(nowAs("datetime", d)).toMatch(/^2026-11-23T09:05:07[+-]\d\d:\d\d$/);
+  });
+});
+
+describe("who sees what", () => {
+  it("Ops see exactly Bookings, Job board, Problems and Dashboards", () => {
+    const everything = () => true;
+    const titles = visibleNav("ops", everything).flatMap((g) => g.items.map((i) => i.to));
+    expect(titles.sort()).toEqual([...OPS_PAGES].sort());
+  });
+  it("Admin sees the management pages too, and nobody has a Search page any more", () => {
+    const admin = visibleNav("admin", () => true).flatMap((g) => g.items.map((i) => i.to));
+    expect(admin).toEqual(expect.arrayContaining(["/bookings", "/forms", "/library", "/users", "/integrations"]));
+    expect(admin).not.toContain("/search");
+    expect(admin).not.toContain("/jobs");
+  });
+  it("Admin may delete any booking, Ops only a draft", () => {
+    expect(canDelete("admin", "completed")).toBe(true);
+    expect(canDelete("ops", "draft")).toBe(true);
+    expect(canDelete("ops", "assigned")).toBe(false);
+    expect(canDelete("ops", "cancelled")).toBe(false);
+  });
+});
+
+describe("the little i", () => {
+  it("opens on hover and closes when the pointer leaves, and still works by click and keyboard", async () => {
+    const u = userEvent.setup();
+    render(<InfoTip>Explains things</InfoTip>);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    await u.hover(screen.getByRole("button", { name: "More info" }));
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Explains things");
+    await u.unhover(screen.getByRole("button", { name: "More info" }));
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    await u.tab();
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();                         // keyboard focus
+    await u.keyboard("{Escape}");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+});

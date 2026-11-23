@@ -1,4 +1,5 @@
 import re
+import uuid
 
 from django.db import models, transaction
 from django.db.models import F, Q
@@ -33,12 +34,18 @@ class FormKind(models.TextChoices):
     INSPECTION = "inspection"
 
 
+def default_submission_roles() -> list[str]:
+    return ["expert", "ops"]            # Admin can always see submissions
+
+
 class Form(models.Model):
     key = models.CharField(max_length=64, unique=True)
     kind = models.CharField(max_length=16, choices=FormKind.choices)
     name = models.CharField(max_length=150)
     is_active = models.BooleanField(default=True)
     inspection_type = models.CharField(max_length=64, blank=True)  # inspection_type list item key
+    # inspection forms: which roles may see this form's submissions at all (Admin always can)
+    submission_roles = models.JSONField(default=default_submission_roles)
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -156,6 +163,9 @@ class Page(DraftOnly):
     visible = models.BooleanField(default=True)
     # the person cannot move on from this page until everything required on it is filled in
     gate = models.BooleanField(default=False)
+    # check-in/wrap-up form only: where the page sits in the expert's steps
+    slot = models.CharField(max_length=6, blank=True,
+                            choices=[("before", "before"), ("after", "after")])
     show_if = models.JSONField(null=True, blank=True)
     access = models.JSONField(default=dict, blank=True)
 
@@ -206,6 +216,7 @@ class FieldType(models.TextChoices):
     VIDEO = "video"
     FILE = "file"
     SIGNATURE = "signature"
+    IMAGE = "image"      # a picture the Admin uploads, shown to people filling the form (read-only)
     DERIVED = "derived"  # system-filled (Key Checks), Ops can override
     RATING = "rating"    # system-filled (suggested rating), Ops can override
 
@@ -297,3 +308,14 @@ class VersionCheck(DraftOnly):
 
     class Meta:
         ordering = ["order", "id"]
+
+
+class FormAsset(models.Model):
+    """A picture uploaded in the builder for an 'image' field (e.g. a payment QR code)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    key = models.CharField(max_length=200)
+    content_type = models.CharField(max_length=50)
+    size = models.PositiveIntegerField()
+    created_by = models.ForeignKey("accounts.User", null=True, on_delete=models.SET_NULL,
+                                   related_name="+")
+    created_at = models.DateTimeField(default=timezone.now)

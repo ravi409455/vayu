@@ -14,7 +14,7 @@ export const EMPTY: Filters = { search: "", city: "", expert: "", type: "", stag
 export const todayIso = () => new Date().toISOString().slice(0, 10);
 
 export function JobBoard() {
-  const { me, can } = useAuth();
+  const { me } = useAuth();
   const nav = useNavigate();
   const key = `vayu:board:${me?.id}`;
   const [f, setF] = useState<Filters>(() => loadJSON<Filters>(key, EMPTY));   // filters are remembered per person
@@ -30,10 +30,10 @@ export function JobBoard() {
   const nameOf = new Map((experts.data ?? []).map((u) => [u.id, u.name || u.username]));
   return (
     <>
-      <PageHeader title="Job board" subtitle="Every booking, with filters that are remembered for you." tip="Click a row to open the booking. Your filters stay as you left them, so the board looks the same tomorrow.">
+      <PageHeader title="Job board" subtitle="Every booking, with filters that are remembered for you." tip="A read-only view of the bookings. Click a row to open the full booking. Your filters stay as you left them. To create or manage bookings use the Bookings page.">
         <button onClick={() => set({ date_from: todayIso(), date_to: todayIso() })}>Today</button>
         <button onClick={() => setF(EMPTY)}>Clear filters</button>
-        {can("bookings.create") && <button className="primary" onClick={() => nav("/booking/new")}>New booking</button>}</PageHeader>
+</PageHeader>
       <div className="card"><div className="grid2">
         <input aria-label="Search" placeholder="Search booking ID, customer, phone, chassis, car" value={f.search} onChange={(e) => set({ search: e.target.value })} />
         <select aria-label="City" value={f.city} onChange={(e) => set({ city: e.target.value })}><option value="">All cities</option>{(cities.data ?? []).map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select>

@@ -141,5 +141,6 @@ test.describe("admin screens", () => {
     await signIn(page, "ops");
     await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Job board" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Library" })).toHaveCount(0);
   });
 });

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.forms.access import levels_for, visible_answers
+from apps.forms.access import hidden_inspection_forms, levels_for, visible_answers
 
 from .models import Booking, Inspection, RescheduleLog
 
@@ -61,6 +61,10 @@ class InspectionSerializer(serializers.ModelSerializer):
             from .submissions import ops_version
 
             role, stage = request.user.role, instance.booking.stage
+            hidden = self.context.setdefault("_hidden_forms", hidden_inspection_forms(request.user))
+            if instance.form_version.form_id in hidden:        # not theirs to see
+                data["answers"], data["scores"], data["overrides"] = {}, None, None
+                return data
             if role == "expert":                       # experts never see ratings or Key Checks
                 data.pop("scores", None)
                 data.pop("overrides", None)

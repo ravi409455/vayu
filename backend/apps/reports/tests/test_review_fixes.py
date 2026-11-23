@@ -176,3 +176,14 @@ def test_a_template_draft_can_be_discarded_but_never_the_first_unpublished_one(r
     assert PdfTemplateVersion.objects.filter(pk=first, status="published").exists()
     assert AuditLog.objects.filter(action="pdf_template.draft_discard").exists()
     assert renv.ops.delete(f"/api/v1/pdf-template-versions/{first}").status_code == 403
+
+
+def test_a_role_left_off_a_forms_submission_list_cannot_open_its_reports(report_env):
+    env, b = report_env
+    url = f"/api/v1/bookings/{b['id']}/report"
+    assert env.ops.get(url).status_code == 200
+    env.admin.patch(f"/api/v1/forms/{env.form_id}", {"submission_roles": ["expert"]},
+                    format="json")
+    assert env.ops.get(url).status_code == 404
+    assert env.ops.get("/api/v1/problems/reports").status_code == 200
+    assert env.admin.get(url).status_code == 200

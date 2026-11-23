@@ -4,15 +4,17 @@ from django.shortcuts import get_object_or_404
 from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.accounts import audit
 from apps.accounts.permissions import perm
 from apps.core.errors import CodedError
 
-from . import library, promote, services
+from . import assets, library, promote, services
 from .models import (
     Field,
     Form,
+    FormAsset,
     FormVersion,
     LibraryItem,
     MasterList,
@@ -409,3 +411,26 @@ class PromoteImport(generics.GenericAPIView):
     def post(self, request):
         return Response(promote.import_bundle(request.user, request.data),
                         status=status.HTTP_201_CREATED)
+
+
+class FormAssetUpload(generics.GenericAPIView):
+    """POST a picture (multipart field 'file'); returns the id to put in an image field."""
+    permission_classes = [perm("forms.edit")]
+    serializer_class = serializers.Serializer
+
+    def post(self, request):
+        file = request.FILES.get("file")
+        if file is None:
+            raise serializers.ValidationError({"file": "Choose a picture."})
+        asset = assets.create_asset(request.user, file.read(assets.MAX_BYTES + 1))
+        return Response({"id": str(asset.id), "url": f"/api/v1/form-assets/{asset.id}"},
+                        status=status.HTTP_201_CREATED)
+
+
+class FormAssetShow(APIView):
+    """Anyone signed in may see a form's pictures (they are part of the form)."""
+
+    def get(self, request, pk):
+        from django.http import HttpResponseRedirect
+
+        return HttpResponseRedirect(assets.url(get_object_or_404(FormAsset, pk=pk)))

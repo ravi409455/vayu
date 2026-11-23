@@ -497,19 +497,17 @@ def test_ops_form_media_is_validated_and_awaited_for_completion(job, settings):
     env, b = job
     ops_form = env.admin.post("/api/v1/forms", {"key": "ops", "kind": "ops", "name": "Ops"},
                               format="json").json()
-    v = ops_form["draft_version"]["id"]
-    sec = env.admin.get(f"/api/v1/form-versions/{v}").json()["pages"][0]["sections"][0]["id"]
-    env.admin.post(f"/api/v1/sections/{sec}/fields", {"key": "selfie", "label": "Selfie",
-                   "type": "photo", "config": {"max_count": 1}}, format="json")
-    publish_form(env.admin, ops_form["id"])
+    publish_form(env.admin, ops_form["id"])        # its system fields (selfie, payment...) come with it
     sid = upload(env.expert, b["id"], jpeg(), settings, field_key="selfie").json()["id"]
     body = {"client_submission_uuid": str(uuid.uuid4()), "answers": {
-        "inspection": {"chassis_no": "MA3YPKCSKTJ273129"}, "ops": {"selfie": [sid]}}}
+        "inspection": {"chassis_no": "MA3YPKCSKTJ273129"},
+        "ops": {"selfie": [sid], "taking_payment": False}}}
     assert env.expert.post(f"/api/v1/bookings/{b['id']}/submit", body, format="json"
                            ).status_code == 200
     assert stage(b) == "completed"
     bad = {"client_submission_uuid": str(uuid.uuid4()), "answers": {
-        "inspection": {"chassis_no": "MA3YPKCSKTJ273129"}, "ops": {"selfie": [str(uuid.uuid4())]}}}
+        "inspection": {"chassis_no": "MA3YPKCSKTJ273129"},
+        "ops": {"selfie": [str(uuid.uuid4())], "taking_payment": False}}}
     other = create(env.ops, booking_id="MD3").json()
     assign(env, other)
     start(env.expert, other)

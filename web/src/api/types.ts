@@ -22,7 +22,7 @@ export type FormSection = {
   library: { item: number; revision: number | null; update_available: boolean } | null;
 };
 export type FormPage = {
-  id: number; title: string; order: number; visible: boolean; gate: boolean; show_if: unknown; access: Access;
+  id: number; title: string; order: number; visible: boolean; gate: boolean; slot?: string; show_if: unknown; access: Access;
   sections: FormSection[];
 };
 export type Check = { id: number; rule: unknown; message: string; fields: string[]; order: number };
@@ -37,7 +37,7 @@ export type RatingConfig = {
 };
 export type FormSummary = {
   id: number; key: string; kind: "booking" | "ops" | "inspection"; name: string; is_active: boolean;
-  inspection_type: string; draft_version: { id: number; number: number } | null;
+  inspection_type: string; submission_roles?: string[]; draft_version: { id: number; number: number } | null;
   published_version: { id: number; number: number } | null;
 };
 export type MasterList = { id: number; key: string; name: string; items?: MasterListItem[] };

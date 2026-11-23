@@ -15,7 +15,7 @@ from apps.bookings.submissions import inspection_version, ops_version, own_filte
 from apps.core import events
 from apps.core import tasks as core_tasks
 from apps.core.errors import CodedError
-from apps.forms.access import levels_for
+from apps.forms.access import hidden_inspection_forms, levels_for
 from apps.forms.fieldtypes import DEFAULT_MAX_COUNT
 from apps.forms.models import Field
 
@@ -80,6 +80,8 @@ def hidden_fields(user, booking: Booking) -> set[str]:
         return set(MediaAsset.objects.filter(booking=booking).values_list("field_key", flat=True))
     versions = [main, ops_version()]
     out: set[str] = set()
+    if main.form_id in hidden_inspection_forms(user):          # the whole submission is off limits
+        out |= set(Field.objects.filter(version=main, type__in=KINDS).values_list("key", flat=True))
     for v in versions:
         if v is not None:
             out |= {k for k, level in levels_for(v, user.role, booking.stage).items()

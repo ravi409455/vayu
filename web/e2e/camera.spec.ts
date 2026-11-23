@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { apiAs, expertId, json, signIn } from "./api";
+import { apiAs, expertId, JPEG, json, signIn } from "./api";
 
 test.use({
   permissions: ["geolocation", "camera", "microphone"], geolocation: { latitude: 28.6, longitude: 77.2 },
@@ -38,6 +38,11 @@ test("attach still works for the same field (both options are offered)", async (
   await signIn(page, "expert");
   await page.goto(`/jobs/${id}`);
   await page.getByRole("button", { name: "Start inspection" }).click();
+  await expect(page.getByRole("button", { name: /Attach a photo/ })).toHaveCount(0);     // the check-in selfie is camera-only
+  await page.getByTestId("camera-selfie").setInputFiles({ name: "s.jpg", mimeType: "image/jpeg", buffer: JPEG });
+  await expect(page.getByTestId("media-item")).toHaveCount(1);
+  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("radio", { name: "Dent" }).click();                                // reveals the door photo
   await expect(page.getByRole("button", { name: /Attach a photo/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Open camera: photo/ })).toBeVisible();
 });

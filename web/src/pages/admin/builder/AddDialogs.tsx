@@ -16,12 +16,13 @@ export function AddFieldDialog({ sectionTitle, onClose, onAdd, onLibrary }: {
   const [type, setType] = useState<string | null>(null);
   const [label, setLabel] = useState("");
   const [key, setKey] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const lib = useList<LibItem>("library", "library", { kind: "field" });
   const groups = useMemo(() => [...new Set(FIELD_TYPES.map((t) => t.group))], []);
   const match = (s: string) => s.toLowerCase().includes(q.trim().toLowerCase());
   return (
     <Modal title={`Add a field to “${sectionTitle}”`} onClose={onClose}
-      actions={type ? <><button onClick={() => setType(null)}>Back</button><button className="primary" disabled={!label || !key} onClick={() => onAdd({ key, label, type, config: defaultConfig(type) })}>Add field</button></> : <button onClick={onClose}>Cancel</button>}>
+      actions={type ? <><button onClick={() => setType(null)}>Back</button><button className="primary" disabled={!label || !key || (type === "image" && !file)} onClick={() => onAdd({ key, label, type, config: defaultConfig(type), ...(file ? { __file: file } : {}) })}>Add field</button></> : <button onClick={onClose}>Cancel</button>}>
       {!type && (
         <>
           <Tabs value={tab} onChange={setTab} tabs={[{ id: "new", label: "New question" }, { id: "library", label: "From the library" }]} />
@@ -51,6 +52,7 @@ export function AddFieldDialog({ sectionTitle, onClose, onAdd, onLibrary }: {
         <>
           <Field label="Label" tip="What the person sees above the field."><input autoFocus value={label} onChange={(e) => { setLabel(e.target.value); if (!key || key === slugKey(label)) setKey(slugKey(e.target.value)); }} /></Field>
           <Field label="Key" tip="A short name used by reports, the API and integrations. It can never change, so pick it carefully." help="Lowercase letters, numbers and underscores."><input value={key} onChange={(e) => setKey(e.target.value)} /></Field>
+          {type === "image" && <Field label="Picture" tip="PNG or JPEG, up to 2 MB, shown to the expert in the form." help="Choose the picture to show."><input type="file" accept="image/png,image/jpeg" aria-label="Choose the picture" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></Field>}
         </>
       )}
     </Modal>

@@ -931,6 +931,37 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/form-assets:
+    post:
+      operationId: form_assets_create
+      description: POST a picture (multipart field 'file'); returns the id to put
+        in an image field.
+      tags:
+      - form-assets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/form-assets/{id}:
+    get:
+      operationId: form_assets_retrieve
+      description: Anyone signed in may see a form's pictures (they are part of the
+        form).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - form-assets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/form-versions/{id}:
     get:
       operationId: form_versions_retrieve
@@ -2586,6 +2617,9 @@ components:
       - summary
       - target_id
       - target_type
+    BlankEnum:
+      enum:
+      - ''
     Booking:
       type: object
       properties:
@@ -2748,6 +2782,7 @@ components:
           type: string
           default: ''
           maxLength: 64
+        submission_roles: {}
         draft_version:
           type: string
           readOnly: true
@@ -2934,6 +2969,10 @@ components:
           type: boolean
         gate:
           type: boolean
+        slot:
+          oneOf:
+          - $ref: '#/components/schemas/SlotEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         show_if:
           nullable: true
         access: {}
@@ -3219,6 +3258,7 @@ components:
           type: string
           default: ''
           maxLength: 64
+        submission_roles: {}
         draft_version:
           type: string
           readOnly: true
@@ -3330,6 +3370,10 @@ components:
           type: boolean
         gate:
           type: boolean
+        slot:
+          oneOf:
+          - $ref: '#/components/schemas/SlotEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         show_if:
           nullable: true
         access: {}
@@ -3480,6 +3524,14 @@ components:
       - library
       - locked
       - title
+    SlotEnum:
+      enum:
+      - before
+      - after
+      type: string
+      description: |-
+        * `before` - before
+        * `after` - after
     StageEnum:
       enum:
       - draft
@@ -3524,6 +3576,7 @@ components:
       - video
       - file
       - signature
+      - image
       - derived
       - rating
       type: string
@@ -3546,6 +3599,7 @@ components:
         * `video` - Video
         * `file` - File
         * `signature` - Signature
+        * `image` - Image
         * `derived` - Derived
         * `rating` - Rating
     User:

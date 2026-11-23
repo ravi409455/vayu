@@ -12,6 +12,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from apps.accounts.permissions import perm, scope_for
+from apps.forms.access import hidden_inspection_forms
 
 from . import services, submissions
 from .models import Booking, Inspection
@@ -171,7 +172,8 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
 
     @action(detail=True, methods=["get"])
     def inspections(self, request, pk=None):
-        qs = self.get_object().inspections.all()
+        qs = self.get_object().inspections.exclude(
+            form_version__form_id__in=hidden_inspection_forms(request.user))
         if scope_for(request.user, "submissions.view", request) == "own":
             qs = qs.filter(expert_id=request.user.pk)
         return Response(InspectionSerializer(qs, many=True,
@@ -187,7 +189,8 @@ class InspectionDetail(generics.RetrieveUpdateAPIView):
         return [perm("submissions.view", "submissions.edit")()]
 
     def get_queryset(self):
-        qs = Inspection.objects.select_related("booking", "form_version", "last_edited_by")
+        qs = Inspection.objects.select_related("booking", "form_version", "last_edited_by").exclude(
+            form_version__form_id__in=hidden_inspection_forms(self.request.user))
         key = "submissions.view" if self.request.method == "GET" else "submissions.edit"
         if scope_for(self.request.user, key, self.request) == "own":
             qs = qs.filter(expert_id=self.request.user.pk)
@@ -210,7 +213,8 @@ class InspectionOverrides(generics.GenericAPIView):
     def patch(self, request, pk):
         if "row_version" not in request.data:
             raise ValidationError({"row_version": "This field is required."})
-        insp = get_object_or_404(Inspection, pk=pk)
+        insp = get_object_or_404(Inspection.objects.exclude(
+            form_version__form_id__in=hidden_inspection_forms(request.user)), pk=pk)
         body = {k: v for k, v in request.data.items() if k != "row_version"}
         insp = submissions.set_overrides(request.user, insp, body, request.data["row_version"])
         return Response(InspectionSerializer(insp, context=self.get_serializer_context()).data)

@@ -1,7 +1,7 @@
 import { Info } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
-/** The little "i": click (or focus) for a plain-words explanation of what something is for. */
+/** The little "i": hover (or focus, or tap) for a plain-words explanation of what something is for. */
 export function InfoTip({ children, label = "More info" }: { children: ReactNode; label?: string }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
@@ -16,9 +16,10 @@ export function InfoTip({ children, label = "More info" }: { children: ReactNode
     return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", close); };
   }, [open]);
   return (
-    <span className="tip" ref={box}>
+    <span className="tip" ref={box} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
       <button type="button" className="tip-btn" aria-label={label} aria-expanded={open} aria-describedby={open ? id : undefined}
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(!open); }}>
+        onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(true); }}>
         <Info size={14} aria-hidden />
       </button>
       {open && <span role="tooltip" id={id} className="tip-pop">{children}</span>}

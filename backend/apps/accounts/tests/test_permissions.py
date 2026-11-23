@@ -16,10 +16,11 @@ OPS_ALLOWED = {
     "ratings.override": "all", "reports.view": "all", "reports.regenerate": "all",
     "dashboards.view": "all", "dashboards.export": "all", "users.view": "all",
     "users.sign_out_devices": "all", "forms.view": "all", "library.view": "all",
+    "bookings.delete": "all",          # the service only lets Ops delete untouched drafts
 }
 OPS_DENIED = [
     "forms.edit", "forms.publish", "forms.promote", "library.edit", "pdf_templates.view",
-    "pdf_templates.edit", "master_lists.manage", "bookings.delete", "submissions.delete",
+    "pdf_templates.edit", "master_lists.manage", "submissions.delete",
     "submissions.fill", "users.manage", "roles.manage", "audit.view", "integrations.manage",
     "api_keys.manage", "payments.record",
 ]
@@ -61,7 +62,7 @@ def test_ops_defaults_are_daily_operations_only(make_user):
 def test_ops_cannot_change_templates_or_delete_submissions_by_default(make_user):
     ops = make_user(Role.OPS)
     for key in ("forms.edit", "forms.publish", "library.edit", "pdf_templates.edit",
-                "master_lists.manage", "submissions.delete", "bookings.delete"):
+                "master_lists.manage", "submissions.delete"):
         assert scope_for(ops, key) is None
 
 
@@ -318,7 +319,7 @@ def test_ops_without_users_manage_cannot_manage_users(api_as, make_user):
 PUBLIC_OR_AUTHENTICATED_ONLY = {"HealthView", "LoginView", "DeviceCheckedRefreshView", "MeView",
                                 "LogoutView", "ChangePasswordView", "ZipDownload", "Verify",
                                 # API-key views: authorised by the key and its scope
-                                "Bookings", "BookingDetail", "BulkBookings",
+                                "Bookings", "BookingDetail", "BulkBookings", "FormAssetShow",
                                 "BookingInspection"}
 
 

@@ -46,8 +46,8 @@ test("J3: expert completes a full inspection on the web", async ({ page }) => {
   await page.getByLabel("Remarks").fill("Small dent on the driver door, customer informed.");
   await page.getByRole("button", { name: "Next" }).click();
 
-  // wrap-up: pay later
-  await page.getByRole("radio", { name: "Pay later" }).click();
+  // wrap-up: not taking payment now
+  await page.getByRole("radiogroup", { name: "Taking payment?" }).getByRole("radio", { name: "No" }).click();
   await page.getByRole("button", { name: "Next" }).click();
 
   // review: the door photo is still missing, and the review says so
@@ -79,7 +79,9 @@ test("J3b: GPS denied shows 'GPS unavailable' and does not block the job", async
   await page.goto(`/jobs/${id}`);
   await page.getByRole("button", { name: "Start inspection" }).click();
   await expect(page.getByRole("status").filter({ hasText: "GPS unavailable" })).toBeVisible();   // asked by itself, refused
-  await page.getByRole("button", { name: "Next" }).click();             // not blocked
+  await page.getByTestId("camera-selfie").setInputFiles(file("selfie.jpg"));                    // the selfie is still required
+  await expect(page.getByTestId("media-item")).toHaveCount(1);
+  await page.getByRole("button", { name: "Next" }).click();             // GPS refusal does not block
   await expect(page.getByText(/Step 2 of/)).toBeVisible();
   await ctx.close();
 });
@@ -89,6 +91,8 @@ test("J3c: a refresh keeps the draft and the pending upload carries on", async (
   await signIn(page, "expert");
   await page.goto(`/jobs/${id}`);
   await page.getByRole("button", { name: "Start inspection" }).click();
+  await page.getByTestId("camera-selfie").setInputFiles(file("selfie.jpg"));
+  await expect(page.getByTestId("media-item")).toHaveCount(1);
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByLabel("Odometer").fill("77");
   await page.getByRole("button", { name: "Next" }).click();

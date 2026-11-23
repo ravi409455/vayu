@@ -158,3 +158,9 @@ div.field > .label-row label, div.field > .label-row > span:first-child { font-w
 .media-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
 .media-actions .btn-icon { padding: 9px 14px; border-radius: 10px; }
 .fake-photo { aspect-ratio: 4/3; background: #eef0f4; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #98a2b3; }
+table.access-grid.vertical { width: 100%; min-width: 0; }
+.access-grid.vertical thead th { text-align: center; } .access-grid.vertical thead th:first-child { text-align: left; }
+.access-grid.vertical tbody th { white-space: nowrap; padding: 4px 8px 4px 0; }
+.access-grid.vertical .cell { min-width: 0; }
+.static-image { max-width: 100%; max-height: 340px; border-radius: 10px; border: 1px solid var(--line); display: block; margin-top: 4px; }
+.auto-stamp { margin: 4px 0; font-weight: 600; }

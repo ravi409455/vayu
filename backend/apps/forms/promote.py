@@ -18,6 +18,7 @@ from .models import (
     FieldKey,
     FieldType,
     Form,
+    FormAsset,
     FormKind,
     FormVersion,
     LibraryItem,
@@ -78,8 +79,8 @@ def export_bundle(version: FormVersion) -> dict:
                 "library": {"key": link.key, "revision": s.library_revision} if link else None,
                 "fields": [_field(f) for f in fields]})
         pages.append({"title": page.title, "order": page.order, "visible": page.visible,
-                      "gate": page.gate, "show_if": page.show_if, "access": page.access,
-                      "sections": sections})
+                      "gate": page.gate, "slot": page.slot, "show_if": page.show_if,
+                      "access": page.access, "sections": sections})
     library = [{"kind": i.kind, "key": i.key, "name": i.name, "definition": i.definition,
                 "revision": i.revision, "archived": i.archived}
                for _, i in sorted(items.items())]
@@ -94,14 +95,58 @@ def export_bundle(version: FormVersion) -> dict:
     return {
         "schema": SCHEMA,
         "form": {"key": version.form.key, "kind": version.form.kind, "name": version.form.name,
-                 "inspection_type": version.form.inspection_type},
+                 "inspection_type": version.form.inspection_type,
+                 "submission_roles": version.form.submission_roles},
         "version": {"rating_config": version.rating_config, "pages": pages,
                     "checks": [{"rule": c.rule, "message": c.message, "fields": c.fields,
                                 "order": c.order}
                                for c in VersionCheck.objects.filter(version=version)]},
         "library": library, "master_lists": master_lists,
         "pdf_template": {"definition": last.definition} if last else None,
+        "assets": _export_assets(pages, library),
     }
+
+
+def _image_ids(pages: list, library: list) -> set[str]:
+    """Picture ids used by image fields (in the form itself and in library definitions)."""
+    out = {f["config"].get("asset") for p in pages for s in p["sections"] for f in s["fields"]
+           if f["type"] == "image"}
+    for item in library:
+        d = item["definition"]
+        out |= {f["config"].get("asset") for f in d.get("fields", [d]) if f.get("type") == "image"}
+    return {i for i in out if i}
+
+
+def _export_assets(pages: list, library: list) -> dict:
+    from . import assets
+
+    ids = _image_ids(pages, library)
+    return {str(a.id): assets.export(a) for a in FormAsset.objects.filter(pk__in=ids)}
+
+
+def _remap_assets(b: dict, mapping: dict[str, str]) -> None:
+    """Point every image field at the picture's new id on this server."""
+    def fix(f):
+        if f.get("type") == "image" and f.get("config", {}).get("asset") in mapping:
+            f["config"]["asset"] = mapping[f["config"]["asset"]]
+
+    for p in b["version"]["pages"]:
+        for s in p["sections"]:
+            for f in s["fields"]:
+                fix(f)
+    for item in b["library"]:
+        d = item["definition"]
+        for f in d.get("fields", [d]):
+            fix(f)
+
+
+def _import_assets(actor, b: dict) -> dict[str, str]:
+    from . import assets
+
+    payload = b.get("assets") or {}
+    if not isinstance(payload, dict):
+        raise bad("INVALID_BUNDLE", "The bundle's pictures are not valid.")
+    return {old: str(assets.import_from_bundle(actor, p).id) for old, p in payload.items()}
 
 
 # ------------------------------------------------------------------ import
@@ -152,9 +197,14 @@ def _check_content(b: dict) -> None:
         if not KEY_RE.fullmatch(b["form"]["key"]):
             raise ValueError("Invalid form key.")
         validate_rating(b["version"].get("rating_config", {}))
+        roles = b["form"].get("submission_roles", ["expert", "ops"])
+        if not isinstance(roles, list) or set(roles) - {"expert", "ops"}:
+            raise ValueError("submission_roles may only name expert and ops.")
         for p in b["version"]["pages"]:
             if not isinstance(p.get("gate", False), bool):
                 raise ValueError("A page's gate must be true or false.")
+            if p.get("slot", "") not in ("", "before", "after"):
+                raise ValueError("A page's slot must be before or after.")
             validate_access(p["access"])
             rules(("page.show_if", p["show_if"]))
             for s in p["sections"]:
@@ -276,19 +326,22 @@ def import_bundle(actor, b: Any) -> dict:
         raise bad("DRAFT_EXISTS", "This form's PDF template already has a draft.", 409)
     notes: list[str] = []
     with transaction.atomic():
+        _remap_assets(b, _import_assets(actor, b))
         list_items = _import_lists(b, notes)
         items, library_created = _import_library(b, notes)
         _check_content(b)       # needs the lists; failure rolls all back
         form = existing or Form.objects.create(
             key=form_data["key"], kind=form_data["kind"], name=form_data["name"],
-            inspection_type=form_data["inspection_type"])
+            inspection_type=form_data["inspection_type"],
+            submission_roles=form_data.get("submission_roles", ["expert", "ops"]))
         number = (form.versions.aggregate(n=Max("number"))["n"] or 0) + 1
         version = FormVersion.objects.create(form=form, number=number,
                                              rating_config=b["version"].get("rating_config", {}))
         for p in b["version"]["pages"]:
             page = Page.objects.create(version=version, title=p["title"], order=p["order"],
                                        visible=p["visible"], gate=p.get("gate", False),
-                                       show_if=p["show_if"], access=p["access"])
+                                       slot=p.get("slot", ""), show_if=p["show_if"],
+                                       access=p["access"])
             for s in p["sections"]:
                 link = s.get("library")
                 section = Section.objects.create(
