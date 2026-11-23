@@ -129,6 +129,9 @@ class BookingReport(APIView):
                          "generated_at": r.generated_at, "filename": r.filename, "error": r.error,
                          "verify_url": f"{settings.VERIFY_BASE_URL}/{r.token}",
                          "url": storage.presign_get(r.key, r.filename) if r.status == "ready"
+                         else None,
+                         # same file, shown in the page instead of downloaded
+                         "preview_url": storage.presign_get(r.key) if r.status == "ready"
                          else None})
 
 

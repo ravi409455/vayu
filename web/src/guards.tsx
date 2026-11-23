@@ -4,7 +4,7 @@ import { useAuth } from "./auth";
 
 /** Where a person lands, and what they may open. Pure so it can be tested without a browser. */
 export function homeFor(role: string): string {
-  return role === "expert" ? "/jobs" : role === "ops" ? "/board" : "/forms";
+  return role === "expert" ? "/jobs" : role === "ops" ? "/today" : "/forms";
 }
 
 export function RequireAuth({ children, perm, not, adminOnly }: { children: ReactNode; perm?: string; not?: string; adminOnly?: boolean }) {

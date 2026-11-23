@@ -1,4 +1,4 @@
-import { ChevronDown, LogOut, Search, UserRound } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Search, UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -9,10 +9,11 @@ import { useAuth } from "../auth";
 import { Avatar } from "./Avatar";
 import { useCrumbText } from "./crumb";
 import { envName } from "./Logo";
+import { useProblems } from "../lib/problems";
 
 /** Section of the app for each first path segment; detail pages name their parent list. */
 const SECTION: Record<string, [string, string]> = {
-  bookings: ["Bookings", "/bookings"], booking: ["Bookings", "/bookings"], board: ["Job board", "/board"],
+  bookings: ["Bookings", "/bookings"], booking: ["Bookings", "/bookings"], today: ["Today", "/today"],
   problems: ["Problems", "/problems"], dashboards: ["Dashboards", "/dashboards"], jobs: ["My jobs", "/jobs"],
   forms: ["Forms", "/forms"], library: ["Library", "/library"], lists: ["Master lists", "/lists"],
   pdf: ["PDF templates", "/pdf"], users: ["Users", "/users"], roles: ["Roles & permissions", "/roles"],
@@ -125,6 +126,15 @@ function AccountMenu() {
   );
 }
 
+function ProblemsBell() {
+  const p = useProblems();
+  return (
+    <Link to="/problems" className="icon-btn bell" aria-label={p.total ? `Problems: ${p.total}` : "Problems: none"} title="Problems">
+      <Bell size={18} aria-hidden />{p.total > 0 && <span className="bell-dot">{p.total}</span>}
+    </Link>
+  );
+}
+
 export function TopBar() {
   const { me, can } = useAuth();
   const env = envName();
@@ -134,6 +144,7 @@ export function TopBar() {
       {me && me.role !== "expert" && can("bookings.view") && <GlobalSearch />}
       <div className="right">
         {env && <span className="env" title="Which server this is">{env}</span>}
+        {me && me.role !== "expert" && can("bookings.view") && <ProblemsBell />}
         <AccountMenu />
       </div>
     </header>

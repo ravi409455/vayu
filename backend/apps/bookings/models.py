@@ -101,3 +101,23 @@ class Inspection(models.Model):
         """part -> the form version this inspection was started on (None: part not used)."""
         return {"inspection": self.form_version, "start": self.start_version,
                 "end": self.end_version}
+
+
+class BookingActivity(models.Model):
+    """What happened to a booking, for its timeline and the "edited by Ops" filter.
+    Append-only. Values are kept only for schedule / stage / assignment keys; other changes
+    keep just the field keys (answers can be sensitive and are visible per role)."""
+
+    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name="activity")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                              on_delete=models.PROTECT, related_name="+")  # null: the system
+    # created | changed | edited | inspection_edited | ratings_changed
+    kind = models.CharField(max_length=24)
+    changes = models.JSONField(default=dict)   # {key: [old, new]} for SAFE_KEYS only
+    keys = models.JSONField(default=list)      # every changed key ("part.key" for inspections)
+    inspection = models.ForeignKey(Inspection, null=True, blank=True, on_delete=models.CASCADE,
+                                   related_name="+")
+    at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-at", "-id"]

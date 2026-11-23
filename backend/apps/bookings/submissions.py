@@ -12,6 +12,7 @@ from apps.forms.rules import validate_answers
 from apps.forms.serializers import VersionTreeSerializer
 from apps.scoring import service as scoring
 
+from . import activity
 from .models import Booking, Inspection
 from .services import (
     _changed,
@@ -286,8 +287,10 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
         raise err("FIELD_ACCESS", "You cannot change these fields at this stage.", 403, keys=locked)
     merged = {k: {**(insp.answers.get(k) or {}), **(answers.get(k) or {})} for k in PARTS}
     new = _clean_all(b, pinned, merged)
-    keys = sorted(k for part in PARTS for k in set(new[part]) | set(
-        insp.answers.get(part) or {}) if new[part].get(k) != (insp.answers.get(part) or {}).get(k))
+    changed = [(part, k) for part in PARTS
+               for k in sorted(set(new[part]) | set(insp.answers.get(part) or {}))
+               if new[part].get(k) != (insp.answers.get(part) or {}).get(k)]
+    keys = sorted(k for _, k in changed)
     if keys:
         insp.answers = new
         insp.row_version += 1
@@ -299,6 +302,8 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
         chassis = new["inspection"].get("chassis_no")
         if chassis is not None and b.chassis_no != chassis:
             Booking.objects.filter(pk=b.pk).update(chassis_no=chassis)
+        activity.log(b, actor, "inspection_edited", keys=[f"{p}.{k}" for p, k in changed],
+                     inspection=insp)
         events.emit("inspection.updated", booking=str(b.id), inspection=str(insp.id), keys=keys)
     return insp
 
@@ -349,6 +354,7 @@ def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Insp
                         "keys": ["overrides"]}
     insp.save()
     scoring.recompute(insp)
+    activity.log(insp.booking, actor, "ratings_changed", keys=[], inspection=insp)
     events.emit("inspection.updated", booking=str(insp.booking_id), inspection=str(insp.id),
                 keys=["overrides"])
     return insp

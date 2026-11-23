@@ -61,13 +61,13 @@ describe("route guards", () => {
     expect(await screen.findByText("JOBS")).toBeInTheDocument();
   });
   it("each role has its own home", () => {
-    expect([homeFor("expert"), homeFor("ops"), homeFor("admin")]).toEqual(["/jobs", "/board", "/forms"]);
+    expect([homeFor("expert"), homeFor("ops"), homeFor("admin")]).toEqual(["/jobs", "/today", "/forms"]);
   });
   it("navigation follows role and permissions", () => {
     const titles = (role: string, perms: string[]) => visibleNav(role, (p) => perms.includes(p)).flatMap((g) => g.items.map((i) => i.label));
     expect(titles("expert", [])).toEqual(["My jobs"]);
     const ops = titles("ops", ["bookings.view", "dashboards.view", "forms.view"]);
-    expect(ops).toContain("Job board");
+    expect(ops).toEqual(["Today", "Bookings", "Problems", "Dashboards"]);
     expect(ops).not.toContain("Users");
     expect(ops).not.toContain("My jobs");
     expect(titles("admin", ["users.view", "roles.manage", "forms.view"])).toEqual(expect.arrayContaining(["Users", "Roles & permissions", "Forms"]));

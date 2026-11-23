@@ -109,5 +109,5 @@ test("forms: duplicate a form, and import a file as a copy", async ({ page }) =>
 test("ops cannot open the library", async ({ page }) => {
   await signIn(page, "ops");
   await page.goto("/library");
-  await expect(page).toHaveURL(/\/board$/);
+  await expect(page).toHaveURL(/\/today$/);
 });

@@ -32,17 +32,19 @@ export type RenderProps = {
 export function FormRenderer(p: RenderProps) {
   const result = evaluateTree(p.kind, p.tree, p.values, p.ctx);
   const pages = p.pages ?? p.tree.pages;
+  // one page / one section: their names ("Page 1", "Section 1") say nothing, so they are not shown
+  const onePage = p.tree.pages.length === 1, oneSection = onePage && p.tree.pages[0]!.sections.length === 1;
   return (
     <div>
       {pages.map((page) => (
         <div key={page.id}>
-          {p.pages === undefined && <h2>{page.title}</h2>}
+          {p.pages === undefined && !onePage && <h2>{page.title}</h2>}
           {page.sections.map((s) => {
             const fields = s.fields.filter((f) => result.visible[f.key] && !(p.role === "expert" && (f.type === "derived" || f.type === "rating")));
             if (fields.length === 0) return null;
             return (
               <section className="card" key={s.id} aria-label={s.title}>
-                <h3 style={{ marginTop: 0 }}>{s.title}</h3>
+                {!oneSection && <h3 style={{ marginTop: 0 }}>{s.title}</h3>}
                 {fields.map((f) => (
                   <FieldInput key={f.id} f={f} value={p.values[f.key]} derived={result.derived[f.key]} required={!!result.required[f.key]}
                     error={p.errors?.[f.key]} readOnly={p.readOnly || p.readOnlyKeys?.includes(f.key) || f.level === "view" || f.type === "derived" || f.type === "rating"}

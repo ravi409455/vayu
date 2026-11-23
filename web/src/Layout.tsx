@@ -1,11 +1,12 @@
 import {
   AlertTriangle, BarChart3, BookOpen, Briefcase, ChevronsLeft, ChevronsRight, FileOutput, FileText, KeyRound,
-  ClipboardList, LayoutDashboard, List, Rocket, ScrollText, Shield, Users, Webhook, type LucideIcon,
+  ClipboardList, Home, List, Rocket, ScrollText, Shield, Users, Webhook, type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "./auth";
 import { loadJSON, saveJSON } from "./lib/store";
+import { useProblems } from "./lib/problems";
 import { CrumbProvider } from "./ui/crumb";
 import { Logo } from "./ui/Logo";
 import { TopBar } from "./ui/TopBar";
@@ -14,8 +15,8 @@ type Item = { to: string; label: string; icon: LucideIcon; perm?: string; role?:
 const GROUPS: { title: string; items: Item[] }[] = [
   { title: "Work", items: [
     { to: "/jobs", label: "My jobs", icon: Briefcase, role: "expert" },
+    { to: "/today", label: "Today", icon: Home, perm: "bookings.view", role: "ops-admin" },
     { to: "/bookings", label: "Bookings", icon: ClipboardList, perm: "bookings.view", role: "ops-admin" },
-    { to: "/board", label: "Job board", icon: LayoutDashboard, perm: "bookings.view", role: "ops-admin" },
     { to: "/problems", label: "Problems", icon: AlertTriangle, perm: "bookings.view", role: "ops-admin" },
     { to: "/dashboards", label: "Dashboards", icon: BarChart3, perm: "dashboards.view" },
   ] },
@@ -35,9 +36,9 @@ const GROUPS: { title: string; items: Item[] }[] = [
   ] },
 ];
 
-/** Ops only ever work with bookings: these four pages and nothing else (no templates, lists,
+/** Ops only ever work with bookings: these pages and nothing else (no templates, lists,
  *  users or settings), whatever permissions their role has behind the scenes. */
-export const OPS_PAGES = ["/bookings", "/board", "/problems", "/dashboards"];
+export const OPS_PAGES = ["/today", "/bookings", "/problems", "/dashboards"];
 
 /** Which links a person sees: by permission, and by role (the expert has a different home). */
 export function visibleNav(role: string, can: (p: string) => boolean): { title: string; items: Item[] }[] {
@@ -54,6 +55,7 @@ export function visibleNav(role: string, can: (p: string) => boolean): { title: 
 
 export function Layout() {
   const { me, can } = useAuth();
+  const problems = useProblems();
   const [collapsed, setCollapsed] = useState(() => loadJSON<boolean>("vayu:nav:collapsed", false));
   useEffect(() => saveJSON("vayu:nav:collapsed", collapsed), [collapsed]);
   if (!me) return null;
@@ -72,6 +74,7 @@ export function Layout() {
               {g.items.map((i) => (
                 <NavLink key={i.to} to={i.to} title={i.label} aria-label={i.label}>
                   <i.icon size={18} aria-hidden /><span className="nav-label">{i.label}</span>
+                  {i.to === "/problems" && problems.total > 0 && <span className="nav-badge" aria-label={`${problems.total} problems`}>{problems.total}</span>}
                 </NavLink>
               ))}
             </div>

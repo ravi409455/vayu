@@ -20,7 +20,7 @@ const ApiKeys = lazy(() => import("./pages/admin/ApiKeys").then((m) => ({ defaul
 const Promote = lazy(() => import("./pages/admin/Promote").then((m) => ({ default: m.Promote })));
 const MyJobs = lazy(() => import("./pages/expert/MyJobs").then((m) => ({ default: m.MyJobs })));
 const Job = lazy(() => import("./pages/expert/Job").then((m) => ({ default: m.Job })));
-const JobBoard = lazy(() => import("./pages/ops/JobBoard").then((m) => ({ default: m.JobBoard })));
+const Today = lazy(() => import("./pages/ops/Today").then((m) => ({ default: m.Today })));
 const BookingPage = lazy(() => import("./pages/ops/Booking").then((m) => ({ default: m.BookingPage })));
 const Problems = lazy(() => import("./pages/ops/Problems").then((m) => ({ default: m.Problems })));
 const Bookings = lazy(() => import("./pages/ops/Bookings").then((m) => ({ default: m.Bookings })));
@@ -46,7 +46,8 @@ export function App() {
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
           <Route path="/" element={<Home />} />
           <Route path="/profile" element={<Profile />} />
-          <Route path="/board" element={<RequireAuth perm="bookings.view" not="expert"><JobBoard /></RequireAuth>} />
+          <Route path="/today" element={<RequireAuth perm="bookings.view" not="expert"><Today /></RequireAuth>} />
+          <Route path="/board" element={<Navigate to="/bookings" replace />} />
           <Route path="/booking/:id" element={<RequireAuth perm="bookings.view" not="expert"><BookingPage /></RequireAuth>} />
           <Route path="/problems" element={<RequireAuth perm="bookings.view" not="expert"><Problems /></RequireAuth>} />
           <Route path="/bookings" element={<RequireAuth perm="bookings.view" not="expert"><Bookings /></RequireAuth>} />

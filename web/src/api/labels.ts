@@ -28,5 +28,5 @@ export const STAGE_LABEL: Record<string, string> = {
   draft: "Not assigned", assigned: "Assigned", in_progress: "In progress", submitted: "Uploading", completed: "Completed", cancelled: "Cancelled",
 };
 export const STAGE_TONE: Record<string, "ok" | "warn" | "bad" | "info" | undefined> = {
-  draft: undefined, assigned: "info", in_progress: "warn", submitted: "warn", completed: "ok", cancelled: "bad",
+  draft: "warn", assigned: undefined, in_progress: "info", submitted: "info", completed: "ok", cancelled: "bad",
 };

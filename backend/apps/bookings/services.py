@@ -12,6 +12,7 @@ from apps.forms.fieldtypes import AnswerError, clean_answer
 from apps.forms.models import Field, Form, FormType, FormVersion, MasterListItem, VersionStatus
 from apps.forms.rules import validate_answers
 
+from . import activity
 from .models import Booking, RescheduleLog
 from .stages import can_transition
 
@@ -95,6 +96,7 @@ def create(actor, answers: dict) -> Booking:
     if cleaned.get("assigned_expert"):
         b.assigned_expert_id, b.stage = cleaned["assigned_expert"], "assigned"
     _save(b)
+    activity.log(b, actor, "created", {"stage": [None, b.stage]} if b.stage != "draft" else {})
     events.emit("booking.created", booking=str(b.id), booking_id=b.booking_id)
     return b
 
@@ -131,6 +133,7 @@ def edit(actor, b: Booking, new_answers: dict, row_version: int) -> Booking:
     sync_columns(b)
     _touch(b, actor, sorted(changes))
     _save(b)
+    activity.log(b, actor, "edited", changes)
     events.emit("booking.updated", booking=str(b.id), booking_id=b.booking_id, changes=changes)
     return b
 
@@ -142,6 +145,7 @@ def _lock(b: Booking) -> Booking:
 def _changed(actor, b: Booking, changes: dict) -> None:
     _touch(b, actor, sorted(changes))
     _save(b)
+    activity.log(b, actor, "changed", changes)
     events.emit("booking.updated", booking=str(b.id), booking_id=b.booking_id, changes=changes)
 
 

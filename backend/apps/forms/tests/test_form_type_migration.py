@@ -27,7 +27,7 @@ def old_world():
     User.objects.create_user(username="e", password="x", role="expert")   # made now: users keep their schema
     apps = migrate(BEFORE)
     yield apps
-    migrate(AFTER)                               # leave the database at the newest state
+    migrate(MigrationExecutor(connection).loader.graph.leaf_nodes())   # leave the database at the newest state
     from django.contrib.contenttypes.models import ContentType
 
     ContentType.objects.clear_cache()            # later tests flush the database

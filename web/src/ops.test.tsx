@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./api/client";
+import { AuthProvider } from "./auth";
 import type { FormField, FormPage } from "./api/types";
 import { saveDirty } from "./lib/saveDirty";
 import { Problems } from "./pages/ops/Problems";
@@ -47,26 +48,29 @@ describe("409 'changed by someone': retry only my own fields", () => {
 });
 
 describe("problem queue", () => {
-  it("shows a count on each tab that has something", async () => {
+  it("groups what needs a person, with a count per group and in total", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
       const u = String(url);
-      const body = u.includes("stuck-uploads") ? [{ id: "a", booking: "b1", booking_id: "B1", field_key: "p", status: "pending", expert: "ravi", created_at: "2026-11-23T01:00:00Z" }, { id: "b", booking: "b2", booking_id: "B2", field_key: "p", status: "uploaded", expert: "ravi", created_at: "2026-11-23T01:00:00Z" }]
+      const body = u.includes("auth/me") ? { id: 1, username: "o", name: "O", role: "ops", permissions: { "bookings.view": "all" } }
+        : u.includes("stuck-uploads") ? [{ id: "a", booking: "b1", booking_id: "B1", field_key: "p", status: "pending", expert: "ravi", created_at: "2026-11-23T01:00:00Z" }, { id: "b", booking: "b2", booking_id: "B2", field_key: "p", status: "uploaded", expert: "ravi", created_at: "2026-11-23T01:00:00Z" }]
         : u.includes("problems/reports") ? [{ booking: "b3", booking_id: "B3", status: "failed", stale: false, error: "render_failed" }]
-        : u.includes("problem=conflict") ? { count: 1, next: null, previous: null, results: [{ id: "b4", booking_id: "B4", conflict: "TWO_EXPERTS", stage: "submitted", alerts: [] }] }
+        : u.includes("problem=conflict") ? { count: 1, next: null, previous: null, results: [{ id: "b4", booking_id: "B4", conflict: "TWO_EXPERTS", stage: "submitted", alerts: [], answers: {} }] }
         : { count: 0, next: null, previous: null, results: [] };
       return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
     });
-    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><Problems /></MemoryRouter></QueryClientProvider>);
-    expect(await screen.findByRole("tab", { name: "Stuck uploads (2)" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("tab", { name: "Conflicts (1)" })).toBeInTheDocument());
-    expect(screen.getByRole("tab", { name: "PDF problems (1)" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Rejected type changes" })).toBeInTheDocument();     // empty: no count
-    expect(screen.getByText("B1")).toBeInTheDocument();
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><AuthProvider><Problems /></AuthProvider></MemoryRouter></QueryClientProvider>);
+    const stuck = await screen.findByRole("region", { name: "Uploads stuck" });
+    expect(stuck).toHaveTextContent("2");
+    await waitFor(() => expect(screen.getByRole("region", { name: "Conflicts" })).toHaveTextContent("B4"));
+    expect(screen.getByRole("region", { name: "PDF problems" })).toHaveTextContent("render_failed");
+    expect(screen.queryByRole("region", { name: "Rejected type changes" })).toBeNull();       // empty: not shown
+    expect(screen.getByRole("heading", { name: /Problems/ })).toHaveTextContent("4");
   });
   it("says so when there is nothing wrong", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => new Response(JSON.stringify(String(url).includes("problem=") ? { count: 0, next: null, previous: null, results: [] } : []), { status: 200, headers: { "Content-Type": "application/json" } }));
-    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><Problems /></MemoryRouter></QueryClientProvider>);
-    expect(await screen.findByText("No uploads are stuck.")).toBeInTheDocument();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => new Response(JSON.stringify(String(url).includes("auth/me") ? { id: 1, username: "o", name: "O", role: "ops", permissions: { "bookings.view": "all" } }
+      : String(url).includes("problem=") ? { count: 0, next: null, previous: null, results: [] } : []), { status: 200, headers: { "Content-Type": "application/json" } }));
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><AuthProvider><Problems /></AuthProvider></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("All clear")).toBeInTheDocument();
   });
 });
 

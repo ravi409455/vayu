@@ -355,6 +355,7 @@ def test_regenerate_after_an_edit_keeps_one_pdf_and_the_same_token(renv, setting
     assert renv.ops.get("/api/v1/problems/reports").json() == []
     url = renv.ops.get(f"/api/v1/bookings/{b['id']}/report").json()
     assert url["url"].startswith("https://") and url["filename"] == "SA37926PDI.pdf"
+    assert url["preview_url"].startswith("https://") and "attachment" not in url["preview_url"]
 
 
 def test_regenerate_needs_permission_and_a_completed_booking(renv, settings):

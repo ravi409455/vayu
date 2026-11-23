@@ -4,8 +4,8 @@ import { apiAs, expertId, json, signIn } from "./api";
 // J2: create a booking -> assign -> reschedule -> cancel; a duplicate Booking ID is refused
 test("J2: Ops run a booking from creation to cancellation", async ({ page }) => {
   await signIn(page, "ops");
-  await expect(page).toHaveURL(/\/board$/);
-  await page.getByRole("link", { name: "Bookings" }).click();                  // bookings are made here, not on the read-only board
+  await expect(page).toHaveURL(/\/today$/);                                    // Ops land on Today
+  await page.getByRole("link", { name: "Bookings", exact: true }).click();
   await page.getByRole("button", { name: "New booking" }).click();
   await page.getByLabel("Booking ID").fill("J2-100");
   await page.getByLabel("Customer name").fill("Sunita Rao");
@@ -33,8 +33,7 @@ test("J2: Ops run a booking from creation to cancellation", async ({ page }) => 
   await page.getByLabel("New time").fill("14:00");
   await page.getByRole("dialog").getByLabel("Reason").selectOption({ index: 1 });
   await page.getByRole("dialog").getByRole("button", { name: "Reschedule" }).click();
-  await page.getByRole("tab", { name: "History" }).click();
-  await expect(page.getByText("2026-12-01 10:30 → 2026-12-02 14:00")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Activity" })).toContainText(/Rescheduled to Wed 2 Dec(ember)?( 2026)?, 2:00 pm/);
 
   // a duplicate Booking ID is refused, in any letter case
   await page.goto("/booking/new");
@@ -51,9 +50,10 @@ test("J2: Ops run a booking from creation to cancellation", async ({ page }) => 
   await expect(page.getByRole("alert").first()).toContainText("already used");
 
   // cancel
-  await page.goto("/board");
-  await page.getByRole("link", { name: "J2-100" }).click();                    // the board opens the same booking page
-  await page.getByRole("button", { name: "Cancel booking" }).click();
+  await page.goto("/bookings?view=all");
+  await page.getByRole("link", { name: "J2-100" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();             // risky actions sit in the ··· menu
+  await page.getByRole("menuitem", { name: "Cancel booking" }).click();
   await page.getByRole("dialog").getByLabel("Reason").selectOption({ index: 1 });
   await page.getByRole("dialog").getByRole("button", { name: "Cancel this booking" }).click();
   await expect(page.getByText("Cancelled").first()).toBeVisible();
@@ -62,9 +62,9 @@ test("J2: Ops run a booking from creation to cancellation", async ({ page }) => 
   expect(list.results[0].stage).toBe("cancelled");
 });
 
-test("job board filters are remembered per person", async ({ page }) => {
+test("booking filters are remembered per person", async ({ page }) => {
   await signIn(page, "ops");
-  await page.goto("/board");
+  await page.goto("/bookings?view=all");
   await page.getByLabel("City").selectOption("pune");
   await page.getByLabel("Stage").selectOption("cancelled");
   await page.reload();
@@ -77,24 +77,24 @@ test("job board filters are remembered per person", async ({ page }) => {
 test("the Bookings page finds a booking by customer, and an expert cannot open the board", async ({ page }) => {
   await signIn(page, "ops");
   await page.goto("/bookings");
-  await page.getByLabel("Search").fill("Sunita");
+  await page.getByLabel("Filter bookings").fill("Sunita");
   await expect(page.getByRole("link", { name: "J2-100" })).toBeVisible();
   await page.goto("/search");                                                  // the old Search page is gone
-  await expect(page).toHaveURL(/\/board$/);
+  await expect(page).toHaveURL(/\/today$/);
   await page.getByRole("button", { name: "Account menu" }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await signIn(page, "expert");
-  await page.goto("/board");
+  await page.goto("/bookings");
   await expect(page).toHaveURL(/\/jobs$/);
 });
 
-test("the menu and pages: Ops see only four, nothing of the admin side", async ({ page }) => {
+test("the menu and pages: Ops see only their four, nothing of the admin side", async ({ page }) => {
   await signIn(page, "ops");
-  for (const name of ["Bookings", "Job board", "Problems", "Dashboards"]) await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
+  for (const name of ["Today", "Bookings", "Problems", "Dashboards"]) await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
   for (const name of ["Library", "Master lists", "Users", "Forms", "PDF templates", "Promote", "Integrations", "API keys", "Search"]) await expect(page.getByRole("link", { name })).toHaveCount(0);
   for (const path of ["/library", "/lists", "/users", "/forms", "/pdf", "/promote", "/integrations"]) {
     await page.goto(path);
-    await expect(page).toHaveURL(/\/board$/);
+    await expect(page).toHaveURL(/\/today$/);
   }
 });
 
@@ -110,11 +110,14 @@ test("delete rules: Ops may delete only a draft, Admin any booking", async ({ pa
 
   await signIn(page, "ops");
   await page.goto("/bookings");
-  await page.getByLabel("Search").fill("J2-DEL");
+  await page.getByLabel("Filter bookings").fill("J2-DEL");
   await expect(page.getByRole("link", { name: "J2-DEL-B" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Delete J2-DEL-B" })).toHaveCount(0);          // assigned: cancel only
+  await page.getByRole("button", { name: "Actions for J2-DEL-B" }).click();
+  await expect(page.getByRole("menuitem", { name: "Delete…" })).toHaveCount(0);                // assigned: cancel only
+  await page.keyboard.press("Escape");
   expect((await ops.delete(`bookings/${assigned.id}`)).status()).toBe(403);
-  await page.getByRole("button", { name: "Delete J2-DEL-A" }).click();                         // untouched draft: allowed
+  await page.getByRole("button", { name: "Actions for J2-DEL-A" }).click();
+  await page.getByRole("menuitem", { name: "Delete…" }).click();                               // untouched draft: allowed
   await page.getByRole("dialog").getByRole("button", { name: "Delete booking" }).click();
   await expect(page.getByText("Booking deleted.")).toBeVisible();
   expect((await admin.get(`bookings/${draft.id}`)).status()).toBe(404);
@@ -123,8 +126,9 @@ test("delete rules: Ops may delete only a draft, Admin any booking", async ({ pa
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await signIn(page, "admin");
   await page.goto("/bookings");
-  await page.getByLabel("Search").fill("J2-DEL-B");
-  await page.getByRole("button", { name: "Delete J2-DEL-B" }).click();                         // Admin can delete any
+  await page.getByLabel("Filter bookings").fill("J2-DEL-B");
+  await page.getByRole("button", { name: "Actions for J2-DEL-B" }).click();
+  await page.getByRole("menuitem", { name: "Delete…" }).click();                               // Admin can delete any
   await page.getByRole("dialog").getByRole("button", { name: "Delete booking" }).click();
   await expect(page.getByText("Booking deleted.")).toBeVisible();
   expect((await admin.get(`bookings/${assigned.id}`)).status()).toBe(404);

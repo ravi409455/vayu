@@ -10,6 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts.permissions import scope_for
+from apps.bookings import activity
 from apps.bookings.models import Booking, Inspection
 from apps.bookings.services import err
 from apps.bookings.submissions import current_versions, own_filter
@@ -245,6 +246,7 @@ def check_completion(booking_id) -> bool:
         b.row_version += 1
         b.last_change = {"by": "system", "at": timezone.now().isoformat(), "keys": ["stage"]}
         b.save()
+        activity.log(b, None, "changed", {"stage": ["submitted", "completed"]})
     events.emit("inspection.completed", booking=str(b.id), booking_id=b.booking_id,
                 inspection=str(insp.id))
     events.emit("media.completed", booking=str(b.id), booking_id=b.booking_id)

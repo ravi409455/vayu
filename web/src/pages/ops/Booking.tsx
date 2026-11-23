@@ -1,16 +1,23 @@
+import { Download, Phone } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError, explain } from "../../api/client";
 import { asList, useList, useRefresh } from "../../api/hooks";
 import { STAGE_LABEL, STAGE_TONE, useInspectionTypes, useLabels, useTypeLabels } from "../../api/labels";
-import type { Booking, Inspection, MasterListItem, User } from "../../api/types";
+import type { Booking, FormPage, FormSection, FormVersion, Inspection, MasterListItem, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { saveDirty } from "../../lib/saveDirty";
 import { usePinnedTrees, useTrees } from "../../lib/useTrees";
 import { addFile } from "../../lib/uploadManager";
 import { FormRenderer } from "../../ui/FormRenderer";
-import { Confirm, Field, Modal, Pill, Tabs, useToast, when } from "../../ui/kit";
+import { Confirm, Empty, Field, Modal, Pill, Tabs, useToast } from "../../ui/kit";
+import { AnswerSheet, AnswerValue, defectOf, readableFields, type SheetFilter } from "../../ui/AnswerSheet";
+import { Avatar } from "../../ui/Avatar";
+import { useMediaUrl, Thumb } from "../../ui/MediaThumb";
+import { MoreMenu } from "../../ui/Menu";
+import { fmtPhone, fmtSlot, fmtStamp, mapsUrl } from "../../lib/format";
+import { missingFields } from "../../lib/formSpec";
 import { StaleDialog, type Stale } from "../../ui/StaleDialog";
 import type { Answers } from "../../lib/formSpec";
 import { useCrumb } from "../../ui/crumb";
@@ -38,15 +45,19 @@ function NewBooking() {
   });
   if (loading || !tree) return <p className="muted pad">Loading…</p>;
   return (
-    <div style={{ maxWidth: 720 }}>
-      <h1>New booking</h1>
-      <FormRenderer kind="booking" tree={tree} values={values} errors={errors} readOnlyKeys={["assigned_expert"]} onChange={(k, v) => { setValues({ ...values, [k]: v }); setErrors({ ...errors, [k]: "" }); }} />
-      <button className="primary" disabled={create.isPending} onClick={() => create.mutate()}>Create booking</button>
+    <div style={{ maxWidth: 1040 }}>
+      <header className="page-head"><div className="grow"><h1>New booking</h1></div>
+        <div className="page-actions"><button onClick={() => nav(-1)}>Cancel</button><button className="primary" disabled={create.isPending} onClick={() => create.mutate()}>Create booking</button></div></header>
+      <div className="two-col">
+        <FormRenderer kind="booking" tree={tree} values={values} errors={errors} readOnlyKeys={["assigned_expert"]} onChange={(k, v) => { setValues({ ...values, [k]: v }); setErrors({ ...errors, [k]: "" }); }} />
+      </div>
     </div>
   );
 }
 
-type Tab = "booking" | "inspection" | "media" | "ratings" | "report" | "history";
+type Tab = "booking" | "inspection" | "media" | "ratings" | "report";
+type Activity = { at: string; kind: string; by: { id: number; name: string; role: string } | null; changes: Record<string, [unknown, unknown]>; keys: string[] };
+type ActionKind = "assign" | "reschedule" | "cancel" | "release" | "type";
 
 function Detail({ id }: { id: string }) {
   const { can } = useAuth();
@@ -55,72 +66,196 @@ function Detail({ id }: { id: string }) {
   const b = useQuery({ queryKey: ["booking", id], queryFn: () => api<Booking>(`bookings/${id}`) });
   useCrumb(b.data?.booking_id);
   const insps = useQuery({ queryKey: ["inspections", id], queryFn: async () => asList<Inspection>(await api(`bookings/${id}/inspections`)) });
-  const [tab, setTab] = useState<Tab>("booking");
-  const [action, setAction] = useState<null | "assign" | "reschedule" | "cancel" | "release" | "type">(null);
+  const activity = useQuery({ queryKey: ["activity", id], queryFn: () => api<Activity[]>(`bookings/${id}/activity`) });
+  const [tab, setTab] = useState<Tab | null>(null);
+  const [action, setAction] = useState<null | ActionKind>(null);
   const booking = b.data;
   const experts = useList<User>("experts", "users", { role: "expert" });
   const trees = useTrees(booking?.inspection_type);
-  const reload = () => Promise.all([refresh("booking"), refresh("inspections"), refresh("board"), refresh("report")]);
+  const car = useLabels("car_make_model");
+  const city = useLabels("city");
+  const typeLabel = useTypeLabels();
+  const reload = () => Promise.all([refresh("booking"), refresh("inspections"), refresh("board"), refresh("report"), refresh("activity"), refresh("bookings-page")]);
   const insp = (insps.data ?? []).filter((i) => i.status === "submitted").sort((a, c) => (c.submitted_at ?? "").localeCompare(a.submitted_at ?? ""))[0] ?? (insps.data ?? [])[0];
   const pinned = usePinnedTrees(insp);                   // the exact versions this inspection was started on
   if (!booking) return <p className="muted pad">Loading…</p>;
+  const current: Tab = tab ?? (insp?.status === "submitted" ? "inspection" : "booking");
   const expert = experts.data?.find((u) => u.id === booking.assigned_expert);
   const open = booking.stage === "draft" || booking.stage === "assigned";
+  const live = booking.stage !== "cancelled" && booking.stage !== "completed";
+  const a = booking.answers;
+  const mediaCount = insp ? mediaFields(pinned).reduce((n, f) => n + idsOf(insp, f.part, f.key).length, 0) : 0;
+  return (
+    <div className="record">
+      <header className="record-head">
+        <div className="grow">
+          <div className="muted small">{booking.booking_id} · {typeLabel(booking.inspection_type)}</div>
+          <h1>{String(a.customer_name ?? "")}{a.car_make_model ? <span className="muted"> · {car(a.car_make_model)}</span> : null}</h1>
+          <div className="chips">
+            <Pill tone={STAGE_TONE[booking.stage]}>{STAGE_LABEL[booking.stage] ?? booking.stage}</Pill>
+            {booking.conflict && <Pill tone="bad">Conflict: two experts</Pill>}
+            {fmtSlot(a.inspection_date, a.inspection_time) && <span className="chip">{fmtSlot(a.inspection_date, a.inspection_time)}</span>}
+            {a.city ? <span className="chip">{city(a.city)}</span> : null}
+            {expert ? <span className="chip who-avatar"><Avatar who={expert} size={18} />Expert: {expert.name || expert.username}</span> : null}
+          </div>
+        </div>
+        <div className="page-actions">
+          {can("bookings.reschedule") && live && <button onClick={() => setAction("reschedule")}>Reschedule</button>}
+          {can("bookings.assign") && booking.stage !== "cancelled" && <button className={booking.assigned_expert ? "" : "primary"} onClick={() => setAction("assign")}>{booking.assigned_expert ? "Reassign" : "Assign"}</button>}
+          <MoreMenu label="More actions" items={[
+            { label: "Change type", onClick: () => setAction("type"), hidden: !(can("bookings.edit") && open) },
+            { label: "Force release", onClick: () => setAction("release"), hidden: !(can("bookings.force_release") && booking.stage === "in_progress") },
+            { label: "Cancel booking", danger: true, onClick: () => setAction("cancel"), hidden: !(can("bookings.cancel") && live) },
+          ]} />
+        </div>
+      </header>
+      {booking.alerts?.map((x, i) => <div key={i} className="banner warn" role="alert">{x.detail} <span className="muted small">{fmtStamp(x.at)}</span></div>)}
+      {booking.conflict && <ConflictBanner booking={booking} insps={insps.data ?? []} experts={experts.data ?? []} onResolved={reload} />}
+      <Tabs value={current} onChange={setTab} tabs={[{ id: "booking", label: "Booking" }, { id: "inspection", label: "Inspection" }, { id: "media", label: mediaCount ? `Media ${mediaCount}` : "Media" }, { id: "ratings", label: "Ratings" }, { id: "report", label: "Report" }]} />
+      <div className="record-body">
+        <aside className="record-rail" aria-label="Summary">
+          <section className="card">
+            <h2 className="rail-h">Customer</h2>
+            <div style={{ fontWeight: 600 }}>{String(a.customer_name ?? "")}</div>
+            {a.customer_phone ? <div className="rail-line"><span className="grow">{fmtPhone(a.customer_phone)}</span><a className="btn sm" href={`tel:${String(a.customer_phone)}`} aria-label="Call the customer"><Phone size={14} aria-hidden /></a></div> : null}
+            {a.address ? <><div className="muted small">{String(a.address)}</div><a className="small" href={mapsUrl(`${String(a.address)} ${city(a.city)}`)} target="_blank" rel="noreferrer">Open in Maps</a></> : null}
+          </section>
+          <section className="card">
+            <h2 className="rail-h">Car</h2>
+            <dl className="details">
+              {a.car_make_model ? <><dt>Model</dt><dd>{car(a.car_make_model)}</dd></> : null}
+              <dt>Inspection</dt><dd>{typeLabel(booking.inspection_type)}</dd>
+              {insp?.answers.inspection?.registration_no ? <><dt>Registration</dt><dd>{String(insp.answers.inspection.registration_no)}</dd></> : null}
+              {insp?.answers.inspection?.chassis_no ? <><dt>Chassis</dt><dd className="mono small">{String(insp.answers.inspection.chassis_no)}</dd></> : null}
+              {insp?.answers.inspection?.odometer !== undefined && insp?.answers.inspection?.odometer !== null ? <><dt>Odometer</dt><dd>{Number(insp.answers.inspection.odometer).toLocaleString("en-IN")} km</dd></> : null}
+            </dl>
+          </section>
+          <ActivityCard rows={activity.data ?? []} experts={experts.data ?? []} labels={(k) => labelOf(trees.booking, k)} typeLabel={typeLabel} />
+        </aside>
+        <div className="record-main">
+          {current === "booking" && trees.booking && <BookingTab booking={booking} tree={trees.booking} onSaved={reload} />}
+          {current === "inspection" && <InspectionTab booking={booking} insp={insp} trees={pinned} activity={activity.data ?? []} onSaved={reload} />}
+          {current === "media" && <MediaTab booking={booking} insp={insp} trees={pinned} onChanged={reload} />}
+          {current === "ratings" && <RatingsTab insp={insp} trees={pinned} onSaved={reload} />}
+          {current === "report" && <ReportTab booking={booking} />}
+        </div>
+      </div>
+      {action && <Actions kind={action} booking={booking} experts={experts.data ?? []} onClose={() => setAction(null)} onDone={() => { setAction(null); say("Done."); void reload(); }} fail={fail} />}
+    </div>
+  );
+}
+
+const labelOf = (tree: FormVersion | null | undefined, key: string) =>
+  tree?.pages.flatMap((p) => p.sections.flatMap((s) => s.fields)).find((f) => f.key === key)?.label || key;
+
+/** One line per thing that happened, newest first. */
+export function activityText(r: Activity, expertName: (id: unknown) => string, label: (k: string) => string, typeLabel: (k: unknown) => string): string {
+  const by = r.by?.name ?? "The system";
+  const c = r.changes;
+  if (r.kind === "created") return `Created by ${by}`;
+  if (r.kind === "inspection_edited") return `${by} changed ${r.keys.length} answer${r.keys.length === 1 ? "" : "s"}`;
+  if (r.kind === "ratings_changed") return `${by} changed the ratings`;
+  const stage = c.stage?.[1];
+  if (stage === "completed") return "Completed: every file uploaded";
+  if (stage === "submitted") return `Submitted by ${by}`;
+  if (stage === "in_progress") return `Started by ${by}`;
+  if (stage === "cancelled") return `Cancelled by ${by}`;
+  if (stage === "assigned" && c.stage?.[0] === "in_progress") return `Force-released by ${by}`;
+  if (c.assigned_expert) return `${c.assigned_expert[0] ? "Reassigned" : "Assigned"} to ${expertName(c.assigned_expert[1])} by ${by}`;
+  if (c.inspection_date || c.inspection_time) return `Rescheduled to ${fmtSlot(c.inspection_date?.[1], c.inspection_time?.[1])} by ${by}`;
+  if (c.inspection_type) return `Type changed to ${typeLabel(c.inspection_type[1])} by ${by}`;
+  if (c.conflict) return `Conflict resolved by ${by}`;
+  return `${by} changed ${r.keys.map(label).join(", ") || "the booking"}`;
+}
+
+function ActivityCard({ rows, experts, labels, typeLabel }: { rows: Activity[]; experts: User[]; labels: (k: string) => string; typeLabel: (k: unknown) => string }) {
+  const [all, setAll] = useState(false);
+  const name = (id: unknown) => { const u = experts.find((x) => x.id === id); return u ? u.name || u.username : "an expert"; };
+  const shown = all ? rows : rows.slice(0, 6);
+  return (
+    <section className="card" aria-label="Activity">
+      <h2 className="rail-h">Activity</h2>
+      {rows.length === 0 && <p className="muted small">Nothing yet.</p>}
+      <ol className="timeline">
+        {shown.map((r, i) => (
+          <li key={i} className={r.kind === "inspection_edited" || r.kind === "edited" ? "edit" : r.changes.stage ? "stage" : ""}>
+            <div>{activityText(r, name, labels, typeLabel)}</div>
+            <div className="muted small">{fmtStamp(r.at)}</div>
+          </li>))}
+      </ol>
+      {rows.length > 6 && <button className="link" onClick={() => setAll(!all)}>{all ? "Show less" : `Show all ${rows.length}`}</button>}
+    </section>
+  );
+}
+
+function ConflictBanner({ booking, insps, experts, onResolved }: { booking: Booking; insps: Inspection[]; experts: User[]; onResolved: () => void }) {
+  const { can } = useAuth();
+  const { fail, say } = useToast();
+  const [keep, setKeep] = useState("");
+  const who = (id: number) => experts.find((u) => u.id === id)?.name ?? `#${id}`;
+  const submitted = insps.filter((i) => i.status === "submitted");
+  return (
+    <div className="banner bad" role="alert">
+      <strong>Two experts submitted this booking.</strong> Choose which inspection counts; the other is kept but set aside.
+      {can("bookings.edit") && submitted.length > 1 && (
+        <div className="bar" style={{ marginTop: 8, marginBottom: 0 }}>
+          <select aria-label="Inspection to keep" value={keep} onChange={(e) => setKeep(e.target.value)} style={{ maxWidth: 320 }}><option value="">Choose…</option>{submitted.map((i) => <option key={i.id} value={i.id}>{who(i.expert)} · {fmtStamp(i.submitted_at)}</option>)}</select>
+          <button className="primary" disabled={!keep} onClick={async () => { try { await api(`bookings/${booking.id}/resolve-conflict`, { body: { inspection: keep } }); say("Resolved."); onResolved(); } catch (e) { fail(e); } }}>Keep this one</button>
+        </div>)}
+    </div>
+  );
+}
+
+/** Edit one section in place: its inputs, Save and Cancel. */
+function SectionEditor({ children, onSave, onCancel, saving, changed }: { children: React.ReactNode; onSave: () => void; onCancel: () => void; saving: boolean; changed: boolean }) {
   return (
     <>
-      <div className="bar">
-        <h1 className="grow">{booking.booking_id} <span className="muted small">{String(booking.answers.customer_name ?? "")}</span></h1>
-        <Pill tone={STAGE_TONE[booking.stage]}>{STAGE_LABEL[booking.stage] ?? booking.stage}</Pill>
-        {booking.conflict && <Pill tone="bad">Conflict: two experts</Pill>}
-        {expert && <span className="muted">Expert: {expert.name || expert.username}</span>}
+      <div className="two-col">{children}</div>
+      <div className="bar" style={{ marginTop: 8, marginBottom: 0 }}>
+        <button className="primary" disabled={!changed || saving} onClick={onSave}>Save changes</button>
+        <button onClick={onCancel}>Cancel</button>
       </div>
-      <div className="bar">
-        {can("bookings.assign") && booking.stage !== "cancelled" && <button onClick={() => setAction("assign")}>{booking.assigned_expert ? "Reassign" : "Assign"}</button>}
-        {can("bookings.reschedule") && booking.stage !== "cancelled" && booking.stage !== "completed" && <button onClick={() => setAction("reschedule")}>Reschedule</button>}
-        {can("bookings.edit") && open && <button onClick={() => setAction("type")}>Change type</button>}
-        {can("bookings.force_release") && booking.stage === "in_progress" && <button onClick={() => setAction("release")}>Force release</button>}
-        {can("bookings.cancel") && booking.stage !== "cancelled" && booking.stage !== "completed" && <button className="danger" onClick={() => setAction("cancel")}>Cancel booking</button>}
-      </div>
-      {booking.alerts?.map((a, i) => <p key={i} className="error" role="alert">⚠ {a.detail} <span className="muted small">{when(a.at)}</span></p>)}
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: "booking", label: "Booking" }, { id: "inspection", label: "Inspection" }, { id: "media", label: "Media" }, { id: "ratings", label: "Ratings" }, { id: "report", label: "Report" }, { id: "history", label: "History" }]} />
-      {tab === "booking" && trees.booking && <BookingTab booking={booking} tree={trees.booking} onSaved={reload} />}
-      {tab === "inspection" && <InspectionTab booking={booking} insp={insp} trees={pinned} onSaved={reload} />}
-      {tab === "media" && <MediaTab booking={booking} insp={insp} trees={pinned} onChanged={reload} />}
-      {tab === "ratings" && <RatingsTab insp={insp} trees={pinned} onSaved={reload} />}
-      {tab === "report" && <ReportTab booking={booking} />}
-      {tab === "history" && <HistoryTab booking={booking} insps={insps.data ?? []} experts={experts.data ?? []} onResolved={reload} />}
-      {action && <Actions kind={action} booking={booking} experts={experts.data ?? []} onClose={() => setAction(null)} onDone={() => { setAction(null); say("Done."); void reload(); }} fail={fail} />}
     </>
   );
 }
 
-function BookingTab({ booking, tree, onSaved }: { booking: Booking; tree: NonNullable<ReturnType<typeof useTrees>["booking"]>; onSaved: () => void }) {
+const onlySection = (page: FormPage, s: FormSection): FormPage[] => [{ ...page, sections: [s] }];
+
+function BookingTab({ booking, tree, onSaved }: { booking: Booking; tree: FormVersion; onSaved: () => void }) {
   const { can } = useAuth();
   const { say, fail } = useToast();
   const [values, setValues] = useState<Answers>(booking.answers);
   const [dirty, setDirty] = useState<Answers>({});
   const [stale, setStale] = useState<Stale | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState<{ page: FormPage; section: FormSection } | null>(null);
+  const [saving, setSaving] = useState(false);
   useEffect(() => { setValues({ ...booking.answers, ...dirty }); }, [booking.row_version]); // eslint-disable-line react-hooks/exhaustive-deps
   const change = (k: string, v: unknown) => { setValues({ ...values, [k]: v }); setDirty({ ...dirty, [k]: v }); setErrors({ ...errors, [k]: "" }); };
+  const cancel = () => { setDirty({}); setErrors({}); setValues(booking.answers); setEditing(null); };
   async function save(rowVersion = booking.row_version) {
+    setSaving(true);
     try {
       const r = await saveDirty((rv, ch) => api(`bookings/${booking.id}`, { method: "PATCH", body: { row_version: rv, answers: ch } }), rowVersion, dirty);
       if (!r.ok) return setStale(r.stale);
-      setDirty({}); setStale(null); say("Saved."); onSaved();
+      setDirty({}); setStale(null); setEditing(null); say("Saved."); onSaved();
     } catch (e) {
       if (e instanceof ApiError && e.body.errors) setErrors(e.body.errors as Record<string, string>);
       else if (e instanceof ApiError && e.code === "FIELD_ACCESS") setErrors(Object.fromEntries(((e.body.keys as string[]) ?? []).map((k) => [k, "You cannot change this now."])));
       else if (e instanceof ApiError && e.code === "DUPLICATE_BOOKING_ID") setErrors({ booking_id: explain(e) });
       else fail(e);
-    }
+    } finally { setSaving(false); }
   }
+  const editor = editing && (
+    <SectionEditor changed={Object.keys(dirty).length > 0} saving={saving} onSave={() => save()} onCancel={cancel}>
+      <FormRenderer kind="booking" tree={tree} pages={onlySection(editing.page, editing.section)} values={values} errors={errors} readOnlyKeys={["assigned_expert", "inspection_type"]} onChange={change} />
+    </SectionEditor>);
   return (
-    <div style={{ maxWidth: 720 }}>
-      <FormRenderer kind="booking" tree={tree} values={values} errors={errors} readOnly={!can("bookings.edit")} readOnlyKeys={["assigned_expert", "inspection_type"]} onChange={change} />
-      {can("bookings.edit") && <button className="primary" disabled={Object.keys(dirty).length === 0} onClick={() => save()}>Save changes</button>}
+    <>
+      <AnswerSheet part={{ kind: "booking", tree, values }} onEdit={can("bookings.edit") ? (page, section) => { cancel(); setEditing({ page, section }); } : undefined}
+        editing={editing ? { sectionId: editing.section.id, node: editor } : null} />
       {stale && <StaleDialog info={stale} mine={Object.keys(dirty)} onRetry={() => save(stale.rowVersion)} onReload={() => { setDirty({}); setStale(null); onSaved(); }} />}
-    </div>
+    </>
   );
 }
 
@@ -128,108 +263,241 @@ type Trees = ReturnType<typeof usePinnedTrees>;
 type Part = "inspection" | "start" | "end";
 type Parts = Record<Part, Answers>;
 const NO_ANSWERS: Parts = { inspection: {}, start: {}, end: {} };
+const PART_ORDER: Part[] = ["start", "inspection", "end"];
 
-function InspectionTab({ booking, insp, trees, onSaved }: { booking: Booking; insp?: Inspection; trees: Trees; onSaved: () => void }) {
+function InspectionTab({ booking, insp, trees, activity, onSaved }: { booking: Booking; insp?: Inspection; trees: Trees; activity: Activity[]; onSaved: () => void }) {
   const { can } = useAuth();
   const { say, fail } = useToast();
   const [vals, setVals] = useState<Parts>(NO_ANSWERS);
   const [dirty, setDirty] = useState<Parts>(NO_ANSWERS);
   const [stale, setStale] = useState<Stale | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [filter, setFilter] = useState<SheetFilter>("all");
+  const [editing, setEditing] = useState<{ part: Part; page: FormPage; section: FormSection } | null>(null);
+  const [saving, setSaving] = useState(false);
   const rv = insp?.row_version;
-  useEffect(() => { if (insp) setVals({ inspection: { ...(insp.answers.inspection ?? {}), ...dirty.inspection }, start: { ...(insp.answers.start ?? {}), ...dirty.start }, end: { ...(insp.answers.end ?? {}), ...dirty.end } }); }, [insp?.id, rv]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!insp) return <p className="muted">No inspection has been submitted yet.</p>;
-  const mineKeys = [...Object.keys(dirty.inspection), ...Object.keys(dirty.start), ...Object.keys(dirty.end)];
-  const change = (part: Part) => (k: string, v: unknown) => { setVals({ ...vals, [part]: { ...vals[part], [k]: v } }); setDirty({ ...dirty, [part]: { ...dirty[part], [k]: v } }); };
+  const fromServer = (i: Inspection, d: Parts): Parts => ({ inspection: { ...(i.answers.inspection ?? {}), ...d.inspection }, start: { ...(i.answers.start ?? {}), ...d.start }, end: { ...(i.answers.end ?? {}), ...d.end } });
+  useEffect(() => { if (insp) setVals(fromServer(insp, dirty)); }, [insp?.id, rv]); // eslint-disable-line react-hooks/exhaustive-deps
+  const edited = useMemo(() => {
+    const out: Record<Part, Set<string>> = { inspection: new Set(), start: new Set(), end: new Set() };
+    activity.filter((r) => r.kind === "inspection_edited" && r.by && r.by.role !== "expert").forEach((r) => r.keys.forEach((k) => { const [part, key] = k.split("."); if (part && key && part in out) out[part as Part].add(key); }));
+    return out;
+  }, [activity]);
+  if (!insp) return <Empty title="No inspection yet">It shows here once the expert submits it.</Empty>;
+  const ctxFor = (part: Part) => ({ booking: booking.answers, ...Object.fromEntries(PART_ORDER.filter((p) => p !== part).map((p) => [p, vals[p]])) });
+  const parts = PART_ORDER.filter((p) => trees[p]).map((p) => ({ part: p, tree: trees[p]! }));
+  const rows = parts.flatMap(({ part, tree }) => readableFields(part, tree, vals[part], ctxFor(part)).map((r) => ({ ...r, part, v: vals[part][r.f.key] })));
+  const isEmpty = (v: unknown) => v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
+  const answered = rows.filter((r) => !isEmpty(r.v)).length;
+  const defects = rows.map((r) => defectOf(r.f, r.v)).filter(Boolean) as string[];
+  const editedCount = rows.filter((r) => edited[r.part].has(r.f.key)).length;
+  const missing = parts.reduce((n, { part, tree }) => n + missingFields(part, tree, vals[part], ctxFor(part)).length, 0);
+  const checks = (trees.inspection?.pages ?? []).flatMap((p) => p.sections.flatMap((s) => s.fields.filter((f) => f.type === "derived")));
+  const mineKeys = PART_ORDER.flatMap((p) => Object.keys(dirty[p]));
+  const change = (part: Part) => (k: string, v: unknown) => { setVals({ ...vals, [part]: { ...vals[part], [k]: v } }); setDirty({ ...dirty, [part]: { ...dirty[part], [k]: v } }); setErrors({ ...errors, [k]: "" }); };
+  const cancel = () => { setDirty(NO_ANSWERS); setErrors({}); setVals(fromServer(insp, NO_ANSWERS)); setEditing(null); };
   async function save(rowVersion = insp!.row_version) {
+    setSaving(true);
     try {
       const r = await saveDirty((v, ch) => api(`inspections/${insp!.id}`, { method: "PATCH", body: { row_version: v, answers: ch } }), rowVersion, dirty);
       if (!r.ok) return setStale(r.stale);
-      setDirty(NO_ANSWERS); setStale(null); say("Saved. Ratings and Key Checks were recalculated."); onSaved();
+      setDirty(NO_ANSWERS); setStale(null); setEditing(null); say("Saved. Ratings and Key Checks were recalculated."); onSaved();
     } catch (e) {
       if (e instanceof ApiError && e.body.errors) setErrors(e.body.errors as Record<string, string>);
       else if (e instanceof ApiError && e.code === "FIELD_ACCESS") setErrors(Object.fromEntries(((e.body.keys as string[]) ?? []).map((k) => [k, "You cannot change this now."])));
       else fail(e);
-    }
+    } finally { setSaving(false); }
   }
   const canEdit = can("submissions.edit");
+  const pageCounts = parts.flatMap(({ part, tree }) => tree.pages.map((p) => {
+    const mine = rows.filter((r) => r.part === part && r.page.id === p.id);
+    return { id: `${part}-p${p.id}`, title: p.title, n: mine.length, done: mine.filter((r) => !isEmpty(r.v)).length, defects: mine.filter((r) => defectOf(r.f, r.v)).length };
+  })).filter((p) => p.n > 0);
+  const major = defects.filter((d) => d === "Major").length;
   return (
-    <div style={{ maxWidth: 760 }}>
-      {insp.last_edited_by && <p className="muted small">Last edited by {insp.last_edited_by} {when(insp.last_edited_at)}</p>}
-      {trees.start && <><h2>Check-in</h2><FormRenderer kind="start" tree={trees.start} values={vals.start} ctx={{ booking: booking.answers, inspection: vals.inspection, end: vals.end }} errors={errors} readOnly={!canEdit} bookingId={booking.id} onChange={change("start")} /></>}
-      {trees.inspection && <FormRenderer kind="inspection" tree={trees.inspection} values={vals.inspection} ctx={{ booking: booking.answers, start: vals.start, end: vals.end }} errors={errors} readOnly={!canEdit} bookingId={booking.id} onChange={change("inspection")} />}
-      {trees.end && <><h2>Wrap-up</h2><FormRenderer kind="end" tree={trees.end} values={vals.end} ctx={{ booking: booking.answers, inspection: vals.inspection, start: vals.start }} errors={errors} readOnly={!canEdit} bookingId={booking.id} onChange={change("end")} /></>}
-      {canEdit && <button className="primary" disabled={mineKeys.length === 0} onClick={() => save()}>Save changes</button>}
-      {stale && <StaleDialog info={stale} mine={mineKeys} onRetry={() => save(stale.rowVersion)} onReload={() => { setDirty(NO_ANSWERS); setStale(null); onSaved(); }} />}
-    </div>
+    <>
+      <section className="card summary-strip" aria-label="Inspection summary">
+        <div><div className="muted small">Answered</div><div className="big">{answered} <span className="muted small">of {rows.length}</span></div>
+          <div className="progress thin"><div style={{ width: `${rows.length ? (answered / rows.length) * 100 : 0}%` }} /></div></div>
+        <div><div className="muted small">Defects</div><div className={`big${defects.length ? " bad-text" : ""}`}>{defects.length}</div><div className="muted small">{major} major · {defects.length - major} other</div></div>
+        {insp.scores?.derived && checks.length > 0 && <div><div className="muted small">Key Checks</div><div className="chips">{checks.map((f) => <span key={f.key} className="chip">{f.label}: {insp.scores?.derived?.[f.key] === true ? String(f.config.true_label ?? "Yes") : String(f.config.false_label ?? "No")}</span>)}</div></div>}
+        <div><div className="muted small">Required, not answered</div><div className={`big${missing ? " warn-text" : ""}`}>{missing}</div></div>
+      </section>
+      <div className="bar">
+        <div className="seg" role="group" aria-label="Show">
+          {([["all", `All ${rows.length}`], ["defects", `Defects ${defects.length}`], ["edited", `Edited by Ops ${editedCount}`], ["empty", `Not answered ${rows.length - answered}`]] as const).map(([k, l]) =>
+            <button key={k} aria-pressed={filter === k} onClick={() => setFilter(k)}>{l}</button>)}
+        </div>
+        <span className="grow" />
+        {insp.last_edited_by && <span className="muted small">Last edited by {insp.last_edited_by}, {fmtStamp(insp.last_edited_at)}</span>}
+      </div>
+      <div className="review">
+        <nav className="card review-index" aria-label="Inspection pages">
+          {pageCounts.map((p) => <a key={p.id} href={`#${p.id}`} onClick={(e) => { e.preventDefault(); document.getElementById(p.id)?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
+            <span className="grow ellipsis">{p.title}</span>{p.defects > 0 && <span className="pill bad" title="Defects">{p.defects}</span>}<span className={`small ${p.done === p.n ? "ok" : "muted"}`} title="Answered">{p.done === p.n ? "✓" : `${p.done}/${p.n}`}</span></a>)}
+        </nav>
+        <div className="review-main">
+          {parts.map(({ part, tree }) => (
+            <AnswerSheet key={part} part={{ kind: part, tree, values: vals[part], ctx: ctxFor(part) }} filter={filter} edited={edited[part]} anchor={(p) => `${part}-p${p.id}`}
+              onEdit={canEdit ? (page, section) => { cancel(); setEditing({ part, page, section }); } : undefined}
+              editing={editing?.part === part ? { sectionId: editing.section.id, node: (
+                <SectionEditor changed={mineKeys.length > 0} saving={saving} onSave={() => save()} onCancel={cancel}>
+                  <FormRenderer kind={part} tree={tree} pages={onlySection(editing.page, editing.section)} values={vals[part]} ctx={ctxFor(part)} errors={errors} bookingId={booking.id} onChange={change(part)} />
+                </SectionEditor>) } : null} />
+          ))}
+          {filter !== "all" && rows.filter((r) => filter === "defects" ? defectOf(r.f, r.v) : filter === "edited" ? edited[r.part].has(r.f.key) : isEmpty(r.v)).length === 0 && <Empty>Nothing to show with this filter.</Empty>}
+        </div>
+      </div>
+      {stale && <StaleDialog info={stale} mine={mineKeys} onRetry={() => save(stale.rowVersion)} onReload={() => { setDirty(NO_ANSWERS); setStale(null); setEditing(null); onSaved(); }} />}
+    </>
   );
 }
 
-function mediaFields(trees: Trees): { key: string; label: string; type: string; part: Part }[] {
-  const out: { key: string; label: string; type: string; part: Part }[] = [];
-  for (const [part, tree] of [["start", trees.start], ["inspection", trees.inspection], ["end", trees.end]] as const)
-    tree?.pages.forEach((p) => p.sections.forEach((s) => s.fields.forEach((f) => { if (["photo", "video", "file", "signature"].includes(f.type)) out.push({ key: f.key, label: f.label || f.key, type: f.type, part }); })));
+type MediaField = { key: string; label: string; type: string; part: Part; section: string };
+
+function mediaFields(trees: Trees): MediaField[] {
+  const out: MediaField[] = [];
+  for (const part of PART_ORDER) trees[part]?.pages.forEach((p) => p.sections.forEach((s) => s.fields.forEach((f) => {
+    if (["photo", "video", "file", "signature"].includes(f.type)) out.push({ key: f.key, label: f.label || f.key, type: f.type, part, section: s.title || p.title });
+  })));
   return out;
 }
 
-const mediaUrl = (id: string) => api<{ url: string; preview_url: string | null }>(`media/${id}/url`).catch(() => null);
+const idsOf = (insp: Inspection, part: Part, key: string): string[] => { const v = (insp.answers[part] ?? {})[key]; return Array.isArray(v) ? (v as string[]) : v ? [String(v)] : []; };
 
 function MediaTab({ booking, insp, trees, onChanged }: { booking: Booking; insp?: Inspection; trees: Trees; onChanged: () => void }) {
   const { can } = useAuth();
   const { fail, say } = useToast();
   const [zip, setZip] = useState<string>("");
   const [confirm, setConfirm] = useState<null | { id: string }>(null);
+  const [kind, setKind] = useState<"all" | "photo" | "video">("all");
+  const [showEmpty, setShowEmpty] = useState(false);
+  const [sel, setSel] = useState<string | null>(null);
+  const [target, setTarget] = useState("");
   const fields = useMemo(() => mediaFields(trees), [trees]);
-  if (!insp) return <p className="muted">No inspection yet.</p>;
-  const ids = (part: Part, key: string): string[] => { const v = (insp.answers[part] ?? {})[key]; return Array.isArray(v) ? (v as string[]) : v ? [String(v)] : []; };
-  async function add(f: (typeof fields)[number], files: FileList | null) {
+  if (!insp) return <Empty title="No inspection yet">Photos and videos show here once the expert starts uploading.</Empty>;
+  const items = fields.flatMap((f) => idsOf(insp, f.part, f.key).map((id) => ({ id, f }))).filter((x) => kind === "all" || x.f.type === kind);
+  const empty = fields.filter((f) => idsOf(insp, f.part, f.key).length === 0);
+  const groups = [...new Set(fields.map((f) => f.section))].map((section) => ({ section, items: items.filter((x) => x.f.section === section) })).filter((g) => g.items.length > 0);
+  const current = items.find((x) => x.id === sel) ?? items[0];
+  const at = current ? items.indexOf(current) : -1;
+  async function add(f: MediaField, files: FileList | null) {
     if (!files || !insp) return;
     try {
-      let list = ids(f.part, f.key);
+      let list = idsOf(insp, f.part, f.key);
       for (const file of Array.from(files)) { const id = await addFile({ bookingId: booking.id, fieldKey: f.key, kind: f.type as "photo", file, name: file.name, source: "gallery" }); list = f.type === "signature" ? [id] : [...list, id]; }
       await api(`inspections/${insp.id}`, { method: "PATCH", body: { row_version: insp.row_version, answers: { [f.part]: { [f.key]: f.type === "signature" ? list[0] : list } } } });
       say("Added. It is checked in the background."); onChanged();
     } catch (e) { fail(e); }
   }
   async function remove(id: string) {
-    try { await api(`media/${id}`, { method: "DELETE" }); setConfirm(null); say("Deleted."); onChanged(); } catch (e) { setConfirm(null); fail(e); }
+    try { await api(`media/${id}`, { method: "DELETE" }); setConfirm(null); setSel(null); say("Deleted."); onChanged(); } catch (e) { setConfirm(null); fail(e); }
   }
-  async function makeZip(kind: "image" | "video") {
-    try { const r = await api<{ url: string }>(`bookings/${booking.id}/media-zip`, { body: { kind } }); setZip(`/zip/${r.url.split("/zips/")[1]}`); } catch (e) { fail(e); }
+  async function makeZip(k: "image" | "video") {
+    try { const r = await api<{ url: string }>(`bookings/${booking.id}/media-zip`, { body: { kind: k } }); setZip(`/zip/${r.url.split("/zips/")[1]}`); } catch (e) { fail(e); }
   }
+  const picked = fields.find((f) => `${f.part}.${f.key}` === target);
   return (
     <>
-      {can("media.download") && <div className="bar"><button onClick={() => makeZip("image")}>Download all images (ZIP)</button><button onClick={() => makeZip("video")}>Download all videos (ZIP)</button>
-        {zip && <a href={zip} target="_blank" rel="noreferrer">Open the ZIP page</a>}</div>}
-      {fields.map((f) => (
-        <div className="card" key={`${f.part}.${f.key}`}>
-          <h3 style={{ marginTop: 0 }}>{f.label}</h3>
-          <div className="photo-grid">
-            {ids(f.part, f.key).map((id) => (
-              <div key={id} data-testid="gallery-item"><Thumb id={id} video={f.type === "video"} />
-                {can("media.manage") && <button className="link" onClick={() => setConfirm({ id })}>Delete</button>}</div>))}
-          </div>
-          {ids(f.part, f.key).length === 0 && <p className="muted small">Nothing here.</p>}
-          {can("media.manage") && <label className="btn" style={{ display: "inline-block", marginTop: 8 }}>Add {f.type}<input type="file" hidden accept={f.type === "video" ? "video/*" : "image/*,application/pdf"} multiple={f.type !== "signature"} aria-label={`Add to ${f.label}`} onChange={(e) => { void add(f, e.target.files); e.target.value = ""; }} /></label>}
-        </div>))}
-      {fields.length === 0 && <p className="muted">This form has no photo or video fields.</p>}
+      <div className="bar">
+        <div className="seg" role="group" aria-label="Show">
+          {([["all", `All ${fields.reduce((n, f) => n + idsOf(insp, f.part, f.key).length, 0)}`], ["photo", "Photos"], ["video", "Videos"]] as const).map(([k, l]) => <button key={k} aria-pressed={kind === k} onClick={() => setKind(k)}>{l}</button>)}
+        </div>
+        <label className="check small"><input type="checkbox" checked={showEmpty} onChange={(e) => setShowEmpty(e.target.checked)} /> Show empty fields ({empty.length})</label>
+        <span className="grow" />
+        {can("media.manage") && <>
+          <select aria-label="Add a file to" value={target} onChange={(e) => setTarget(e.target.value)} style={{ maxWidth: 220 }}><option value="">Add a file to…</option>{fields.map((f) => <option key={`${f.part}.${f.key}`} value={`${f.part}.${f.key}`}>{f.section} › {f.label}</option>)}</select>
+          {picked && <label className="btn primary">Choose file<input type="file" hidden accept={picked.type === "video" ? "video/*" : "image/*,application/pdf"} multiple={picked.type !== "signature"} aria-label={`Add to ${picked.label}`} onChange={(e) => { void add(picked, e.target.files); e.target.value = ""; setTarget(""); }} /></label>}
+        </>}
+        {can("media.download") && <MoreMenu label="Download" items={[{ label: "All images (ZIP)", onClick: () => void makeZip("image") }, { label: "All videos (ZIP)", onClick: () => void makeZip("video") }]}><Download size={16} aria-hidden /> ZIP</MoreMenu>}
+        {zip && <a href={zip} target="_blank" rel="noreferrer">Open the ZIP page</a>}
+      </div>
+      {items.length === 0 && !showEmpty && <Empty title="No photos or videos yet">{fields.length ? "Files show here as the expert uploads them." : "This form has no photo or video fields."}</Empty>}
+      <div className="gallery-wrap">
+        <div className="gallery">
+          {groups.map((g) => (
+            <section key={g.section} aria-label={g.section}>
+              <h3 className="gallery-h">{g.section} <span className="muted small">{g.items.length}</span></h3>
+              <div className="tile-grid">
+                {g.items.map((x) => {
+                  const sev = defectFor(insp, trees, x.f);
+                  return (
+                    <button key={x.id} className={`tile-btn${current?.id === x.id ? " on" : ""}`} data-testid="gallery-item" onClick={() => setSel(x.id)} aria-label={`${x.f.label}${sev ? `, ${sev}` : ""}`}>
+                      <Thumb id={x.id} video={x.f.type === "video"} />
+                      {sev && <span className="pill bad tile-tag">{sev}</span>}
+                      <span className="tile-label ellipsis">{x.f.label}</span>
+                    </button>);
+                })}
+              </div>
+            </section>))}
+          {showEmpty && empty.length > 0 && (
+            <section aria-label="Empty fields">
+              <h3 className="gallery-h">Empty fields <span className="muted small">{empty.length}</span></h3>
+              <div className="chips">{empty.map((f) => <span key={`${f.part}.${f.key}`} className="chip">{f.section} › {f.label}</span>)}</div>
+            </section>)}
+        </div>
+        {current && (
+          <aside className="card preview-pane" aria-label="Selected file">
+            <PreviewMedia id={current.id} video={current.f.type === "video"} />
+            <div className="bar" style={{ margin: "8px 0" }}>
+              <button className="sm" aria-label="Previous file" disabled={at <= 0} onClick={() => setSel(items[at - 1]!.id)}>‹</button>
+              <span className="muted small grow" style={{ textAlign: "center" }}>{at + 1} of {items.length}</span>
+              <button className="sm" aria-label="Next file" disabled={at >= items.length - 1} onClick={() => setSel(items[at + 1]!.id)}>›</button>
+            </div>
+            <div style={{ fontWeight: 600 }}>{current.f.label}</div>
+            <div className="muted small">{current.f.section}</div>
+            <AnswerNear insp={insp} trees={trees} f={current.f} />
+            {can("media.manage") && <div className="bar" style={{ marginTop: 10, marginBottom: 0 }}><button className="danger sm" onClick={() => setConfirm({ id: current.id })}>Delete…</button></div>}
+          </aside>)}
+      </div>
       {confirm && <Confirm title="Delete this file?" danger confirmLabel="Delete" onCancel={() => setConfirm(null)} onConfirm={() => remove(confirm.id)}><p>It is removed from the booking and from every ZIP. This cannot be undone.</p></Confirm>}
     </>
   );
 }
 
-function Thumb({ id, video }: { id: string; video: boolean }) {
-  const q = useQuery({ queryKey: ["media-url", id], staleTime: 600_000, queryFn: () => mediaUrl(id) });
-  if (!q.data) return <div style={{ aspectRatio: "4/3", background: "#eee", borderRadius: 8 }} aria-label="Not ready yet" />;
-  return video ? <video src={q.data.url} controls preload="metadata" /> : <a href={q.data.url} target="_blank" rel="noreferrer"><img src={q.data.preview_url ?? q.data.url} alt="" /></a>;
+/** The choice question in the same section a photo belongs to (what it shows: OK, dented...). */
+function nearestChoice(trees: Trees, f: MediaField) {
+  const tree = trees[f.part];
+  const sec = tree?.pages.flatMap((p) => p.sections).find((s) => s.fields.some((x) => x.key === f.key));
+  const fields = sec?.fields ?? [];
+  const i = fields.findIndex((x) => x.key === f.key);
+  return [...fields.slice(0, i)].reverse().find((x) => x.type === "single_choice" || x.type === "multi_choice");
+}
+function defectFor(insp: Inspection, trees: Trees, f: MediaField): string | null {
+  const q = nearestChoice(trees, f);
+  return q ? defectOf(q, (insp.answers[f.part] ?? {})[q.key]) : null;
+}
+function AnswerNear({ insp, trees, f }: { insp: Inspection; trees: Trees; f: MediaField }) {
+  const q = nearestChoice(trees, f);
+  if (!q) return null;
+  const v = (insp.answers[f.part] ?? {})[q.key];
+  const sev = defectOf(q, v);
+  return <p className="small" style={{ margin: "6px 0 0" }}>{q.label}: <strong className={sev ? "bad-text" : ""}><AnswerValue f={q} v={v} /></strong>{sev && <> <span className="pill bad">{sev}</span></>}</p>;
+}
+
+function PreviewMedia({ id, video }: { id: string; video: boolean }) {
+  const links = useMediaUrl(id);
+  if (!links) return <div className="preview-media empty" aria-label="Not ready yet" />;
+  return video ? <video className="preview-media" src={links.url} controls preload="metadata" />
+    : <a href={links.url} target="_blank" rel="noreferrer"><img className="preview-media" src={links.preview_url ?? links.url} alt="" /></a>;
 }
 
 const WORDS = ["excellent", "good", "average", "bad"];
 
+/** 1 to 5 (or words) as one row of buttons; the suggestion is marked; Auto clears an override. */
+function Seg<T extends string | number>({ label, value, suggested, options, onPick, disabled }: { label: string; value: T | null; suggested?: T; options: { v: T; label: string }[]; onPick: (v: T | null) => void; disabled: boolean }) {
+  return (
+    <div className="seg" role="radiogroup" aria-label={label}>
+      <button role="radio" aria-checked={value === null} disabled={disabled} onClick={() => onPick(null)}>Auto</button>
+      {options.map((o) => <button key={String(o.v)} role="radio" aria-checked={value === o.v} disabled={disabled} onClick={() => onPick(o.v)} title={o.v === suggested ? "Suggested" : undefined}>{o.label}{o.v === suggested ? <span className="sugg" aria-label="suggested">•</span> : null}</button>)}
+    </div>
+  );
+}
+
 function RatingsTab({ insp, trees, onSaved }: { insp?: Inspection; trees: Trees; onSaved: () => void }) {
   const { can } = useAuth();
   const { say, fail } = useToast();
-  if (!insp) return <p className="muted">No inspection yet.</p>;
+  if (!insp) return <Empty title="No inspection yet">Ratings are calculated from the defects once the expert submits.</Empty>;
   const s = insp.scores;
   const cats = trees.inspection?.rating_config?.categories ?? [];
   const checks = (trees.inspection?.pages ?? []).flatMap((p) => p.sections.flatMap((sec) => sec.fields.filter((f) => f.type === "derived")));
@@ -237,32 +505,48 @@ function RatingsTab({ insp, trees, onSaved }: { insp?: Inspection; trees: Trees;
     try { await api(`inspections/${insp!.id}/overrides`, { method: "PATCH", body: { row_version: insp!.row_version, ...body } }); say("Saved."); onSaved(); } catch (e) { fail(e); }
   }
   const edit = can("ratings.override");
+  const nums = [1, 2, 3, 4, 5].map((n) => ({ v: n, label: String(n) }));
+  const derivedOverride = (k: string) => (insp.overrides?.derived as Record<string, boolean> | undefined)?.[k];
   return (
-    <div style={{ maxWidth: 720 }}>
-      <h2 style={{ marginTop: 0 }}>Ratings</h2>
-      <table><thead><tr><th>Category</th><th>Suggested</th><th>Rating</th></tr></thead>
-        <tbody>{cats.map((c) => {
-          const r = s?.ratings?.[c.key];
-          return <tr key={c.key}><td>{c.label}</td><td>{r?.suggested ?? "—"}</td>
-            <td>{edit ? <select aria-label={`${c.label} rating`} value={r?.overridden ? r.value : ""} onChange={(e) => send({ ratings: { [c.key]: e.target.value ? Number(e.target.value) : null } })}>
-              <option value="">Use suggestion ({r?.suggested ?? "—"})</option>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select> : r?.value}
-              {r?.overridden && <> <Pill tone="warn">Overridden</Pill></>}</td></tr>;
-        })}</tbody></table>
-      <h3>Overall</h3>
-      <p><strong>{s?.overall?.word ?? "—"}</strong> <span className="muted small">(suggested {s?.overall?.suggested_word ?? "—"}, average {s?.overall?.average ?? "—"})</span> {s?.overall?.overridden && <Pill tone="warn">Overridden</Pill>}</p>
-      {edit && <Field label="Overall word"><select aria-label="Overall word" value={s?.overall?.overridden ? s.overall.word : ""} onChange={(e) => send({ overall: e.target.value || null })}>
-        <option value="">Use suggestion</option>{WORDS.map((w) => <option key={w} value={w}>{w}</option>)}</select></Field>}
-      <h3>Key Checks</h3>
-      <table><tbody>{checks.map((f) => (
-        <tr key={f.key}><td>{f.label}</td><td>{s?.derived?.[f.key] === true ? String(f.config.true_label ?? "Yes") : String(f.config.false_label ?? "No")}</td>
-          <td>{edit && <select aria-label={`${f.label} override`} value={(insp.overrides?.derived as Record<string, boolean> | undefined)?.[f.key] === undefined ? "" : String((insp.overrides?.derived as Record<string, boolean>)[f.key])}
-            onChange={(e) => send({ derived: { [f.key]: e.target.value === "" ? null : e.target.value === "true" } })}>
-            <option value="">Automatic</option><option value="true">{String(f.config.true_label ?? "Yes")}</option><option value="false">{String(f.config.false_label ?? "No")}</option></select>}</td></tr>))}</tbody></table>
+    <div className="stack">
+      <section className="card">
+        <div className="sheet-head"><h3>Overall</h3><span className="pill">{s?.overall?.word ?? "—"}</span><span className="muted small">average {s?.overall?.average ?? "—"} · suggested {s?.overall?.suggested_word ?? "—"}</span>{s?.overall?.overridden && <Pill tone="warn">Overridden</Pill>}</div>
+        <Seg label="Overall word" value={s?.overall?.overridden ? s.overall.word : null} suggested={s?.overall?.suggested_word} options={WORDS.map((w) => ({ v: w, label: w[0]!.toUpperCase() + w.slice(1) }))} disabled={!edit} onPick={(v) => send({ overall: v })} />
+      </section>
+      <section className="card">
+        <h3 style={{ marginTop: 0 }}>Ratings</h3>
+        <div className="rating-rows">
+          {cats.map((c) => {
+            const r = s?.ratings?.[c.key];
+            return (
+              <div key={c.key} className="rating-row">
+                <div className="grow"><strong>{c.label}</strong> <span className="muted small">Suggested {r?.suggested ?? "—"}</span> {r?.overridden && <Pill tone="warn">Overridden</Pill>}</div>
+                <Seg label={`${c.label} rating`} value={r?.overridden ? r.value : null} suggested={r?.suggested} options={nums} disabled={!edit} onPick={(v) => send({ ratings: { [c.key]: v } })} />
+              </div>);
+          })}
+          {cats.length === 0 && <p className="muted">This form has no rating categories.</p>}
+        </div>
+      </section>
+      {checks.length > 0 && <section className="card">
+        <h3 style={{ marginTop: 0 }}>Key Checks</h3>
+        <div className="rating-rows">
+          {checks.map((f) => {
+            const yes = String(f.config.true_label ?? "Yes"), no = String(f.config.false_label ?? "No");
+            const o = derivedOverride(f.key);
+            return (
+              <div key={f.key} className="rating-row">
+                <div className="grow"><strong>{f.label}</strong> <span className="muted small">Now: {s?.derived?.[f.key] === true ? yes : no}</span></div>
+                <Seg label={`${f.label} override`} value={o === undefined ? null : o ? "true" : "false"} options={[{ v: "true", label: yes }, { v: "false", label: no }]} disabled={!edit}
+                  onPick={(v) => send({ derived: { [f.key]: v === null ? null : v === "true" } })} />
+              </div>);
+          })}
+        </div>
+      </section>}
     </div>
   );
 }
 
-type ReportInfo = { verify_url?: string; revision: number; status: string; stale: boolean; generated_at: string | null; filename: string; error: string; url: string | null };
+type ReportInfo = { verify_url?: string; revision: number; status: string; stale: boolean; generated_at: string | null; filename: string; error: string; url: string | null; preview_url?: string | null };
 
 function ReportTab({ booking }: { booking: Booking }) {
   const { can } = useAuth();
@@ -272,40 +556,19 @@ function ReportTab({ booking }: { booking: Booking }) {
   const regen = useMutation({ mutationFn: () => api(`bookings/${booking.id}/report/regenerate`, { body: {} }), onSuccess: () => { say("Regenerating. This takes a few seconds."); setTimeout(() => void refresh("report"), 4000); }, onError: fail });
   const r = q.data;
   return (
-    <div style={{ maxWidth: 640 }}>
-      {!r && <p className="muted">No report yet. It is made automatically when the booking is Completed.</p>}
-      {r && <div className="card">
-        <p><Pill tone={r.status === "ready" ? "ok" : r.status === "failed" ? "bad" : "warn"}>{r.status}</Pill> {r.stale && <Pill tone="warn">Out of date: regenerate after your edits</Pill>} <span className="muted small">revision {r.revision} · {when(r.generated_at)}</span></p>
-        {r.error && <p className="error">Problem: {r.error}</p>}
-        {r.url && <a className="btn" href={r.url} download={r.filename}>Download {r.filename}</a>}
-        {r.verify_url && <p className="small muted">Public check page: <a href={r.verify_url} target="_blank" rel="noreferrer">{r.verify_url}</a></p>}
-      </div>}
-      {can("reports.regenerate") && booking.stage === "completed" && <button onClick={() => regen.mutate()}>Regenerate PDF</button>}
-    </div>
-  );
-}
-
-function HistoryTab({ booking, insps, experts, onResolved }: { booking: Booking; insps: Inspection[]; experts: User[]; onResolved: () => void }) {
-  const { can } = useAuth();
-  const { fail, say } = useToast();
-  const [keep, setKeep] = useState("");
-  const who = (id: number) => experts.find((u) => u.id === id)?.name ?? `#${id}`;
-  const submitted = insps.filter((i) => i.status === "submitted");
-  return (
-    <div style={{ maxWidth: 720 }}>
-      <div className="card"><h3 style={{ marginTop: 0 }}>Inspections</h3>
-        <table><tbody>{insps.map((i) => <tr key={i.id}><td>{who(i.expert)}</td><td><Pill tone={i.status === "submitted" ? "ok" : undefined}>{i.status}</Pill></td><td>{when(i.submitted_at)}</td></tr>)}</tbody></table>
-        {booking.conflict && can("bookings.edit") && submitted.length > 1 && (
-          <div style={{ marginTop: 10 }}>
-            <p className="error">Two experts submitted this booking. Choose which inspection counts; the other is kept but set aside.</p>
-            <select aria-label="Inspection to keep" value={keep} onChange={(e) => setKeep(e.target.value)}><option value="">Choose…</option>{submitted.map((i) => <option key={i.id} value={i.id}>{who(i.expert)} · {when(i.submitted_at)}</option>)}</select>{" "}
-            <button className="primary" disabled={!keep} onClick={async () => { try { await api(`bookings/${booking.id}/resolve-conflict`, { body: { inspection: keep } }); say("Resolved."); onResolved(); } catch (e) { fail(e); } }}>Keep this one</button>
-          </div>)}
+    <>
+      <div className="bar">
+        {r && <><Pill tone={r.status === "ready" ? "ok" : r.status === "failed" ? "bad" : "warn"}>{r.status === "ready" ? "Ready" : r.status}</Pill><span className="muted small">Revision {r.revision} · {fmtStamp(r.generated_at)}</span></>}
+        <span className="grow" />
+        {r?.verify_url && <button onClick={() => { void navigator.clipboard?.writeText(r.verify_url!); say("Check link copied."); }}>Copy check link</button>}
+        {can("reports.regenerate") && booking.stage === "completed" && <button onClick={() => regen.mutate()}>Regenerate PDF</button>}
+        {r?.url && <a className="btn primary" href={r.url} download={r.filename}><Download size={15} aria-hidden /> Download PDF</a>}
       </div>
-      <div className="card"><h3 style={{ marginTop: 0 }}>Reschedules</h3>
-        {((booking as unknown as { reschedules?: { old_date: string; old_time: string; new_date: string; new_time: string; reason: string; by: string; at: string }[] }).reschedules ?? []).map((r, i) => <p key={i} className="small">{r.old_date} {r.old_time} → {r.new_date} {r.new_time} · {r.reason} · {r.by}, {when(r.at)}</p>)}
-        {!((booking as unknown as { reschedules?: unknown[] }).reschedules?.length) && <p className="muted small">None.</p>}</div>
-    </div>
+      {r?.stale && <div className="banner warn">Out of date: answers changed after this PDF was made. Regenerate it to include them.</div>}
+      {r?.error && <div className="banner bad">Problem: {r.error}</div>}
+      {!r && <Empty title="No report yet">It is made automatically when the booking is Completed.</Empty>}
+      {r?.preview_url && <iframe className="pdf-frame" title="Report preview" src={r.preview_url} />}
+    </>
   );
 }
 

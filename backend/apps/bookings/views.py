@@ -23,7 +23,7 @@ ACTION_PERMISSIONS = {
     "partial_update": "bookings.edit", "change_type": "bookings.edit",
     "assign": "bookings.assign", "reschedule": "bookings.reschedule", "cancel": "bookings.cancel",
     "force_release": "bookings.force_release", "destroy": "bookings.delete",
-    "resolve_conflict": "bookings.edit",
+    "resolve_conflict": "bookings.edit", "activity": "bookings.view",
     "start": "submissions.fill", "submit": "submissions.fill", "inspections": "submissions.view",
 }
 
@@ -83,6 +83,10 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
             if len(digits) >= 4:
                 q |= Q(customer_phone__contains=digits, stage__in=stages.get("customer_phone", []))
             qs = qs.filter(q)
+        if p.get("order") == "schedule":                 # Today / Upcoming: soonest first
+            qs = qs.order_by("inspection_date", "answers__inspection_time", "booking_id")
+        elif p.get("order"):
+            raise ValidationError({"order": "Use schedule."})
         return qs
 
     def create(self, request, *args, **kwargs):
@@ -174,6 +178,13 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
             "booking": BookingSerializer(Booking.objects.get(pk=b.pk), context=ctx).data,
             "inspection": InspectionSerializer(insp, context=ctx).data,
             "server_time": timezone.now().isoformat()})
+
+    @action(detail=True, methods=["get"])
+    def activity(self, request, pk=None):
+        """The booking's timeline, newest first (field keys hidden from this person left out)."""
+        from . import activity
+
+        return Response(activity.for_user(self.get_object(), request.user))
 
     @action(detail=True, methods=["get"])
     def inspections(self, request, pk=None):

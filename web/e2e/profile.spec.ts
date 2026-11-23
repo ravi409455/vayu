@@ -51,10 +51,8 @@ test("a picture: uploaded, square, in the sidebar, seen by Ops next to the exper
   const ops = await browser.newContext({ baseURL: "http://localhost:5173" });
   const opsPage = await ops.newPage();
   await signIn(opsPage, "ops");
-  await opsPage.goto("/board");
-  await expect(opsPage.locator("tr", { hasText: "PIC-1" }).locator("img.avatar")).toBeVisible();
   await opsPage.goto("/bookings");
-  await opsPage.getByLabel("Search").fill("PIC-1");
+  await opsPage.getByLabel("Filter bookings").fill("PIC-1");
   await expect(opsPage.locator("tr", { hasText: "PIC-1" }).locator("img.avatar")).toBeVisible();
   await ops.close();
 

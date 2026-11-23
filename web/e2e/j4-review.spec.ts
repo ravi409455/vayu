@@ -12,14 +12,15 @@ test("J4: Ops review a completed inspection", async ({ page }) => {
   // override the Exterior rating, then edit an answer: the override stays
   await page.getByRole("tab", { name: "Ratings" }).click();
   await expect(page.getByText("Suggested").first()).toBeVisible();
-  await page.getByLabel("Exterior rating").selectOption("2");
+  await page.getByRole("radiogroup", { name: "Exterior rating" }).getByRole("radio", { name: "2", exact: true }).click();
   await expect(page.getByText("Overridden").first()).toBeVisible();
   await page.getByRole("tab", { name: "Inspection" }).click();
+  await page.locator("section.sheet", { hasText: "Odometer" }).getByRole("button", { name: "Edit" }).click();   // read first, edit one section
   await page.getByLabel("Odometer").fill("150");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("status").filter({ hasText: "recalculated" })).toBeVisible();
   await page.getByRole("tab", { name: "Ratings" }).click();
-  await expect(page.getByLabel("Exterior rating")).toHaveValue("2");
+  await expect(page.getByRole("radiogroup", { name: "Exterior rating" }).getByRole("radio", { name: "2", exact: true })).toHaveAttribute("aria-checked", "true");
 
   // the PDF is out of date until regenerated
   await page.getByRole("tab", { name: "Report" }).click();
@@ -28,7 +29,7 @@ test("J4: Ops review a completed inspection", async ({ page }) => {
   await expect.poll(async () => (await json(await (await apiAs("ops")).get(`bookings/${id}/report`))).revision, { timeout: 30_000 }).toBe(2);
   await page.getByRole("tab", { name: "Inspection" }).click();
   await page.getByRole("tab", { name: "Report" }).click();
-  await expect(page.getByRole("link", { name: /Download J4-1PDI\.pdf/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Download PDF/ })).toBeVisible();
   await expect(page.getByText(/Out of date/)).toHaveCount(0);
   const pdf = await page.request.get((await waitForReport(id)).url);
   expect((await pdf.body()).subarray(0, 4).toString()).toBe("%PDF");
@@ -39,6 +40,7 @@ test("J4b: someone else saved first: the dialog names them and retries only my c
   await signIn(page, "ops");
   await page.goto(`/booking/${id}`);
   await page.getByRole("tab", { name: "Inspection" }).click();
+  await page.locator("section.sheet", { hasText: "Odometer" }).getByRole("button", { name: "Edit" }).click();
   await expect(page.getByLabel("Odometer")).toHaveValue("10");
   // an Admin edits a different field meanwhile
   const admin = await apiAs("admin");

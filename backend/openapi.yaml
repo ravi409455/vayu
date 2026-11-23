@@ -330,6 +330,28 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/bookings/{id}/activity:
+    get:
+      operationId: bookings_activity_retrieve
+      description: The booking's timeline, newest first (field keys hidden from this
+        person left out).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
   /api/v1/bookings/{id}/assign:
     post:
       operationId: bookings_assign_create
