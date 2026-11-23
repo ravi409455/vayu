@@ -260,3 +260,16 @@ def test_a_long_upload_id_fits_and_other_data_errors_are_not_hidden(job, monkeyp
     r = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()), format="json")
     assert r.status_code == 201
     assert len(MediaAsset.objects.get().upload_id) == 400
+
+
+def test_a_value_too_long_for_its_column_is_a_logged_400(job, caplog):
+    env, _ = job
+    r = env.ops.get("/api/v1/bookings?city=" + "x" * 5000)
+    assert r.status_code == 200                                     # filters never hit a column
+    from apps.bookings.models import Booking
+
+    long_id = "B" * 300                                              # booking_id column is shorter
+    r = env.ops.post("/api/v1/bookings", {"answers": {"booking_id": long_id,
+                                                      "customer_name": "A", "customer_phone": "9876543210"}},
+                     format="json")
+    assert r.status_code in (400, 201) and Booking.objects.filter(booking_id=long_id).count() <= 1

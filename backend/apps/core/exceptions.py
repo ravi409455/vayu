@@ -1,4 +1,6 @@
 """One place that turns "the client sent something odd" into a clean 400 instead of a 500."""
+import logging
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import DataError
 from rest_framework.exceptions import ParseError
@@ -7,13 +9,21 @@ from rest_framework.views import exception_handler
 
 from .errors import CodedError
 
+logger = logging.getLogger(__name__)
+# PostgreSQL: 22001 string too long, 22003 number out of range, 22021 bad byte sequence (NUL),
+# 22P02 bad text representation, 22007/22008 bad date/time
+BAD_VALUE = {"22001", "22003", "22021", "22P02", "22007", "22008"}
+
 
 def handler(exc, context):
     if isinstance(exc, DjangoValidationError):      # e.g. a malformed UUID in a lookup
         exc = CodedError("INVALID_INPUT", "; ".join(exc.messages), 400)
-    elif isinstance(exc, DataError) and "NUL" in str(exc):   # a NUL byte in a text value
+    elif isinstance(exc, DataError) and (
+            getattr(exc.__cause__, "sqlstate", None) in BAD_VALUE or "NUL" in str(exc)):
+        # a value the database cannot hold (too long, out of range, NUL byte) is the client's
+        # doing - but it can also mean one of our columns is too small, so it is always logged
+        logger.error("Database refused a value", exc_info=exc)
         exc = CodedError("INVALID_INPUT", "A value is not acceptable.", 400)
-    # any other DataError is our bug (e.g. a column too small): let it surface as a 500
     return exception_handler(exc, context)
 
 
