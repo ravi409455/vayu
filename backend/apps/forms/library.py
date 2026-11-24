@@ -167,7 +167,7 @@ def _record(actor, item: LibraryItem, old: dict | None) -> None:
     LibraryRevision.objects.create(
         item=item, revision=item.revision, name=item.name, definition=item.definition,
         changed_keys=changed_keys(item.kind, old, item.definition),
-        by=actor.username if actor is not None else "")
+        by=actor.shown_name if actor is not None else "")
 
 
 def _validate(kind: str, key: str, definition: Any) -> None:

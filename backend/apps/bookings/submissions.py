@@ -361,7 +361,7 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
         insp.answers = new
         insp.row_version += 1
         insp.last_edited_by, insp.last_edited_at = actor, timezone.now()
-        insp.last_change = {"by": actor.username, "at": insp.last_edited_at.isoformat(),
+        insp.last_change = {"by": actor.shown_name, "at": insp.last_edited_at.isoformat(),
                             "keys": keys}
         insp.save()
         scoring.recompute(insp)
@@ -420,7 +420,7 @@ def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Insp
     insp.overrides = scoring.apply_overrides(insp.overrides, body)
     insp.row_version += 1
     insp.last_edited_by, insp.last_edited_at = actor, timezone.now()
-    insp.last_change = {"by": actor.username, "at": insp.last_edited_at.isoformat(),
+    insp.last_change = {"by": actor.shown_name, "at": insp.last_edited_at.isoformat(),
                         "keys": ["overrides"]}
     insp.save()
     scoring.recompute(insp)

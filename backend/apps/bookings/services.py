@@ -83,7 +83,7 @@ def _save(b: Booking) -> None:
 def _touch(b: Booking, actor, keys: list[str]) -> None:
     b.row_version += 1
     b.last_edited_by, b.last_edited_at = actor, timezone.now()
-    b.last_change = {"by": actor.username, "at": b.last_edited_at.isoformat(), "keys": keys}
+    b.last_change = {"by": actor.shown_name, "at": b.last_edited_at.isoformat(), "keys": keys}
 
 
 def create(actor, answers: dict) -> Booking:

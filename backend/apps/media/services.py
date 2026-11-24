@@ -315,7 +315,7 @@ def attach(request, new: MediaAsset, replaces=None) -> None:
         insp.answers = {**insp.answers, part: answers}
         insp.row_version += 1
         insp.last_edited_by, insp.last_edited_at = user, timezone.now()
-        insp.last_change = {"by": user.username, "at": insp.last_edited_at.isoformat(),
+        insp.last_change = {"by": user.shown_name, "at": insp.last_edited_at.isoformat(),
                             "keys": [field.key]}
         insp.save()
         if old is not None:
@@ -473,7 +473,7 @@ def delete_asset(actor, asset: MediaAsset) -> None:
             if changed:
                 insp.row_version += 1
                 insp.last_edited_by, insp.last_edited_at = actor, timezone.now()
-                insp.last_change = {"by": actor.username, "at": insp.last_edited_at.isoformat(),
+                insp.last_change = {"by": actor.shown_name, "at": insp.last_edited_at.isoformat(),
                                     "keys": [asset.field_key]}
                 insp.save()
                 scoring.recompute(insp)
@@ -544,7 +544,8 @@ def finish_without_missing(actor, booking: Booking) -> Booking:
         insp = b.inspections.filter(status="submitted").order_by("-submitted_at").first()
         b.stage = "completed"
         b.row_version += 1
-        b.last_change = {"by": actor.username, "at": timezone.now().isoformat(), "keys": ["stage"]}
+        b.last_change = {"by": actor.shown_name, "at": timezone.now().isoformat(),
+                         "keys": ["stage"]}
         b.save()
         left = sum(r["count"] for r in rows)
         activity.log(b, actor, "finished_without_files",

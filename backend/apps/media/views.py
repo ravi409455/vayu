@@ -127,7 +127,7 @@ class StuckUploads(APIView):
             qs = qs.filter(booking__in=Booking.objects.filter(own_filter(request.user)))
         return Response([{"id": str(a.id), "booking": str(a.booking_id),
                           "booking_id": a.booking.booking_id, "field_key": a.field_key,
-                          "status": a.status, "expert": a.uploaded_by.username,
+                          "status": a.status, "expert": a.uploaded_by.shown_name,
                           "created_at": a.created_at} for a in qs])
 
 

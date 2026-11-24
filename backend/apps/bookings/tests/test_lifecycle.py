@@ -100,7 +100,7 @@ def test_stale_edit_is_409_with_who_changed_what_and_retry_works(env, booking):
                       format="json")
     assert r.status_code == 409 and r.json()["code"] == "STALE_BOOKING"
     body = r.json()
-    assert body["changed_by"] == env.admin_user.username and body["changed_keys"] == ["address"]
+    assert body["changed_by"] == env.admin_user.shown_name and body["changed_keys"] == ["address"]
     ok = env.ops.patch(url, {"answers": {"customer_name": "Asha K"},
                              "row_version": body["row_version"]}, format="json")
     assert ok.status_code == 200, ok.json()

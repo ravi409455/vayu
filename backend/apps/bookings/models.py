@@ -25,7 +25,7 @@ class Booking(models.Model):
     chassis_no = models.CharField(max_length=64, blank=True)  # from the submitted inspection
     inspection_date = models.DateField(null=True, blank=True)
     row_version = models.PositiveIntegerField(default=0)
-    last_change = models.JSONField(default=dict)   # {"by": username, "at": iso, "keys": [...]}
+    last_change = models.JSONField(default=dict)   # {"by": shown name, "at": iso, "keys": [...]}
     last_edited_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                        on_delete=models.PROTECT, related_name="+")
     last_edited_at = models.DateTimeField(null=True, blank=True)

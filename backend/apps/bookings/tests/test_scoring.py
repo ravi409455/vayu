@@ -232,7 +232,7 @@ def test_override_needs_permission_row_version_and_fresh_data(senv):
     assert ok.status_code == 200
     stale = senv.admin.patch(f"/api/v1/inspections/{insp.id}/overrides",
                              {"overall": "bad", "row_version": 0}, format="json")
-    assert stale.status_code == 409 and stale.json()["changed_by"] == senv.ops_user.username
+    assert stale.status_code == 409 and stale.json()["changed_by"] == senv.ops_user.shown_name
 
 
 def test_override_permission_can_be_revoked_from_ops(senv):

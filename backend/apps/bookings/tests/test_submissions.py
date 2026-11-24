@@ -273,7 +273,7 @@ def test_ops_edit_with_stale_guard_and_access(started):
     assert r.json()["last_edited_by"] == ienv.ops_user.shown_name and r.json()["row_version"] == 1
     stale = ienv.admin.patch(url, {"answers": {"inspection": {"odometer": 51}}, "row_version": 0},
                              format="json")
-    assert stale.status_code == 409 and stale.json()["changed_by"] == ienv.ops_user.username
+    assert stale.status_code == 409 and stale.json()["changed_by"] == ienv.ops_user.shown_name
     sys = ienv.ops.patch(url, {"answers": {"inspection": {"grade": 3}}, "row_version": 1},
                          format="json")
     assert sys.status_code == 403 and sys.json()["keys"] == ["grade"]

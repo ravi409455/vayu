@@ -85,11 +85,12 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 class AuditLogSerializer(serializers.ModelSerializer):
     actor_username = serializers.CharField(source="actor.username", read_only=True, default=None)
+    actor_name = serializers.CharField(source="actor.shown_name", read_only=True, default=None)
 
     class Meta:
         model = AuditLog
-        fields = ["id", "actor", "actor_username", "action", "target_type", "target_id",
-                  "summary", "created_at"]
+        fields = ["id", "actor", "actor_username", "actor_name", "action", "target_type",
+                  "target_id", "summary", "created_at"]
 
 
 ROLE_VALUES = [r.value for r in Role]
