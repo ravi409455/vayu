@@ -28,8 +28,9 @@ def push(ids: list[int]) -> int:
                 F("push_token_at").desc(nulls_last=True), "-created_at", "-pk").first()
             if winner is None or winner.pk != d.pk:
                 continue
-            data = {"id": str(n.id), "kind": n.kind, "title": n.title, "body": n.body,
-                    "booking": str(n.booking_id or "")}
+            # "user": the phone shows it only if that person is the one signed in there
+            data = {"id": str(n.id), "user": str(n.user_id), "kind": n.kind, "title": n.title,
+                    "body": n.body, "booking": str(n.booking_id or "")}
             if fcm.send(d.push_token, data):
                 sent += 1
             else:

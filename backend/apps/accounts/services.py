@@ -58,7 +58,7 @@ def authenticate(username: str, password: str) -> User:
 
 def revoke_devices(user: User) -> int:
     return Device.objects.filter(user=user, revoked_at__isnull=True).update(
-        revoked_at=timezone.now())
+        revoked_at=timezone.now(), push_token="")
 
 
 def register_device_and_tokens(user: User, device_name: str) -> dict:

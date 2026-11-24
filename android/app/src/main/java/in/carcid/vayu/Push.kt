@@ -84,7 +84,9 @@ class VayuMessaging : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val d = message.data
         val graph = (application as VayuApp).graph
-        if (graph.signedInId() == null) return             // signed out on this phone: nothing to show
+        // only the person it is for, signed in on this phone, ever sees it (a phone used by
+        // someone else since may still get an earlier person's push)
+        if (d["user"] == null || d["user"] != graph.signedInId()?.toString()) return
         Notices.show(this, "push-${d["id"]}", d["title"].orEmpty(), d["body"].orEmpty(), d["booking"], problem = d["kind"] == "problem")
         // the app is open: it refreshes now; closed: an expert's jobs are fetched so they're there offline
         if (!graph.pushed()) SyncWorker.enqueue(this)

@@ -147,7 +147,7 @@ class LogoutView(APIView):
         device_id = token.get("device_id") if hasattr(token, "get") else None
         if device_id:
             Device.objects.filter(pk=device_id, revoked_at__isnull=True).update(
-                revoked_at=timezone.now())
+                revoked_at=timezone.now(), push_token="")
         else:
             django_logout(request._request)
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -192,7 +192,7 @@ class ChangePasswordView(APIView):
         others = Device.objects.filter(user=user, revoked_at__isnull=True)
         if hasattr(request.auth, "get") and request.auth.get("device_id"):
             others = others.exclude(pk=request.auth.get("device_id"))
-        others.update(revoked_at=timezone.now())
+        others.update(revoked_at=timezone.now(), push_token="")
         if request._request.user.is_authenticated:  # keep the web session alive
             update_session_auth_hash(request._request, user)
         return Response({"detail": "Password changed."})

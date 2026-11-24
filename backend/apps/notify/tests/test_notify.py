@@ -130,6 +130,8 @@ def test_push_token_belongs_to_the_signed_in_phone(db, make_user, login):
     assert c.post("/api/v1/devices/push-token", {"token": "abc"}, format="json").status_code == 204
     earlier.refresh_from_db()
     assert earlier.push_token == "abc"            # someone else's row is never written
+    assert c.post("/api/v1/auth/logout").status_code == 204
+    assert Device.objects.get(pk=tok["device_id"]).push_token == ""   # signed out: token gone
     web = APIClient()
     web.force_authenticate(u)
     assert web.post("/api/v1/devices/push-token", {"token": "abc"},
@@ -155,6 +157,7 @@ def test_push_sends_to_live_phones_and_forgets_dead_tokens(env, booking, setting
         assign(env, booking)
     assert [t for t, _ in sent] == ["live"]
     assert sent[0][1]["kind"] == "assigned" and sent[0][1]["booking"] == booking["id"]
+    assert sent[0][1]["user"] == str(env.expert_user.id)
     live.refresh_from_db()
     assert live.push_token == ""                      # dead token dropped
     assert tasks.push([]) == 0
