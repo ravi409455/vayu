@@ -5,8 +5,9 @@ import type { PendingUpload } from "./store";
 // The browser's store and the network are faked; the queue's own logic is real.
 const db = new Map<string, PendingUpload>();
 let putFails = false;
+let putHook: (() => void) | null = null;
 vi.mock("./store", () => ({
-  putJob: async (j: PendingUpload) => { if (putFails) throw new Error("QuotaExceededError"); db.set(j.clientUuid, j); },
+  putJob: async (j: PendingUpload) => { if (putFails) throw new Error("QuotaExceededError"); db.set(j.clientUuid, j); putHook?.(); },
   deleteJob: async (id: string) => { db.delete(id); },
   allJobs: async () => [...db.values()],
 }));
@@ -158,6 +159,14 @@ describe("sign-out (F-072) and resume (H-15)", () => {
     _reset();
     release();
     await expect(pending).rejects.toThrow("Signed out.");
+    expect(db.size).toBe(0);
+    expect(states()).toEqual([]);
+  });
+
+  it("a sign-out while the file is being stored leaves nothing behind", async () => {
+    putHook = () => _reset();                                // the person signs out during the save
+    await expect(add()).rejects.toThrow("Signed out.");
+    putHook = null;
     expect(db.size).toBe(0);
     expect(states()).toEqual([]);
   });

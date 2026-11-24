@@ -143,6 +143,7 @@ export async function addFile(args: { bookingId: string; fieldKey: string; kind:
   if (mine !== gen) throw new Error("Signed out.");
   const job: PendingUpload = { ...spec, kind: args.kind, name: args.name, assetId };
   const kept = await putJob(job).then(() => true, () => false);       // private window or a full disk: say so
+  if (mine !== gen) { await deleteJob(job.clientUuid).catch(() => {}); throw new Error("Signed out."); }   // signed out while it was being stored
   return track(job, !kept).state.assetId;
 }
 
