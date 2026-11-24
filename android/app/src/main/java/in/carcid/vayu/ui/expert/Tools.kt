@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Cameraswitch
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FlashOff
 import androidx.compose.material.icons.outlined.FlashOn
@@ -91,6 +92,7 @@ import `in`.carcid.vayu.core.draft.LocalFile
 import `in`.carcid.vayu.core.forms.Field
 import `in`.carcid.vayu.core.media.Locator
 import `in`.carcid.vayu.core.media.stampPhoto
+import `in`.carcid.vayu.ui.components.ChipRow
 import `in`.carcid.vayu.ui.components.PrimaryButton
 import `in`.carcid.vayu.ui.components.SoftButton
 import `in`.carcid.vayu.ui.components.SoftField
@@ -126,13 +128,13 @@ fun rememberPermissions(vararg permissions: String, onResult: (Boolean) -> Unit 
 
 /**
  * The in-app camera (approved prototype): live preview with the stamp, one shutter, several shots
- * in a row up to the field's limit. Photos are stamped and shrunk; videos are 720p, at most 60 s.
+ * in a row up to the field's limit. Each shot is shown first, to Use or Retake. Photos are stamped
+ * and shrunk; videos are 720p, at most 60 s. The front camera is one tap away.
  */
 @SuppressLint("MissingPermission")
 @Composable
 fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () -> Instant, verified: Boolean,
                  dir: File, onTaken: (File, String) -> Unit, onDone: () -> Unit) {
-    BackHandler(onBack = onDone)
     val video = field.type == "video"
     val ctx = LocalContext.current
     val owner = LocalLifecycleOwner.current
@@ -147,36 +149,53 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
     var seconds by remember { mutableStateOf(0) }
     var place by remember { mutableStateOf(Locator.last) }
     var clock by remember { mutableStateOf(now()) }
+    var back by remember { mutableStateOf(true) }
+    var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    // the shot waiting for Use or Retake
+    var pending by remember { mutableStateOf<Pair<File, String>?>(null) }
     LaunchedEffect(Unit) { place = Locator.fix(ctx) ?: place }
     LaunchedEffect(Unit) { while (true) { clock = now(); kotlinx.coroutines.delay(1000) } }
+    val preview = remember { Preview.Builder().build() }
     val capture = remember { ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build() }
     val recorder = remember { Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.HD)).build() }
     val videoCapture = remember { VideoCapture.withOutput(recorder) }
+    val canFlip = provider?.let { runCatching { it.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) }.getOrDefault(false) } == true
+    LaunchedEffect(provider, back) {
+        val p = provider ?: return@LaunchedEffect
+        p.unbindAll()
+        runCatching {
+            p.bindToLifecycle(owner, if (back) CameraSelector.DEFAULT_BACK_CAMERA else CameraSelector.DEFAULT_FRONT_CAMERA,
+                preview, if (video) videoCapture else capture)
+        }
+    }
+    // a shot left unconfirmed (screen closed) is not kept
+    DisposableEffect(Unit) { onDispose { pending?.first?.delete() } }
     val full = taken >= field.maxCount
+    val close = { val r = recording; if (r != null) r.stop() else onDone() }
+    BackHandler { close() }
+    BackHandler(enabled = pending != null) { pending?.first?.delete(); pending = null }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (camOk) AndroidView(factory = { c ->
             PreviewView(c).also { view ->
+                preview.surfaceProvider = view.surfaceProvider
                 val future = ProcessCameraProvider.getInstance(c)
-                future.addListener({
-                    val provider = future.get()
-                    val preview = Preview.Builder().build().also { it.surfaceProvider = view.surfaceProvider }
-                    provider.unbindAll()
-                    provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, if (video) videoCapture else capture)
-                }, ContextCompat.getMainExecutor(c))
+                future.addListener({ provider = future.get() }, ContextCompat.getMainExecutor(c))
             }
         }, modifier = Modifier.fillMaxSize())
         else Text("Allow the camera to take photos here.", color = Color.White, modifier = Modifier.align(Alignment.Center).padding(24.dp))
 
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
             Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                CloseButton("Close the camera", onDone, tint = Color.White)
+                CloseButton("Close the camera", close, tint = Color.White)
                 Column(Modifier.weight(1f)) {
                     Text(field.label, color = Color.White, fontWeight = FontWeight.Bold)
                     Text("$taken of ${field.maxCount} ${if (video) "recorded" else "taken"}", color = Color.White.copy(alpha = .8f), fontSize = 13.sp)
                 }
                 if (recording != null) Text("● %d:%02d / 1:00".format(seconds / 60, seconds % 60), color = Color(0xFFFF5A5A),
                     fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 12.dp))
+                else Text("Done", color = Color.White, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable(role = Role.Button, onClick = onDone).padding(12.dp))
             }
             Spacer(Modifier.weight(1f))
             Text(stampLines(code, expert, clock, verified, place).joinToString("\n"), color = Color.White, fontFamily = FontFamily.Monospace,
@@ -187,11 +206,11 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
                 }
                 Spacer(Modifier.weight(1f))
                 Box(Modifier.size(76.dp).clip(CircleShape).border(4.dp, Color.White, CircleShape).padding(8.dp).clip(CircleShape)
-                    .background(when { full && recording == null -> Color.Gray; video -> Color(0xFFE5484D); else -> Color.White })
+                    .background(when { busy || (full && recording == null) -> Color.Gray; video -> Color(0xFFE5484D); else -> Color.White })
                     .clickable(enabled = camOk && !busy && (!full || recording != null), role = Role.Button) {
                         if (video) {
                             val r = recording
-                            if (r != null) { r.stop(); recording = null; return@clickable }
+                            if (r != null) { r.stop(); return@clickable }
                             val out = newFile(dir, "mp4")
                             val opts = FileOutputOptions.Builder(out).setDurationLimitMillis(60_000).build()
                             seconds = 0
@@ -202,7 +221,7 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
                                     is VideoRecordEvent.Status -> seconds = (e.recordingStats.recordedDurationNanos / 1_000_000_000).toInt()
                                     is VideoRecordEvent.Finalize -> {
                                         recording = null
-                                        if (out.exists() && out.length() > 0) { onTaken(out, "video/mp4"); taken++ }
+                                        if (out.exists() && out.length() > 0) pending = out to "video/mp4" else out.delete()
                                     }
                                 }
                             }
@@ -217,7 +236,7 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
                                             withContext(Dispatchers.Default) {
                                                 stampPhoto(raw, out, stampLines(code, expert, now(), verified, place)); raw.delete()
                                             }
-                                            onTaken(out, "image/jpeg"); last = out; taken++; busy = false
+                                            pending = out to "image/jpeg"; busy = false
                                         }
                                     }
                                     override fun onError(e: ImageCaptureException) { raw.delete(); busy = false }
@@ -225,10 +244,40 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
                         }
                     }.semantics { contentDescription = if (video) (if (recording != null) "Stop recording" else "Record") else "Take photo" })
                 Spacer(Modifier.weight(1f))
-                Text("Done", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(role = Role.Button) {
-                    recording?.stop(); onDone()
-                }.padding(12.dp))
+                Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+                    if (canFlip && recording == null) androidx.compose.material3.IconButton(onClick = { back = !back },
+                        modifier = Modifier.clip(CircleShape).background(Color.White.copy(alpha = .18f))) {
+                        Icon(Icons.Outlined.Cameraswitch, if (back) "Use the front camera" else "Use the back camera", tint = Color.White)
+                    }
+                }
             }
+        }
+
+        pending?.let { (file, type) ->
+            ShotCheck(file, type, onRetake = { file.delete(); pending = null }, onUse = {
+                pending = null; onTaken(file, type); taken++; if (type.startsWith("image/")) last = file
+            })
+        }
+    }
+}
+
+/** The shot just taken, full screen: Retake or Use. A video plays on a loop. */
+@Composable
+private fun ShotCheck(file: File, type: String, onRetake: () -> Unit, onUse: () -> Unit) {
+    val video = type.startsWith("video/")
+    Column(Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding()) {
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            if (video) AndroidView(factory = { c ->
+                android.widget.VideoView(c).apply {
+                    setVideoPath(file.path)
+                    setOnPreparedListener { it.isLooping = true; start() }
+                }
+            }, onRelease = { it.stopPlayback() }, modifier = Modifier.fillMaxSize())
+            else rememberThumb(file.path, 1400)?.let { Image(it, "Photo just taken", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
+        }
+        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SoftButton("Retake", onRetake, Modifier.weight(1f))
+            PrimaryButton(if (video) "Use video" else "Use photo", onUse, Modifier.weight(1f))
         }
     }
 }
@@ -288,8 +337,8 @@ fun scanCandidates(lines: List<String>): List<String> = lines
 
 /**
  * Scan a short text with the camera, on the phone (no signal needed). It reads only when the
- * expert taps Read, and only the text inside the box; they pick the right result and can still
- * type over it. Tap the picture to focus; the torch helps under a bonnet.
+ * expert taps Read, and only the text inside the box; they pick from up to three results and can
+ * still type over it. Tap the picture to focus; the torch helps under a bonnet.
  */
 @SuppressLint("UnsafeOptInUsageError", "ClickableViewAccessibility")
 @Composable
@@ -354,27 +403,27 @@ fun ScanScreen(field: Field, current: String?, onUse: (String) -> Unit, onClose:
             }, modifier = Modifier.fillMaxSize())
             // the box: put the number inside it
             Box(Modifier.align(Alignment.Center).fillMaxWidth(0.84f).height(86.dp).border(2.dp, Color.White, RoundedCornerShape(10.dp)))
-            Text(if (reading) "Reading…" else "Put the number inside the box, tap to focus, then Read", color = Color.White,
-                fontSize = 13.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(10.dp))
+            Text("Number inside the box · tap to focus", color = Color.White, fontSize = 12.sp,
+                modifier = Modifier.align(Alignment.TopCenter).padding(10.dp))
+            Text(if (reading) "Reading…" else if (found == null) "Read" else "Read again", color = Color.Black, fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp).clip(RoundedCornerShape(22.dp))
+                    .background(if (ok && !reading) Color.White else Color.LightGray)
+                    .clickable(enabled = ok && !reading, role = Role.Button) { reading = true; armed.set(true) }
+                    .padding(horizontal = 28.dp, vertical = 12.dp))
         }
         Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            PrimaryButton(if (reading) "Reading…" else if (found == null) "Read" else "Read again", {
-                if (!reading) { reading = true; armed.set(true) }
-            }, enabled = ok && !reading)
             when {
                 found == null -> {}
-                found!!.isEmpty() -> Text("Nothing readable in the box. Move closer, tap to focus, and read again.", color = Vayu.colors.warn, fontSize = 14.sp)
-                else -> {
-                    Text("Tap the right one", color = Vayu.colors.muted, fontSize = 13.sp)
-                    found!!.forEach { c ->
-                        Text(c, fontFamily = FontFamily.Monospace, fontSize = 17.sp, color = if (c == text) Vayu.colors.onPrimary else Vayu.colors.ink,
-                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                                .background(if (c == text) Vayu.colors.primary else Vayu.colors.soft)
-                                .clickable(role = Role.RadioButton) { text = c }.padding(horizontal = 14.dp, vertical = 12.dp))
+                found!!.isEmpty() -> Text("Nothing read. Move closer, tap to focus, read again.", color = Vayu.colors.warn, fontSize = 13.sp)
+                // a few picks in one sideways row, so the answer stays in view
+                else -> ChipRow {
+                    found!!.take(3).forEach { c ->
+                        Text(c, fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = if (c == text) Vayu.colors.onPrimary else Vayu.colors.ink,
+                            modifier = Modifier.clip(RoundedCornerShape(18.dp)).background(if (c == text) Vayu.colors.primary else Vayu.colors.soft)
+                                .clickable(role = Role.RadioButton) { text = c }.padding(horizontal = 12.dp, vertical = 8.dp))
                     }
                 }
             }
-            Text("Check it against the car; you can type over it", color = Vayu.colors.muted, fontSize = 13.sp)
             SoftField(text, { text = it.uppercase() }, field.label)
             PrimaryButton("Use this", { onUse(text.trim()) }, enabled = text.isNotBlank())
         }
