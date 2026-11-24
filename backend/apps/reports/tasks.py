@@ -118,7 +118,9 @@ def render_report(booking_id: str) -> str:
         logger.exception("PDF render failed for booking %s", booking.id)   # detail stays in logs
         # a PDF already made stays ready (the customer's QR keeps working, H-18); the failure is
         # kept beside it for Ops
+        # the last PDF no longer shows the data that asked for a new one: out of date again
         Report.objects.filter(pk=report.pk).update(status="ready" if report.key else "failed",
+                                                   stale=bool(report.key),
                                                    error=reason, render_started_at=None,
                                                    retry_at=timezone.now() + RETRY_FAILED)
         if not report.error:                         # alert once, not on every retry

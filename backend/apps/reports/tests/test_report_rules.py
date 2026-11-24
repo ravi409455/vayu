@@ -208,6 +208,7 @@ def test_a_later_render_that_fails_keeps_the_report_genuine(done, monkeypatch):
         assert tasks.render_report(b["id"]) == "failed"
     now = Report.objects.get(pk=r.pk)
     assert now.status == "ready" and now.key == r.key and now.error == "render_failed"
+    assert now.stale is True                  # the last PDF is out of date until one succeeds
     assert [n for n, _ in seen].count("alert.pdf_failed") == 1             # told once
     verify = APIClient().get(f"/api/v1/verify/{r.token}")
     assert verify.status_code == 200 and verify.json()["valid"] is True

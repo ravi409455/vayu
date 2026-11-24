@@ -310,8 +310,11 @@ class Resolver:
     def inspection(self):
         if self._insp is False:
             b = self.booking
-            self._insp = (b.counted_inspection()
-                          or b.inspections.order_by("-created_at").first()) if b else None
+            # before any submission, the running draft (inspection.started); never past a
+            # conflict, where nothing counts until Ops choose
+            self._insp = (b.counted_inspection() or (
+                None if b.conflict else b.inspections.order_by("-created_at").first())
+            ) if b else None
         return self._insp
 
     def _get(self, ref: str) -> Any:

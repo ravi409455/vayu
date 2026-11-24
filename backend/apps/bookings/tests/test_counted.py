@@ -30,7 +30,10 @@ def _other(env, name="sana"):
 def _late_conflict(env, booking):
     """Expert A started; Ops force-release and give the job to B, who finishes it; then A's
     offline work arrives (odometer 99999)."""
+    from django.utils import timezone
+
     sana, sc = _other(env)
+    Booking.objects.filter(pk=booking["id"]).update(inspection_date=timezone.localdate())
     env.ops.post(f"/api/v1/bookings/{booking['id']}/force-release")
     assign(env, booking, sana)
     assert start(sc, booking).status_code == 200

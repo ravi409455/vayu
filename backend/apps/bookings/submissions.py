@@ -89,8 +89,10 @@ def deliver_filter(user) -> Q:
     recent = timezone.localdate() - timedelta(days=MOVED_DAYS)
     return own_filter(user) | Q(activity__changes__assigned_expert__0=user.pk,
                                 inspection_date__gte=recent) | Q(
-        # a draft Ops force-released may still arrive (then a conflict for Ops)
-        inspections__expert_id=user.pk, inspections__status="released")
+        # a draft Ops force-released may still arrive (then a conflict for Ops), as long as a job
+        # moved away does
+        inspections__expert_id=user.pk, inspections__status="released",
+        inspection_date__gte=recent)
 
 
 def form_for_role(version: FormVersion, role: str, stage: str) -> dict:
