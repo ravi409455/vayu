@@ -202,13 +202,20 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
 
     @action(detail=True, methods=["post"])
     def start(self, request, pk=None):
+        """Start a lead with its check-in. ``form_version``, ``start_version``, ``end_version``:
+        the versions the phone pinned when the expert started, kept if each was the latest
+        published one at ``client_started_at`` (give or take 10 minutes); an older one is refused
+        (409 ``FORM_VERSION_OLD``, Ops alerted). Left out: the latest published versions."""
         raw = request.headers.get("X-App-Version", "")
         app_version = int(raw) if raw.isdigit() else None
         started = request.data.get("client_started_at")
         b, insp = submissions.start(
             request.user, self.get_object(), self._uuid("client_uuid"),
             parse_datetime(started) if isinstance(started, str) else None,
-            request.data.get("inspection_type"), app_version, request.data.get("start_answers"))
+            request.data.get("inspection_type"), app_version, request.data.get("start_answers"),
+            {part: request.data.get(key) for part, key in (
+                ("inspection", "form_version"), ("start", "start_version"),
+                ("end", "end_version"))})
         ctx = self.get_serializer_context()
         return Response({
             "booking": BookingSerializer(Booking.objects.get(pk=b.pk), context=ctx).data,
@@ -301,17 +308,19 @@ class InspectionOverrides(generics.GenericAPIView):
 
 class SyncJobs(generics.GenericAPIView):
     """The expert's jobs and everything needed to inspect them offline (see apps/bookings/sync.py).
-    ``have`` lists form version ids the phone already holds; ``since`` is the last sync's
-    ``server_time`` (returns what Ops changed after it)."""
+    ``have`` lists form version ids the phone already holds; ``drafts`` the ones its open drafts
+    are pinned to (sent when missing, even if no listed job uses them); ``since`` is the last
+    sync's ``server_time`` (returns what Ops changed after it)."""
 
     permission_classes = [perm("submissions.fill")]
 
     def get(self, request):
-        have_raw = request.query_params.get("have", "")
         since_raw = request.query_params.get("since")
         since = parse_datetime(since_raw) if since_raw else None
-        parts = [p for p in have_raw.split(",") if p]
-        if (since_raw and since is None) or not all(p.isdigit() for p in parts):
-            raise services.err("INVALID_QUERY", "have must be version ids, since a date-time.")
-        return Response(sync.payload(request.user, {int(p) for p in parts}, since,
-                                     self.get_serializer_context()))
+        have, drafts = ([p for p in request.query_params.get(name, "").split(",") if p]
+                        for name in ("have", "drafts"))
+        if (since_raw and since is None) or not all(p.isdigit() for p in have + drafts):
+            raise services.err("INVALID_QUERY",
+                               "have and drafts must be version ids, since a date-time.")
+        return Response(sync.payload(request.user, {int(p) for p in have}, since,
+                                     self.get_serializer_context(), {int(p) for p in drafts}))

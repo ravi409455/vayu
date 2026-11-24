@@ -7,7 +7,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from apps.core.errors import CodedError
-from apps.forms.models import Form, MasterList
+from apps.forms.models import Form, FormType, FormVersion, MasterList, VersionStatus
 
 from . import activity
 from .models import Booking
@@ -31,8 +31,13 @@ def jobs_for(user):
             .select_related("report").distinct().order_by("inspection_date", "created_at"))
 
 
-def payload(user, have: set[int], since, context) -> dict:
-    jobs, versions = [], {}
+def payload(user, have: set[int], since, context, drafts: set[int] | None = None) -> dict:
+    """[drafts]: form versions the phone's open drafts are pinned to. They are sent too (when the
+    phone lacks them), even once no listed job uses them: the phone keeps every one of them."""
+    jobs = []
+    versions = {v.id: v for v in FormVersion.objects.filter(
+        pk__in=(drafts or set()) - have, status=VersionStatus.PUBLISHED,
+        form__type__in=(FormType.CUSTOM, FormType.START, FormType.END))}
     bookings = list(jobs_for(user))
     for b in bookings:
         try:

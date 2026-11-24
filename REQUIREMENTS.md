@@ -61,6 +61,7 @@ Reference report: `SA37926PDI.pdf` (PDI, 35 pp). Clappia (garuda) was reviewed r
   - **Forms are built and tested on the staging server**, then **"Promote to production"**. Promotion carries the form version, linked library items, referenced master lists (matched by key) and the PDF template.
   - Production keeps draft → **PDF preview** → publish. No test mode in production.
   - An inspection's version is **frozen at Start**. Jobs not yet started move to the latest version on sync.
+  - The expert never chooses a version: the phone pins the **latest published** version when the lead is started (offline too) and sends it with the start. The server keeps it if it really was the latest published version at the phone's start time (10-minute clock allowance), even if the Admin published a newer one before the start arrived; an older one is refused and Ops are alerted. The phone keeps every form version its open drafts use (sync sends them again when missing).
   - v1.1: change diff vs live, one-click rollback.
 - **Field settings:**
   - Stable machine key: **never editable**, unique within its form and in the library.
@@ -81,7 +82,7 @@ Reference report: `SA37926PDI.pdf` (PDI, 35 pp). Clappia (garuda) was reviewed r
 ## 5. Inspection flow (expert, Android)
 ### 5.1 App basics
 - Kotlin / Jetpack Compose, **Android 11+**, English, distributed as an **APK download link** with an in-app self-update.
-- **Forced minimum app version:** an outdated app can't start new jobs but can finish a job already in progress.
+- **Forced minimum app version:** an outdated app can't start new jobs but can finish a job already in progress, including one started offline before its version became too old (accepted; Ops alerted). Work on a form the Admin switched off after the start is accepted too (Ops alerted).
 - **Visible push notifications** (Firebase) for: new job assigned, rescheduled, cancelled / reassigned away, booking details changed. Each push also triggers an immediate sync. Pull-to-refresh is also available.
 - **My Jobs** list → **booking summary confirmation** → Start.
 - **Check-in** on Start:
@@ -108,7 +109,7 @@ forms at the end of the day; the app keeps its generic nature").
 ### 5.3 Media
 - Photo/video fields: the expert taps the camera repeatedly up to the configured count. Camera and gallery are both allowed.
 - **In-app camera photos get a burned-in stamp** (booking ID, expert, server time, GPS, or **"GPS unavailable"**). Gallery photos aren't stamped. The source is tagged internally and never shown in the PDF.
-- Stored at **~2048px / ~500 KB** plus a preview copy. Videos are clips of up to 60 s at 720p, compressed on the phone.
+- Stored at **~2048px / ~500 KB** plus a preview copy. Videos are clips of up to 60 s at 720p, compressed on the phone. The server checks each video really is an MP4 / MOV file. A failed upload does not use up a place on its field.
 - Expert can **delete/retake** and review full-screen before submit.
 - **Upload as you go** on any network: background, resumable, chunked, checksum-verified, **sent directly from the phone to R2** via pre-signed URLs (never through the API server).
 - **Local copies:** cleared manually only; **unuploaded files can never be cleared**. Low-storage warning below 2 GB, and starting a job is blocked below 500 MB.

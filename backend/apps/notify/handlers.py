@@ -12,7 +12,8 @@ PREFS = ("submitted", "started", "new_bookings")
 PROBLEMS = {"alert.conflict": "Two experts inspected {bid}",
             "alert.pdf_failed": "Report failed for {bid}",
             "alert.stuck_upload": "Photos stuck for {bid}",
-            "alert.type_change_rejected": "Type change wasn't applied for {bid}"}
+            "alert.type_change_rejected": "Type change wasn't applied for {bid}",
+            "alert.late_work": "Late offline work for {bid}"}
 PROGRESS = {"inspection.started": ("started", "{bid} started"),
             "inspection.submitted": ("submitted", "{bid} submitted"),
             "inspection.completed": ("completed", "{bid} completed")}

@@ -10,6 +10,8 @@ from .models import MediaAsset
 
 MAX_EDGE = 2048
 PREVIEW_EDGE = 480
+# the first box of an MP4 / MOV file (QuickTime files may begin with any of these)
+VIDEO_BOXES = {b"ftyp", b"moov", b"mdat", b"wide", b"free", b"skip"}
 
 
 def _shrink(image: Image.Image, edge: int) -> Image.Image:
@@ -33,11 +35,14 @@ def verify_asset(asset_id: str) -> str:
     asset = MediaAsset.objects.get(pk=asset_id)
     if asset.status == "verified":
         return "verified"
-    digest, total = hashlib.sha256(), 0
+    digest, total, head = hashlib.sha256(), 0, b""
     for chunk in storage.stream(asset.key):
         digest.update(chunk)
         total += len(chunk)
-    if digest.hexdigest() != asset.sha256 or total != asset.size:
+        head = (head + chunk[:8])[:8]
+    # a video must really be one: its first box names an MP4 / MOV container (F-244)
+    not_video = asset.kind == "video" and head[4:8] not in VIDEO_BOXES
+    if digest.hexdigest() != asset.sha256 or total != asset.size or not_video:
         storage.delete(asset.key)
         asset.status = "failed"
         asset.save()

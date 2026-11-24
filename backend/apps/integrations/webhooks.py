@@ -34,7 +34,7 @@ PUBLIC = {"booking.created": "booking.created", "booking.updated": "booking.upda
           "inspection.started": "inspection.started",
           "inspection.submitted": "inspection.submitted", "media.completed": "media.completed",
           "pdf.ready": "pdf.ready", "alert.conflict": "alert.conflict",
-          "alert.type_change_rejected": "alert.conflict",
+          "alert.type_change_rejected": "alert.conflict", "alert.late_work": "alert.conflict",
           "alert.stuck_upload": "alert.stuck_upload"}
 MAX_BODY = 1_000_000
 METHODS = ["POST", "PUT", "PATCH", "GET", "DELETE"]

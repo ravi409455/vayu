@@ -148,7 +148,7 @@ def test_a_huge_photo_is_stored_at_most_2048px(job, settings):
 def test_resume_lists_uploaded_parts_and_completes_the_rest(job, settings):
     env, b = job
     settings.MEDIA_PART_SIZE = 5 * 1024 * 1024
-    data = b"v" * (11 * 1024 * 1024)
+    data = mp4(11 * 1024 * 1024)
     init = env.expert.post("/api/v1/media/initiate", initiate_body(
         b["id"], data, field_key="clip", kind="video", content_type="video/mp4"),
         format="json").json()
@@ -562,3 +562,48 @@ def test_the_expert_can_list_the_files_on_the_booking_and_others_cannot(job, set
 
     Field.objects.filter(key="photo_a").update(access={"expert": {"in_progress": "hidden"}})
     assert env.expert.get(f"/api/v1/bookings/{b['id']}/media").json() == []
+
+
+# ---------------------------------------------------------------- plan batch 3 (F-122, F-244)
+
+def mp4(size=4096) -> bytes:
+    """The start of a real MP4: an ftyp box, then filler."""
+    head = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2"
+    return head + b"\x00" * (size - len(head))
+
+
+def test_a_failed_upload_does_not_use_up_the_experts_place_on_the_field(job, settings):
+    env, b = job
+    for _ in range(2):                                    # photo_a takes 2: both fail the checksum
+        init = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),
+                               format="json").json()
+        parts = put_parts(init, jpeg(color=(1, 2, 3)), settings)
+        env.expert.post(f"/api/v1/media/{init['id']}/complete", {"parts": parts}, format="json")
+    assert MediaAsset.objects.filter(status="failed").count() == 2
+    assert upload(env.expert, b["id"], jpeg(), settings).status_code == 200   # a retake fits
+
+
+@pytest.mark.parametrize("ctype", ["video/mp4", "video/quicktime"])
+def test_a_video_that_is_not_a_video_fails_verification(job, settings, ctype):
+    env, b = job
+    r = upload(env.expert, b["id"], jpeg(), settings, field_key="clip", kind="video",
+               content_type=ctype)
+    assert r.status_code == 409
+    a = MediaAsset.objects.get()
+    assert a.status == "failed" and not storage.exists(a.key)
+
+
+@pytest.mark.parametrize("box", [b"ftyp", b"moov", b"mdat", b"wide", b"free", b"skip"])
+def test_a_real_mp4_or_mov_is_verified(job, settings, box):
+    env, b = job
+    data = b"\x00\x00\x00\x08" + box + mp4()[8:]
+    r = upload(env.expert, b["id"], data, settings, field_key="clip", kind="video",
+               content_type="video/quicktime")
+    assert r.status_code == 200 and r.json()["status"] == "verified"
+
+
+def test_a_video_shorter_than_a_box_header_fails(job, settings):
+    env, b = job
+    r = upload(env.expert, b["id"], b"\x00\x00", settings, field_key="clip", kind="video",
+               content_type="video/mp4")
+    assert r.status_code == 409 and MediaAsset.objects.get().status == "failed"
