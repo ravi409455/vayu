@@ -253,7 +253,9 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
                             Column(Modifier.weight(1f)) {
                                 Text(f.label, fontSize = 12.sp, color = Vayu.colors.muted)
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    val shownText = answerText(f, v, env)
+                                    // a photo question counts what the server holds, even before the answer lists it
+                                    val held = if (f.isMedia) media.count { it.s("field_key") == f.key } else 0
+                                    val shownText = if (f.isMedia && v == null && held > 0) "$held ${if (f.type == "file") "file" else f.type}${if (held == 1) "" else "s"}" else answerText(f, v, env)
                                     Text(shownText, color = Vayu.colors.ink, modifier = Modifier.weight(1f, fill = false))
                                     // the tag only when it adds something ("Minor" twice says nothing)
                                     if (bad != null && !bad.equals(shownText, ignoreCase = true)) Text(bad, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.warn,
@@ -338,7 +340,7 @@ private fun answerText(f: Field, v: Any?, env: OpsEnv): String = when (f.type) {
     "master_list" -> (v as? String)?.let { if (f.config["list"] == "city") env.labels.city(it) else if (f.config["list"] == "car_make_model") env.labels.car(it) else it } ?: "—"
     "form_choice" -> (v as? String)?.let(env.labels::type) ?: "—"
     "user_picker" -> (v as? Number)?.let { env.labels.person(it.toInt()) } ?: "—"
-    "number" -> shown(v) + ((f.config["unit"] as? String)?.let { " $it" } ?: "")
+    "number" -> if (v == null) "—" else shown(v) + ((f.config["unit"] as? String)?.let { " $it" } ?: "")
     "currency" -> if (v == null) "—" else "₹" + shown(v)
     "datetime" -> (v as? String)?.let { whenStamp(it, env.today()) } ?: "—"
     "date" -> (v as? String)?.let { dayLabel(it, env.today()).ifBlank { it } } ?: "—"
