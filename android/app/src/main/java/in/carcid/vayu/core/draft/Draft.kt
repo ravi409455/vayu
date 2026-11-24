@@ -59,10 +59,14 @@ data class Draft(
     val unverifiedTime: Boolean = false,
     /** Answers the server refused, by field key (its code), until the expert changes them. */
     val fieldErrors: Map<String, String> = emptyMap(),
+    /** Server files to take back (deleted or retaken after they were sent). */
+    val discards: List<String> = emptyList(),
+    /** Fetch the files the server already holds for this job (it was started before, elsewhere). */
+    val reconcile: Boolean = false,
 ) {
     val locked: Boolean get() = submittedAt != null
     /** Something still has to reach the server. */
-    val unsent: Boolean get() = !submitSent || files.any { !it.sent }
+    val unsent: Boolean get() = !submitSent || files.any { !it.sent } || discards.isNotEmpty() || reconcile
 
     fun answer(part: String, key: String): Any? = answers[part]?.get(key)
     fun withAnswer(part: String, key: String, v: Any?): Draft =
@@ -74,7 +78,7 @@ data class Draft(
         "start_uuid" to startUuid, "started_at" to startedAt, "start_sent" to startSent,
         "submit_uuid" to submitUuid, "submitted_at" to submittedAt, "submit_sent" to submitSent,
         "problem" to problem, "problem_code" to problemCode, "unverified_time" to unverifiedTime,
-        "field_errors" to fieldErrors,
+        "field_errors" to fieldErrors, "discards" to discards, "reconcile" to reconcile,
         "files" to files.map { f -> mapOf("id" to f.id, "part" to f.part, "field" to f.field, "kind" to f.kind,
             "path" to f.path, "content_type" to f.contentType, "source" to f.source, "size" to f.size,
             "sha256" to f.sha256, "label" to f.label, "server_id" to f.serverId, "sent" to f.sent,
@@ -97,6 +101,8 @@ data class Draft(
                 submitUuid = s("submit_uuid")!!, submittedAt = s("submitted_at"), submitSent = b("submit_sent"),
                 problem = s("problem"), problemCode = s("problem_code"), unverifiedTime = b("unverified_time"),
                 fieldErrors = (o["field_errors"] as? JsonObject).orEmpty().mapValues { (it.value as? JsonPrimitive)?.contentOrNull ?: "" },
+                discards = (o["discards"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
+                reconcile = b("reconcile"),
                 files = (o["files"] as? JsonArray).orEmpty().map { it.jsonObject }.map { f ->
                     fun fs(k: String) = (f[k] as? JsonPrimitive)?.contentOrNull
                     LocalFile(fs("id")!!, fs("part")!!, fs("field")!!, fs("kind")!!, fs("path")!!, fs("content_type")!!,
@@ -150,7 +156,7 @@ class DraftStore(private val dir: File) {
     /** Discard: the answers and every file of this job (also ones not sent). */
     @Synchronized
     fun discard(bookingId: String) {
-        get(bookingId)?.files?.forEach { File(it.path).delete() }
+        get(bookingId)?.files?.forEach { if (it.path.isNotEmpty()) File(it.path).delete() }
         fileOf(bookingId).delete()
         cache.remove(bookingId)
         changes.value++
@@ -163,9 +169,9 @@ class DraftStore(private val dir: File) {
     @Synchronized
     fun clearSentCopies(): Long {
         var freed = 0L
-        all().forEach { d -> d.files.filter { it.sent }.forEach { f -> File(f.path).takeIf { it.exists() }?.let { freed += it.length(); it.delete() } } }
+        all().forEach { d -> d.files.filter { it.sent && it.path.isNotEmpty() }.forEach { f -> File(f.path).takeIf { it.exists() }?.let { freed += it.length(); it.delete() } } }
         return freed
     }
 
-    fun sentBytes(): Long = all().sumOf { d -> d.files.filter { it.sent }.sumOf { File(it.path).takeIf { f -> f.exists() }?.length() ?: 0L } }
+    fun sentBytes(): Long = all().sumOf { d -> d.files.filter { it.sent && it.path.isNotEmpty() }.sumOf { File(it.path).takeIf { f -> f.exists() }?.length() ?: 0L } }
 }

@@ -139,4 +139,31 @@ class OutboxTest {
         assertFalse(File(d.files.single().path).exists())
         assertEquals(null, again.get(BOOKING))
     }
+
+    @Test fun aSentFileRemovedOnThePhoneIsTakenBackOnTheServer() = runBlocking {
+        val f = ready()
+        outbox.run()
+        server.on("DELETE media/asset-1", "", 204)
+        drafts.update(BOOKING) { it.copy(submittedAt = null) }                              // still editing
+        val model = `in`.carcid.vayu.ui.expert.InspectionModel(drafts, jobs, BOOKING, { java.time.Instant.now() }, {})
+        model.removeFile("inspection", "door_photos", f.id)
+        assertEquals(listOf("asset-1"), drafts.get(BOOKING)!!.discards)
+        outbox.run()
+        assertEquals(1, server.bodiesOf("DELETE media/asset-1").size)
+        assertTrue(drafts.get(BOOKING)!!.discards.isEmpty())
+    }
+
+    @Test fun filesFromBeforeArePickedUpWhenTheServerSaysTheFieldIsFull() = runBlocking {
+        ready()
+        server.on("POST media/initiate", """{"code":"TOO_MANY","detail":"'door_photos' takes at most 1."}""", 409)
+        server.on("GET bookings/$BOOKING/media", """[{"id":"old-1","field_key":"door_photos","kind":"photo","status":"verified"},
+            {"id":"half","field_key":"door_photos","kind":"photo","status":"pending"}]""")
+        server.on("DELETE media/half", "", 204)
+        outbox.run()
+        val d = drafts.get(BOOKING)!!
+        val old = d.files.single { it.serverId == "old-1" }
+        assertTrue(old.sent)                                                               // the finished one is back in the answers
+        assertTrue((d.answer("inspection", "door_photos") as List<*>).contains(old.id))
+        assertEquals(1, server.bodiesOf("DELETE media/half").size)                         // the half-sent one stops counting
+    }
 }

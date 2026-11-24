@@ -174,6 +174,7 @@ class OpsFlowTest {
         compose.onNode(androidx.compose.ui.test.hasContentDescription("Refresh", substring = true)).performClick()
         waitFor("Offline · as of")
         compose.onNodeWithText("Rohit Sharma").assertIsDisplayed()
+        waitFor("No signal. Showing what was saved")                                 // Refresh said what happened
         shot("ops_today_offline")
     }
 

@@ -50,7 +50,9 @@ class InspectionModel(
         /** Open the job's draft, creating it (pinning today's forms) on first Start. */
         fun begin(drafts: DraftStore, job: Job, verified: Boolean): Draft = drafts.get(job.id) ?: drafts.save(Draft(
             bookingId = job.id, code = job.bookingId, customer = job.customer, versions = job.versions,
-            inspectionType = job.typeKey, unverifiedTime = !verified))
+            inspectionType = job.typeKey, unverifiedTime = !verified,
+            // started before (another phone, cleared storage): pick up the files the server holds
+            reconcile = job.stage != "assigned"))
     }
 
     fun filled(d: Draft = draft): Filled? = jobs.filled(bookingId, d.versions, d.answers, now().atZone(ZoneId.systemDefault()).toLocalDate().toString())
@@ -93,8 +95,10 @@ class InspectionModel(
         commit { d ->
             val cur = d.answer(part, field)
             val value: Any? = if (single) f.id else ((cur as? List<*>).orEmpty() + f.id)
-            if (single) (cur as? String)?.let { old -> d.files.firstOrNull { it.id == old && !it.sent }?.let { File(it.path).delete() } }
-            d.copy(files = d.files.filterNot { single && it.id == cur } + f).withAnswer(part, field, value)
+            val replaced = if (single) d.files.firstOrNull { it.id == cur } else null
+            replaced?.path?.takeIf { it.isNotEmpty() && !replaced.sent }?.let { File(it).delete() }
+            d.copy(files = d.files.filterNot { single && it.id == cur } + f, discards = d.discards + listOfNotNull(replaced?.serverId))
+                .withAnswer(part, field, value)
         }
         kick()
     }
@@ -102,11 +106,15 @@ class InspectionModel(
     fun removeFile(part: String, field: String, id: String) {
         if (draft.locked) return
         commit { d ->
-            d.files.firstOrNull { it.id == id }?.let { File(it.path).delete() }
+            val f = d.files.firstOrNull { it.id == id }
+            f?.path?.takeIf { it.isNotEmpty() }?.let { File(it).delete() }
             val cur = d.answer(part, field)
             val value: Any? = if (cur is List<*>) cur.filter { it != id } else null
-            d.copy(files = d.files.filterNot { it.id == id }).withAnswer(part, field, value)
+            // a file the server already has is taken back there too, or it keeps its place
+            d.copy(files = d.files.filterNot { it.id == id }, discards = d.discards + listOfNotNull(f?.serverId))
+                .withAnswer(part, field, value)
         }
+        kick()
     }
 
     /** Lock the answers and queue them for sending. */

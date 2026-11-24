@@ -45,7 +45,11 @@ class Outbox(
     private fun note(id: String, e: ApiError?) = drafts.update(id) { it.copy(problem = e?.message, problemCode = e?.code) }
 
     private suspend fun push(id: String) {
+        takeBack(id)
+        if (drafts.get(id)!!.reconcile) reconcile(id)
         register(id)
+        // a field was full on the server: pick up what is there, then register what is left
+        if (drafts.get(id)!!.reconcile) { reconcile(id); register(id) }
         sendStart(id)
         sendSubmit(id)
         upload(id)
@@ -61,9 +65,53 @@ class Outbox(
                 drafts.update(id) { d -> d.copy(files = d.files.map { if (it.id == f.id) it.copy(serverId = server, sent = done, error = null) else it }) }
             } catch (e: ApiError) {
                 if (e.code == ApiError.NETWORK || e.status >= 500 || e.code == "DEVICE_REVOKED") throw e
+                // the field is full on the server: files from before; pick them up and try again next run
+                if (e.code == "TOO_MANY") { drafts.update(id) { it.copy(reconcile = true) }; continue }
                 drafts.update(id) { d -> d.copy(files = d.files.map { if (it.id == f.id) it.copy(error = e.message) else it }) }
             }
         }
+    }
+
+    /** Delete on the server the files the expert removed or replaced after they were sent. */
+    private suspend fun takeBack(id: String) {
+        for (server in drafts.get(id)!!.discards) {
+            try {
+                api.act("DELETE", "media/$server")
+            } catch (e: ApiError) {
+                if (e.code == ApiError.NETWORK || e.status >= 500 || e.code == "DEVICE_REVOKED") throw e
+                // gone already, or no longer ours to take back: nothing more to do
+            }
+            drafts.update(id) { it.copy(discards = it.discards - server) }
+        }
+    }
+
+    /**
+     * The job was started before (another phone, cleared storage): the server's finished files go
+     * back into the answers (marked sent) while there is room; half-sent ones, and any that no
+     * longer fit, are taken back so they stop counting against the field's limit (web: reconcileMedia).
+     */
+    private suspend fun reconcile(id: String) {
+        val rows = (api.get("bookings/$id/media") as? JsonArray).orEmpty().map { it.jsonObject }
+        val d = drafts.get(id)!!
+        val filled = filledOf(d)
+        val known = d.files.mapNotNull { it.serverId }.toSet() + d.discards
+        val fields = PARTS.flatMap { p -> filled?.trees?.get(p)?.fields.orEmpty().map { p to it } }.associateBy { it.second.key }
+        var next = d
+        val drop = mutableListOf<String>()
+        for (r in rows) {
+            val server = r.str("id")
+            if (server in known) continue
+            val (part, f) = fields[r.str("field_key")] ?: continue
+            val used = (next.answer(part, f.key) as? List<*>)?.size ?: if (next.answer(part, f.key) != null) 1 else 0
+            if (r.str("status") !in arrived || used >= f.maxCount) { drop += server; continue }
+            val file = LocalFile(java.util.UUID.randomUUID().toString(), part, f.key, r.str("kind"), "", "", "server", 0, "",
+                "${f.label} (from before)", serverId = server, sent = true, progress = 1f)
+            val value: Any? = if (f.type == "signature") file.id else ((next.answer(part, f.key) as? List<*>).orEmpty() + file.id)
+            next = next.copy(files = next.files + file).withAnswer(part, f.key, value)
+        }
+        val picked = next
+        drafts.update(id) { picked.copy(reconcile = false, discards = it.discards + drop) }
+        takeBack(id)
     }
 
     /** The answers of one part as the server takes them: visible ones only, file ids swapped for the server's. */
