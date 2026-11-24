@@ -33,7 +33,10 @@ class LocalNotes(private val file: File, private val now: () -> Instant = Instan
 
     @Synchronized fun add(kind: String, title: String, body: String, booking: String?) {
         val t = now()
-        save(listOf(LocalNote(-t.toEpochMilli(), kind, title, body, booking, t)) + all().take(29))
+        val kept = all()
+        var id = -t.toEpochMilli()
+        while (kept.any { it.id == id }) id--          // two in the same millisecond: still unique
+        save(listOf(LocalNote(id, kind, title, body, booking, t)) + kept.take(29))
     }
 
     /** Mark these read (all when [ids] is null). */

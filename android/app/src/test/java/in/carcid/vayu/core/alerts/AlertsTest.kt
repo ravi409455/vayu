@@ -106,8 +106,11 @@ class AlertsTest {
         var cleared = 0
         val root = Files.createTempDirectory("vayu").toFile()
         val g = `in`.carcid.vayu.Graph(api, MemoryTokenStore(), root, {}, clearNotices = { cleared++ })
+        g.localNotes(3).add("reminder", "In 1 hour: DEMO-8 at 11:00", "", "b8")
+        assertTrue(g.localNotes(4).all().isEmpty())                          // each person their own
         g.forgetCopies(3)
         assertEquals(1, cleared)
+        assertTrue(g.localNotes(3).all().isEmpty())
     }
 
     @Test fun phoneNoticesAreKeptReadAndCleared() {
@@ -117,6 +120,9 @@ class AlertsTest {
         assertEquals(30, notes.all().size)                                   // the latest 30
         assertEquals("In 1 hour: DEMO-34 at 11:00", notes.all().first().title)
         assertTrue(notes.all().all { it.id < 0 && !it.read })
+        val same = LocalNotes(File(Files.createTempDirectory("n").toFile(), "n.json")) { t }
+        same.add("reminder", "a", "", null); same.add("reminder", "b", "", null)
+        assertEquals(2, same.all().map { it.id }.toSet().size)                // same millisecond, two ids
         notes.read(listOf(notes.all().first().id))
         assertEquals(1, notes.all().count { it.read })
         notes.read(null)
@@ -133,7 +139,7 @@ class AlertsTest {
         notes.add("reminder", "In 1 hour: DEMO-8 at 15:30", "", "b8")
         server.on("GET notifications", """{"unread":1,"results":[{"id":5,"kind":"assigned","title":"New job: DEMO-2",
             "body":"","booking":"b2","created_at":"2026-11-24T08:00:00Z","read":false}]}""")
-        val bell = `in`.carcid.vayu.ui.BellModel(api, scope, notes)
+        val bell = `in`.carcid.vayu.ui.BellModel(api, scope) { notes }
         bell.refresh(); until { bell.state.value.notes.size == 2 }
         assertEquals(listOf("In 1 hour: DEMO-8 at 15:30", "New job: DEMO-2"), bell.state.value.notes.map { it.title })
         assertEquals(2, bell.state.value.unread)

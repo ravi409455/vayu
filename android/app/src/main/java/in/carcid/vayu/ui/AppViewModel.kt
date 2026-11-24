@@ -39,7 +39,7 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
     /** A booking to open, from a tapped notice; the home screen takes it and sets it back to null. */
     val opening = MutableStateFlow<String?>(null)
     /** The bell (notifications from the server), read on sign-in, on coming back and on each push. */
-    val bell = BellModel(api, viewModelScope, graph.localNotes)
+    val bell = BellModel(api, viewModelScope) { graph.signedInId()?.let(graph::localNotes) }
     private var lastPassword = ""
     /** Below this version the app may finish a started job but not start new ones (enforced in Phase 14). */
     var minAppVersion = 0

@@ -129,7 +129,7 @@ object Reminders {
             wm.enqueueUniqueWork("remind-${r.jobId}", ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<ReminderWorker>()
                 .addTag(TAG)
                 .setInitialDelay(Duration.between(Instant.now(), r.at).toMillis().coerceAtLeast(0), TimeUnit.MILLISECONDS)
-                .setInputData(workDataOf("job" to r.jobId, "title" to r.title, "body" to r.body)).build())
+                .setInputData(workDataOf("job" to r.jobId, "user" to user, "title" to r.title, "body" to r.body)).build())
         }
     }
 
@@ -140,9 +140,10 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
     override suspend fun doWork(): Result {
         val job = inputData.getString("job") ?: return Result.success()
         val graph = (applicationContext as VayuApp).graph
-        if (graph.signedInId() == null) return Result.success()
+        val owner = inputData.getInt("user", -1)
+        if (graph.signedInId() != owner) return Result.success()   // only the person it was set for
         val title = inputData.getString("title").orEmpty(); val body = inputData.getString("body").orEmpty()
-        graph.localNotes.add("reminder", title, body, job)
+        graph.localNotes(owner).add("reminder", title, body, job)
         graph.pushed()                                       // an open bell shows it at once
         Notices.show(applicationContext, "remind-$job", title, body, job)
         return Result.success()
@@ -156,7 +157,7 @@ fun alertStuck(ctx: Context, graph: Graph, user: Int) {
     val now = stuck(graph.drafts(user).all(), Instant.now()) { p -> File(p).takeIf { it.exists() }?.let { Instant.ofEpochMilli(it.lastModified()) } }
     now.filter { it.first !in told }.forEach { (id, code) ->
         val title = "Photos for $code haven't sent for 2 hours"; val body = "Open the app on Wi-Fi to send them."
-        graph.localNotes.add("problem", title, body, id)
+        graph.localNotes(user).add("problem", title, body, id)
         graph.pushed()
         Notices.show(ctx, "stuck-$id", title, body, id, problem = true)
     }

@@ -118,6 +118,11 @@ Each phase: tests first (red), then the code, then CI green, then a short demo o
 - **E2E J6** (on the owner's test phone, not an emulator — owner's choice): offline inspection → reconnect → uploads resume → Completed; reassign
   conflict path; Ops assigns a job and the expert gets the push.
 
+- **Release signing set up (2026-11-24).** Key and passwords live in `~/vayu-keys` (outside the
+  project, backed up offline by the owner). Every release must show this signer:
+  `CN=Vayu, O=CarCID, C=IN`, SHA-256 `251bb5d28b2423c1ff6dd3d6badfd94be503956e36590f48abe8fd356640f0cd`
+  (check: `apksigner verify --print-certs app-release.apk`).
+
 ### Phase 18 — Launch (was Phase 16)
 Unchanged from plan.md: seeds, release rehearsal, staging trial with 2–3 experts and Ops.
 - Also moved here (owner, 2026-11-24): Ops payments verify / record — needs a server payments API

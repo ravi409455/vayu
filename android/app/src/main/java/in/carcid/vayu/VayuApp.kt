@@ -30,8 +30,8 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
             val onJobs: (Int) -> Unit = {},
             /** Signed out: take this person's notices off the phone and drop their reminders. */
             val clearNotices: () -> Unit = {}) {
-    /** The phone's own notices (reminders, photos not sending), shown in the bell with the server's. */
-    val localNotes = `in`.carcid.vayu.core.alerts.LocalNotes(File(root, "notes.json"))
+    /** One person's own phone notices (reminders, photos not sending), shown in their bell. */
+    fun localNotes(userId: Int) = `in`.carcid.vayu.core.alerts.LocalNotes(File(root, "notes-$userId.json"))
 
     /** A push arrived; the open app listens and refreshes at once. */
     val pushes = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -54,7 +54,7 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
      */
     fun forgetCopies(userId: Int) {
         clearNotices()                     // the next person on this phone never sees them
-        localNotes.clear()
+        root.listFiles()?.filter { it.name.startsWith("notes-") }?.forEach { it.delete() }
         ops(userId).clear()
         cache?.listFiles()?.filter { it.name.startsWith("media-") || it.name == "reports" || it.name.endsWith(".up") }
             ?.forEach { it.deleteRecursively() }

@@ -63,7 +63,8 @@ fun parseNotes(o: JsonObject): BellState = BellState(
  * sending), read on open, on coming back to the app and on each push.
  */
 class BellModel(private val api: Api, private val scope: CoroutineScope,
-                private val local: `in`.carcid.vayu.core.alerts.LocalNotes? = null) {
+                /** The signed-in person's own phone notices (null: none). */
+                private val localOf: () -> `in`.carcid.vayu.core.alerts.LocalNotes? = { null }) {
     private val _state = MutableStateFlow(BellState())
     val state: StateFlow<BellState> = _state
     private var server = BellState()
@@ -76,7 +77,7 @@ class BellModel(private val api: Api, private val scope: CoroutineScope,
     }
 
     private fun merge() {
-        val mine = local?.all().orEmpty().map { n ->
+        val mine = localOf()?.all().orEmpty().map { n ->
             Note(n.id, n.kind, n.title, n.body, n.booking, n.at.atOffset(java.time.ZoneOffset.UTC), n.read)
         }
         _state.value = BellState((server.notes + mine).sortedByDescending { it.at?.toInstant() },
@@ -91,7 +92,7 @@ class BellModel(private val api: Api, private val scope: CoroutineScope,
         _state.value = s.copy(notes = s.notes.map { if (it in gone) it.copy(read = true) else it },
             unread = (s.unread - gone.size).coerceAtLeast(0))
         val phone = gone.filter { it.id < 0 }.map { it.id }
-        if (phone.isNotEmpty()) local?.read(if (ids == null) null else phone)
+        if (phone.isNotEmpty()) localOf()?.read(if (ids == null) null else phone)
         val fromServer = gone.filter { it.id > 0 }.map { it.id }
         if (fromServer.isEmpty()) return
         scope.launch {
