@@ -104,8 +104,8 @@ class Preview(APIView):
                 d = validate_definition(request.data["definition"])
             except ValueError as e:
                 raise err("INVALID_TEMPLATE", str(e)) from e
-            pdf, name, layout = tasks.preview(booking, insp, d)
-            return Response({"filename": name, "pages": layout,
+            pdf, name, layout, checks = tasks.preview(booking, insp, d)
+            return Response({"filename": name, "pages": layout, "checks": checks,
                              "pdf": base64.b64encode(pdf).decode()})
         pdf, name = tasks.build_pdf(booking, insp, tv, "preview", 0, edge=480)
         response = HttpResponse(pdf, content_type="application/pdf")

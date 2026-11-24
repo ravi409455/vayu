@@ -1018,3 +1018,17 @@ def test_the_pdf_has_a_bookmark_for_each_page_and_part_title(renv, settings):
     outline: list = reader.outline
     assert outline[0].title == "Vehicle & owner" and [o.title for o in outline[1]] == ["Body"]
     assert len(outline) == 2 and (reader.metadata and reader.metadata.title or "").startswith("SA37926")
+
+
+def test_the_designer_is_warned_about_blank_pages_and_headings_left_alone():
+    html = ('<html><head><style>@page { size: A5 } .big { height: 168mm }</style></head><body>'
+            '<p>one</p><div class="big"></div><h2>Alone</h2>'
+            '<div style="break-before: page"></div>'
+            '<div style="break-before: page"><h3>Last page heading</h3></div></body></html>')
+    pdf, pages, checks = render.render_with_layout(html)
+    assert pdf[:4] == b"%PDF" and len(pages) == 5      # the tall box spills onto page 2
+    assert [(c["page"], c["code"]) for c in checks] == [
+        (2, "BLANK_PAGE"), (3, "LONELY_HEADING"), (4, "BLANK_PAGE")]       # the last page is fine
+    assert "“Alone”" in checks[1]["message"]
+    ok = render.render_with_layout("<html><body><h2>T</h2><p>rows</p></body></html>")[2]
+    assert ok == []

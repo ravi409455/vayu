@@ -323,6 +323,58 @@ Not done (on purpose): uploading your own fonts (the three bundled fonts cover t
 upload needs a licence check); answer-option conflicts on import (templates name fields and
 sections, not answer options).
 
+### Phase 6: final review (2026-11-24)
+
+**Speed and size** (measured on this Mac; staging should be similar or faster):
+
+| What | Result | Target |
+|---|---|---|
+| Real PDI report (DEMO-3, 18 pages) | 2.8 s, 0.7 MB | under 2 min, under 15 MB |
+| 100 photos, worst case (noisy test photos) | 7.4 s, 5.4 MB | under 15 MB |
+| 150 photos, worst case | 11.1 s, 8.2 MB | under 2 min |
+
+Fixed during the review: every photo used to print at 1000 px, so 100 photos made a 21.5 MB PDF.
+Now a photo in a small box (up to 65 mm wide, e.g. 3 per row) prints at 600 px, still about
+250 dpi; a photo across the page stays at 1000 px.
+
+**Layout checks** now run with every preview and show under warnings: a blank page, and a
+heading left alone at the bottom of a page. The PDI report has none. (Header and footer come
+from the page style, and nothing can load from outside, so those need no check.)
+
+**Staging bundle:** `docs/samples/pdi-bundle.json` is the PDI form with its report: layout,
+shared theme "Car C.I.D.", shared part "PDI disclaimer", logo and watermark. Tried on an empty
+server: everything arrives as drafts. Import the booking form first (the report shows booking
+fields), then this bundle, then publish the form and the template.
+
+**Sample report:** `docs/samples/DEMO-3PDI.pdf`.
+
+**Sign-off checklist** (everything agreed; ✓ = built and tested):
+
+| Agreed | Where to see it |
+|---|---|
+| ✓ Full report with the exact disclaimer | Sample PDF, last pages |
+| ✓ Cover: car photo beside the vehicle table, logo and name on one line in the header | Sample PDF, page 1 |
+| ✓ Ratings as big numbers with dots, issues / not able to check / checks done tiles | Page 1 |
+| ✓ Divider page with the section list and page numbers | Page 3 |
+| ✓ Verify page with QR code before the disclaimer | Second last page |
+| ✓ Watermark shows through table rows | Every normal page |
+| ✓ No photos inside table rows; remarks are normal rows | Section pages |
+| ✓ Issue photos and "photo of" with "Check: answer" captions | Summary, section pages |
+| ✓ Page breaks: new page, keep together, keep title with rows | Part settings → Page breaks |
+| ✓ Photo grids: per row, shape, fit and crop, border, gap, captions | Photo part settings |
+| ✓ Side by side columns with widths and line-up | Cover page part |
+| ✓ Box: space, padding, border, light tint, corners | Part settings → Box |
+| ✓ Style rules (e.g. critical → bold on red) | Table settings → Style rules |
+| ✓ Custom HTML for experts, safe | "+ Add to this page" → Custom HTML |
+| ✓ PDF bookmarks per page and part | Open the PDF's side panel |
+| ✓ Simple designer: pages and parts, real PDF, click to select | PDF templates screen |
+| ✓ Picture library, shared themes and parts with versions | Report settings → Theme, Pictures |
+| ✓ Copy, export and import with conflicts marked and suggestions | ⋯ menu |
+| ✓ Staging to production carries pictures and shared items | `docs/samples/pdi-bundle.json` |
+
+Not built, on purpose (say if you want them): uploading your own fonts; import checks on
+answer options.
+
 ## 12. Questions for you
 
 1. Battery state and Generator state: keep them in the PDI form? They are not in the sample

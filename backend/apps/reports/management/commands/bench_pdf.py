@@ -55,7 +55,6 @@ class Command(BaseCommand):
         if expert is None:
             raise CommandError("There are no users to attribute the benchmark data to.")
         keys: list[str] = []
-        sample = photo(0)
         try:
             with transaction.atomic():
                 b = Booking.objects.create(
@@ -63,7 +62,8 @@ class Command(BaseCommand):
                     inspection_type=f.inspection_type, customer_name="Benchmark",
                     answers={"booking_id": "BENCH"}, assigned_expert=expert)
                 ids = []
-                for _ in range(photos):
+                for n in range(photos):
+                    sample = photo(n)       # all different: a PDF keeps a repeated picture once
                     a = MediaAsset(client_uuid=uuid.uuid4(), booking=b, uploaded_by=expert,
                                    field_key=field, kind="photo", content_type="image/jpeg",
                                    size=len(sample), sha256="0" * 64, status="verified")
@@ -80,7 +80,8 @@ class Command(BaseCommand):
                                                   "per_row": 3, "source": {
                                                       "kind": "fields",
                                                       "fields": [f"inspection.{field}"]}}]}]})
-                keys += [f"print/{i}-{render.PRINT_EDGE}.jpg" for i in ids]   # shrunk copies
+                keys += [f"print/{i}-{e}.jpg" for i in ids                    # shrunk copies
+                         for e in (render.PRINT_EDGE, render.SMALL_EDGE)]
                 start = time.monotonic()
                 pdf, _name = tasks.build_pdf(b, insp, tv, "bench", 1)
                 took = time.monotonic() - start

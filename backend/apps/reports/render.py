@@ -24,7 +24,9 @@ PAPER = {"A4": (210, 297), "Letter": (216, 279)}
 MARGINS = {"top": 26, "right": 12, "bottom": 16, "left": 12}
 COLORS = {"brand": "#a62830", "text": "#1b1f27", "ok": "#15703f", "warn": "#b25e09",
           "bad": "#b3261e", "muted": "#8a93a3"}
-PRINT_EDGE = 1000            # print photos: about 1000 px is plenty at 2-3 per row on A4
+PRINT_EDGE = 1000            # print photos: the largest size, for a photo across the page
+SMALL_EDGE = 600             # a photo in a box up to 65 mm wide: about 250 dpi, sharp in print
+SMALL_BOX_MM = 65
 PADS = {"compact": 0.6, "normal": 1.2, "roomy": 2.0}
 RATIO = {"4:3": 0.75, "16:9": 0.5625, "1:1": 1.0}
 FONTS_DIR = Path(__file__).parent / "fonts"
@@ -207,10 +209,14 @@ def _table(part: dict) -> str:
 
 
 def _photos(part: dict, width_mm: float, edge: int) -> str:
+    """edge: the largest photo size; a photo in a small box is printed smaller (a full PDI with
+    100 photos stays a reasonable size)."""
     n = part.get("per_row", 2)
     frame = part.get("frame", {})
     gap = frame.get("gap", 4)
     cell = (width_mm - gap * (n - 1)) / n
+    if edge > SMALL_EDGE and cell <= SMALL_BOX_MM:
+        edge = SMALL_EDGE
     ratio = RATIO.get(part.get("shape", "4:3"))
     fit = part.get("fit", "fill")
     size = f"width:{cell:.2f}mm;" + (f"height:{cell * ratio:.2f}mm;" if ratio else "")
@@ -500,9 +506,34 @@ def render_pdf(html_text: str) -> bytes:
     return _document(html_text).write_pdf()
 
 
-def render_with_layout(html_text: str) -> tuple[bytes, list[dict]]:
-    """The PDF, and where each part with an id sits on each page (CSS px, top left origin), so
-    the designer can highlight a part and pick one by clicking it."""
+def quality(doc) -> list[dict]:
+    """What the designer warns about in the laid-out pages: a page with nothing on it, and a
+    heading left alone at the bottom of a page (its rows start on the next). Header and footer
+    come from the page style, and nothing can be loaded from outside, so neither needs a check."""
+    from weasyprint.formatting_structure import boxes
+
+    out = []
+    for n, page in enumerate(doc.pages, 1):
+        body = [c for c in page._page_box.children if not isinstance(c, boxes.MarginBox)]
+        leaves = [b for c in body for b in c.descendants()
+                  if (isinstance(b, boxes.TextBox) and b.text.strip())
+                  or isinstance(b, boxes.ReplacedBox)]
+        if not leaves:
+            out.append({"page": n, "code": "BLANK_PAGE",
+                        "message": f"Page {n} is blank. A page break or space may push the "
+                                   "next part over."})
+            continue
+        last = max(leaves, key=lambda b: (b.position_y, b.position_x))
+        if n < len(doc.pages) and getattr(last, "element_tag", "") in ("h2", "h3", "h4"):
+            out.append({"page": n, "code": "LONELY_HEADING",
+                        "message": f"The heading “{last.text.strip()}” is alone at the bottom "
+                                   f"of page {n}. Turn on “Keep the title with the first rows”."})
+    return out
+
+
+def render_with_layout(html_text: str) -> tuple[bytes, list[dict], list[dict]]:
+    """The PDF, where each part with an id sits on each page (CSS px, top left origin), so the
+    designer can highlight a part and pick one by clicking it, and the layout checks."""
     doc = _document(html_text)
     pages = []
     for page in doc.pages:
@@ -518,4 +549,4 @@ def render_with_layout(html_text: str) -> tuple[bytes, list[dict]]:
         pages.append({"width": page.width, "height": page.height, "parts": [
             {"id": k, "x": round(r[0], 1), "y": round(r[1], 1), "w": round(r[2] - r[0], 1),
              "h": round(r[3] - r[1], 1)} for k, r in found.items()]})
-    return doc.write_pdf(), pages
+    return doc.write_pdf(), pages, quality(doc)

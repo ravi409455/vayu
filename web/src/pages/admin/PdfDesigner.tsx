@@ -93,7 +93,7 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
   const [settings, setSettings] = useState(false);
   const [discard, setDiscard] = useState(false);
   const [showWarnings, setShowWarnings] = useState(false);
-  const [preview, setPreview] = useState<{ pdf: string; pages: LayoutPage[] } | null>(null);
+  const [preview, setPreview] = useState<{ pdf: string; pages: LayoutPage[]; checks?: { page: number; code: string; message: string }[] } | null>(null);
   const [rendering, setRendering] = useState(false);
   const [checks, setChecks] = useState<{ issues: Issue[]; unused: Unused[] }>({ issues: [], unused: [] });
   const v = ver.data;
@@ -139,7 +139,7 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
     void api<{ issues: Issue[]; unused: Unused[] }>(`pdf-template-versions/${v.id}/checks`, { body: { definition: shown } }).then((r) => { if (n === ticket.current) setChecks(r); }).catch(() => {});
     if (!chosen) return;
     setRendering(true);
-    api<{ pdf: string; pages: LayoutPage[] }>(`pdf-template-versions/${v.id}/preview`, { body: { booking: chosen, definition: shown } })
+    api<{ pdf: string; pages: LayoutPage[]; checks: { page: number; code: string; message: string }[] }>(`pdf-template-versions/${v.id}/preview`, { body: { booking: chosen, definition: shown } })
       .then((r) => { if (n === ticket.current) setPreview(r); })
       .catch((e) => { if (n === ticket.current) fail(e); })
       .finally(() => { if (n === ticket.current) setRendering(false); });
@@ -199,7 +199,8 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
   const page = sel?.kind === "page" ? def.pages.find((p) => p.id === sel.id) : null;
   const nameMap = names(def, sectionNames, sharedNames);
   const bad = new Set(checks.issues.map((i) => i.part).filter((x): x is string => !!x));
-  const warnCount = checks.issues.length + checks.unused.length;
+  const layoutChecks = preview?.checks ?? [];
+  const warnCount = checks.issues.length + checks.unused.length + layoutChecks.length;
   return (
     <>
       <div className="bar rd-top">
@@ -224,6 +225,7 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
                       <button type="button" className="sm" onClick={() => { const p = findPart(def, i.part!); if (p) edit(updatePart(def, i.part!, replaceRef(p, i.ref!, i.suggestion!))); }}>Use {i.suggestion}</button>)}
                   </div>
                 </div>))}
+              {layoutChecks.map((c, k) => <div key={`l${k}`} className="rd-warn-row"><strong>Layout, page {c.page}</strong> {c.message}</div>)}
               {checks.unused.length > 0 && <div className="rd-warn-row"><strong>{checks.unused.length} form field{checks.unused.length === 1 ? " is" : "s are"} not in this report</strong>
                 <ul>{checks.unused.slice(0, 12).map((u) => <li key={u.key}>{u.section} → {u.label}</li>)}{checks.unused.length > 12 && <li>…and {checks.unused.length - 12} more</li>}</ul></div>}
               {warnCount === 0 && <p className="muted small" style={{ padding: 8 }}>Every field of the form is in the report and nothing points at a missing field.</p>}
