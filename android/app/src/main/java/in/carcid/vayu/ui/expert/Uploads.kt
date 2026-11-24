@@ -79,7 +79,7 @@ fun UploadsScreen(me: Me, extras: ExpertExtras, onProfile: () -> Unit, onJobs: (
             (digits.length >= 4 && (extras.phones[d.bookingId] ?: "").filter { it.isDigit() }.contains(digits))
     }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
-        VayuTopBar("Uploads", me.initials, bellCount = 0, onBell = onBell, onProfile = onProfile) {
+        VayuTopBar("Uploads", me.initials, bellCount = extras.bell.unread, onBell = onBell, onProfile = onProfile) {
             androidx.compose.material3.IconButton(onClick = { storage = true }) {
                 androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.SdStorage, contentDescription = "Phone storage", tint = Vayu.colors.ink)
             }

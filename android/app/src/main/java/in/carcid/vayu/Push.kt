@@ -1,0 +1,153 @@
+package `in`.carcid.vayu
+
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.work.Constraints
+import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
+import com.google.firebase.messaging.FirebaseMessaging
+import com.google.firebase.messaging.FirebaseMessagingService
+import com.google.firebase.messaging.RemoteMessage
+import `in`.carcid.vayu.core.alerts.reminders
+import `in`.carcid.vayu.core.alerts.stuck
+import `in`.carcid.vayu.core.api.ApiError
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import java.io.File
+import java.time.Duration
+import java.time.Instant
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+
+/** Notices on the phone: pushes from the server, job reminders, photos that won't send. */
+object Notices {
+    private const val JOBS = "jobs"
+    private const val PROBLEMS = "problems"
+    const val EXTRA_BOOKING = "booking"
+
+    private fun channels(ctx: Context) {
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(NotificationChannel(JOBS, "Jobs and updates", NotificationManager.IMPORTANCE_DEFAULT))
+        nm.createNotificationChannel(NotificationChannel(PROBLEMS, "Problems", NotificationManager.IMPORTANCE_HIGH))
+    }
+
+    /** Show one notice; tapping it opens the app on [booking]. Silent if notices aren't allowed. */
+    fun show(ctx: Context, tag: String, title: String, body: String, booking: String?, problem: Boolean = false) {
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+            android.os.Build.VERSION.SDK_INT >= 33) return
+        channels(ctx)
+        val open = Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .apply { if (!booking.isNullOrBlank()) putExtra(EXTRA_BOOKING, booking) }
+        val n = NotificationCompat.Builder(ctx, if (problem) PROBLEMS else JOBS)
+            .setSmallIcon(R.drawable.ic_notice)
+            .setContentTitle(title).setContentText(body).setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setAutoCancel(true)
+            .setContentIntent(PendingIntent.getActivity(ctx, tag.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+            .build()
+        runCatching { NotificationManagerCompat.from(ctx).notify(tag, 0, n) }
+    }
+
+    /** This phone's push token (null without Google Play services or signal). */
+    suspend fun token(): String? = suspendCancellableCoroutine { c ->
+        runCatching {
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { t -> if (c.isActive) c.resume(if (t.isSuccessful) t.result else null) }
+        }.onFailure { if (c.isActive) c.resume(null) }
+    }
+}
+
+/** Pushes from the server. Each one is shown, and what it is about is fetched (a sync). */
+class VayuMessaging : FirebaseMessagingService() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun onNewToken(token: String) {
+        val graph = (application as VayuApp).graph
+        if (graph.signedInId() == null) return             // sent at the next sign-in instead
+        scope.launch { runCatching { graph.api.pushToken(token) } }
+    }
+
+    override fun onMessageReceived(message: RemoteMessage) {
+        val d = message.data
+        val graph = (application as VayuApp).graph
+        if (graph.signedInId() == null) return             // signed out on this phone: nothing to show
+        Notices.show(this, "push-${d["id"]}", d["title"].orEmpty(), d["body"].orEmpty(), d["booking"], problem = d["kind"] == "problem")
+        // the app is open: it refreshes now; closed: an expert's jobs are fetched so they're there offline
+        if (!graph.pushed()) SyncWorker.enqueue(this)
+    }
+}
+
+/** Fetch an expert's jobs in the background (after a push), then set their reminders. */
+class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val graph = (applicationContext as VayuApp).graph
+        val user = graph.signedInId() ?: return Result.success()
+        if (graph.tokens.me()?.get("role") != "expert") return Result.success()
+        return try {
+            val store = graph.jobs(user)
+            store.apply(graph.api.syncJobs(store.haveVersions(), store.since()), System.currentTimeMillis())
+            Reminders.schedule(applicationContext, graph, user)
+            Result.success()
+        } catch (e: ApiError) {
+            if (e.code == ApiError.NETWORK) Result.retry() else Result.success()
+        }
+    }
+
+    companion object {
+        fun enqueue(ctx: Context) = WorkManager.getInstance(ctx).enqueueUniqueWork("sync", ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<SyncWorker>().setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build())
+    }
+}
+
+/** "In 1 hour: DEMO-8 at 11:00", 60 min before each job not started yet. */
+object Reminders {
+    private const val TAG = "remind"
+
+    /** Set from the saved jobs: every earlier reminder is replaced (moved, cancelled, reassigned jobs). */
+    fun schedule(ctx: Context, graph: Graph, user: Int) {
+        val wm = WorkManager.getInstance(ctx)
+        wm.cancelAllWorkByTag(TAG)
+        reminders(graph.jobs(user).jobs(), Instant.now()).forEach { r ->
+            wm.enqueueUniqueWork("remind-${r.jobId}", ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<ReminderWorker>()
+                .addTag(TAG)
+                .setInitialDelay(Duration.between(Instant.now(), r.at).toMillis().coerceAtLeast(0), TimeUnit.MILLISECONDS)
+                .setInputData(workDataOf("job" to r.jobId, "title" to r.title, "body" to r.body)).build())
+        }
+    }
+
+    fun cancel(ctx: Context) { WorkManager.getInstance(ctx).cancelAllWorkByTag(TAG) }
+}
+
+class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val job = inputData.getString("job") ?: return Result.success()
+        if ((applicationContext as VayuApp).graph.signedInId() == null) return Result.success()
+        Notices.show(applicationContext, "remind-$job", inputData.getString("title").orEmpty(), inputData.getString("body").orEmpty(), job)
+        return Result.success()
+    }
+}
+
+/** After each send attempt: tell the expert once per job when its photos have been stuck for 2 hours. */
+fun alertStuck(ctx: Context, graph: Graph, user: Int) {
+    val prefs = ctx.getSharedPreferences("vayu.stuck", Context.MODE_PRIVATE)
+    val told = prefs.getStringSet("told", emptySet()).orEmpty()
+    val now = stuck(graph.drafts(user).all(), Instant.now()) { p -> File(p).takeIf { it.exists() }?.let { Instant.ofEpochMilli(it.lastModified()) } }
+    now.filter { it.first !in told }.forEach { (id, code) ->
+        Notices.show(ctx, "stuck-$id", "Photos for $code haven't sent for 2 hours", "Open the app on Wi-Fi to send them.", id, problem = true)
+    }
+    prefs.edit().putStringSet("told", now.map { it.first }.toSet()).apply()   // sent ones can be told about again later
+}

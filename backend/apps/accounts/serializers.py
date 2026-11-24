@@ -63,8 +63,8 @@ class MeSerializer(UserSerializer):
     """The signed-in person's own record: adds their saved theme."""
 
     class Meta(UserSerializer.Meta):
-        fields = [*UserSerializer.Meta.fields, "theme"]
-        read_only_fields = [*UserSerializer.Meta.read_only_fields, "theme"]
+        fields = [*UserSerializer.Meta.fields, "theme", "notify_prefs"]
+        read_only_fields = [*UserSerializer.Meta.read_only_fields, "theme", "notify_prefs"]
 
 
 class LoginSerializer(serializers.Serializer):

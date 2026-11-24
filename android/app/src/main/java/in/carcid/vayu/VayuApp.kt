@@ -25,7 +25,15 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
             /** Ask for the outbox to run (WorkManager in the app, directly in tests). */
             val kick: () -> Unit,
             /** Where downloaded photos, reports and spreadsheets are kept for viewing. */
-            private val cache: File? = null) {
+            private val cache: File? = null,
+            /** An expert's jobs were saved fresh: set their reminders (WorkManager in the app). */
+            val onJobs: (Int) -> Unit = {}) {
+    /** A push arrived; the open app listens and refreshes at once. */
+    val pushes = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** Tell the open app about a push; false when no screen is listening (the app is closed). */
+    fun pushed(): Boolean = pushes.subscriptionCount.value > 0 && pushes.tryEmit(Unit)
+
     private val jobStores = HashMap<Int, JobStore>()
     private val draftStores = HashMap<Int, DraftStore>()
 
@@ -66,7 +74,8 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
 class VayuApp : Application() {
     val graph: Graph by lazy {
         val tokens = PrefsTokenStore(this)
-        Graph(Api(BuildConfig.API_URL, tokens), tokens, filesDir, { OutboxWorker.enqueue(this) }, cacheDir)
+        Graph(Api(BuildConfig.API_URL, tokens), tokens, filesDir, { OutboxWorker.enqueue(this) }, cacheDir,
+            onJobs = { Reminders.schedule(this, graph, it) })
     }
 }
 
@@ -76,7 +85,9 @@ class OutboxWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val graph = (applicationContext as VayuApp).graph
         val user = graph.signedInId() ?: return Result.success()
         return try {
-            if (graph.outbox(user).run()) Result.success() else Result.retry()
+            val done = graph.outbox(user).run()
+            alertStuck(applicationContext, graph, user)
+            if (done) Result.success() else Result.retry()
         } catch (e: ApiError) {
             Result.success()                  // signed out by the server: the app takes it from here
         }

@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.expert
 
+import `in`.carcid.vayu.ui.noteRows
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -148,6 +149,13 @@ class ExpertExtras(
     val onClearSent: () -> Unit = {},
     /** Customer phones by booking id (Uploads search). */
     val phones: Map<String, String> = emptyMap(),
+    /** The bell: notifications from the server; [onRead] marks some (null: all) read. */
+    val bell: `in`.carcid.vayu.ui.BellState = `in`.carcid.vayu.ui.BellState(),
+    val onBell: () -> Unit = {},
+    val onRead: (List<Long>?) -> Unit = {},
+    /** A booking a tapped notice asks to open (null: none); [onOpened] says it was taken. */
+    val opening: String? = null,
+    val onOpened: () -> Unit = {},
 ) {
     /** Phone storage, as Uploads and App settings show it. */
     val storage: StorageInfo get() = StorageInfo(freeBytes, sentBytes, drafts.values.sumOf { d -> d.files.count { !it.sent } }) {
@@ -174,6 +182,11 @@ fun ExpertHome(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit
     var inspectId by rememberSaveable { mutableStateOf<String?>(null) }
     var uploads by rememberSaveable { mutableStateOf(false) }
     var bell by rememberSaveable { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(bell) { if (bell) extras.onBell() }
+    androidx.compose.runtime.LaunchedEffect(extras.opening, state.jobs) {
+        val id = extras.opening ?: return@LaunchedEffect
+        if (state.jobs.any { it.id == id }) { inspectId = null; bell = false; uploads = false; openId = id; extras.onOpened() }
+    }
     val snack = remember { androidx.compose.material3.SnackbarHostState() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val say: (String) -> Unit = { m -> scope.launch { snack.currentSnackbarData?.dismiss(); snack.showSnackbar(m) } }
@@ -195,7 +208,11 @@ fun ExpertHome(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit
                 onClose = { inspectId = null })
             bell -> {
                 BackHandler { bell = false }
-                NotificationsScreen(onBack = { bell = false })
+                NotificationsScreen(extras.bell, today, onBack = { bell = false }, onReadAll = { extras.onRead(null) }, onOpen = { n ->
+                    extras.onRead(listOf(n.id))
+                    if (n.booking != null && state.jobs.any { it.id == n.booking }) { openId = n.booking; bell = false }
+                    else say("That job is no longer on your list.")
+                })
             }
             open != null -> {
                 BackHandler { openId = null }
@@ -220,16 +237,24 @@ fun ExpertHome(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit
     }
 }
 
-/** The expert's bell. Notifications (new jobs, moved times, stuck uploads) arrive with push, Phase 17. */
+/** The expert's bell: new jobs, moved times, cancellations, details Ops changed. */
 @Composable
-fun NotificationsScreen(onBack: () -> Unit) {
+fun NotificationsScreen(bell: `in`.carcid.vayu.ui.BellState, today: LocalDate, onBack: () -> Unit, onReadAll: () -> Unit,
+                        onOpen: (`in`.carcid.vayu.ui.Note) -> Unit) {
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
-        IconButton(onClick = onBack, modifier = Modifier.padding(start = 6.dp, top = 10.dp)) {
-            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Vayu.colors.ink)
+        Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 12.dp, top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Vayu.colors.ink) }
+            Spacer(Modifier.weight(1f))
+            if (bell.unread > 0) androidx.compose.material3.TextButton(onClick = onReadAll) { Text("Mark all read", color = Vayu.colors.brand) }
         }
         Text("Notifications", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink, modifier = Modifier.padding(horizontal = 20.dp))
-        Text("Nothing yet. New jobs, changed times and photos that are stuck will show here.",
-            color = Vayu.colors.muted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp))
+        LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp)) {
+            if (bell.notes.isEmpty()) item {
+                Text(if (bell.loaded) "Nothing yet. New jobs, changed times and cancellations show here." else "Loading…",
+                    color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 16.dp))
+            }
+            noteRows(bell.notes, today, onOpen)
+        }
     }
 }
 
@@ -246,7 +271,7 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
         .let { if (tab == JobTab.DONE) it.reversed() else it }
     val todayCount = state.jobs.count { tabOf(it, today) == JobTab.TODAY }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
-        VayuTopBar("My jobs", me.initials, bellCount = 0, onBell = onBell, onProfile = onProfile)
+        VayuTopBar("My jobs", me.initials, bellCount = extras.bell.unread, onBell = onBell, onProfile = onProfile)
         // a thin bar while jobs download (Refresh, reopening); fixed height so nothing jumps
         Box(Modifier.fillMaxWidth().height(3.dp).padding(horizontal = 20.dp)) {
             if (state.syncing) LinearProgressIndicator(Modifier.fillMaxSize().semantics { contentDescription = "Updating jobs" },

@@ -73,23 +73,39 @@ class MeView(APIView):
 
 
 class ProfileView(APIView):
-    """What a person may change about themselves: their theme, nothing else. Name, email, role and
-    phone are the Admin's to change."""
+    """What a person may change about themselves: their theme, and (Ops) which notifications they
+    get. Name, email, role and phone are the Admin's to change."""
 
     def patch(self, request):
+        from apps.notify.handlers import PREFS
+
         body = request.data if isinstance(request.data, dict) else {}
-        extra = sorted(set(body) - {"theme"})
+        extra = sorted(set(body) - {"theme", "notify_prefs"})
         if extra:
             raise CodedError("FIELD_NOT_EDITABLE", "Only an Admin can change that. You can change "
                              "your theme here.", 400, keys=extra)
-        theme = body.get("theme")
-        if theme not in Theme.values:
-            raise ValidationError({"theme": f"Choose one of: {', '.join(Theme.values)}."})
         user = request.user
-        if user.theme != theme:
-            user.theme = theme
-            user.save(update_fields=["theme"])
-            audit.record(user, "user.theme_change", "user", user.id, f"Theme set to {theme}")
+        if "notify_prefs" not in body and "theme" not in body:
+            raise ValidationError({"theme": f"Choose one of: {', '.join(Theme.values)}."})
+        if "theme" in body:
+            theme = body["theme"]
+            if theme not in Theme.values:
+                raise ValidationError({"theme": f"Choose one of: {', '.join(Theme.values)}."})
+            if user.theme != theme:
+                user.theme = theme
+                user.save(update_fields=["theme"])
+                audit.record(user, "user.theme_change", "user", user.id, f"Theme set to {theme}")
+        if "notify_prefs" in body:
+            prefs = body["notify_prefs"]
+            if user.role != Role.OPS:
+                raise CodedError("FIELD_NOT_EDITABLE", "Only Ops choose their notifications.", 400,
+                                 keys=["notify_prefs"])
+            if not isinstance(prefs, dict) or any(k not in PREFS or type(v) is not bool
+                                                  for k, v in prefs.items()):
+                raise ValidationError({"notify_prefs": "Switch these on or off: "
+                                       f"{', '.join(PREFS)}. Problems are always on."})
+            user.notify_prefs = {**user.notify_prefs, **prefs}
+            user.save(update_fields=["notify_prefs"])
         return Response(MeSerializer(user).data)
 
 

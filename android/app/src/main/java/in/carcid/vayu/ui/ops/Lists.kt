@@ -36,6 +36,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import `in`.carcid.vayu.ui.noteRows
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -297,16 +298,27 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
 
 /** The bell: what needs a person (Problems), and Updates (with notifications, Phase 17). */
 @Composable
-fun NeedsYouScreen(env: OpsEnv, loaded: List<Need>?, onBack: () -> Unit, onOpen: (String) -> Unit) {
+fun NeedsYouScreen(env: OpsEnv, loaded: List<Need>?, onBack: () -> Unit, onOpen: (String) -> Unit,
+                   updates: `in`.carcid.vayu.ui.BellState = `in`.carcid.vayu.ui.BellState(), onRead: (List<Long>?) -> Unit = {}) {
     val problems = loaded.orEmpty()
     var tab by rememberSaveable { mutableStateOf(0) }
+    val unseen = updates.notes.count { !it.read }
+    // looking at Updates counts as reading them (the dots stay until the next visit)
+    LaunchedEffect(tab, unseen) { if (tab == 1 && unseen > 0) onRead(updates.notes.filter { !it.read }.map { it.id }) }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         SubHeader("Needs you", onBack = onBack)
         Box(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-            Segmented(listOf(if (problems.isEmpty()) "Problems" else "Problems · ${problems.size}", "Updates"), tab, { tab = it })
+            Segmented(listOf(if (problems.isEmpty()) "Problems" else "Problems · ${problems.size}",
+                if (unseen == 0) "Updates" else "Updates · $unseen"), tab, { tab = it })
         }
         LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp)) {
-            if (tab == 1) item { Text("Updates (new bookings, jobs started, submitted) arrive here with notifications.", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
+            if (tab == 1) {
+                if (updates.notes.isEmpty()) item {
+                    Text(if (updates.loaded) "Nothing yet. Jobs started, submitted and completed, late starts and new bookings show here." else "Loading…",
+                        color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp))
+                }
+                noteRows(updates.notes, env.today()) { n -> n.booking?.let(onOpen) }
+            }
             else if (loaded == null) item { Text("Loading…", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
             else if (problems.isEmpty()) item { Text("All clear. Nothing needs you right now.", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
             else problems.groupBy { it.group }.forEach { (group, list) ->

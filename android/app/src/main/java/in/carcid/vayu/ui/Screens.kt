@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -164,8 +166,12 @@ fun HomeScreen(me: Me, onProfile: () -> Unit) {
 
 @Composable
 fun ProfileScreen(state: Screen.Profile, onBack: () -> Unit, onTheme: (String) -> Unit, onSignOut: () -> Unit,
+                  /** Ops: switch a kind of notification on or off. */
+                  onNotify: (String, Boolean) -> Unit = { _, _ -> },
                   /** Phone storage for App settings (experts); null hides App settings. */
-                  storage: (() -> `in`.carcid.vayu.ui.expert.StorageInfo)? = null) {
+                  storage: (() -> `in`.carcid.vayu.ui.expert.StorageInfo)? = null,
+                  /** This build's version, and a newer one on offer (null: up to date). */
+                  version: String = "", update: String? = null, onUpdate: () -> Unit = {}) {
     var page by rememberSaveable { mutableStateOf("") }
     if (page == "settings" && storage != null) {
         androidx.activity.compose.BackHandler { page = "" }
@@ -193,13 +199,33 @@ fun ProfileScreen(state: Screen.Profile, onBack: () -> Unit, onTheme: (String) -
             SectionLabel("Look")
             Segmented(listOf("Light", "Dark", "Match phone"), themes.indexOf(me.theme).coerceAtLeast(0), { onTheme(themes[it]) })
             if (state.error != null) Text(state.error, color = Vayu.colors.bad, modifier = Modifier.padding(top = 8.dp))
+            if (me.role == "ops") {
+                SectionLabel("Notifications")
+                NotifyRow("Problems", null) {}
+                listOf("submitted" to "Submitted and completed", "started" to "Started and late starts", "new_bookings" to "New bookings")
+                    .forEach { (key, label) -> NotifyRow(label, key !in me.muted) { onNotify(key, it) } }
+            }
             if (storage != null) {
                 SectionLabel("App")
                 ListRow("App settings", subtitle = "Phone storage", onClick = { page = "settings" })
             }
             SectionLabel("Account")
             ListRow("Sign out", subtitle = "Signing in on another phone signs this one out", onClick = onSignOut)
+            if (update != null) ListRow("Update available", subtitle = "Vayu $update · you have $version", onClick = onUpdate)
+            else if (version.isNotBlank()) Text("Vayu $version · up to date", fontSize = 13.sp, color = Vayu.colors.muted,
+                modifier = Modifier.padding(top = 16.dp))
         }
+    }
+}
+
+/** One notification switch; [on] null means it can't be turned off ("Always on"). */
+@Composable
+private fun NotifyRow(label: String, on: Boolean?, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).let { m -> if (on == null) m else m.toggleable(on, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onChange) },
+        verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = Vayu.colors.ink, modifier = Modifier.weight(1f))
+        if (on == null) Text("Always on", color = Vayu.colors.muted, fontSize = 14.sp)
+        else androidx.compose.material3.Switch(checked = on, onCheckedChange = null)
     }
 }
 

@@ -43,14 +43,24 @@ class MainActivity : ComponentActivity() {
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                AppViewModel((application as VayuApp).graph, Build.MODEL) as T
+                AppViewModel((application as VayuApp).graph, Build.MODEL, pushToken = Notices::token, appVersion = BuildConfig.VERSION_CODE) as T
         }
         setContent {
             val vm: AppViewModel = viewModel(factory = factory)
+            androidx.compose.runtime.LaunchedEffect(vm) { opened(intent, vm) }
+            androidx.compose.runtime.DisposableEffect(vm) {
+                val l = androidx.core.util.Consumer<android.content.Intent> { opened(it, vm) }
+                addOnNewIntentListener(l); onDispose { removeOnNewIntentListener(l) }
+            }
             androidx.lifecycle.compose.LifecycleResumeEffect(vm) { vm.onForeground(); onPauseOrDispose {} }
             AppRoot(vm)
         }
     }
+}
+
+/** A tapped notice opens its job or booking. */
+private fun opened(intent: android.content.Intent?, vm: AppViewModel) {
+    intent?.getStringExtra(Notices.EXTRA_BOOKING)?.let { vm.opening.value = it; intent.removeExtra(Notices.EXTRA_BOOKING) }
 }
 
 fun themeOf(s: Screen): ThemeMode = when ((s as? Screen.Home)?.me?.theme ?: (s as? Screen.Profile)?.me?.theme) {
@@ -62,6 +72,8 @@ fun themeOf(s: Screen): ThemeMode = when ((s as? Screen.Home)?.me?.theme ?: (s a
 @Composable
 fun AppRoot(vm: AppViewModel) {
     val screen by vm.screen.collectAsState()
+    val update by vm.update.collectAsState()
+    val showUpdate by vm.showUpdate.collectAsState()
     VayuTheme(themeOf(screen)) {
         // status bar icons follow the app's own light / dark look, not the phone's setting
         val activity = androidx.compose.ui.platform.LocalContext.current as? ComponentActivity
@@ -72,21 +84,49 @@ fun AppRoot(vm: AppViewModel) {
                 statusBarStyle = if (dark) androidx.activity.SystemBarStyle.dark(clear) else androidx.activity.SystemBarStyle.light(clear, clear),
                 navigationBarStyle = if (dark) androidx.activity.SystemBarStyle.dark(clear) else androidx.activity.SystemBarStyle.light(clear, clear))
         }
+        val u = update
+        if (u != null && showUpdate && (screen is Screen.Home || screen is Screen.Profile)) {
+            BackHandler { vm.showUpdate.value = false }
+            `in`.carcid.vayu.ui.UpdateScreen(u, onLater = { vm.showUpdate.value = false })
+            return@VayuTheme
+        }
         when (val s = screen) {
             Screen.Loading -> Box(Modifier.fillMaxSize().background(Vayu.colors.bg))
             is Screen.SignIn -> SignInScreen(s, vm::signIn)
             Screen.AdminRefused -> AdminRefusedScreen(vm::backToSignIn)
             is Screen.ChangePassword -> ChangePasswordScreen(s, vm::changePassword)
-            is Screen.Home -> if (s.me.role == "expert") {
+            is Screen.Home -> {
+              AskForNotices()
+              if (s.me.role == "expert") {
                 val jobs by vm.jobs.state.collectAsState()
                 ExpertHome(s.me, jobs, vm.jobs.today(), vm::openProfile, vm.jobs::sync, expertExtras(vm, s.me))
-            } else `in`.carcid.vayu.ui.ops.OpsHome(s.me, remember(s.me.id) { vm.graph.ops(s.me.id) }, vm.jobs::today, vm::openProfile)
+            } else {
+                val bell by vm.bell.state.collectAsState()
+                `in`.carcid.vayu.ui.ops.OpsHome(s.me, remember(s.me.id) { vm.graph.ops(s.me.id) }, vm.jobs::today, vm::openProfile,
+                    bell = bell, onRead = vm.bell::read, onBell = vm.bell::refresh,
+                    opening = vm.opening.collectAsState().value, onOpened = { vm.opening.value = null })
+            }
+            }
             is Screen.Profile -> {
                 BackHandler { vm.closeProfile() }
                 val extras = if (s.me.role == "expert") expertExtras(vm, s.me) else null
-                ProfileScreen(s, vm::closeProfile, vm::setTheme, vm::signOut, storage = extras?.let { e -> { e.storage } })
+                ProfileScreen(s, vm::closeProfile, vm::setTheme, vm::signOut, vm::setNotify, storage = extras?.let { e -> { e.storage } },
+                    version = BuildConfig.VERSION_NAME, update = update?.name, onUpdate = { vm.showUpdate.value = true })
             }
         }
+    }
+}
+
+/** Android 13+: ask once, after sign-in, to show notices (new jobs, problems, reminders). */
+@Composable
+private fun AskForNotices() {
+    if (Build.VERSION.SDK_INT < 33) return
+    val ctx = LocalContext.current
+    val ask = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {}
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) ask.launch(android.Manifest.permission.POST_NOTIFICATIONS)
     }
 }
 
@@ -98,7 +138,9 @@ private fun expertExtras(vm: AppViewModel, me: `in`.carcid.vayu.core.api.Me): Ex
     val store = vm.graph.jobs(me.id)
     val tick by drafts.changes.collectAsState()
     val jobs by vm.jobs.state.collectAsState()
-    return remember(tick, jobs) {
+    val bell by vm.bell.state.collectAsState()
+    val opening by vm.opening.collectAsState()
+    return remember(tick, jobs, bell, opening) {
         ExpertExtras(
             drafts = drafts.all().associateBy { it.bookingId },
             notices = vm.jobs.notices(),
@@ -116,6 +158,8 @@ private fun expertExtras(vm: AppViewModel, me: `in`.carcid.vayu.core.api.Me): Ex
             onDiscard = { drafts.discard(it) },
             onClearSent = { drafts.clearSentCopies() },
             phones = jobs.jobs.associate { it.id to it.phone },
+            bell = bell, onBell = vm.bell::refresh, onRead = vm.bell::read,
+            opening = vm.opening.value, onOpened = { vm.opening.value = null },
         )
     }
 }

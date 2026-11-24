@@ -51,6 +51,8 @@ class User(AbstractBaseUser):
     avatar = models.BinaryField(null=True, blank=True, editable=False)
     has_avatar = models.BooleanField(default=False)
     avatar_version = models.PositiveIntegerField(default=0)
+    # Ops mute switches {"submitted": false, ...}; a missing key means on (see apps/notify)
+    notify_prefs = models.JSONField(default=dict, blank=True)
 
     USERNAME_FIELD = "username"
     REQUIRED_FIELDS = ["name"]
@@ -71,6 +73,7 @@ class Device(models.Model):
     # what the phone last said it still holds: {"drafts": n, "files": n}; null = never reported
     unsynced = models.JSONField(null=True, blank=True)
     last_seen_at = models.DateTimeField(null=True, blank=True)
+    push_token = models.CharField(max_length=4096, blank=True)   # Firebase token; "" = none
 
     def holds_work(self) -> bool:
         """True when this phone may still hold answers or files the server doesn't have."""

@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "apps.media",
     "apps.reports",
     "apps.integrations",
+    "apps.notify",
     "drf_spectacular",
 ]
 
@@ -124,11 +125,15 @@ CELERY_BEAT_SCHEDULE = {
     "retry-webhooks": {"task": "apps.integrations.tasks.retry_due", "schedule": 60.0},
     "sweep-reports": {"task": "apps.reports.tasks.sweep_reports", "schedule": 300.0},
     "purge-media": {"task": "apps.media.tasks.purge_expired", "schedule": 3600.0},
+    "late-starts": {"task": "apps.notify.tasks.late_starts", "schedule": 300.0},
 }
 
 CELERY_BROKER_URL = REDIS_URL
 CELERY_TASK_ALWAYS_EAGER = False
 CELERY_TASK_DEFAULT_QUEUE = "default"
+
+# Push: path to the Firebase service-account JSON (kept out of git); empty = no pushes
+FCM_CREDENTIALS = env("FIREBASE_CREDENTIALS_FILE", "")
 
 # Android: apps older than this cannot start new jobs (they can still finish one in progress)
 MIN_APP_VERSION = int(env("MIN_APP_VERSION", "0"))

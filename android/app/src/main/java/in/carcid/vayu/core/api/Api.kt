@@ -30,7 +30,9 @@ class ApiError(val code: String, override val message: String, val status: Int,
 data class Me(val id: Int, val username: String, val name: String, val role: String,
               val mustChangePassword: Boolean, val theme: String,
               /** What this person may do ({permission: all|own} keys), from auth/me. */
-              val permissions: Set<String> = emptySet()) {
+              val permissions: Set<String> = emptySet(),
+              /** Ops' notification switches that are off ("submitted", "started", "new_bookings"). */
+              val muted: Set<String> = emptySet()) {
     fun can(p: String) = p in permissions
     val initials: String
         get() = (name.ifBlank { username }).split(" ").filter { it.isNotBlank() }.take(2)
@@ -61,6 +63,24 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
     }
 
     suspend fun setTheme(theme: String): Me = parseMe(call("PATCH", "auth/me/profile", buildJsonObject { put("theme", theme) }))
+
+    /** Ops: switch one kind of notification on or off (problems are always on). */
+    suspend fun setNotify(key: String, on: Boolean): Me =
+        parseMe(call("PATCH", "auth/me/profile", buildJsonObject { put("notify_prefs", buildJsonObject { put(key, on) }) }))
+
+    /** This phone's Firebase token, so the server can push to it. */
+    suspend fun pushToken(token: String) { call("POST", "devices/push-token", buildJsonObject { put("token", token) }) }
+
+    /** The bell: latest notifications and how many are unread. */
+    suspend fun notifications(): JsonObject = call("GET", "notifications")
+
+    /** Mark these notifications read (all of them when [ids] is null); returns the unread count. */
+    suspend fun markRead(ids: List<Long>?): Int = call("POST", "notifications/read", buildJsonObject {
+        if (ids == null) put("all", true) else put("ids", kotlinx.serialization.json.JsonArray(ids.map { JsonPrimitive(it) }))
+    })["unread"]?.jsonPrimitive?.intOrNull ?: 0
+
+    /** The newest app build ({version_code, url, sha256, size, notes, min_version}). */
+    suspend fun appLatest(): JsonObject = call("GET", "app/latest")
 
     /** Tells the server what this phone still holds; returns the minimum app version it accepts. */
     suspend fun heartbeat(drafts: Int, files: Int): Int =
@@ -200,7 +220,8 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         name = o.str("name"), role = o.str("role"),
         mustChangePassword = o["must_change_password"]?.jsonPrimitive?.booleanOrNull ?: false,
         theme = o["theme"]?.jsonPrimitive?.contentOrNull ?: "light",
-        permissions = (o["permissions"] as? JsonObject)?.keys.orEmpty())
+        permissions = (o["permissions"] as? JsonObject)?.keys.orEmpty(),
+        muted = (o["notify_prefs"] as? JsonObject)?.filterValues { it.jsonPrimitive.booleanOrNull == false }?.keys.orEmpty())
 
     private fun JsonObject.str(k: String) = this[k]?.jsonPrimitive?.contentOrNull ?: ""
 

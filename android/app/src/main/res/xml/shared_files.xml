@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="reports" path="reports/" />
+    <!-- a checked app update, handed to Android's installer -->
+    <cache-path name="update" path="update/" />
 </paths>

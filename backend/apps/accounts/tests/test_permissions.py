@@ -310,6 +310,9 @@ PUBLIC_OR_AUTHENTICATED_ONLY = {"HealthView", "LoginView", "DeviceCheckedRefresh
                                 "ProfileView", "MyPictureView",
                                 "LogoutView", "ChangePasswordView", "HeartbeatView", "ZipDownload", "Verify",
                                 "ReportMedia",   # the report token is the credential
+                                # one's own bell and phone, and the app download (apps/notify)
+                                "PushTokenView", "NotificationsView", "ReadView", "AppLatestView",
+                                "AppDownloadView",
                                 # API-key views: authorised by the key and its scope
                                 "Bookings", "BookingDetail", "BulkBookings", "FormAssetShow",
                                 "BookingInspection"}

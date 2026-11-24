@@ -38,7 +38,12 @@ sealed interface Route {
 
 /** Ops' app: Today · Bookings · Dashboard, the bell (Needs you), bookings and their parts. */
 @Composable
-fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit) {
+fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit,
+            /** Updates (submitted, started, new bookings…) from the server; problems come from loadNeeds. */
+            bell: `in`.carcid.vayu.ui.BellState = `in`.carcid.vayu.ui.BellState(),
+            onRead: (List<Long>?) -> Unit = {}, onBell: () -> Unit = {},
+            /** A booking a tapped notice asks to open; [onOpened] says it was taken. */
+            opening: String? = null, onOpened: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
     var tab by rememberSaveable { mutableStateOf(OpsTab.TODAY) }
@@ -70,6 +75,14 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
         }
         refreshing = false
     }
+    LaunchedEffect(opening) { opening?.let { stack.clear(); stack.add(Route.Booking(it)); onOpened() } }
+    // a new notification (a push, or the bell read on coming back) means something changed: reload
+    var newest by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(bell.notes.firstOrNull()?.id) {
+        val id = bell.notes.firstOrNull()?.id
+        if (newest != null && id != null && id != newest) tick++
+        newest = id
+    }
     // fresh again whenever the app comes back to the front (and on Refresh, and after every change)
     androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { tick++; onPauseOrDispose {} }
     val push = { r: Route -> stack.add(r) }
@@ -85,7 +98,11 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
                     onNew = { push(Route.Form(null)) }, bar)
                 OpsTab.DASHBOARD -> DashboardScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { preset = it; tab = OpsTab.BOOKINGS }, bar)
             }
-            Route.Needs -> NeedsYouScreen(env, needs, onBack = { pop() }, onOpen = { push(Route.Booking(it)) })
+            Route.Needs -> {
+                LaunchedEffect(Unit) { onBell() }
+                NeedsYouScreen(env, needs, onBack = { pop() }, onOpen = { push(Route.Booking(it)) },
+                    updates = bell.copy(notes = bell.notes.filter { it.kind != "problem" }), onRead = onRead)
+            }
             is Route.Booking -> BookingScreen(env, r.id, onBack = { pop() }, onPart = { push(Route.Detail(r.id, it)) },
                 onAnswers = { push(Route.Detail(r.id, Part.ANSWERS, it)) }, onEdit = { push(Route.Form(r.id)) })
             is Route.Detail -> when (r.part) {

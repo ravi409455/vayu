@@ -22,19 +22,33 @@ sealed interface Screen {
 
 /** Sign-in, the forced password change, routing by role, and the profile. */
 class AppViewModel(val graph: Graph, private val deviceName: String,
-                   private val clock: () -> Long = System::currentTimeMillis) : ViewModel() {
+                   private val clock: () -> Long = System::currentTimeMillis,
+                   /** This phone's push token (Firebase in the app; none in tests). */
+                   private val pushToken: suspend () -> String? = { null },
+                   /** This build's version code (newer builds are offered as updates). */
+                   val appVersion: Int = 0) : ViewModel() {
     private val api = graph.api
     private val tokens = graph.tokens
     private val _screen = MutableStateFlow<Screen>(Screen.Loading)
     val screen: StateFlow<Screen> = _screen
     val jobs = JobsModel(api, graph::jobs, viewModelScope, clock, onRevoked = ::revoked, drop = graph::forgetJobs,
-        afterSync = { graph.prune(it); heartbeat(it) })
+        afterSync = { graph.prune(it); heartbeat(it); graph.onJobs(it) })
+    /** A newer build on offer (null: this is the newest), and whether its screen is up. */
+    val update = MutableStateFlow<`in`.carcid.vayu.core.update.AppUpdate?>(null)
+    val showUpdate = MutableStateFlow(false)
+    /** A booking to open, from a tapped notice; the home screen takes it and sets it back to null. */
+    val opening = MutableStateFlow<String?>(null)
+    /** The bell (notifications from the server), read on sign-in, on coming back and on each push. */
+    val bell = BellModel(api, viewModelScope)
     private var lastPassword = ""
     /** Below this version the app may finish a started job but not start new ones (enforced in Phase 14). */
     var minAppVersion = 0
         private set
 
-    init { viewModelScope.launch { resume() } }
+    init {
+        viewModelScope.launch { resume() }
+        viewModelScope.launch { graph.pushes.collect { onPush() } }
+    }
 
     private suspend fun resume() {
         if (tokens.access() == null) { _screen.value = Screen.SignIn(); return }
@@ -54,7 +68,7 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         } catch (e: ApiError) {
             when {
                 e.code == "DEVICE_REVOKED" -> {
-                    tokens.clear(); jobs.forget(savedId); savedId?.let { graph.forgetCopies(it) }; _screen.value = Screen.SignIn()
+                    tokens.clear(); jobs.forget(savedId); savedId?.let { graph.forgetCopies(it) }; bell.clear(); _screen.value = Screen.SignIn()
                 }
                 // no signal or the server is down: still signed in, already open on the saved copy
                 JobsModel.unreachable(e) && cached != null -> {}
@@ -104,8 +118,22 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         _screen.value = Screen.Home(me)
         if (me.role == "expert") jobs.open(me.id, offline = false)
         heartbeat(me.id)
+        bell.refresh()
+        viewModelScope.launch { pushToken()?.let { runCatching { api.pushToken(it) } } }
+        checkUpdate()
         if (local != null) pushTheme()
         graph.kick()                                  // anything left from before goes out now
+    }
+
+    /** Once per sign-in / app start: a newer build is offered (its screen shows once; Profile keeps a way back). */
+    private fun checkUpdate() {
+        if (update.value != null) return
+        viewModelScope.launch {
+            try {
+                update.value = `in`.carcid.vayu.core.update.parseUpdate(api.appLatest(), appVersion)
+                if (update.value != null) showUpdate.value = true
+            } catch (_: ApiError) {}
+        }
     }
 
     /** Tell the server what this phone still holds (it refuses another phone while work is here). */
@@ -126,12 +154,33 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
     /** Signed out from the server (another phone, or an Admin): nothing of theirs stays on this phone. */
     private fun revoked() {
         signedIn()?.let { graph.forgetCopies(it) }
-        tokens.clear(); jobs.forget(); _screen.value = Screen.SignIn()
+        tokens.clear(); jobs.forget(); bell.clear(); _screen.value = Screen.SignIn()
     }
 
     /** The app came back to the front: experts get fresh jobs (and a new "today" after midnight). */
     fun onForeground() {
-        if ((screen.value as? Screen.Home)?.me?.role == "expert") jobs.sync()
+        val me = (screen.value as? Screen.Home)?.me ?: return
+        if (me.role == "expert") jobs.sync()
+        bell.refresh()
+    }
+
+    /** A push arrived: what it is about is fetched now (jobs for experts; Ops screens reload themselves). */
+    fun onPush() = onForeground()
+
+    /** Ops: one kind of notification on or off. Shown at once; put back if the server refuses. */
+    fun setNotify(key: String, on: Boolean) {
+        val p = screen.value as? Screen.Profile ?: return
+        val was = p.me
+        _screen.value = p.copy(me = was.copy(muted = if (on) was.muted - key else was.muted + key), error = null)
+        viewModelScope.launch {
+            try {
+                val me = api.setNotify(key, on)
+                (screen.value as? Screen.Profile)?.let { _screen.value = it.copy(me = it.me.copy(muted = me.muted)) }
+            } catch (e: ApiError) {
+                (screen.value as? Screen.Profile)?.let { _screen.value = it.copy(me = it.me.copy(muted = was.muted),
+                    error = if (e.code == ApiError.NETWORK) "No signal. Try again when you're online." else e.message) }
+            }
+        }
     }
 
     fun openProfile() { (screen.value as? Screen.Home)?.let { _screen.value = Screen.Profile(it.me) } }
@@ -172,6 +221,7 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
             signedIn()?.let { graph.forgetCopies(it) }
             tokens.clear()
             jobs.forget()
+            bell.clear()
             _screen.value = Screen.SignIn()
         }
     }
