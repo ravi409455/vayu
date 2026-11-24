@@ -19,9 +19,9 @@ def _asset(request, pk, *, write=True) -> MediaAsset:
     asset = MediaAsset.objects.select_related("booking").filter(pk=pk).first()
     if asset is None:
         raise err("NOT_FOUND", "Media not found.", 404)
-    if not write and asset.uploaded_by_id == request.user.pk:
-        services.writable_booking(request, asset.booking_id)   # one's own upload, even if moved
-    else:
+    if asset.uploaded_by_id == request.user.pk:     # one's own upload, even on a job moved away
+        services.writable_booking(request, asset.booking_id, moved_ok=True)
+    else:                                           # anyone else's: only on one's own jobs
         (services.writable_booking if write else services.readable_booking)(request,
                                                                              asset.booking_id)
     return asset

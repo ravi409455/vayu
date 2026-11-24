@@ -20,10 +20,11 @@ pytestmark = pytest.mark.django_db
 
 @pytest.fixture
 def moved(menv):
+    from django.utils import timezone
     from rest_framework.test import APIClient
 
     from apps.bookings.tests.conftest import create
-    b = create(menv.ops, booking_id="OFF1").json()
+    b = create(menv.ops, booking_id="OFF1", inspection_date=timezone.localdate().isoformat()).json()
     assign(menv, b)                                   # Ravi's job; he goes offline, never syncs
     sana = menv.make_user(Role.EXPERT, username="sana")
     assign(menv, b, sana)                             # Ops move it to Sana meanwhile
@@ -90,4 +91,39 @@ def test_the_moved_job_stays_in_ravis_sync_so_he_can_submit_or_discard(moved):
     assert jobs[b["id"]]["assigned_to_me"] is False and jobs[b["id"]]["my_draft"] is None
     assert b["id"] in {j["id"] for j in sana_client.get("/api/v1/sync/jobs").json()["jobs"]}
     Booking.objects.filter(pk=b["id"]).update(stage="completed")     # done: not listed for Ravi
+    assert b["id"] not in {j["id"] for j in env.expert.get("/api/v1/sync/jobs").json()["jobs"]}
+
+
+def test_the_moved_route_is_only_for_open_recent_jobs_and_own_files(moved, settings):
+    env, b, sana, sana_client, version = moved
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from .conftest import initiate_body
+    hers = upload(sana_client, b["id"], jpeg(), settings).json()["id"]      # Sana's own photo
+    assert env.expert.delete(f"/api/v1/media/{hers}").status_code == 404   # never Ravi's to touch
+    Booking.objects.filter(pk=b["id"]).update(stage="completed")          # finished: closed to him
+    assert env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),
+                           format="json").status_code == 404
+    Booking.objects.filter(pk=b["id"]).update(stage="assigned",
+                                              inspection_date=timezone.localdate() - timedelta(days=8))
+    assert submit_offline(env, b, version).status_code == 404               # too long ago
+
+
+def test_each_expert_has_their_own_photo_places(moved, settings):
+    env, b, sana, sana_client, _ = moved
+    for _ in range(2):                                # photo_a takes 2: Sana fills hers
+        assert upload(sana_client, b["id"], jpeg(), settings).status_code == 200
+    assert upload(env.expert, b["id"], jpeg(), settings).status_code == 200   # Ravi still can
+
+
+def test_a_job_moved_long_ago_is_no_longer_listed(moved):
+    env, b, _, _, _ = moved
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.bookings.models import BookingActivity
+    BookingActivity.objects.filter(booking_id=b["id"]).update(at=timezone.now() - timedelta(days=3))
     assert b["id"] not in {j["id"] for j in env.expert.get("/api/v1/sync/jobs").json()["jobs"]}

@@ -34,13 +34,14 @@ LIMITS = {
 }
 
 
-def writable_booking(request, booking_id) -> Booking:
-    """The booking if this user may add media to it: its expert (own scope) or media managers."""
+def writable_booking(request, booking_id, moved_ok: bool = False) -> Booking:
+    """The booking if this user may add media to it: its expert (own scope) or media managers.
+    [moved_ok]: also a job moved away from them meanwhile, for their own new or own uploads only."""
     user = request.user
     qs = Booking.objects.all()
     if scope_for(user, "media.manage", request) is None \
             and scope_for(user, "submissions.fill", request) == "own":
-        qs = qs.filter(deliver_filter(user)).distinct()   # incl. a job moved away meanwhile
+        qs = qs.filter(deliver_filter(user) if moved_ok else own_filter(user)).distinct()
     b = qs.filter(pk=booking_id).first()
     if b is None:
         raise err("NOT_FOUND", "Booking not found.", 404)
@@ -117,7 +118,7 @@ def check_ops_upload(booking: Booking, field: Field, user) -> None:
 def booking_media(request, booking_id) -> list[dict]:
     """The files this person put on the booking (media managers: every file), oldest first, so a
     phone that lost its draft can pick them up again. Fields they may not see are left out."""
-    booking = writable_booking(request, booking_id)
+    booking = writable_booking(request, booking_id, moved_ok=True)    # experts: their own only
     qs = MediaAsset.objects.filter(booking=booking, replaced_at__isnull=True) \
         .select_related("uploaded_by").order_by("created_at")
     if scope_for(request.user, "media.manage", request) is None:
@@ -145,7 +146,7 @@ def _body(asset: MediaAsset, with_urls: bool) -> dict:
 def initiate(request, data: dict) -> tuple[dict, bool]:
     """Returns (body, created). Retrying with the same client_uuid returns the same asset."""
     user = request.user
-    booking = writable_booking(request, data.get("booking"))
+    booking = writable_booking(request, data.get("booking"), moved_ok=True)   # a new own upload
     manager = is_manager(user, request)
     if booking.stage == "cancelled" or (booking.stage == "completed" and not manager):
         raise err("BOOKING_CLOSED", f"A {booking.stage} booking takes no new files.", 409)
@@ -205,8 +206,10 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
         raise err("UNKNOWN_MEDIA", "Only Ops replace a file.")
     with transaction.atomic():
         Booking.objects.select_for_update().get(pk=booking.pk)   # two uploads must not both fit
+        # an expert's limit counts their own uploads: two experts on one job (a conflict for Ops)
+        # never use up each other's places
         if not manager and MediaAsset.objects.filter(
-                booking=booking, field_key=field.key).count() >= max_count(field):
+                booking=booking, field_key=field.key, uploaded_by=user).count() >= max_count(field):
             raise err("TOO_MANY", f"'{field.key}' takes at most {max_count(field)}.", 409)
         asset = MediaAsset(client_uuid=client_uuid, booking=booking, uploaded_by=user,
                            field_key=field.key, kind=kind, content_type=ctype, size=size,

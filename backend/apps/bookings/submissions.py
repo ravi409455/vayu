@@ -1,4 +1,6 @@
 """Start, submit and Ops edits of inspections, including the offline conflict rules."""
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
@@ -73,12 +75,19 @@ def own_filter(user) -> Q:
                                              inspections__status="draft")
 
 
+# a job moved away stays deliverable while still open and recent (as the phone's job list)
+MOVED_STAGES = ("assigned", "in_progress", "submitted")
+MOVED_DAYS = 7
+
+
 def deliver_filter(user) -> Q:
     """Bookings an expert may still send work for (check-in, answers, their own photos): their
     own, or one Ops moved away from them (the timeline says it was theirs), because they may
     have inspected it offline before they knew. What then happens is decided in _advance: back
     to them if the new expert has not started, else a conflict for Ops. Never used for lists."""
-    return own_filter(user) | Q(activity__changes__assigned_expert__0=user.pk)
+    recent = timezone.localdate() - timedelta(days=MOVED_DAYS)
+    return own_filter(user) | Q(activity__changes__assigned_expert__0=user.pk,
+                                stage__in=MOVED_STAGES, inspection_date__gte=recent)
 
 
 def form_for_role(version: FormVersion, role: str, stage: str) -> dict:

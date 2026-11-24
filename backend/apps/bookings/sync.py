@@ -16,14 +16,16 @@ from .submissions import current_versions, form_for_role, own_filter
 
 ACTIVE = ("assigned", "in_progress", "submitted")
 DONE_DAYS = 7          # finished jobs stay on the phone's Done tab this long
+MOVED_LIST_DAYS = 2    # a job moved away stays listed (for submit or discard) this long
 
 
 def jobs_for(user):
     recent = timezone.localdate() - timedelta(days=DONE_DAYS)
     # also an open job Ops moved away from this expert lately: their phone may hold work for it
     # done offline (it shows only where it does, with "Discard draft / Submit anyway")
-    moved = Q(activity__changes__assigned_expert__0=user.pk, stage__in=ACTIVE,
-              inspection_date__gte=recent)
+    moved = Q(activity__changes__assigned_expert__0=user.pk,
+              activity__at__gte=timezone.now() - timedelta(days=MOVED_LIST_DAYS),
+              stage__in=ACTIVE, inspection_date__gte=recent)
     return (Booking.objects.filter(own_filter(user) | moved)
             .filter(Q(stage__in=ACTIVE) | Q(inspection_date__gte=recent))
             .select_related("report").distinct().order_by("inspection_date", "created_at"))
