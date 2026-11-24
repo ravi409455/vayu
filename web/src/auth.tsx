@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 import { api, ApiError, setApiHandlers } from "./api/client";
 import type { Me } from "./api/types";
 import * as uploads from "./lib/uploadManager";
+import { setPerson } from "./lib/monitor";
 import { wipeWork } from "./lib/store";
 
 type Auth = {
@@ -48,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, [qc]);
   const me = q.data ?? null;
+  useEffect(() => setPerson(me?.id ?? null), [me?.id]);
   const scope = useCallback((p: string) => (me ? (me.permissions[p] ?? null) : null), [me]);
   const value = useMemo<Auth>(
     () => ({

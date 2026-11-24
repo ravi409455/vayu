@@ -31,6 +31,7 @@ const Dashboards = lazyPage(() => import("./pages/ops/Dashboards").then((m) => (
 const VerifyPage = lazyPage(() => import("./pages/Public").then((m) => ({ default: m.VerifyPage })));
 const ReportMediaPage = lazyPage(() => import("./pages/Public").then((m) => ({ default: m.ReportMediaPage })));
 const ZipPage = lazyPage(() => import("./pages/Public").then((m) => ({ default: m.ZipPage })));
+const AppDownload = lazyPage(() => import("./pages/AppDownload").then((m) => ({ default: m.AppDownload })));
 const FormBuilder = lazyPage(() => import("./pages/admin/FormBuilder").then((m) => ({ default: m.FormBuilder })));
 
 function Home() {
@@ -52,6 +53,7 @@ export function App() {
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
           <Route path="/" element={<Home />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/app" element={<AppDownload />} />
           <Route path="/today" element={<RequireAuth perm="bookings.view" not="expert"><Today /></RequireAuth>} />
           <Route path="/board" element={<Navigate to="/bookings" replace />} />
           <Route path="/booking/:id" element={<RequireAuth perm="bookings.view" not="expert"><BookingPage /></RequireAuth>} />

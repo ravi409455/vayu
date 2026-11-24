@@ -1,9 +1,11 @@
 import { Component, lazy, type ComponentType, type ReactNode } from "react";
+import { report } from "../lib/monitor";
 
 /** A page that crashed shows a way out instead of a blank screen. */
 export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error: unknown) { report(error, { where: "page" }); }
   render() {
     if (!this.state.failed) return this.props.children;
     return (

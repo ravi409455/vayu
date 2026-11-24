@@ -22,6 +22,8 @@ vi.mock("./uploader", () => ({
   shrinkImage: async (b: Blob) => b,
   abortTransfers: vi.fn(),
 }));
+const reported = vi.fn();
+vi.mock("./monitor", () => ({ report: (...a: unknown[]) => reported(...a) }));
 const api = vi.fn(async (_path: string, _o?: unknown): Promise<unknown> => ({ status: "verified" }));
 vi.mock("../api/client", async (orig) => ({ ...(await orig<typeof import("../api/client")>()), api: (p: string, o?: unknown) => api(p, o) }));
 
@@ -75,6 +77,7 @@ describe("upload queue", () => {
     await vi.advanceTimersByTimeAsync(RETRY_MAX());
     expect(transfer).toHaveBeenCalledTimes(1);
     expect(uploadFor(id)).toMatchObject({ status: "failed", permanent: true, error: "'door' takes at most 1." });
+    expect(reported).toHaveBeenCalledWith(expect.any(ApiError), { where: "upload", kind: "file", code: "TOO_MANY" });   // F-235
     retryFailed();                                           // the person asked: try anyway
     await flush();
     expect(transfer).toHaveBeenCalledTimes(2);

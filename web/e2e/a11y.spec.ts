@@ -22,7 +22,7 @@ test.beforeAll(async () => {
 const STAFF: [string, string[]][] = [
   ["ops", ["/today", "/bookings", "/problems", "/dashboards", "/profile", "/settings"]],
   ["admin", ["/users", "/roles", "/forms", "/lists", "/library", "/pdf", "/integrations", "/api-keys", "/audit"]],
-  ["expert", ["/jobs"]],
+  ["expert", ["/jobs", "/app"]],
 ];
 
 for (const [who, paths] of STAFF) {

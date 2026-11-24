@@ -16,6 +16,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@noble/hashes": "^1.8.0",
+    "@sentry/react": "11.12.0",
     "@tanstack/react-query": "^5.108.3",
     "json-logic-js": "2.0.5",
     "lucide-react": "^1.78.0",
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
     "@playwright/test": "^1.65.1",
+    "@sentry/vite-plugin": "11.12.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.13",

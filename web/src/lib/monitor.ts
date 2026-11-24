@@ -1,0 +1,42 @@
+// Web errors go to Sentry (R-36) only when VITE_SENTRY_DSN is set at build time; otherwise the SDK
+// is never even loaded. Nothing private leaves the browser: no request bodies, cookies, query
+// strings (they can hold a customer's phone or name), typed text or console output.
+import type { Breadcrumb, ErrorEvent } from "@sentry/react";
+
+type Sdk = typeof import("@sentry/react");
+let sdk: Sdk | null = null;
+
+const stripQuery = (url: string) => url.replace(/[?#].*$/, "");
+
+/** What leaves for Sentry: the error and where it happened, never what people typed or the server sent. */
+export function scrub(e: ErrorEvent): ErrorEvent {
+  if (e.request) e.request = { url: e.request.url ? stripQuery(e.request.url) : undefined };
+  if (e.user) e.user = e.user.id !== undefined ? { id: e.user.id } : undefined;
+  delete e.extra;
+  return e;
+}
+export function scrubCrumb(b: Breadcrumb): Breadcrumb | null {
+  if (b.category === "console" || b.category === "ui.input") return null;
+  const d = b.data as Record<string, unknown> | undefined;
+  if (d) for (const k of ["url", "from", "to"]) if (typeof d[k] === "string") d[k] = stripQuery(d[k] as string);
+  return b;
+}
+
+export async function startMonitoring(dsn = import.meta.env.VITE_SENTRY_DSN as string | undefined): Promise<void> {
+  if (!dsn) return;
+  const S = await import("@sentry/react");
+  S.init({ dsn, environment: (import.meta.env.VITE_SENTRY_ENV as string | undefined) ?? import.meta.env.MODE, release: import.meta.env.VITE_RELEASE as string | undefined,
+    // collect nothing about people or requests; scrub() and scrubCrumb() check again before sending
+    dataCollection: { userInfo: false, cookies: false, httpHeaders: false, httpBodies: [], urlQueryParams: false },
+    beforeSend: scrub, beforeBreadcrumb: scrubCrumb });
+  sdk = S;
+}
+
+/** Report something that went wrong (a page crash, an upload that will not go). No-op without a DSN. */
+export function report(error: unknown, tags?: Record<string, string>): void {
+  sdk?.captureException(error, { tags });
+}
+/** Who is signed in, by id only, so errors can be grouped per person without their name. */
+export function setPerson(id: number | null): void {
+  sdk?.setUser(id === null ? null : { id: String(id) });
+}

@@ -7,6 +7,7 @@
 import { useSyncExternalStore } from "react";
 import { api, ApiError } from "../api/client";
 import { allJobs, deleteJob, putJob, type PendingUpload } from "./store";
+import { report } from "./monitor";
 import { abortTransfers, hashBlob, initiate, shrinkImage, transfer } from "./uploader";
 
 export type UploadState = {
@@ -71,6 +72,8 @@ async function run(e: Entry): Promise<void> {
     if (mine !== gen || !entries.has(e.job.clientUuid)) return;
     const stop = permanent(err);
     set(e, { status: "failed", error: reason(err), permanent: stop });
+    // F-235: a refused file, or one still failing after a few tries, is reported (the reason only, no file data)
+    if (stop || e.tries === 3) report(err, { where: "upload", kind: e.job.kind, code: err instanceof ApiError ? err.code : "network" });
     if (!stop) later(e);
   } finally {
     if (mine === gen) { running--; pump(); }

@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, LogOut, Search, UserRound } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Search, Smartphone, UserRound } from "lucide-react";
 import { useSignOut } from "./SignOut";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -121,6 +121,7 @@ function AccountMenu() {
         <div className="menu" role="menu">
           <div className="menu-head"><strong>{name}</strong><div className="muted small" style={{ textTransform: "capitalize" }}>{me.role}</div></div>
           <Link role="menuitem" to="/profile" onClick={() => setOpen(false)}><UserRound size={16} aria-hidden /> Your profile</Link>
+          <Link role="menuitem" to="/app" onClick={() => setOpen(false)}><Smartphone size={16} aria-hidden /> Get the Android app</Link>
           <button role="menuitem" onClick={() => { setOpen(false); signOut.start(); }}><LogOut size={16} aria-hidden /> Sign out</button>
         </div>
       )}
