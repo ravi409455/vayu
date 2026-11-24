@@ -157,3 +157,42 @@ def test_a_value_the_phone_did_send_is_kept(ienv, booking):
     assert submit(ienv.expert, booking, {"inspection": mine}).status_code == 200
     assert Inspection.objects.get(booking_id=booking["id"]).answers["inspection"][
         "arrived_time"] == "09:15"
+
+
+def _finished_at(client, booking):
+    rows = client.get("/api/v1/bookings").json()["results"]
+    return next(b for b in rows if b["id"] == booking["id"])["finished_at"]
+
+
+def test_the_finish_time_in_the_list_is_only_for_those_who_may_see_the_submission(done):
+    env, b = done
+    assert _finished_at(env.ops, b) and _finished_at(env.expert, b)
+    hide_from(env, "ops")
+    assert _finished_at(env.ops, b) is None                      # the form's submissions are hidden
+    assert _finished_at(env.admin, b) and _finished_at(env.expert, b)
+
+
+def test_an_expert_sees_only_the_finish_time_of_their_own_submission(done):
+    import uuid
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.bookings.models import Inspection
+
+    env, b = done
+    mine = Inspection.objects.get(booking_id=b["id"])
+    other = env.make_user("expert", username="bee")
+    Inspection.objects.create(booking_id=b["id"], expert=other, form_version=mine.form_version,
+                              client_start_uuid=uuid.uuid4(), status="submitted",
+                              submitted_at=timezone.now() + timedelta(hours=2))
+    from django.utils.dateparse import parse_datetime
+
+    assert parse_datetime(_finished_at(env.expert, b)) == mine.submitted_at      # not bee's, later one
+    assert parse_datetime(_finished_at(env.admin, b)) == other_at(b)             # Admin sees the latest
+
+
+def other_at(b):
+    from apps.bookings.models import Inspection
+
+    return Inspection.objects.filter(booking_id=b["id"]).order_by("-submitted_at").first().submitted_at

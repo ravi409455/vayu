@@ -52,7 +52,11 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
             qs = qs.filter(submissions.own_filter(self.request.user)).distinct()
         if self.action != "list":
             return qs
-        done = Inspection.objects.filter(booking=OuterRef("pk"), status="submitted")
+        # only submissions this user may see, the same rule as the `inspections` action
+        done = Inspection.objects.filter(booking=OuterRef("pk"), status="submitted").exclude(
+            form_version__form_id__in=hidden_inspection_forms(self.request.user))
+        if scope_for(self.request.user, "submissions.view", self.request) == "own":
+            done = done.filter(expert_id=self.request.user.pk)
         return self._filtered(qs).annotate(finished_at=Subquery(
             done.order_by("-submitted_at").values("submitted_at")[:1]))
 
