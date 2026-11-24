@@ -139,8 +139,12 @@ object Reminders {
 class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val job = inputData.getString("job") ?: return Result.success()
-        if ((applicationContext as VayuApp).graph.signedInId() == null) return Result.success()
-        Notices.show(applicationContext, "remind-$job", inputData.getString("title").orEmpty(), inputData.getString("body").orEmpty(), job)
+        val graph = (applicationContext as VayuApp).graph
+        if (graph.signedInId() == null) return Result.success()
+        val title = inputData.getString("title").orEmpty(); val body = inputData.getString("body").orEmpty()
+        graph.localNotes.add("reminder", title, body, job)
+        graph.pushed()                                       // an open bell shows it at once
+        Notices.show(applicationContext, "remind-$job", title, body, job)
         return Result.success()
     }
 }
@@ -151,7 +155,10 @@ fun alertStuck(ctx: Context, graph: Graph, user: Int) {
     val told = prefs.getStringSet("told", emptySet()).orEmpty()
     val now = stuck(graph.drafts(user).all(), Instant.now()) { p -> File(p).takeIf { it.exists() }?.let { Instant.ofEpochMilli(it.lastModified()) } }
     now.filter { it.first !in told }.forEach { (id, code) ->
-        Notices.show(ctx, "stuck-$id", "Photos for $code haven't sent for 2 hours", "Open the app on Wi-Fi to send them.", id, problem = true)
+        val title = "Photos for $code haven't sent for 2 hours"; val body = "Open the app on Wi-Fi to send them."
+        graph.localNotes.add("problem", title, body, id)
+        graph.pushed()
+        Notices.show(ctx, "stuck-$id", title, body, id, problem = true)
     }
     prefs.edit().putStringSet("told", now.map { it.first }.toSet()).apply()   // sent ones can be told about again later
 }

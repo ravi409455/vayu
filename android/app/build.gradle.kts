@@ -1,3 +1,6 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -36,6 +39,20 @@ android {
     // empty = no reports
     val sentryDsn = (project.findProperty("vayu.sentryDsn") as String?) ?: System.getenv("SENTRY_DSN_ANDROID") ?: ""
     defaultConfig { buildConfigField("String", "SENTRY_DSN", "\"$sentryDsn\"") }
+    // Release signing: the key and its passwords live outside the project (backed up offline), in
+    // ~/vayu-keys/keystore.properties (or the file VAYU_KEYSTORE_PROPS names):
+    //   storeFile=/Users/you/vayu-keys/vayu-release.jks  storePassword=…  keyAlias=vayu  keyPassword=…
+    val signingProps = File(System.getenv("VAYU_KEYSTORE_PROPS")
+        ?: "${System.getProperty("user.home")}/vayu-keys/keystore.properties")
+    val signing: Properties? = signingProps.takeIf { it.isFile }?.let { f ->
+        Properties().apply { f.inputStream().use { input -> load(input) } }
+    }
+    if (signing != null) signingConfigs.create("release") {
+        storeFile = file(signing.getProperty("storeFile"))
+        storePassword = signing.getProperty("storePassword")
+        keyAlias = signing.getProperty("keyAlias")
+        keyPassword = signing.getProperty("keyPassword")
+    }
     buildTypes {
         // the API the app talks to; override with -Pvayu.apiUrl=... (e.g. staging)
         val apiUrl = project.findProperty("vayu.apiUrl") as String?
@@ -48,6 +65,7 @@ android {
             manifestPlaceholders["cleartext"] = "false"
             buildConfigField("String", "API_URL", "\"${apiUrl ?: "https://app.carcid.in/api/v1/"}\"")
             isMinifyEnabled = true
+            if (signing != null) signingConfig = signingConfigs.getByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -97,4 +115,14 @@ dependencies {
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.roborazzi.junit)
     testImplementation(libs.work.testing)
+}
+
+// A release build made here must be signed with the real key: without it, stop (an unsigned or
+// wrongly signed APK could never update phones). CI builds it unsigned only to check it compiles.
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    doFirst {
+        if (System.getenv("CI") == null && !project.android.signingConfigs.names.contains("release"))
+            throw GradleException("Release signing key not found. Put keystore.properties in ~/vayu-keys " +
+                "(or set VAYU_KEYSTORE_PROPS). See docs/plan-android.md, release signing.")
+    }
 }

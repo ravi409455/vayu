@@ -115,11 +115,13 @@ Each phase: tests first (red), then the code, then CI green, then a short demo o
 - On-phone alerts: reminder 60 min before each job; "photos haven't sent for 2 hours".
 - Self-update (download, Android install prompt), release signing (keystore backed up offline;
   release build fails without it), Sentry release tags.
-- **E2E J6** on an emulator: offline inspection → reconnect → uploads resume → Completed; reassign
+- **E2E J6** (on the owner's test phone, not an emulator — owner's choice): offline inspection → reconnect → uploads resume → Completed; reassign
   conflict path; Ops assigns a job and the expert gets the push.
 
 ### Phase 18 — Launch (was Phase 16)
 Unchanged from plan.md: seeds, release rehearsal, staging trial with 2–3 experts and Ops.
+- Also moved here (owner, 2026-11-24): Ops payments verify / record — needs a server payments API
+  first, then the app screen.
 
 ## Testing and gates
 - Unit (JUnit 4, a route-based fake server instead of mocks), Robolectric, Compose UI tests for every

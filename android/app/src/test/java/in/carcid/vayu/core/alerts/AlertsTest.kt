@@ -109,4 +109,39 @@ class AlertsTest {
         g.forgetCopies(3)
         assertEquals(1, cleared)
     }
+
+    @Test fun phoneNoticesAreKeptReadAndCleared() {
+        var t = Instant.parse("2026-11-24T04:00:00Z")
+        val notes = LocalNotes(File(Files.createTempDirectory("n").toFile(), "notes.json")) { t }
+        repeat(35) { i -> t = t.plusSeconds(60); notes.add("reminder", "In 1 hour: DEMO-$i at 11:00", "Farhan Ali", "b$i") }
+        assertEquals(30, notes.all().size)                                   // the latest 30
+        assertEquals("In 1 hour: DEMO-34 at 11:00", notes.all().first().title)
+        assertTrue(notes.all().all { it.id < 0 && !it.read })
+        notes.read(listOf(notes.all().first().id))
+        assertEquals(1, notes.all().count { it.read })
+        notes.read(null)
+        assertTrue(notes.all().all { it.read })
+        notes.clear()
+        assertEquals(emptyList<LocalNote>(), notes.all())
+    }
+
+    private suspend fun until(ok: () -> Boolean) { repeat(200) { if (ok()) return; kotlinx.coroutines.delay(20) }; assertTrue(ok()) }
+
+    @Test fun theBellShowsServerAndPhoneNoticesTogether() = kotlinx.coroutines.runBlocking {
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default)
+        val notes = LocalNotes(File(Files.createTempDirectory("n").toFile(), "notes.json")) { Instant.parse("2026-11-24T09:00:00Z") }
+        notes.add("reminder", "In 1 hour: DEMO-8 at 15:30", "", "b8")
+        server.on("GET notifications", """{"unread":1,"results":[{"id":5,"kind":"assigned","title":"New job: DEMO-2",
+            "body":"","booking":"b2","created_at":"2026-11-24T08:00:00Z","read":false}]}""")
+        val bell = `in`.carcid.vayu.ui.BellModel(api, scope, notes)
+        bell.refresh(); until { bell.state.value.notes.size == 2 }
+        assertEquals(listOf("In 1 hour: DEMO-8 at 15:30", "New job: DEMO-2"), bell.state.value.notes.map { it.title })
+        assertEquals(2, bell.state.value.unread)
+        server.on("POST notifications/read", """{"unread":0}""")
+        bell.read(null); until { server.bodiesOf("POST notifications/read").isNotEmpty() && bell.state.value.unread == 0 }
+        assertTrue(notes.all().single().read)
+        bell.clear()
+        assertEquals(0, bell.state.value.notes.size)
+        scope.coroutineContext[kotlinx.coroutines.Job]?.cancel(); Unit
+    }
 }

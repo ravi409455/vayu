@@ -58,13 +58,29 @@ fun parseNotes(o: JsonObject): BellState = BellState(
     },
     unread = o["unread"]?.jsonPrimitive?.intOrNull ?: 0, loaded = true)
 
-/** The signed-in person's bell: read on open, on coming back to the app and on each push. */
-class BellModel(private val api: Api, private val scope: CoroutineScope) {
+/**
+ * The signed-in person's bell: the server's notices plus the phone's own (reminders, photos not
+ * sending), read on open, on coming back to the app and on each push.
+ */
+class BellModel(private val api: Api, private val scope: CoroutineScope,
+                private val local: `in`.carcid.vayu.core.alerts.LocalNotes? = null) {
     private val _state = MutableStateFlow(BellState())
     val state: StateFlow<BellState> = _state
+    private var server = BellState()
 
     fun refresh() {
-        scope.launch { try { _state.value = parseNotes(api.notifications()) } catch (_: ApiError) {} }
+        scope.launch {
+            try { server = parseNotes(api.notifications()) } catch (_: ApiError) {}
+            merge()
+        }
+    }
+
+    private fun merge() {
+        val mine = local?.all().orEmpty().map { n ->
+            Note(n.id, n.kind, n.title, n.body, n.booking, n.at.atOffset(java.time.ZoneOffset.UTC), n.read)
+        }
+        _state.value = BellState((server.notes + mine).sortedByDescending { it.at?.toInstant() },
+            server.unread + mine.count { !it.read }, loaded = server.loaded || mine.isNotEmpty())
     }
 
     /** Marked read here at once; the server is told when it can be (a later refresh corrects it). */
@@ -74,10 +90,20 @@ class BellModel(private val api: Api, private val scope: CoroutineScope) {
         if (gone.isEmpty()) return
         _state.value = s.copy(notes = s.notes.map { if (it in gone) it.copy(read = true) else it },
             unread = (s.unread - gone.size).coerceAtLeast(0))
-        scope.launch { try { _state.value = _state.value.copy(unread = api.markRead(ids)) } catch (_: ApiError) {} }
+        val phone = gone.filter { it.id < 0 }.map { it.id }
+        if (phone.isNotEmpty()) local?.read(if (ids == null) null else phone)
+        val fromServer = gone.filter { it.id > 0 }.map { it.id }
+        if (fromServer.isEmpty()) return
+        scope.launch {
+            try {
+                val left = api.markRead(if (ids == null) null else fromServer)
+                server = server.copy(unread = left, notes = server.notes.map { if (it.id in fromServer || ids == null) it.copy(read = true) else it })
+                merge()
+            } catch (_: ApiError) {}
+        }
     }
 
-    fun clear() { _state.value = BellState() }
+    fun clear() { server = BellState(); _state.value = BellState() }
 }
 
 /** "Today" / "Yesterday" / "2 Dec" groups, newest first; tapping a line opens its job. */
