@@ -251,7 +251,10 @@ def test_a_failed_upload_cannot_be_restarted_on_a_closed_booking(job, settings):
     body = initiate_body(b["id"], data)
     init = env.expert.post("/api/v1/media/initiate", body, format="json").json()
     MediaAsset.objects.filter(pk=init["id"]).update(status="failed", upload_id="")
+    from apps.bookings.models import Inspection
     Booking.objects.filter(pk=b["id"]).update(stage="cancelled")
+    # the expert's work has not arrived yet: a cancelled job's draft still syncs (rule 6)
+    Inspection.objects.filter(booking_id=b["id"]).update(status="submitted")   # now it has
     assert env.expert.post("/api/v1/media/initiate", body, format="json").status_code == 409
     assert MediaAsset.objects.get(pk=init["id"]).status == "failed"
 

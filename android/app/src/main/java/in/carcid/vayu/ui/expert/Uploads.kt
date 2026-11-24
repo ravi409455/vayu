@@ -57,7 +57,9 @@ fun UploadsScreen(me: Me, extras: ExpertExtras, onProfile: () -> Unit, onJobs: (
     if (storage) { StorageScreen(extras.storage, onBack = { storage = false }, say = say); return }
     var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     var openId by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
-    val pending = extras.drafts.values.map { d -> d to d.files.filter { !it.sent } }.filter { it.second.isNotEmpty() }
+    // jobs with files still to send, and any job the server has closed (its work can't be sent)
+    val pending = extras.drafts.values.map { d -> d to d.files.filter { !it.sent } }
+        .filter { it.second.isNotEmpty() || it.first.problemCode == `in`.carcid.vayu.core.draft.JOB_CLOSED }
     val count = pending.sumOf { it.second.size }
     // one booking's files on their own screen
     pending.firstOrNull { it.first.bookingId == openId }?.let { (d, files) ->
@@ -68,6 +70,17 @@ fun UploadsScreen(me: Me, extras: ExpertExtras, onProfile: () -> Unit, onJobs: (
             }
             Text(d.customer.ifBlank { d.code }, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink, modifier = Modifier.padding(horizontal = 20.dp))
             Text("${d.code} · ${files.size} file${if (files.size == 1) "" else "s"} to send", color = Vayu.colors.muted, modifier = Modifier.padding(horizontal = 20.dp))
+            if (d.problemCode == `in`.carcid.vayu.core.draft.JOB_CLOSED) {
+                var confirm by remember { mutableStateOf(false) }
+                Text(d.problem.orEmpty(), color = Vayu.colors.bad, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
+                SoftButton("Discard draft", { confirm = true }, Modifier.padding(horizontal = 20.dp).fillMaxWidth(), color = Vayu.colors.bad)
+                if (confirm) androidx.compose.material3.AlertDialog(onDismissRequest = { confirm = false },
+                    title = { Text("Discard ${d.code}?") },
+                    text = { Text("Its answers and photos on this phone are cleared. This cannot be undone.") },
+                    confirmButton = { androidx.compose.material3.TextButton({ confirm = false; extras.onDiscard(d.bookingId); openId = null; say("Draft discarded.") }) {
+                        Text("Discard draft", color = Vayu.colors.bad) } },
+                    dismissButton = { androidx.compose.material3.TextButton({ confirm = false }) { Text("Keep it") } })
+            }
             LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp, vertical = 8.dp)) { items(files.size) { FileRow(files[it]) } }
         }
         return

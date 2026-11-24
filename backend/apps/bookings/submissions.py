@@ -75,8 +75,8 @@ def own_filter(user) -> Q:
                                              inspections__status="draft")
 
 
-# a job moved away stays deliverable while still open and recent (as the phone's job list)
-MOVED_STAGES = ("assigned", "in_progress", "submitted")
+# a job moved away stays deliverable for a week after its date, whatever its stage: work done
+# offline still reaches Ops even if the other expert finished first or Ops cancelled it
 MOVED_DAYS = 7
 
 
@@ -87,7 +87,7 @@ def deliver_filter(user) -> Q:
     to them if the new expert has not started, else a conflict for Ops. Never used for lists."""
     recent = timezone.localdate() - timedelta(days=MOVED_DAYS)
     return own_filter(user) | Q(activity__changes__assigned_expert__0=user.pk,
-                                stage__in=MOVED_STAGES, inspection_date__gte=recent)
+                                inspection_date__gte=recent)
 
 
 def form_for_role(version: FormVersion, role: str, stage: str) -> dict:

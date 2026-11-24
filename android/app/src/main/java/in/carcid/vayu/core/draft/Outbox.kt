@@ -19,6 +19,10 @@ import java.io.RandomAccessFile
  * (the server's id goes into the answers), send the start with its check-in, send the submit,
  * then upload the bytes. Every step is safe to repeat (client UUIDs), so a run can stop anywhere.
  */
+/** The draft's job is closed on the server: its work can't be sent; the expert discards it. */
+const val JOB_CLOSED = "JOB_CLOSED"
+const val CLOSED_TEXT = "This job is closed on the server, so this work can't be sent. Discard the draft."
+
 class Outbox(
     private val api: Api,
     private val drafts: DraftStore,
@@ -42,15 +46,24 @@ class Outbox(
         return true
     }
 
-    private fun note(id: String, e: ApiError?) = drafts.update(id) { it.copy(problem = e?.message, problemCode = e?.code) }
+    private fun note(id: String, e: ApiError?) = drafts.update(id) { d ->
+        if (e != null && closed(e)) d.copy(problem = CLOSED_TEXT, problemCode = JOB_CLOSED)
+        else d.copy(problem = e?.message, problemCode = e?.code)
+    }
+
+    /** The server no longer takes this job's work (closed more than a week ago, or not theirs). */
+    private fun closed(e: ApiError) = e.code == "NOT_FOUND" || e.code == "BOOKING_CLOSED"
 
     private suspend fun push(id: String) {
+        if (drafts.get(id)!!.problemCode == JOB_CLOSED) return     // waits for the expert to discard it
         takeBack(id)
         if (drafts.get(id)!!.reconcile) reconcile(id)
         register(id)
         // a field was full on the server: pick up what is there, then register what is left
         if (drafts.get(id)!!.reconcile) { reconcile(id); register(id) }
+        if (drafts.get(id)!!.problemCode == JOB_CLOSED) return
         sendStart(id)
+        if (drafts.get(id)!!.problemCode == JOB_CLOSED) return
         sendSubmit(id)
         upload(id)
     }
@@ -71,6 +84,7 @@ class Outbox(
                         if (it.id == f.id) it.copy(error = "This field already has its photos from before. Delete one to send this.") else it }) }
                     continue
                 }
+                if (closed(e)) { note(id, e); return }
                 drafts.update(id) { d -> d.copy(files = d.files.map { if (it.id == f.id) it.copy(error = e.message) else it }) }
             }
         }
@@ -146,6 +160,7 @@ class Outbox(
             drafts.update(id) { it.copy(startSent = true, problem = null, problemCode = null) }
         } catch (e: ApiError) {
             if (e.code == ApiError.NETWORK || e.status >= 500 || e.code == "DEVICE_REVOKED") throw e
+            if (closed(e)) { note(id, e); return }
             val errors = (e.extra["errors"] as? JsonObject).orEmpty().mapValues { (it.value as? JsonPrimitive)?.contentOrNull ?: "" }
             drafts.update(id) { it.copy(problem = if (errors.isEmpty()) e.message else "The check-in was refused. Fix the answers marked in red.",
                 problemCode = e.code, fieldErrors = it.fieldErrors + errors, startedAt = if (errors.isEmpty()) it.startedAt else null) }

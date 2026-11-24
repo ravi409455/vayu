@@ -148,7 +148,12 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
     user = request.user
     booking = writable_booking(request, data.get("booking"), moved_ok=True)   # a new own upload
     manager = is_manager(user, request)
-    if booking.stage == "cancelled" or (booking.stage == "completed" and not manager):
+    # a closed booking takes files only for an expert's work that has not arrived yet (done
+    # offline before it was cancelled, or before Ops moved it and the other expert finished):
+    # never anything added to an inspection already submitted
+    closed = booking.stage == "cancelled" or (booking.stage == "completed" and not manager)
+    if closed and (manager or booking.inspections.filter(
+            expert=user, status__in=("submitted", "superseded")).exists()):
         raise err("BOOKING_CLOSED", f"A {booking.stage} booking takes no new files.", 409)
     kind, ctype = data.get("kind"), data.get("content_type")
     size, sha = data.get("size"), data.get("sha256")

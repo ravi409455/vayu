@@ -102,6 +102,26 @@ class OutboxTest {
         assertEquals(null, d.problemCode)                    // the submit went through and cleared it
     }
 
+    @Test fun aJobClosedOnTheServerSaysSoAndStopsTrying() = runBlocking {
+        ready()
+        server.on("POST media/initiate", """{"code":"NOT_FOUND","detail":"Booking not found."}""", 404)
+        outbox.run()
+        val d = drafts.get(BOOKING)!!
+        assertEquals(JOB_CLOSED, d.problemCode)
+        assertEquals(CLOSED_TEXT, d.problem)
+        assertTrue(d.unsent)                                   // still blocks sign-out until discarded
+        val tries = server.requests.size
+        outbox.run()
+        assertEquals(tries, server.requests.size)              // no more calls for a closed job
+    }
+
+    @Test fun aRefusedStartOnAClosedJobIsTheSame() = runBlocking {
+        ready()
+        server.on("POST bookings/$BOOKING/start", """{"code":"BOOKING_CLOSED","detail":"closed"}""", 409)
+        outbox.run()
+        assertEquals(JOB_CLOSED, drafts.get(BOOKING)!!.problemCode)
+    }
+
     @Test fun aRefusedSubmitIsKeptAndExplained() = runBlocking {
         ready()
         server.on("POST bookings/$BOOKING/submit", """{"code":"INVALID_ANSWERS","detail":"Some answers are invalid.","errors":{"odometer":"OUT_OF_RANGE"}}""", 400)

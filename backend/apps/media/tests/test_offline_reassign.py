@@ -94,21 +94,37 @@ def test_the_moved_job_stays_in_ravis_sync_so_he_can_submit_or_discard(moved):
     assert b["id"] not in {j["id"] for j in env.expert.get("/api/v1/sync/jobs").json()["jobs"]}
 
 
-def test_the_moved_route_is_only_for_open_recent_jobs_and_own_files(moved, settings):
+def test_the_moved_route_is_only_for_recent_jobs_and_own_files(moved, settings):
     env, b, sana, sana_client, version = moved
     from datetime import timedelta
 
     from django.utils import timezone
-
-    from .conftest import initiate_body
     hers = upload(sana_client, b["id"], jpeg(), settings).json()["id"]      # Sana's own photo
     assert env.expert.delete(f"/api/v1/media/{hers}").status_code == 404   # never Ravi's to touch
-    Booking.objects.filter(pk=b["id"]).update(stage="completed")          # finished: closed to him
-    assert env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),
-                           format="json").status_code == 404
-    Booking.objects.filter(pk=b["id"]).update(stage="assigned",
-                                              inspection_date=timezone.localdate() - timedelta(days=8))
-    assert submit_offline(env, b, version).status_code == 404               # too long ago
+    Booking.objects.filter(pk=b["id"]).update(inspection_date=timezone.localdate() - timedelta(days=8))
+    assert submit_offline(env, b, version).status_code == 404               # a week late: closed
+
+
+def test_late_work_reaches_ops_even_if_sana_finished_first(moved, settings):
+    env, b, sana, sana_client, version = moved
+    from apps.bookings.tests.test_submissions import submit
+    assert start(sana_client, b).status_code in (200, 201)
+    assert submit(sana_client, b, answers={"inspection": {"chassis_no": "MA3YPKCSKTJ273129"}}).status_code == 200
+    assert Booking.objects.get(pk=b["id"]).stage == "completed"              # Sana done first
+    photo = upload(env.expert, b["id"], jpeg(), settings)
+    assert photo.status_code == 200, photo.json()
+    r = submit_offline(env, b, version, photo_a=[photo.json()["id"]])
+    assert r.status_code == 200, r.json()
+    got = Booking.objects.get(pk=b["id"])
+    assert got.conflict == "TWO_EXPERTS" and got.assigned_expert_id == sana.id   # Ops choose
+    assert Notification.objects.filter(kind="problem", title="Two experts inspected OFF1").exists()
+
+
+def test_late_work_is_kept_on_a_cancelled_job(moved, settings):
+    env, b, _, _, version = moved
+    Booking.objects.filter(pk=b["id"]).update(stage="cancelled")
+    assert submit_offline(env, b, version).status_code == 200
+    assert Booking.objects.get(pk=b["id"]).stage == "cancelled"
 
 
 def test_each_expert_has_their_own_photo_places(moved, settings):
