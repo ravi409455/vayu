@@ -162,8 +162,8 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
                     stampPhoto(raw, out, stampLines(draft.code, env.expertName, env.now(), env.verified, Locator.last).let { listOf(it[0] + " · gallery", it[1]) })
                     raw.delete()
                 }
-                model.addFile(part, f.key, "photo", out, "image/jpeg", "gallery", label(f, draft, part), single = false)
-            } else model.addFile(part, f.key, f.type, raw, type, "gallery", label(f, draft, part), single = false)
+                model.addFile(part, f.key, "photo", out, "image/jpeg", "gallery", label(f, draft, part), single = false, max = f.maxCount)
+            } else model.addFile(part, f.key, f.type, raw, type, "gallery", label(f, draft, part), single = false, max = f.maxCount)
         }
     }
     val document = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -172,7 +172,7 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
         scope.launch {
             val raw = newFile(dir, "file")
             val type = withContext(Dispatchers.IO) { copyIn(ctx, uri, raw) } ?: return@launch
-            model.addFile(part, f.key, "file", raw, type, "gallery", label(f, draft, part), single = false)
+            model.addFile(part, f.key, "file", raw, type, "gallery", label(f, draft, part), single = false, max = f.maxCount)
         }
     }
 
@@ -180,7 +180,7 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
         is Tool.Camera -> {
             CameraScreen(t.field, (draft.answer(t.part, t.field.key) as? List<*>)?.size ?: 0, draft.code, env.expertName, env.now,
                 env.verified, dir, onTaken = { file, type ->
-                    model.addFile(t.part, t.field.key, t.field.type, file, type, "camera", label(t.field, model.draft, t.part), single = false)
+                    model.addFile(t.part, t.field.key, t.field.type, file, type, "camera", label(t.field, model.draft, t.part), single = false, max = t.field.maxCount)
                 }, onDone = { tool = null })
             return
         }

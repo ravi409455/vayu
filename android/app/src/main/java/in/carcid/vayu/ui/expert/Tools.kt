@@ -28,6 +28,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -127,8 +128,8 @@ fun rememberPermissions(vararg permissions: String, onResult: (Boolean) -> Unit 
 }
 
 /**
- * The in-app camera (approved prototype): live preview with the stamp, one shutter, several shots
- * in a row up to the field's limit. Each shot is shown first, to Use or Retake. Photos are stamped
+ * The in-app camera (approved prototype): live preview with the stamp and one shutter. Each shot
+ * is shown first: Use keeps it and goes back to the form, Retake tries again. Photos are stamped
  * and shrunk; videos are 720p, at most 60 s. The front camera is one tap away.
  */
 @SuppressLint("MissingPermission")
@@ -142,8 +143,7 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
     val camOk = if (video) rememberPermissions(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO,
         Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
         else rememberPermissions(Manifest.permission.CAMERA, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-    var taken by remember { mutableStateOf(have) }
-    var last by remember { mutableStateOf<File?>(null) }
+    val taken = have
     var busy by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf<Recording?>(null) }
     var seconds by remember { mutableStateOf(0) }
@@ -201,13 +201,11 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
             Text(stampLines(code, expert, clock, verified, place).joinToString("\n"), color = Color.White, fontFamily = FontFamily.Monospace,
                 fontSize = 12.sp, modifier = Modifier.padding(12.dp).background(Color.Black.copy(alpha = .45f)).padding(8.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(Color.DarkGray)) {
-                    last?.takeIf { !video }?.let { f -> rememberThumb(f.path)?.let { Image(it, "Last photo", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) } }
-                }
+                Spacer(Modifier.size(56.dp))
                 Spacer(Modifier.weight(1f))
                 Box(Modifier.size(76.dp).clip(CircleShape).border(4.dp, Color.White, CircleShape).padding(8.dp).clip(CircleShape)
                     .background(when { busy || (full && recording == null) -> Color.Gray; video -> Color(0xFFE5484D); else -> Color.White })
-                    .clickable(enabled = camOk && !busy && (!full || recording != null), role = Role.Button) {
+                    .clickable(enabled = camOk && !busy && pending == null && (!full || recording != null), role = Role.Button) {
                         if (video) {
                             val r = recording
                             if (r != null) { r.stop(); return@clickable }
@@ -255,7 +253,8 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
 
         pending?.let { (file, type) ->
             ShotCheck(file, type, onRetake = { file.delete(); pending = null }, onUse = {
-                pending = null; onTaken(file, type); taken++; if (type.startsWith("image/")) last = file
+                // kept: back to the form
+                pending = null; onTaken(file, type); onDone()
             })
         }
     }
@@ -265,7 +264,8 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
 @Composable
 private fun ShotCheck(file: File, type: String, onRetake: () -> Unit, onUse: () -> Unit) {
     val video = type.startsWith("video/")
-    Column(Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding()) {
+    // takes every touch, so none reaches the shutter underneath
+    Column(Modifier.fillMaxSize().background(Color.Black).pointerInput(Unit) { detectTapGestures { } }.safeDrawingPadding()) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             if (video) AndroidView(factory = { c ->
                 android.widget.VideoView(c).apply {

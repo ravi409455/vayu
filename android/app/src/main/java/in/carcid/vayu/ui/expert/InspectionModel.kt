@@ -89,8 +89,10 @@ class InspectionModel(
     }
 
     /** Keep a taken photo, video, file or signature and put it in the answer. */
-    fun addFile(part: String, field: String, kind: String, file: File, contentType: String, source: String, label: String, single: Boolean) {
-        if (draft.locked) { file.delete(); return }
+    fun addFile(part: String, field: String, kind: String, file: File, contentType: String, source: String, label: String, single: Boolean,
+                max: Int = Int.MAX_VALUE) {
+        // locked, or the field already holds its most: not kept
+        if (draft.locked || (!single && ((draft.answer(part, field) as? List<*>)?.size ?: 0) >= max)) { file.delete(); return }
         val f = LocalFile(UUID.randomUUID().toString(), part, field, kind, file.path, contentType, source, file.length(), sha256(file), label)
         commit { d ->
             val cur = d.answer(part, field)
