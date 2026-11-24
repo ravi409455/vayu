@@ -266,7 +266,7 @@ def part_html(part: dict, width_mm: float, ctx: dict) -> str:
     elif t == "button":
         href = ctx.get("links", {}).get(part["link"], "")
         inner = (f'<div class="btnrow" style="text-align:{part.get("align", "center")}">'
-                 f'<a class="btn" href="{e(href)}">{part["label_out"]}</a></div>')
+                 f'<a class="btn" href="{e(href)}">{e(part["label_out"])}</a></div>')
     elif t == "columns":
         gap = part.get("gap", 6)
         cols = part["columns"]

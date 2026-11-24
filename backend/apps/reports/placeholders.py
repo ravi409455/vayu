@@ -4,6 +4,7 @@ Rendered by Jinja2's sandbox with autoescape, after a check that the text holds 
 variable lookups: no tags, filters, calls or arithmetic, so a template cannot do anything but
 show values. Rich text is cleaned to a small set of tags when it is saved."""
 import re
+from html.parser import HTMLParser
 from typing import Any
 
 import nh3
@@ -49,14 +50,30 @@ def render(text: str, values: dict[str, Any], html: bool = True) -> str:
 
 # what a link in report text may point at when it holds a value: only the report's own links
 LINK_VALUES = ("verify_url", "photos_url", "videos_url")
-HREF = re.compile(r'href="([^"]*)"')
 SYS_LINK = re.compile(r"\{\{\s*sys\.(" + "|".join(LINK_VALUES) + r")\s*\}\}")
+
+
+class _Links(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.hrefs: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        self.hrefs += [v or "" for k, v in attrs if k == "href"]
+
+
+def _hrefs(text: str) -> list[str]:
+    """Every href in the text, however it is quoted (a parser, not a pattern)."""
+    p = _Links()
+    p.feed(text)
+    p.close()
+    return p.hrefs
 
 
 def check_links(text: str, where: str) -> None:
     """A link is a fixed https/mailto/tel address or exactly one report link like
     {{ sys.photos_url }}: a form answer can never become where a link goes."""
-    for href in HREF.findall(text):
+    for href in _hrefs(text):
         if "{" in href and not SYS_LINK.fullmatch(href.strip()):
             raise ValueError(f"{where}: a link can hold only one of "
                              f"{', '.join('{{ sys.' + v + ' }}' for v in LINK_VALUES)}.")

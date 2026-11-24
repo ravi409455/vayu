@@ -350,7 +350,7 @@ def _resolve(src: Source, parts: list[dict], data: dict, values: dict) -> list[d
             item["items"] = photo_items(src, part)
             empty = not item["items"]
         elif t == "button":                    # a link the customer taps in the PDF
-            item["label_out"] = placeholders.render(part["label"], values)
+            item["label_out"] = placeholders.render(part["label"], values, html=False)  # plain
             count = values["sys"].get(f"{part['link'][:-1]}_count", "")
             empty = count == "0"                           # nothing behind the link
         elif t in ("text", "html"):

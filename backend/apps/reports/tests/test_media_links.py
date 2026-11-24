@@ -10,7 +10,7 @@ from rest_framework.test import APIClient
 
 from apps.media import storage, zips
 from apps.media.models import MediaAsset, MediaZip
-from apps.reports import context, definition, render
+from apps.reports import context, definition, placeholders, render
 from apps.reports.models import Report
 
 from .test_reports import complete_job, one_page, renv, set_template, source  # noqa: F401
@@ -163,3 +163,16 @@ def test_old_photos_of_completed_jobs_are_purged_and_the_link_says_so(done, sett
     assert storage.exists(Report.objects.get(pk=r.pk).key)           # the PDF itself stays
     from apps.media.services import stuck_uploads
     assert not stuck_uploads(hours=1).exists()                       # not "stuck uploads"
+
+
+def test_link_check_sees_every_quoting_and_button_labels_are_plain_text(done):
+    for bad in ("<a href='{{ inspection.note }}'>x</a>", "<a href={{inspection.note}}>x</a>",
+                '<a HREF="{{ booking.x }}">x</a>'):
+        with pytest.raises(ValueError, match="link"):
+            placeholders.check_links(bad, "t")
+    _, b, r = done
+    d = definition.validate_definition(one_page(
+        {"type": "button", "link": "photos", "label": '<img src="x"> All <b>photos</b>'}))
+    src = source(b, token=r.token)
+    html = render.render_html(context.build(src, d), d, src.values())
+    assert "&lt;img src=&quot;x&quot;&gt; All &lt;b&gt;photos&lt;/b&gt;</a>" in html
