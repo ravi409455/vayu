@@ -87,6 +87,9 @@ class OpsTextTest {
         val done = Json.parseToJsonElement("""{"kind":"finished_without_files","by":{"name":"Priya Ops"},
             "changes":{"stage":["submitted","completed"],"missing":2},"keys":["inspection.front_photos","stage"]}""").jsonObject
         assertEquals("Finished by Priya Ops without 2 files: Front photos", activityText(done, env))
+        fun media(kind: String) = Json.parseToJsonElement("""{"kind":"$kind","by":{"name":"Priya Ops"},"changes":{},"keys":["start.selfie"]}""").jsonObject
+        assertEquals("Priya Ops replaced a file in Selfie", activityText(media("media_replaced"), env))
+        assertEquals("Priya Ops added a file to Selfie", activityText(media("media_added"), env))
         assertEquals("Priya Ops changed Fuel: Petrol → CNG; Seal: empty → Intact",
             activityText(row("key_checks_changed", """{"check.fuel":["Petrol","CNG"],"check.seal":[null,"Intact"]}"""), env) { if (it == "fuel") "Fuel" else "Seal" })
     }

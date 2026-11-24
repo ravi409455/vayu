@@ -197,7 +197,8 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
         _, _, ids = submitted_answer(booking, field)
         if replaces is not None and str(replaces) not in ids:
             raise err("UNKNOWN_MEDIA", "The file to replace is not on this field.")
-        if replaces is None and len(ids) >= max_count(field):
+        if replaces is None and len(ids) >= max_count(field) \
+                and first_unarrived(booking, ids) is None:   # a missing one is taken over
             raise err("TOO_MANY", f"'{field.label}' takes at most {max_count(field)}. "
                       "Replace one instead.", 409)
         # uploads not (yet) in the answers: a few may be left by closed tabs, never a pile
@@ -252,6 +253,13 @@ def live_asset(booking: Booking, field_key: str, asset_id) -> MediaAsset | None:
         return None
 
 
+def first_unarrived(booking: Booking, ids: list[str]) -> str | None:
+    """The oldest file a field names that never arrived (the expert's phone lost or broken)."""
+    arrived = set(map(str, MediaAsset.objects.filter(
+        booking=booking, id__in=ids, status="verified").values_list("id", flat=True)))
+    return next((i for i in ids if i not in arrived), None)
+
+
 def attach(request, new: MediaAsset, replaces=None) -> None:
     """Ops put a file they uploaded into the submitted inspection: in place of `replaces` (kept as
     history, Admin can still open it) or added to the field. The report is rebuilt."""
@@ -272,6 +280,10 @@ def attach(request, new: MediaAsset, replaces=None) -> None:
         if str(new.id) in ids:
             return                                           # a retry: already in place
         old = None
+        # an Ops "add" to a full field takes the place of a file that never arrived (a lost
+        # phone), so the job can be finished; with room left it is simply added
+        if replaces is None and len(ids) >= max_count(field):
+            replaces = first_unarrived(booking, ids)
         if replaces is not None:
             old = live_asset(booking, field.key, replaces)
             if old is None or str(old.id) not in ids:
@@ -482,7 +494,9 @@ def missing_files(booking: Booking) -> list[dict]:
                       .values_list("id", flat=True)))
     today = timezone.localdate().isoformat()
     rows = []
-    for part, version in insp.pinned().items():
+    pinned = insp.pinned()
+    for part in ("start", "inspection", "end"):     # page order: check-in, inspection, wrap-up
+        version = pinned.get(part)
         if version is None:
             continue
         answers = insp.answers.get(part) or {}

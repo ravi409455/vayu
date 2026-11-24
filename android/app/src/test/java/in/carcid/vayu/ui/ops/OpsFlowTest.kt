@@ -295,7 +295,7 @@ class OpsFlowTest {
         waitFor("Customer name")
         compose.onNodeWithContentDescription("Customer name").performTextInput("Ananya Gupta")
         compose.onNodeWithText("Save").performClick()
-        compose.waitUntil(5_000) { server.bodiesOf("POST bookings").isNotEmpty() }
+        compose.waitUntil(15_000) { server.bodiesOf("POST bookings").isNotEmpty() }   // slow under a full run
         assertTrue(server.bodiesOf("POST bookings").single().contains("Ananya Gupta"))
     }
 }

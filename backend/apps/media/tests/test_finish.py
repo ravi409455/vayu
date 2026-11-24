@@ -61,3 +61,27 @@ def test_nothing_missing_or_not_waiting_for_files(job, settings):
     assert env.ops.get(f"/api/v1/bookings/{b['id']}/missing-files").json()["missing"] == []
     r = env.ops.post(f"/api/v1/bookings/{b['id']}/finish")
     assert r.status_code == 409 and r.json()["code"] == "INVALID_STAGE"
+
+
+def test_an_ops_add_takes_the_place_of_a_file_that_never_arrived(job, settings):
+    env, b = job
+    Field.objects.filter(key="photo_a").update(required=True, config={"max_count": 1})
+    [old] = stuck(env, b)
+    r = upload(env.ops, b["id"], jpeg(color=(5, 5, 5)), settings, source="gallery")   # plain Add
+    assert r.status_code == 200, r.json()
+    new = r.json()["id"]
+    assert env.ops.post(f"/api/v1/media/{new}/attach", {}, format="json").status_code == 204
+    from apps.bookings.models import Inspection
+    assert Inspection.objects.get(booking_id=b["id"]).answers["inspection"]["photo_a"] == [new]
+    assert BookingActivity.objects.filter(kind="media_replaced").exists()     # kept as history
+    assert Booking.objects.get(pk=b["id"]).stage == "completed"              # nothing left missing
+    assert old != new
+
+
+def test_with_room_left_an_ops_add_is_just_added(job, settings):
+    env, b = job
+    [mine] = stuck(env, b)                                   # photo_a takes 2: one place left
+    new = upload(env.ops, b["id"], jpeg(color=(6, 6, 6)), settings, source="gallery").json()["id"]
+    assert env.ops.post(f"/api/v1/media/{new}/attach", {}, format="json").status_code == 204
+    from apps.bookings.models import Inspection
+    assert Inspection.objects.get(booking_id=b["id"]).answers["inspection"]["photo_a"] == [mine, new]
