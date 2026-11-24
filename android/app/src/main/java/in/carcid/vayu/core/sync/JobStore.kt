@@ -13,7 +13,11 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import java.io.File
-import java.io.FileOutputStream
+import `in`.carcid.vayu.core.forms.Filled
+import `in`.carcid.vayu.core.forms.FormTree
+import `in`.carcid.vayu.core.forms.PARTS
+import `in`.carcid.vayu.core.rules.JsonLogic
+import `in`.carcid.vayu.core.writeAtomically
 import java.time.OffsetDateTime
 
 /** One job as My jobs and Job details show it. */
@@ -23,6 +27,8 @@ data class Job(
     /** yyyy-MM-dd and HH:mm, as the booking form stores them ("" when missing). */
     val date: String, val time: String,
     val assignedToMe: Boolean, val myDraft: String?,
+    /** The inspection type's key (type is its name). */
+    val typeKey: String = "",
     /** Form version per part (start, inspection, end); null = that part has no form. */
     val versions: Map<String, Int?>,
 ) {
@@ -52,6 +58,17 @@ class JobStore(private val file: File) {
 
     /** Server minus phone clock (ms): add it to the phone's time to get the server's. */
     fun clockOffset(): Long = data()["clock_offset"]?.jsonPrimitive?.longOrNull ?: 0L
+
+    /** A master list's items (key, label) for list fields. */
+    fun list(key: String): List<Pair<String, String>> = (data().obj("lists")[key] as? JsonArray).orEmpty()
+        .map { it.jsonObject }.map { it.str("key") to it.str("label") }
+
+    /** Inspection types (key, name) the phone knows. */
+    fun types(): List<Pair<String, String>> = data().obj("types").map { it.key to (it.value.jsonPrimitive.contentOrNull ?: it.key) }
+
+    /** What Ops changed on this booking since the last sync ("old -> new" banners). */
+    fun changes(bookingId: String): List<JsonObject> = (data()["changes"] as? JsonArray).orEmpty().map { it.jsonObject }
+        .filter { it.str("booking") == bookingId }
 
     fun form(version: Int): JsonObject? = data().obj("forms")[version.toString()] as? JsonObject
 
@@ -103,20 +120,34 @@ class JobStore(private val file: File) {
                 assignedToMe = j["assigned_to_me"]?.jsonPrimitive?.booleanOrNull ?: false,
                 myDraft = j["my_draft"]?.jsonPrimitive?.contentOrNull,
                 versions = j.obj("versions").mapValues { it.value.jsonPrimitive.intOrNull },
+                typeKey = type,
             )
         }.sortedWith(compareBy({ it.date }, { it.time }))
+    }
+
+    /** The booking's own answers (rules may refer to them, e.g. booking.city). */
+    fun bookingAnswers(bookingId: String): Map<String, Any?> =
+        @Suppress("UNCHECKED_CAST")
+        ((data()["jobs"] as? JsonArray)?.map { it.jsonObject }?.firstOrNull { it.str("id") == bookingId }
+            ?.get("answers")?.let { JsonLogic.fromJson(it) } as? Map<String, Any?>).orEmpty()
+
+    /** A form version as a tree (null when the phone doesn't hold it). */
+    fun tree(version: Int?): FormTree? =
+        version?.let { form(it) }?.let { FormTree.parse(it) }
+
+    /** The forms and answers of an inspection, ready for the rules; null if a form is missing. */
+    fun filled(bookingId: String, versions: Map<String, Int?>, answers: Map<String, Map<String, Any?>>,
+               today: String): Filled? {
+        val trees = PARTS.associateWith { p -> versions[p]?.let { tree(it) ?: return null } }
+        if (trees["inspection"] == null) return null
+        return Filled(trees, answers, bookingAnswers(bookingId), today)
     }
 
     /** Every form this job needs is on the phone, so it can be done without signal. */
     fun readyOffline(job: Job): Boolean =
         job.versions["inspection"] != null && job.versions.values.filterNotNull().all { form(it) != null }
 
-    private fun write(o: JsonObject) {
-        file.parentFile?.mkdirs()
-        val tmp = File(file.path + ".tmp")
-        FileOutputStream(tmp).use { it.write(o.toString().toByteArray()); it.fd.sync() }
-        check(tmp.renameTo(file)) { "Could not save the jobs file." }
-    }
+    private fun write(o: JsonObject) = writeAtomically(file, o.toString().toByteArray())
 }
 
 private fun JsonObject.obj(k: String): JsonObject = this[k] as? JsonObject ?: JsonObject(emptyMap())

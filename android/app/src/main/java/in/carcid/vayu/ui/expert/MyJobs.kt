@@ -52,7 +52,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import `in`.carcid.vayu.core.api.Me
+import `in`.carcid.vayu.core.draft.Draft
 import `in`.carcid.vayu.core.sync.Job
+import `in`.carcid.vayu.ui.components.Banner
+import `in`.carcid.vayu.ui.components.SoftButton
+import androidx.compose.runtime.remember
 import `in`.carcid.vayu.ui.components.ExpertBottomBar
 import `in`.carcid.vayu.ui.components.ExpertTab
 import `in`.carcid.vayu.ui.components.OfflineStrip
@@ -86,7 +90,12 @@ fun tabOf(j: Job, today: LocalDate): JobTab = when {
     else -> JobTab.UPCOMING
 }
 
-fun statusOf(j: Job): Pair<String, Tone> = when {
+fun statusOf(j: Job, d: Draft? = null): Pair<String, Tone> = when {
+    d != null && d.locked && d.files.any { !it.sent } -> "Sending ${d.files.count { it.sent }}/${d.files.size}" to Tone.WARN
+    d != null && d.locked && !d.submitSent -> "Sending" to Tone.WARN
+    d != null && !d.locked && !j.assignedToMe -> "Reassigned" to Tone.BAD
+    d != null && !d.locked && j.stage == "cancelled" -> "Cancelled" to Tone.BAD
+    d != null && !d.locked -> "In progress" to Tone.INFO
     !j.assignedToMe -> "Reassigned" to Tone.BAD
     j.stage == "in_progress" -> "In progress" to Tone.INFO
     j.stage == "submitted" -> "Uploading" to Tone.WARN
@@ -117,24 +126,67 @@ fun time12(hhmm: String): String {
     return "${(h + 11) % 12 + 1}:${m.toString().padStart(2, '0')} ${if (h >= 12) "pm" else "am"}"
 }
 
-/** The expert's home: My jobs, and a job's details on top of it. */
+/** What the expert's home needs beyond the job list: drafts, notices, and the inspection screens. */
+class ExpertExtras(
+    val drafts: Map<String, Draft> = emptyMap(),
+    /** Ops changes since the last look: (booking id, text). */
+    val notices: List<Pair<String, String>> = emptyList(),
+    /** This app is older than the server accepts: finish started jobs, start no new ones. */
+    val updateNeeded: Boolean = false,
+    val freeBytes: Long = Long.MAX_VALUE,
+    val sentBytes: Long = 0,
+    val inspection: ((Job) -> InspectionEnv)? = null,
+    val onDiscard: (String) -> Unit = {},
+    val onClearSent: () -> Unit = {},
+)
+
+private const val GB = 1024L * 1024 * 1024
+
+/** Why a job can't be started on this phone now (null: it can). A started draft can always go on. */
+fun cannotStart(j: Job, d: Draft?, ready: Boolean, extras: ExpertExtras): String? = when {
+    d != null -> null
+    extras.updateNeeded -> "Update the app to start new jobs."
+    extras.freeBytes < GB / 2 -> "The phone is almost full. Clear sent photos on the Uploads tab first."
+    !ready -> "This job's form isn't on the phone yet. Connect once and tap Refresh."
+    else -> null
+}
+
+/** The expert's home: My jobs or Uploads, a job's details, and the inspection on top. */
 @Composable
 fun ExpertHome(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit, onRefresh: () -> Unit,
-               onStart: (Job) -> Unit) {
+               extras: ExpertExtras = ExpertExtras()) {
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
+    var inspectId by rememberSaveable { mutableStateOf<String?>(null) }
+    var uploads by rememberSaveable { mutableStateOf(false) }
+    val inspecting = state.jobs.firstOrNull { it.id == inspectId }
     val open = state.jobs.firstOrNull { it.id == openId }
-    if (open != null) {
-        BackHandler { openId = null }
-        JobDetailScreen(open, ready = open.id in state.ready, today = today, onBack = { openId = null },
-            onStart = { onStart(open) })
-    } else {
-        MyJobsScreen(me, state, today, onProfile, onRefresh, onOpen = { openId = it.id })
+    when {
+        inspecting != null && extras.inspection != null -> InspectionScreen(remember(inspecting.id) { extras.inspection.invoke(inspecting) },
+            onClose = { inspectId = null })
+        open != null -> {
+            BackHandler { openId = null }
+            val d = extras.drafts[open.id]
+            JobDetailScreen(open, ready = open.id in state.ready, today = today, onBack = { openId = null },
+                draft = d, blocked = cannotStart(open, d, open.id in state.ready, extras),
+                notices = extras.notices.filter { it.first == open.id }.map { it.second },
+                onStart = { inspectId = open.id }, onDiscard = { extras.onDiscard(open.id) })
+        }
+        uploads -> {
+            BackHandler { uploads = false }
+            UploadsScreen(me, extras, onProfile, onJobs = { uploads = false }, onRefresh = onRefresh)
+        }
+        else -> MyJobsScreen(me, state, today, onProfile, onRefresh, extras, onOpen = { j ->
+            val d = extras.drafts[j.id]
+            if (d != null && d.locked) inspectId = j.id else openId = j.id
+        }, onUploads = { uploads = true }, onDiscard = extras.onDiscard, onSubmitAnyway = { inspectId = it.id })
     }
 }
 
 @Composable
 fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit, onRefresh: () -> Unit,
-                 onOpen: (Job) -> Unit) {
+                 extras: ExpertExtras = ExpertExtras(), onOpen: (Job) -> Unit, onUploads: () -> Unit = {},
+                 onDiscard: (String) -> Unit = {}, onSubmitAnyway: (Job) -> Unit = {}) {
+    var closed by rememberSaveable { mutableStateOf(setOf<String>()) }
     var tab by rememberSaveable { mutableStateOf(JobTab.TODAY) }
     var query by rememberSaveable { mutableStateOf("") }
     val needle = query.trim().lowercase()
@@ -159,13 +211,31 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
                     Text(state.error, color = Vayu.colors.bad, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(12.dp))
                 }
+                val banners = buildList {
+                    extras.notices.forEach { (id, text) -> add("ops:$id:$text" to (text to Tone.WARN)) }
+                    if (extras.freeBytes < 2 * GB) add("space" to ("%.1f GB free. Clear sent photos on the Uploads tab before it runs out.".format(extras.freeBytes.toDouble() / GB) to Tone.WARN))
+                    if (extras.updateNeeded) add("update" to ("Update needed to start new jobs. Started jobs can still be finished." to Tone.BAD))
+                }.filter { it.first !in closed }
+                banners.forEach { (key, b) ->
+                    Banner(b.first, b.second, { closed = closed + key })
+                    Spacer(Modifier.height(10.dp))
+                }
                 SoftField(query, { query = it }, "Booking ID or customer", icon = Icons.Outlined.Search)
                 Spacer(Modifier.height(12.dp))
                 Segmented(listOf(if (todayCount > 0) "Today · $todayCount" else "Today", "Upcoming", "Done"),
                     tab.ordinal, { tab = JobTab.entries[it] })
                 Spacer(Modifier.height(8.dp))
             }
-            items(shown, key = { it.id }) { JobRow(it, today, onOpen) }
+            items(shown, key = { it.id }) { j ->
+                val d = extras.drafts[j.id]
+                JobRow(j, today, d, onOpen)
+                // a draft for a job taken away or cancelled: the expert decides what happens to it
+                if (d != null && !d.locked && (!j.assignedToMe || j.stage == "cancelled")) Row(Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SoftButton("Discard draft", { onDiscard(j.id) }, Modifier.weight(1f), color = Vayu.colors.bad)
+                    SoftButton("Submit anyway", { onSubmitAnyway(j) }, Modifier.weight(1f))
+                }
+            }
             if (shown.isEmpty()) item {
                 Text(when {
                     state.syncing && state.jobs.isEmpty() -> "Getting your jobs…"
@@ -176,19 +246,20 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
                 }, color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp))
             }
         }
-        ExpertBottomBar(ExpertTab.JOBS, uploads = 0, onTab = {}, onRefresh = onRefresh)
+        ExpertBottomBar(ExpertTab.JOBS, uploads = extras.drafts.values.sumOf { d -> d.files.count { !it.sent } },
+            onTab = { if (it == ExpertTab.UPLOADS) onUploads() }, onRefresh = onRefresh)
     }
 }
 
 @Composable
-private fun JobRow(j: Job, today: LocalDate, onOpen: (Job) -> Unit) {
+private fun JobRow(j: Job, today: LocalDate, d: Draft?, onOpen: (Job) -> Unit) {
     val overdue = j.open && j.date.isNotEmpty() && j.date < today.toString()
     val tab = tabOf(j, today)
     val lead = when {
         overdue || tab != JobTab.TODAY -> runCatching { LocalDate.parse(j.date).format(SHORT_DAY) }.getOrDefault("")
         else -> j.time
     }
-    val (label, tone) = statusOf(j)
+    val (label, tone) = statusOf(j, d)
     Column(Modifier.fillMaxWidth().clickable(role = Role.Button) { onOpen(j) }) {
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -197,7 +268,11 @@ private fun JobRow(j: Job, today: LocalDate, onOpen: (Job) -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(j.customer, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
-                Text(j.bookingId, style = MaterialTheme.typography.bodyMedium, color = Vayu.colors.muted)
+                Text(j.bookingId + when {
+                    d != null && !d.locked && !j.assignedToMe -> " · given to another expert"
+                    d != null && !d.locked && j.stage == "cancelled" -> " · cancelled; your draft is still sent"
+                    else -> ""
+                }, style = MaterialTheme.typography.bodyMedium, color = Vayu.colors.muted)
             }
             StatusDot(label, tone)
         }
@@ -206,7 +281,8 @@ private fun JobRow(j: Job, today: LocalDate, onOpen: (Job) -> Unit) {
 }
 
 @Composable
-fun JobDetailScreen(j: Job, ready: Boolean, today: LocalDate, onBack: () -> Unit, onStart: () -> Unit) {
+fun JobDetailScreen(j: Job, ready: Boolean, today: LocalDate, onBack: () -> Unit, onStart: () -> Unit,
+                    draft: Draft? = null, blocked: String? = null, notices: List<String> = emptyList(), onDiscard: () -> Unit = {}) {
     val uri = LocalUriHandler.current
     val place = listOf(j.address, j.city).filter { it.isNotBlank() }.joinToString(", ")
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
@@ -231,6 +307,7 @@ fun JobDetailScreen(j: Job, ready: Boolean, today: LocalDate, onBack: () -> Unit
                     uri.openUri("https://www.google.com/maps/search/?api=1&query=" + URLEncoder.encode(place, "UTF-8"))
                 }
             }
+            notices.forEach { Spacer(Modifier.height(12.dp)); Banner(it, Tone.WARN, {}) }
             Spacer(Modifier.height(14.dp))
             Info("Car", listOf(j.car, j.type).filter { it.isNotBlank() }.joinToString(" · "))
             Info("Address", place)
@@ -241,8 +318,17 @@ fun JobDetailScreen(j: Job, ready: Boolean, today: LocalDate, onBack: () -> Unit
                 Text("Ready to work without signal", color = Vayu.colors.ok, style = MaterialTheme.typography.bodyMedium)
             }
         }
-        if (j.open && j.assignedToMe) Box(Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 22.dp)) {
-            PrimaryButton(if (j.stage == "assigned") "Start inspection" else "Continue inspection", onStart)
+        val mine = j.open && j.assignedToMe
+        if (mine || draft != null) Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 22.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (blocked != null) Text(blocked, color = Vayu.colors.bad, style = MaterialTheme.typography.bodyMedium)
+            if (draft != null && !draft.locked && !mine) SoftButton("Discard draft", onDiscard, Modifier.fillMaxWidth(), color = Vayu.colors.bad)
+            PrimaryButton(when {
+                draft?.locked == true -> "See what was sent"
+                draft != null && !mine -> "Submit anyway"
+                draft != null || j.stage != "assigned" -> "Continue inspection"
+                else -> "Start inspection"
+            }, onStart, enabled = blocked == null)
         }
     }
 }

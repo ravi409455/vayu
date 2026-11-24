@@ -70,6 +70,67 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         return call("GET", "sync/jobs" + if (q.isEmpty()) "" else "?" + q.joinToString("&"))
     }
 
+    /** Start a job with its check-in (B: submissions.start). Same [clientUuid] = same start (safe to retry). */
+    suspend fun start(bookingId: String, clientUuid: String, startedAt: String?, inspectionType: String,
+                      startAnswers: JsonObject, appVersion: Int): JsonObject =
+        call("POST", "bookings/$bookingId/start", buildJsonObject {
+            put("client_uuid", clientUuid); put("inspection_type", inspectionType)
+            if (startedAt != null) put("client_started_at", startedAt)
+            put("start_answers", startAnswers)
+        }, headers = mapOf("X-App-Version" to appVersion.toString()))
+
+    /** Submit the answers (idempotent by [submissionUuid]). */
+    suspend fun submit(bookingId: String, submissionUuid: String, formVersion: Int?, answers: JsonObject): JsonObject =
+        call("POST", "bookings/$bookingId/submit", buildJsonObject {
+            put("client_submission_uuid", submissionUuid)
+            if (formVersion != null) put("form_version", formVersion)
+            put("answers", answers)
+        })
+
+    /** Register a file (same client_uuid = same file); returns id, status, part_size and part URLs. */
+    suspend fun mediaInitiate(bookingId: String, clientUuid: String, fieldKey: String, kind: String,
+                              contentType: String, size: Long, sha256: String, source: String): JsonObject =
+        call("POST", "media/initiate", buildJsonObject {
+            put("booking", bookingId); put("client_uuid", clientUuid); put("field_key", fieldKey); put("kind", kind)
+            put("content_type", contentType); put("size", size); put("sha256", sha256); put("source", source)
+        })
+
+    suspend fun media(id: String): JsonObject = call("GET", "media/$id")
+
+    suspend fun mediaComplete(id: String, parts: List<Pair<Int, String>>): JsonObject =
+        call("POST", "media/$id/complete", buildJsonObject {
+            put("parts", kotlinx.serialization.json.JsonArray(parts.map { (n, etag) ->
+                buildJsonObject { put("part_number", n); put("etag", etag) } }))
+        })
+
+    /** PUT one part straight to storage (a signed URL: no sign-in header). Returns the ETag. */
+    suspend fun putPart(url: String, bytes: ByteArray, contentType: String): String = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(url).put(bytes.toRequestBody(contentType.toMediaType())).build()
+        try {
+            http.newCall(req).execute().use { r ->
+                val etag = r.header("ETag")
+                if (!r.isSuccessful || etag == null) throw ApiError("UPLOAD_FAILED", "The file could not be sent (${r.code}).", r.code)
+                etag
+            }
+        } catch (e: IOException) {
+            throw ApiError(ApiError.NETWORK, "No connection. Check your signal and try again.", 0)
+        }
+    }
+
+    /** A form picture (image field), as bytes. */
+    suspend fun formAsset(id: String): ByteArray = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(baseUrl + "form-assets/$id")
+        tokens.access()?.let { req.header("Authorization", "Bearer $it") }
+        try {
+            http.newCall(req.build()).execute().use { r ->
+                if (!r.isSuccessful) throw ApiError("HTTP_${r.code}", "Picture not available.", r.code)
+                r.body!!.bytes()
+            }
+        } catch (e: IOException) {
+            throw ApiError(ApiError.NETWORK, "No connection.", 0)
+        }
+    }
+
     suspend fun logout() {
         try { call("POST", "auth/logout") } finally { tokens.clear() }
     }
@@ -82,10 +143,11 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
 
     private fun JsonObject.str(k: String) = this[k]?.jsonPrimitive?.contentOrNull ?: ""
 
-    private suspend fun call(method: String, path: String, body: JsonObject? = null, auth: Boolean = true): JsonObject =
+    private suspend fun call(method: String, path: String, body: JsonObject? = null, auth: Boolean = true,
+                             headers: Map<String, String> = emptyMap()): JsonObject =
         withContext(Dispatchers.IO) {
-            var res = send(method, path, body, auth)
-            if (res.status == 401 && auth && res.code != "DEVICE_REVOKED" && refresh()) res = send(method, path, body, auth)
+            var res = send(method, path, body, auth, headers)
+            if (res.status == 401 && auth && res.code != "DEVICE_REVOKED" && refresh()) res = send(method, path, body, auth, headers)
             if (res.code == "DEVICE_REVOKED") tokens.clear()
             if (res.status !in 200..299) throw ApiError(res.code ?: "HTTP_${res.status}",
                 res.body["detail"]?.jsonPrimitive?.contentOrNull ?: "Something went wrong (${res.status}).",
@@ -97,10 +159,11 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         val code: String? get() = (body["code"] as? JsonPrimitive)?.contentOrNull
     }
 
-    private fun send(method: String, path: String, body: JsonObject?, auth: Boolean): Res {
+    private fun send(method: String, path: String, body: JsonObject?, auth: Boolean, headers: Map<String, String> = emptyMap()): Res {
         val req = Request.Builder().url(baseUrl + path)
             .method(method, body?.toString()?.toRequestBody(json) ?: if (method == "GET") null else "{}".toRequestBody(json))
         if (auth) tokens.access()?.let { req.header("Authorization", "Bearer $it") }
+        headers.forEach { (k, v) -> req.header(k, v) }
         return try {
             http.newCall(req.build()).execute().use { r ->
                 val text = r.body?.string().orEmpty()

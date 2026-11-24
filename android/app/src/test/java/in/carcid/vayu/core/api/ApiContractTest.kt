@@ -14,8 +14,9 @@ class ApiContractTest {
 
     @Test fun everyCallIsInTheApiDescription() {
         val source = up("app/src/main/java/in/carcid/vayu/core/api/Api.kt").readText()
-        val calls = Regex("""(?:call|send)\("(GET|POST|PATCH|PUT|DELETE)", "([a-z0-9/_-]+)""").findAll(source)
-            .map { it.groupValues[1].lowercase() to it.groupValues[2] }.toSet()
+        // "bookings/$bookingId/start" -> "bookings/{id}/start" (the spec names every path id {id})
+        val calls = Regex("""(?:call|send)\("(GET|POST|PATCH|PUT|DELETE)", "([a-z0-9/_${'$'}A-Za-z-]+)""").findAll(source)
+            .map { it.groupValues[1].lowercase() to it.groupValues[2].replace(Regex("\\${'$'}[A-Za-z]+"), "{id}") }.toSet()
         assertTrue("no calls found in Api.kt", calls.size >= 7)
         // openapi.yaml: "  /api/v1/<path>:" then its methods indented below it
         val spec = up("backend/openapi.yaml").readLines()

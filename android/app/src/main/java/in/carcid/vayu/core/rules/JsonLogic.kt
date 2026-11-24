@@ -270,4 +270,17 @@ object JsonLogic {
             else -> e.content.toDouble()
         }
     }
+
+    /** Back to JSON; whole numbers go out without ".0" (ids and counts stay integers). */
+    fun toJson(v: Any?): JsonElement = when (v) {
+        null -> JsonNull
+        is JsonElement -> v
+        is Boolean -> JsonPrimitive(v)
+        is Double -> if (v % 1.0 == 0.0 && kotlin.math.abs(v) < 1e15) JsonPrimitive(v.toLong()) else JsonPrimitive(v)
+        is Number -> JsonPrimitive(v)
+        is String -> JsonPrimitive(v)
+        is Map<*, *> -> JsonObject(v.entries.associate { (k, x) -> k.toString() to toJson(x) })
+        is List<*> -> JsonArray(v.map { toJson(it) })
+        else -> JsonPrimitive(v.toString())
+    }
 }

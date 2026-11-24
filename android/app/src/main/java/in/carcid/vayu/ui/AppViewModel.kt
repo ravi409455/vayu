@@ -5,8 +5,7 @@ import androidx.lifecycle.viewModelScope
 import `in`.carcid.vayu.core.api.Api
 import `in`.carcid.vayu.core.api.ApiError
 import `in`.carcid.vayu.core.api.Me
-import `in`.carcid.vayu.core.auth.TokenStore
-import `in`.carcid.vayu.core.sync.JobStore
+import `in`.carcid.vayu.Graph
 import `in`.carcid.vayu.ui.expert.JobsModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,13 +21,14 @@ sealed interface Screen {
 }
 
 /** Sign-in, the forced password change, routing by role, and the profile. */
-class AppViewModel(private val api: Api, private val tokens: TokenStore, private val deviceName: String,
-                   /** The signed-in person's jobs file (one per user id). */
-                   private val storeFor: (Int) -> JobStore,
+class AppViewModel(val graph: Graph, private val deviceName: String,
                    private val clock: () -> Long = System::currentTimeMillis) : ViewModel() {
+    private val api = graph.api
+    private val tokens = graph.tokens
     private val _screen = MutableStateFlow<Screen>(Screen.Loading)
     val screen: StateFlow<Screen> = _screen
-    val jobs = JobsModel(api, storeFor, viewModelScope, clock, onRevoked = ::revoked)
+    val jobs = JobsModel(api, graph::jobs, viewModelScope, clock, onRevoked = ::revoked, drop = graph::forgetJobs,
+        afterSync = { graph.prune(it); heartbeat(it) })
     private var lastPassword = ""
     /** Below this version the app may finish a started job but not start new ones (enforced in Phase 14). */
     var minAppVersion = 0
@@ -93,10 +93,19 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
         if (me.mustChangePassword) { _screen.value = Screen.ChangePassword(); return }
         _screen.value = Screen.Home(me)
         if (me.role == "expert") jobs.open(me.id, offline = false)
-        try {
-            minAppVersion = api.heartbeat(drafts = 0, files = 0)     // nothing is stored on the phone yet
-        } catch (e: ApiError) {
-            if (e.code == "DEVICE_REVOKED") revoked()
+        heartbeat(me.id)
+        graph.kick()                                  // anything left from before goes out now
+    }
+
+    /** Tell the server what this phone still holds (it refuses another phone while work is here). */
+    private fun heartbeat(userId: Int) {
+        viewModelScope.launch {
+            val (drafts, files) = graph.drafts(userId).unsentCounts()
+            try {
+                minAppVersion = api.heartbeat(drafts = drafts, files = files)
+            } catch (e: ApiError) {
+                if (e.code == "DEVICE_REVOKED") revoked()
+            }
         }
     }
 
@@ -127,6 +136,15 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
     }
 
     fun signOut() {
+        val p = screen.value as? Screen.Profile
+        if (p != null) {
+            val (drafts, files) = graph.drafts(p.me.id).unsentCounts()
+            if (drafts + files > 0) {
+                _screen.value = p.copy(error = "This phone still has $drafts job${if (drafts == 1) "" else "s"} and $files file${if (files == 1) "" else "s"} " +
+                    "not sent. Connect to the internet and wait until Uploads is empty, then sign out.")
+                return
+            }
+        }
         viewModelScope.launch {
             runCatching { api.logout() }
             tokens.clear()

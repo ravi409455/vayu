@@ -40,10 +40,7 @@ class SignInFlowTest {
         """{"id":3,"username":"ravi","name":"Ravi Expert","role":"$role","must_change_password":$mustChange,"theme":"light"}"""
 
     private fun launch() {
-        val tokens = MemoryTokenStore()
-        val dir = java.nio.file.Files.createTempDirectory("vayu").toFile()
-        val vm = AppViewModel(Api(server.url, tokens), tokens, "Test phone",
-            storeFor = { `in`.carcid.vayu.core.sync.JobStore(java.io.File(dir, "jobs-$it.json")) })
+        val vm = AppViewModel(`in`.carcid.vayu.core.api.testGraph(server), "Test phone")
         compose.setContent { AppRoot(vm) }
     }
 

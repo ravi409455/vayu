@@ -18,11 +18,11 @@ fun payload(jobs: String, forms: String = "{}", time: String = "2026-11-24T05:00
 """).jsonObject
 
 fun job(id: String, stage: String = "assigned", date: String = "2026-11-24", time: String = "15:30",
-        version: Int? = 7, mine: Boolean = true) = """
-    {"id":"$id","booking_id":"DEMO-$id","stage":"$stage","inspection_type":"pdi",
+        version: Int? = 7, mine: Boolean = true, start: Int? = null, end: Int? = null, code: String = "DEMO-$id") = """
+    {"id":"$id","booking_id":"$code","stage":"$stage","inspection_type":"pdi",
      "answers":{"customer_name":"Arjun Mehta","customer_phone":"+919876500000","address":"MG Road",
                 "city":"pune","car_make_model":"nexon","inspection_date":"$date","inspection_time":"$time:00"},
-     "assigned_to_me":$mine,"my_draft":null,"versions":{"start":null,"inspection":$version,"end":null}}
+     "assigned_to_me":$mine,"my_draft":null,"versions":{"start":$start,"inspection":$version,"end":$end}}
 """
 
 class JobStoreTest {

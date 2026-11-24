@@ -22,6 +22,7 @@ import `in`.carcid.vayu.ui.components.Tone
 import `in`.carcid.vayu.ui.theme.ThemeMode
 import `in`.carcid.vayu.ui.theme.VayuTheme
 import `in`.carcid.vayu.core.api.FakeServer
+import `in`.carcid.vayu.core.api.testGraph
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -53,7 +54,7 @@ class MyJobsTest {
     ).sortedWith(compareBy({ it.date }, { it.time }))
 
     private fun show(state: JobsState, theme: ThemeMode = ThemeMode.LIGHT) = compose.setContent {
-        VayuTheme(theme) { ExpertHome(me, state, today, {}, {}, {}) }
+        VayuTheme(theme) { ExpertHome(me, state, today, {}, {}) }
     }
 
     @Test fun myJobsMatchesTheDesign() {
@@ -113,13 +114,13 @@ class MyJobsTest {
 
     private fun signInThen(revoke: Boolean) {
         val server = FakeServer()
-        val file = File(Files.createTempDirectory("vayu").toFile(), "jobs.json")
+        val dir = Files.createTempDirectory("vayu").toFile()
+        val file = File(dir, "jobs-3.json")
         server.on("POST auth/login", """{"access":"A","refresh":"R"}""")
         server.on("GET auth/me", """{"id":3,"username":"ravi","name":"Ravi","role":"expert","must_change_password":false,"theme":"light"}""")
         server.on("POST devices/heartbeat", """{"min_app_version":1}""")
         server.on("GET sync/jobs", payload(job("2"), forms = """{"7":{"pages":[]}}""").toString())
-        val tokens = MemoryTokenStore()
-        val vm = AppViewModel(Api(server.url, tokens), tokens, "Test phone", storeFor = { JobStore(file) })
+        val vm = AppViewModel(testGraph(server, root = dir), "Test phone")
         compose.setContent { `in`.carcid.vayu.AppRoot(vm) }
         compose.onNodeWithContentDescription("Username").performTextInput("ravi")
         compose.onNodeWithContentDescription("Password").performTextInput("pw")
@@ -148,7 +149,7 @@ class MyJobsTest {
             saveMe(mapOf("id" to "3", "username" to "ravi", "name" to "Ravi", "role" to "expert", "theme" to "light", "must_change" to "false"))
         }
         server.on("GET auth/me", """{"detail":"Bad gateway"}""", 502)
-        val vm = AppViewModel(Api(server.url, tokens), tokens, "Test phone", storeFor = { JobStore(File(dir, "jobs-$it.json")) })
+        val vm = AppViewModel(testGraph(server, tokens, dir), "Test phone")
         compose.setContent { `in`.carcid.vayu.AppRoot(vm) }
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Arjun Mehta")).fetchSemanticsNodes().isNotEmpty() }
         server.stop()
