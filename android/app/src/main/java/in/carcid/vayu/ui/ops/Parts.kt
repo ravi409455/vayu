@@ -713,9 +713,12 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
         if (rep?.s("url").isNullOrBlank()) return null
         val code = b.code.filter { it.isLetterOrDigit() || it == '-' }
         val dir = File(ctx.cacheDir, "reports").apply { mkdirs() }
+        // kept only under a real revision number and its time; without them, always a fresh download
+        val rev = rep?.s("revision")?.takeIf { it.isNotBlank() && it.all(Char::isDigit) }
+        val made = rep?.s("generated_at").orEmpty().filter { it.isDigit() }
         // our own name, never the server's (no path tricks in the cache folder)
-        val f = File(dir, "report-$code-${rep?.s("revision").orEmpty().filter { it.isDigit() }}.pdf")
-        if (f.exists()) return f
+        val f = File(dir, if (rev != null && made.isNotEmpty()) "report-$code-$rev-$made.pdf" else "report-$code-latest.pdf")
+        if (rev != null && made.isNotEmpty() && f.exists()) return f
         return withContext(Dispatchers.IO) {
             try {
                 dir.listFiles { x -> x.name.startsWith("report-$code-") }?.forEach { it.delete() }
@@ -724,10 +727,10 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
         }
     }
     fun uriOf(f: File) = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
-    // who passed it on, and how, goes on the booking's history
-    fun logShared(how: String) = scope.launch {
-        try { env.data.act("POST", "bookings/$id/report/shared", buildJsonObject { put("how", how) }) } catch (e: ApiError) { }
-    }
+    // who passed it on, and how, goes on the booking's history first; no record, no share
+    suspend fun logShared(how: String): Boolean = try {
+        env.data.act("POST", "bookings/$id/report/shared", buildJsonObject { put("how", how) }); true
+    } catch (e: ApiError) { env.say("Couldn't record the share. Check the signal and try again."); false }
     Column(Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Vayu.colors.soft).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         val failed = rep?.s("status") == "failed"
@@ -744,15 +747,15 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
             CardButton("Open", Modifier.weight(1f), online) { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }
             CardButton("Share", Modifier.weight(1f), online) { scope.launch {
                 file()?.let {
-                    logShared("pdf")
+                    if (!logShared("pdf")) return@launch
                     ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/pdf")
                         .putExtra(Intent.EXTRA_STREAM, uriOf(it)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Share the report"))
                 } ?: env.say("Couldn't download the report.")
             } }
-            if (rep!!.s("verify_url").isNotBlank()) CardButton("Check link", Modifier.weight(1f), online) {
-                logShared("check_link")
+            if (rep!!.s("verify_url").isNotBlank()) CardButton("Check link", Modifier.weight(1f), online) { scope.launch {
+                if (!logShared("check_link")) return@launch
                 ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, rep!!.s("verify_url")), "Share the check link"))
-            }
+            } }
         }
     }
 }
