@@ -86,10 +86,12 @@ def test_list_filters_and_the_flag_are_for_admin_and_ops_only(env, booking):
 
 def test_late_and_quick_are_reviewed_apart(env, booking):
     _booking(env, late_minutes=40, duration_minutes=5)       # both: late start AND too quick
+    env.ops_user.name = "Asha Agarwal"                       # people see the name, not the login
+    env.ops_user.save(update_fields=["name"])
     url = f"/api/v1/bookings/{booking['id']}/timing-review"
     r = env.ops.post(url, {"flag": "late"}, format="json")
     t = r.json()["timing"]
-    assert r.status_code == 200 and t["late_reviewed_by"] == env.ops_user.username
+    assert r.status_code == 200 and t["late_reviewed_by"] == "Asha Agarwal"
     assert t["quick_reviewed_at"] is None                    # the quick finish is still open
     assert env.ops.get("/api/v1/bookings?timing=late&reviewed=0").json()["count"] == 0
     assert env.ops.get("/api/v1/bookings?timing=quick&reviewed=0").json()["count"] == 1

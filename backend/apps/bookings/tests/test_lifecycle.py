@@ -106,7 +106,7 @@ def test_stale_edit_is_409_with_who_changed_what_and_retry_works(env, booking):
     assert ok.status_code == 200, ok.json()
     final = ok.json()["answers"]
     assert final["address"] == "New address" and final["customer_name"] == "Asha K"
-    assert ok.json()["last_edited_by"] == env.ops_user.username
+    assert ok.json()["last_edited_by"] == env.ops_user.shown_name
 
 
 def test_edit_needs_row_version_and_valid_answers(env, booking):
@@ -162,7 +162,7 @@ def test_reschedule_keeps_history_and_validates_reason(env, booking):
     assert r.json()["answers"]["inspection_date"] == "2026-10-20"
     h = r.json()["reschedules"][0]
     assert (h["old_date"], h["old_time"], h["reason"]) == ("2026-10-14", "15:30", "customer_request")
-    assert h["by"] == env.ops_user.username
+    assert h["by"] == env.ops_user.shown_name
     for bad in ({**body, "reason": "nope"}, {**body, "date": "2026-02-30"}, {**body, "time": "25:00"},
                 {"date": "2026-10-20", "time": "10:00"}):
         assert env.ops.post(url, bad, format="json").status_code == 400
@@ -209,7 +209,7 @@ def test_force_release_clears_the_start_lock_and_records_who(env, booking):
     assert r.status_code == 200
     b = r.json()
     assert b["stage"] == "assigned" and b["started_at"] is None
-    assert b["released_by"] == env.ops_user.username and b["released_draft_expected"] is True
+    assert b["released_by"] == env.ops_user.shown_name and b["released_draft_expected"] is True
     assert AuditLog.objects.filter(action="booking.force_release").exists()
     assert env.ops.post(f"/api/v1/bookings/{booking['id']}/force-release").status_code == 409
     assert env.expert.post(f"/api/v1/bookings/{booking['id']}/force-release").status_code == 403

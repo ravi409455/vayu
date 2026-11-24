@@ -8,7 +8,7 @@ from .models import Booking, Inspection, RescheduleLog
 
 
 class RescheduleSerializer(serializers.ModelSerializer):
-    by = serializers.CharField(source="by.username")
+    by = serializers.CharField(source="by.shown_name")
 
     class Meta:
         model = RescheduleLog
@@ -16,8 +16,8 @@ class RescheduleSerializer(serializers.ModelSerializer):
 
 
 class BookingSerializer(serializers.ModelSerializer):
-    last_edited_by = serializers.CharField(source="last_edited_by.username", default=None)
-    released_by = serializers.CharField(source="released_by.username", default=None)
+    last_edited_by = serializers.CharField(source="last_edited_by.shown_name", default=None)
+    released_by = serializers.CharField(source="released_by.shown_name", default=None)
     reschedules = RescheduleSerializer(many=True, read_only=True)
     # when the expert pressed Submit; only the booking list fills it (see BookingViewSet)
     finished_at = serializers.DateTimeField(read_only=True, required=False)
@@ -54,7 +54,7 @@ class BookingSerializer(serializers.ModelSerializer):
 
 
 class InspectionSerializer(serializers.ModelSerializer):
-    last_edited_by = serializers.CharField(source="last_edited_by.username", default=None)
+    last_edited_by = serializers.CharField(source="last_edited_by.shown_name", default=None)
     form_version = serializers.IntegerField(source="form_version_id")
     start_version = serializers.IntegerField(source="start_version_id", allow_null=True)
     end_version = serializers.IntegerField(source="end_version_id", allow_null=True)

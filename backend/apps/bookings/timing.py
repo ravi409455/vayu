@@ -67,4 +67,4 @@ def flags(b, cfg: dict) -> dict:
 
 def _reviewed(b, flag: str, what: str):
     v = getattr(b, f"{flag}_reviewed_{what}")
-    return None if v is None else v.username if what == "by" else v.isoformat()
+    return None if v is None else v.shown_name if what == "by" else v.isoformat()

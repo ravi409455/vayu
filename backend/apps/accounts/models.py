@@ -61,6 +61,11 @@ class User(AbstractBaseUser):
     class Meta:
         constraints = [models.UniqueConstraint(Lower("username"), name="user_username_ci_unique")]
 
+    @property
+    def shown_name(self) -> str:
+        """What people see ("Asha Agarwal"); the login only when no name is set."""
+        return self.name or self.username
+
 
 class Device(models.Model):
     """A registered mobile device. Web sessions are not devices."""
