@@ -1,7 +1,6 @@
 from datetime import timedelta
 
 from celery import shared_task
-from django.db.models import F
 from django.utils import timezone
 
 from . import push as fcm
@@ -12,7 +11,9 @@ KEEP_DAYS = 30
 
 @shared_task
 def push(ids: list[int]) -> int:
-    """Send each new bell row to its person's signed-in phone (one phone per person)."""
+    """Send each new bell row to its person's signed-in phone (one phone per person). Each push
+    names its person and the phone shows it only to that person, so a token that ends up on the
+    wrong row (a phone used by someone else since) can neither show nor block anyone's notices."""
     from apps.accounts.models import Device
 
     if fcm.credential() is None:
@@ -21,13 +22,6 @@ def push(ids: list[int]) -> int:
     for n in Notification.objects.filter(pk__in=ids).select_related("booking"):
         for d in Device.objects.filter(user_id=n.user_id, revoked_at__isnull=True).exclude(
                 push_token=""):
-            # a token belongs to one phone: exactly one device row wins it, the one that sent it
-            # last (rows signed out since count too, so a handed-on phone never falls back to an
-            # earlier person); rows saved before the time existed lose, ties go to the newest row
-            winner = Device.objects.filter(push_token=d.push_token).order_by(
-                F("push_token_at").desc(nulls_last=True), "-created_at", "-pk").first()
-            if winner is None or winner.pk != d.pk:
-                continue
             # "user": the phone shows it only if that person is the one signed in there
             data = {"id": str(n.id), "user": str(n.user_id), "kind": n.kind, "title": n.title,
                     "body": n.body, "booking": str(n.booking_id or "")}

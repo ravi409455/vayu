@@ -140,16 +140,6 @@ def test_push_token_belongs_to_the_signed_in_phone(db, make_user, login):
 
 def test_push_sends_to_live_phones_and_forgets_dead_tokens(env, booking, settings):
     live = Device.objects.create(user=env.expert_user, push_token="live", push_token_at=timezone.now())
-    # the same phone, used by someone else since: the expert's old row must not get their pushes
-    Device.objects.create(user=env.expert_user, push_token="handed-on",
-                          push_token_at=timezone.now() - timedelta(days=1))
-    Device.objects.create(user=env.ops_user, push_token="handed-on", push_token_at=timezone.now())
-    Device.objects.create(user=env.expert_user, push_token="untimed")    # saved before the time field
-    Device.objects.create(user=env.ops_user, push_token="untimed", push_token_at=timezone.now())
-    # two rows without a time: only the newer row may win, never both
-    Device.objects.create(user=env.expert_user, push_token="both-untimed",
-                          created_at=timezone.now() - timedelta(days=2))
-    Device.objects.create(user=env.ops_user, push_token="both-untimed")
     Device.objects.create(user=env.expert_user, push_token="old", revoked_at=timezone.now())
     sent = []
     with mock.patch.object(fcm, "credential", return_value={"project_id": "p"}), \
