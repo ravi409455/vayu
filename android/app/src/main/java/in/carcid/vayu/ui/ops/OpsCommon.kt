@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import kotlinx.coroutines.async
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -128,13 +129,25 @@ class Labels(val cities: Map<String, String> = emptyMap(), val cars: Map<String,
     }
 
     companion object {
+        /** The names as last saved on this phone (read in the background), to show at once. */
+        suspend fun saved(data: OpsData): Labels = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            fun list(k: String) = data.saved("master-lists/$k/items")?.data?.rows().orEmpty().associate { it.s("key") to it.s("label") }
+            Labels(list("city"), list("car_make_model"),
+                data.saved("inspection-types")?.data?.rows().orEmpty().map { Triple(it.s("key"), it.s("label"), it.s("available") != "false") },
+                data.saved("users")?.data?.rows().orEmpty())
+        }
+
         suspend fun load(data: OpsData): Labels {
             // failures count as empty; cancellation is never swallowed (ApiError only)
             suspend fun <T> soft(empty: T, f: suspend () -> T): T = try { f() } catch (e: ApiError) { empty }
             suspend fun list(k: String) = soft(emptyMap()) { data.load("master-lists/$k/items").data.rows().associate { it.s("key") to it.s("label") } }
-            val types = soft(emptyList()) { data.load("inspection-types").data.rows().map { Triple(it.s("key"), it.s("label"), it.s("available") != "false") } }
-            val people = soft(emptyList()) { data.load("users").data.rows() }
-            return Labels(list("city"), list("car_make_model"), types, people)
+            // all four at once: the wait is the slowest one, not the sum
+            return kotlinx.coroutines.coroutineScope {
+                val types = async { soft(emptyList()) { data.load("inspection-types").data.rows().map { Triple(it.s("key"), it.s("label"), it.s("available") != "false") } } }
+                val people = async { soft(emptyList()) { data.load("users").data.rows() } }
+                val cities = async { list("city") }; val cars = async { list("car_make_model") }
+                Labels(cities.await(), cars.await(), types.await(), people.await())
+            }
         }
     }
 }
@@ -150,9 +163,12 @@ data class OpsEnv(val me: Me, val data: OpsData, val labels: Labels, val today: 
 @Composable
 fun rememberLoad(env: OpsEnv, path: String?): State<Loaded?, String?> {
     var error by androidx.compose.runtime.remember(path) { mutableStateOf<String?>(null) }
-    // the saved copy shows at once while the fresh one loads; "offline" only once loading fails
-    val loaded by produceState<Loaded?>(path?.let { env.data.saved(it)?.copy(offline = false) }, path, env.tick) {
+    // the saved copy shows first (read in the background, not while the screen draws) while the
+    // fresh one loads; "offline" only once loading fails
+    val loaded by produceState<Loaded?>(null, path, env.tick) {
         if (path == null) return@produceState
+        if (value == null) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { env.data.saved(path) }
+            ?.let { if (value == null) value = it.copy(offline = false) }
         try { value = env.data.load(path); error = null } catch (e: ApiError) { error = e.message }
     }
     return State(loaded, error)

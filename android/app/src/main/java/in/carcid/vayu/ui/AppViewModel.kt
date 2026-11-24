@@ -42,7 +42,13 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         // read before calling the server: a revoked phone's sign-in (and this id) is cleared by the call
         val savedId = tokens.me()?.get("id")?.toIntOrNull()
         val cached = tokens.me()?.takeIf { it["role"] in setOf("expert", "ops") && it["must_change"] == "false" }
-            ?.let { Me(it["id"]!!.toIntOrNull() ?: 0, it["username"]!!, it["name"]!!, it["role"]!!, false, it["theme"]!!) }
+            ?.let { Me(it["id"]!!.toIntOrNull() ?: 0, it["username"]!!, it["name"]!!, it["role"]!!, false, it["theme"]!!,
+                it["perms"].orEmpty().split(",").filter { p -> p.isNotBlank() }.toSet()) }
+        // open at once on the saved profile; the server's answer (or a sign-out) follows when it comes
+        if (cached != null) {
+            _screen.value = Screen.Home(cached)
+            if (cached.role == "expert") jobs.open(cached.id, offline = true)
+        }
         try {
             enter(api.me())
         } catch (e: ApiError) {
@@ -50,11 +56,8 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
                 e.code == "DEVICE_REVOKED" -> {
                     tokens.clear(); jobs.forget(savedId); savedId?.let { graph.forgetCopies(it) }; _screen.value = Screen.SignIn()
                 }
-                // no signal or the server is down: still signed in, so open on the saved copy
-                JobsModel.unreachable(e) && cached != null -> {
-                    _screen.value = Screen.Home(cached)
-                    if (cached.role == "expert") jobs.open(cached.id, offline = true)
-                }
+                // no signal or the server is down: still signed in, already open on the saved copy
+                JobsModel.unreachable(e) && cached != null -> {}
                 else -> _screen.value = Screen.SignIn()
             }
         }
@@ -95,7 +98,8 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         val local = tokens.me()?.takeIf { it["theme_pending"] == "true" && it["id"] == server.id.toString() }?.get("theme")
         val me = if (local != null) server.copy(theme = local) else server
         tokens.saveMe(mapOf("id" to me.id.toString(), "username" to me.username, "name" to me.name,
-            "role" to me.role, "theme" to me.theme, "must_change" to me.mustChangePassword.toString()))
+            "role" to me.role, "theme" to me.theme, "must_change" to me.mustChangePassword.toString(),
+            "perms" to me.permissions.joinToString(",")))
         if (me.mustChangePassword) { _screen.value = Screen.ChangePassword(); return }
         _screen.value = Screen.Home(me)
         if (me.role == "expert") jobs.open(me.id, offline = false)

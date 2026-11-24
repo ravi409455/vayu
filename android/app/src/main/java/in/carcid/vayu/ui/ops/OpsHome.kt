@@ -48,6 +48,7 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     val stack = remember { mutableStateListOf<Route>() }
     var assigning by remember { mutableStateOf<Bk?>(null) }
     var labels by remember { mutableStateOf(Labels()) }
+    var namesFresh by remember { mutableStateOf(false) }
     val env = OpsEnv(me, data, labels, today, tick, refresh = { tick++ }, say = { scope.launch { snack.showSnackbar(it) } })
     // null until the first load is back (so the bell never says "All clear" too early)
     var needs by remember { mutableStateOf<List<Need>?>(null) }
@@ -56,8 +57,10 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     // one load per Refresh: names first, then the lists (a second key here restarted it half-way)
     LaunchedEffect(tick) {
         refreshing = true
-        // without signal or a saved copy a reload comes back empty: keep what's on screen then
-        Labels.load(data).takeIf { it.people.isNotEmpty() || it.cities.isNotEmpty() || it.types.isNotEmpty() }?.let { labels = it }
+        if (labels.people.isEmpty()) Labels.saved(data).takeIf { it.people.isNotEmpty() }?.let { labels = it }
+        // names (types, people, cities, cars) rarely change: once per session, and again on Refresh
+        if (asked || !namesFresh) Labels.load(data).takeIf { it.people.isNotEmpty() || it.cities.isNotEmpty() || it.types.isNotEmpty() }
+            ?.let { labels = it; namesFresh = true }
         loadNeeds(env.copy(labels = labels))?.let { needs = it }
         // Refresh says what happened (a fresh answer, or the saved copy without signal)
         if (asked) {

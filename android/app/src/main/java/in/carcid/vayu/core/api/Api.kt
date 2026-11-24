@@ -39,7 +39,9 @@ data class Me(val id: Int, val username: String, val name: String, val role: Str
 
 /** The Vayu API, as the app uses it. Tokens are refreshed once on a 401; a revoked phone signs out. */
 class Api(private val baseUrl: String, private val tokens: TokenStore,
-          private val http: OkHttpClient = OkHttpClient()) {
+          // a dead connection gives up after 5 s (screens then show the saved copy); a slow but
+          // working one keeps the usual time to send and receive
+          private val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS).build()) {
 
     private val json = "application/json".toMediaType()
 

@@ -355,13 +355,20 @@ private fun answerText(f: Field, v: Any?, env: OpsEnv): String = when (f.type) {
     else -> shown(v)
 }
 
-/** A signed file URL, fetched and kept in the cache folder (thumbnails, full view). */
-suspend fun mediaBytes(env: OpsEnv, dir: File, id: String): File? = withContext(Dispatchers.IO) {
-    val f = File(dir, "media-$id")
+/**
+ * A file fetched through its signed link and kept in the cache folder. [preview]: the server's small
+ * preview when it has one (tiles; a phone photo is ~0.5 MB, its preview a few KB), else the file.
+ */
+suspend fun mediaBytes(env: OpsEnv, dir: File, id: String, preview: Boolean = false): File? = withContext(Dispatchers.IO) {
+    val full = File(dir, "media-$id")
+    if (full.exists()) return@withContext full                  // the whole file serves as its own preview
+    val f = if (preview) File(dir, "media-$id-p") else full
     if (f.exists()) return@withContext f
     try {
-        val url = (env.data.api.get("media/$id/url") as JsonObject).s("url")
-        writeAtomically(f, env.data.api.download(url)); f
+        val links = env.data.api.get("media/$id/url") as JsonObject
+        val url = links.s("preview_url").takeIf { preview && it.isNotBlank() } ?: links.s("url")
+        writeAtomically(if (url == links.s("url")) full else f, env.data.api.download(url))
+        if (url == links.s("url")) full else f
     } catch (e: kotlin.coroutines.cancellation.CancellationException) { throw e } catch (e: Exception) { null }
 }
 
@@ -489,7 +496,7 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
 private fun MediaTile(env: OpsEnv, m: JsonObject, size: Int = 76, onClick: () -> Unit) {
     val ctx = LocalContext.current
     val img by produceState<ImageBitmap?>(null, m.s("id")) {
-        if (m.s("kind") in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.s("id"))?.let { thumb(it, 160) }
+        if (m.s("kind") in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.s("id"), preview = true)?.let { thumb(it, 160) }
     }
     Box(Modifier.size(size.dp).clip(RoundedCornerShape(if (size < 76) 10.dp else 12.dp)).background(Vayu.colors.illo).clickable(role = Role.Button, onClick = onClick)
         .semantics { contentDescription = "${m.s("kind")} ${m.s("field_key")}" }, contentAlignment = Alignment.Center) {
