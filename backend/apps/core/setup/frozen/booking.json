@@ -1,0 +1,252 @@
+{
+ "made_from": "Clappia read-out booking (docs/clappia)",
+ "notes": [],
+ "spec": {
+  "pages": [
+   {
+    "title": "Booking",
+    "sections": [
+     {
+      "title": "Booking Details",
+      "fields": [
+       {
+        "key": "booking_id",
+        "label": "Booking ID",
+        "config": {},
+        "required": true,
+        "helper_text": "",
+        "clappia": "bookingid",
+        "type": "short_text"
+       },
+       {
+        "key": "assigned_expert",
+        "label": "Expert ID",
+        "config": {
+         "display": "dropdown"
+        },
+        "required": true,
+        "helper_text": "",
+        "clappia": "assignedexpert_id",
+        "type": "user_picker"
+       },
+       {
+        "key": "customer_name",
+        "label": "Customer Name",
+        "config": {},
+        "required": true,
+        "helper_text": "",
+        "clappia": "customer_n",
+        "type": "short_text"
+       },
+       {
+        "key": "customer_phone",
+        "label": "Customer Phone",
+        "config": {},
+        "required": true,
+        "helper_text": "",
+        "clappia": "customer_p",
+        "type": "phone"
+       },
+       {
+        "key": "address",
+        "label": "Inspection Address",
+        "config": {},
+        "required": true,
+        "helper_text": "",
+        "clappia": "inspection",
+        "type": "long_text"
+       },
+       {
+        "key": "inspection_date",
+        "label": "Date(DD/MM/YY)",
+        "config": {},
+        "required": true,
+        "helper_text": "",
+        "clappia": "dateddmmyy",
+        "type": "date"
+       },
+       {
+        "key": "inspection_time",
+        "label": "Time",
+        "config": {},
+        "required": true,
+        "helper_text": "",
+        "clappia": "timehhmm_a",
+        "type": "time"
+       },
+       {
+        "key": "inspection_type",
+        "label": "Type of Inspection",
+        "config": {},
+        "required": true,
+        "helper_text": "",
+        "clappia": "type_of_in",
+        "type": "form_choice",
+        "values": {
+         "PDI": "pdi",
+         "Used Car": "used_car",
+         "EV": "ev"
+        }
+       },
+       {
+        "key": "obd_scanning",
+        "label": "OBD Scanning",
+        "config": {
+         "options": [
+          {
+           "key": "yes",
+           "label": "Yes",
+           "tone": "ok"
+          },
+          {
+           "key": "no",
+           "label": "No",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "clappia": "obd_scanni",
+        "type": "single_choice"
+       },
+       {
+        "key": "obd_amount",
+        "label": "OBD Amount",
+        "config": {
+         "max": 800
+        },
+        "required": true,
+        "helper_text": "",
+        "clappia": "obd_amount",
+        "type": "number",
+        "show_if": {
+         "==": [
+          {
+           "var": "booking.obd_scanning"
+          },
+          "yes"
+         ]
+        }
+       },
+       {
+        "key": "car_make_model",
+        "label": "Car",
+        "config": {},
+        "required": true,
+        "helper_text": "",
+        "clappia": "car",
+        "type": "master_list"
+       },
+       {
+        "key": "final_amount",
+        "label": "Final Amount",
+        "config": {},
+        "required": true,
+        "helper_text": "",
+        "clappia": "final_amou",
+        "type": "currency"
+       },
+       {
+        "key": "advance_amount",
+        "label": "Advance Amount",
+        "config": {},
+        "required": true,
+        "helper_text": "",
+        "clappia": "advance_am",
+        "type": "currency"
+       },
+       {
+        "key": "city",
+        "label": "Car Inspection City",
+        "config": {
+         "display": "dropdown"
+        },
+        "required": true,
+        "helper_text": "",
+        "clappia": "car_inspec",
+        "type": "master_list"
+       },
+       {
+        "key": "service_history_taken",
+        "label": "Service History Taken?",
+        "config": {
+         "options": [
+          {
+           "key": "yes",
+           "label": "Yes",
+           "tone": "ok"
+          },
+          {
+           "key": "no",
+           "label": "No",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "clappia": "service_hi",
+        "type": "single_choice",
+        "show_if": {
+         "==": [
+          {
+           "var": "booking.inspection_type"
+          },
+          "used_car"
+         ]
+        }
+       },
+       {
+        "key": "any_offer_given",
+        "label": "Any Offer Given",
+        "config": {
+         "options": [
+          {
+           "key": "yes",
+           "label": "Yes",
+           "tone": "ok"
+          },
+          {
+           "key": "no",
+           "label": "No",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "clappia": "any_offer_",
+        "type": "single_choice"
+       },
+       {
+        "key": "why_was_the_offer_given",
+        "label": "Why was the offer given?",
+        "config": {},
+        "required": true,
+        "helper_text": "",
+        "clappia": "why_offer_",
+        "type": "short_text",
+        "show_if": {
+         "==": [
+          {
+           "var": "booking.any_offer_given"
+          },
+          "yes"
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "extra": {}
+}

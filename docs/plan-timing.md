@@ -1,6 +1,6 @@
 # Plan: inspection timing (too quick, started late) and a Settings page
 
-Status: **built 2026-11-24, waiting for review** (not committed). For Admin and Ops only; Experts never see any of it.
+Status: **built and committed** (`73be9c6`). For Admin and Ops only; Experts never see any of it. *(Status corrected 2026-11-25.)*
 
 ## What the user asked
 "Duration of each inspection is an important aspect." Admin sets time limits on a new Settings page;

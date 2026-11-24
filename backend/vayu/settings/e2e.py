@@ -32,3 +32,4 @@ WEB = os.environ.get("E2E_WEB", "http://localhost:5199")   # the Vite dev server
 PUBLIC_BASE_URL = WEB
 VERIFY_BASE_URL = f"{WEB}/verify"
 CSRF_TRUSTED_ORIGINS = [WEB]
+SERVER_KIND, SERVER_NAME = "local", "local"     # test data may wipe this one

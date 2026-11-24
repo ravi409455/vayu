@@ -26,3 +26,4 @@ VERIFY_BASE_URL = "http://localhost:5173/verify"
 WEBHOOK_ALLOW_HTTP = True                             # so a receiver on this laptop can be tried
 WEBHOOK_ALLOW_PRIVATE = True
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.PBKDF2PasswordHasher"]
+SERVER_KIND, SERVER_NAME = "local", "local"     # test data may wipe this one

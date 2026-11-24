@@ -1,6 +1,6 @@
 # Plan: form types (booking / start / end / custom)
 
-Status: **planned, not started** (re-reviewed after the builder redesign and the check-in/wrap-up work). **Estimate now ≈ 6 days** (was 4–5: the recent changes added more `ops` / `kind` touch points). Do this one **first**: the library plan and the profile plan build on it.
+Status: **built** (`975e815`, `1d2de51`). *(Status corrected 2026-11-25 by the full review.)*
 Order of the three plans: **form types (this) → library + form import (`docs/plan-library.md`) → profile
 (`docs/plan-profile.md`)**.
 

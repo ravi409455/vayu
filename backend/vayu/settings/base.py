@@ -114,6 +114,11 @@ VERIFY_BASE_URL = env("VERIFY_BASE_URL", "https://verify.carcid.in")
 CELERY_TASK_ROUTES = {"apps.reports.tasks.render_report": {"queue": "pdf"}}
 STUCK_UPLOAD_HOURS = int(env("STUCK_UPLOAD_HOURS", "6"))
 
+# What kind of server this is. Test data (seed_test_data) wipes the server, so it runs only where
+# this says "local" or "test"; anything else, the default included, counts as production.
+SERVER_KIND = env("VAYU_SERVER_KIND", "production")
+SERVER_NAME = env("VAYU_SERVER_NAME", "")      # typed back to confirm a wipe
+
 # Webhooks
 PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", "http://localhost:8000")   # absolute links in payloads
 WEBHOOK_TIMEOUT = 10

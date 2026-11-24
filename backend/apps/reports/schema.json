@@ -939,6 +939,9 @@
      "type": "number",
      "minimum": 15,
      "maximum": 120
+    },
+    "show_url": {
+     "type": "boolean"
     }
    }
   },

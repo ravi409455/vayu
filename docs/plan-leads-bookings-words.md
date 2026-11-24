@@ -1,6 +1,6 @@
 # Plan: experts say "lead", Ops say "booking" (user-facing words only)
 
-Status: plan agreed, not built. Written 2026-11-24 from a scan of web, Android and server.
+Status: **built on web and server** (`ee15cf9`); **Android not yet** ([`plan-fixes.md`](plan-fixes.md) batch 4). *(Status corrected 2026-11-25.)*
 
 ## The rule
 

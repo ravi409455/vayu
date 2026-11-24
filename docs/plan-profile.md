@@ -1,6 +1,6 @@
 # Plan: user profile (picture, password, theme) + Admin-only identity edits
 
-Status: **planned, not started.** Third in the order (re-reviewed after the builder redesign; estimate now ≈ 4.5 days): **form types (`docs/plan-form-types.md`) → library +
+Status: **built** (web `/profile`; Android profile `c82f3be`). *(Status corrected 2026-11-25.)*
 form import (`docs/plan-library.md`) → this profile plan.** Decisions below are agreed; the ladder review
 (2026-11) made two simplifications, marked **(simplified)**.
 
