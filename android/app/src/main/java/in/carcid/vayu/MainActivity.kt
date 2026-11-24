@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -62,6 +63,15 @@ fun themeOf(s: Screen): ThemeMode = when ((s as? Screen.Home)?.me?.theme ?: (s a
 fun AppRoot(vm: AppViewModel) {
     val screen by vm.screen.collectAsState()
     VayuTheme(themeOf(screen)) {
+        // status bar icons follow the app's own light / dark look, not the phone's setting
+        val activity = androidx.compose.ui.platform.LocalContext.current as? ComponentActivity
+        val dark = Vayu.colors.bg.luminance() < 0.5f
+        androidx.compose.runtime.LaunchedEffect(dark) {
+            val clear = android.graphics.Color.TRANSPARENT
+            activity?.enableEdgeToEdge(
+                statusBarStyle = if (dark) androidx.activity.SystemBarStyle.dark(clear) else androidx.activity.SystemBarStyle.light(clear, clear),
+                navigationBarStyle = if (dark) androidx.activity.SystemBarStyle.dark(clear) else androidx.activity.SystemBarStyle.light(clear, clear))
+        }
         when (val s = screen) {
             Screen.Loading -> Box(Modifier.fillMaxSize().background(Vayu.colors.bg))
             is Screen.SignIn -> SignInScreen(s, vm::signIn)

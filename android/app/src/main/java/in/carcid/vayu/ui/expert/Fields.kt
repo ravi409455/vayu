@@ -320,9 +320,22 @@ private fun MultiChoice(options: List<Option>, chosen: List<String>, readOnly: B
 
 @Composable
 private fun Gps(f: Field, value: Any?, readOnly: Boolean, env: FieldEnv, onChange: (Any?) -> Unit) {
+    val ctx = LocalContext.current
     var state by remember { mutableStateOf("idle") }
     val auto = f.config["auto"] != false
-    val capture = { state = "busy"; env.onLocate(f) { fix -> state = if (fix == null) "unavailable" else "idle"; if (fix != null) onChange(fix) } }
+    val locate = { state = "busy"; env.onLocate(f) { fix -> state = if (fix == null) "unavailable" else "idle"; if (fix != null) onChange(fix) } }
+    // ask for location here (the check-in comes before any photo); then read it
+    val ask = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { got ->
+        if (got.values.any { it }) locate() else state = "denied"
+    }
+    val capture = {
+        when {
+            !`in`.carcid.vayu.core.media.Locator.allowed(ctx) -> ask.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
+            !`in`.carcid.vayu.core.media.Locator.enabled(ctx) -> state = "off"
+            else -> locate()
+        }
+    }
     LaunchedEffect(f.key) { if (value == null && !readOnly && auto) capture() }
     val v = value as? Map<*, *>
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -331,12 +344,28 @@ private fun Gps(f: Field, value: Any?, readOnly: Boolean, env: FieldEnv, onChang
             v != null -> "Location recorded · %.4f, %.4f".format((v["lat"] as Number).toDouble(), (v["lng"] as Number).toDouble()) +
                 ((v["accuracy"] as? Number)?.let { " (±${it.toInt()} m)" } ?: "")
             state == "busy" -> "Finding your location…"
+            state == "off" -> "Location is off on this phone"
+            state == "denied" -> "Location not allowed for Vayu"
             state == "unavailable" -> "GPS unavailable"
             else -> "Not recorded yet"
-        }, color = if (v != null) Vayu.colors.ok else Vayu.colors.muted, fontSize = 14.sp, modifier = Modifier.weight(1f))
-        if (!readOnly && state != "busy" && (v != null || state == "unavailable" || !auto))
-            Text(if (v != null) "Update" else if (state == "unavailable") "Try again" else "Capture", color = Vayu.colors.info,
-                fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.clickable(role = Role.Button) { capture() }.padding(6.dp))
+        }, color = if (v != null) Vayu.colors.ok else if (state == "off" || state == "denied") Vayu.colors.warn else Vayu.colors.muted,
+            fontSize = 14.sp, modifier = Modifier.weight(1f))
+        if (!readOnly && state != "busy" && (v != null || state != "idle" || !auto))
+            Text(when { v != null -> "Update"; state == "off" -> "Turn on"; state == "denied" -> "Allow"; state == "unavailable" -> "Try again"; else -> "Capture" },
+                color = Vayu.colors.info, fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+                modifier = Modifier.clickable(role = Role.Button) {
+                    when (state) {
+                        "off" -> { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)); state = "idle" }
+                        "denied" -> ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            android.net.Uri.fromParts("package", ctx.packageName, null)))
+                        else -> capture()
+                    }
+                }.padding(6.dp))
+    }
+    // back from Settings with Location on: try again by itself
+    androidx.lifecycle.compose.LifecycleResumeEffect(state) {
+        if (state == "idle" && v == null && !readOnly && auto && `in`.carcid.vayu.core.media.Locator.enabled(ctx) && `in`.carcid.vayu.core.media.Locator.allowed(ctx)) locate()
+        onPauseOrDispose {}
     }
 }
 

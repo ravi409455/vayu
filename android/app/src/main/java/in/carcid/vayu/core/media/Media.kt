@@ -35,6 +35,9 @@ object Locator {
     fun allowed(ctx: Context) = ctx.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
         ctx.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
+    /** The phone's own Location switch is on. */
+    fun enabled(ctx: Context) = ctx.getSystemService(LocationManager::class.java)?.isLocationEnabled == true
+
     @SuppressLint("MissingPermission")
     suspend fun fix(ctx: Context, timeoutMs: Long = 10_000): Location? {
         if (!allowed(ctx)) return null
