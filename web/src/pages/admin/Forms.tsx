@@ -49,27 +49,27 @@ export function Forms() {
         try { setBundle(JSON.parse(await f.text())); } catch { fail(new Error("That file is not a Vayu form file.")); }
       }} />
       <section className="table-card" style={{ marginBottom: 16 }}>
-        <h2 className="table-title">Inspection forms <span className="muted small">what experts fill in, one per kind of inspection</span></h2>
+        <div className="table-title stacked"><h2>System forms</h2><p>Always there: the booking, and the start and end of every inspection.</p></div>
+        <table className="rows" aria-label="System forms">
+          <thead><tr><th>Name</th><th>Live version</th><th>Draft</th></tr></thead>
+          <tbody>{system.map((x) => (
+            <tr key={x.id} className="click" onClick={() => nav(`/forms/${x.id}`)}>
+              <td><Link className="cell-main" to={`/forms/${x.id}`} onClick={(e) => e.stopPropagation()}>{x.name}</Link></td>
+              <Versions x={x} />
+            </tr>))}</tbody>
+        </table>
+      </section>
+      <section className="table-card">
+        <div className="table-title stacked"><h2>Inspection forms</h2><p>What experts fill in, one per kind of inspection.</p></div>
         <table className="rows" aria-label="Custom forms">
           <thead><tr><th>Name</th><th>Live version</th><th>Draft</th></tr></thead>
           <tbody>{custom.map((x) => (
             <tr key={x.id} className="click" onClick={() => nav(`/forms/${x.id}`)}>
-              <td><Link className="cell-main" to={`/forms/${x.id}`} onClick={(e) => e.stopPropagation()}>{x.name}</Link>{!x.is_active && <> <Pill>Switched off</Pill></>}<div className="cell-sub mono">{x.key}</div></td>
+              <td><Link className="cell-main" to={`/forms/${x.id}`} onClick={(e) => e.stopPropagation()}>{x.name}</Link>{!x.is_active && <> <Pill>Switched off</Pill></>}</td>
               <Versions x={x} />
             </tr>))}</tbody>
         </table>
         {custom.length === 0 && <Empty title="No inspection forms yet">Create one for each kind of inspection.</Empty>}
-      </section>
-      <section className="table-card">
-        <h2 className="table-title">System forms <span className="muted small">always there: the booking, and the start and end of every inspection</span></h2>
-        <table className="rows" aria-label="System forms">
-          <thead><tr><th>Name</th><th>What it is</th><th>Live version</th><th>Draft</th></tr></thead>
-          <tbody>{system.map((x) => (
-            <tr key={x.id} className="click" onClick={() => nav(`/forms/${x.id}`)}>
-              <td><Link className="cell-main" to={`/forms/${x.id}`} onClick={(e) => e.stopPropagation()}>{x.name}</Link><div className="cell-sub mono">{x.key}</div></td>
-              <td>{TYPE_LABEL[x.type]}</td><Versions x={x} />
-            </tr>))}</tbody>
-        </table>
       </section>
       {bundle !== null && <ImportDialog bundle={bundle as never} forms={forms.data ?? []} onClose={() => setBundle(null)} />}
       {open && (

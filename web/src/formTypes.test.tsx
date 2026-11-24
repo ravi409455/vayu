@@ -41,7 +41,7 @@ describe("the Forms page", () => {
     shell(<Forms />);
     const system = within(await screen.findByRole("table", { name: "System forms" }));
     await waitFor(() => expect(system.getAllByRole("row")).toHaveLength(4));
-    expect(system.getAllByRole("row").slice(1).map((r) => within(r).getAllByRole("cell")[1]!.textContent)).toEqual(["Booking form", "Start form", "End form"]);
+    expect(system.getAllByRole("row").slice(1).map((r) => within(r).getAllByRole("cell")[0]!.textContent)).toEqual(["Booking", "Start", "End"]);
     const custom = within(screen.getByRole("table", { name: "Custom forms" }));
     expect(custom.getByText("PDI (new car)")).toBeInTheDocument();
     expect(custom.getByText("Not published")).toBeInTheDocument();           // EV has only a draft

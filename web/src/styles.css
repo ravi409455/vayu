@@ -129,6 +129,8 @@ div.field > .label-row label, div.field > .label-row > span:first-child { font-w
 
 /* ---------- form builder ---------- */
 .builder { display: grid; grid-template-columns: minmax(0, 1fr) clamp(400px, 36vw, 600px); gap: 18px; align-items: start; }
+/* pages folded: the room they gave goes to the field settings, the questions keep their width */
+@media (min-width: 1101px) { .builder:has(.builder-cols.folded) { grid-template-columns: minmax(0, 1fr) calc(clamp(400px, 36vw, 600px) + 166px); } }
 @media (max-width: 1100px) { .builder { grid-template-columns: 1fr; } }
 .builder-cols { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 16px; align-items: start; }
 .val-item { padding: 0 0 10px; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
@@ -344,6 +346,9 @@ a.btn.primary { background: var(--primary); color: var(--primary-ink); border-co
 .table-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow-x: auto; }
 .table-card table { border: 0; border-radius: 0; }
 .table-title { font-size: 14px; font-weight: 600; margin: 0; padding: 12px 14px; display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--line); }
+.table-title.stacked { display: block; }
+.table-title.stacked h2 { font-size: 15px; font-weight: 600; margin: 0; }
+.table-title.stacked p { font-size: 13px; font-weight: 400; color: var(--muted); margin: 2px 0 0; }
 table.rows th { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; }
 table.rows td { vertical-align: middle; padding: 8px 12px; font-size: 14px; }
 .cell-main { font-weight: 600; color: var(--ink); } .cell-sub { font-size: 12px; color: var(--muted); }
