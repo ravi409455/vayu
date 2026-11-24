@@ -15,8 +15,10 @@ def _device_id(request):
 
 
 class PushTokenView(APIView):
-    """The phone's Firebase token, kept on this signed-in device. Only the caller's own rows are
-    touched: their older devices with the same token lose it."""
+    """The phone's Firebase token, kept on this signed-in device only. A token belongs to one
+    phone, so any other device row holding it (an earlier person on the same phone) loses it:
+    their notices must never reach whoever uses the phone now. Tokens are long random secrets
+    only that phone holds, so this can't be used to clear someone else's."""
 
     allow_password_change_pending = True
 
@@ -27,8 +29,7 @@ class PushTokenView(APIView):
         token = request.data.get("token") if isinstance(request.data, dict) else None
         if not isinstance(token, str) or not 0 < len(token) <= 4096:
             raise CodedError("INVALID_TOKEN", "Send the phone's push token.", 400)
-        Device.objects.filter(user=request.user, push_token=token).exclude(pk=device_id).update(
-            push_token="")
+        Device.objects.filter(push_token=token).exclude(pk=device_id).update(push_token="")
         Device.objects.filter(pk=device_id, user=request.user).update(push_token=token)
         return Response(status=204)
 

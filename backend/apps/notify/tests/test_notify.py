@@ -125,10 +125,10 @@ def test_push_token_belongs_to_the_signed_in_phone(db, make_user, login):
     assert c.post("/api/v1/devices/push-token", {"token": "abc"}, format="json").status_code == 204
     assert Device.objects.get(pk=tok["device_id"]).push_token == "abc"
     assert c.post("/api/v1/devices/push-token", {"token": ""}, format="json").status_code == 400
-    other = Device.objects.create(user=make_user(Role.OPS), push_token="abc")
+    earlier = Device.objects.create(user=make_user(Role.OPS), push_token="abc")   # same phone, before
     assert c.post("/api/v1/devices/push-token", {"token": "abc"}, format="json").status_code == 204
-    other.refresh_from_db()
-    assert other.push_token == "abc"              # someone else's device is never touched
+    earlier.refresh_from_db()
+    assert earlier.push_token == ""               # their notices no longer reach this phone
     web = APIClient()
     web.force_authenticate(u)
     assert web.post("/api/v1/devices/push-token", {"token": "abc"},
