@@ -333,10 +333,12 @@ fun NeedsYouScreen(env: OpsEnv, loaded: List<Need>?, onBack: () -> Unit, onOpen:
 data class Need(val key: String, val booking: String, val tone: Tone, val title: String, val meta: String, val group: String = "")
 
 /** Every problem queue as one list, in groups, most urgent group first. */
-suspend fun loadNeeds(env: OpsEnv): List<Need> {
+/** Every problem list; null when none could be read (no signal, nothing saved): keep what shows. */
+suspend fun loadNeeds(env: OpsEnv): List<Need>? {
     val t = env.today()
+    val read = java.util.concurrent.atomic.AtomicInteger()
     // a failed list counts as empty; a cancelled load (a newer one started) must stay cancelled
-    suspend fun rows(path: String) = try { env.data.load(path).data.rows() } catch (e: `in`.carcid.vayu.core.api.ApiError) { emptyList() }
+    suspend fun rows(path: String) = try { env.data.load(path).data.rows().also { read.incrementAndGet() } } catch (e: `in`.carcid.vayu.core.api.ApiError) { emptyList() }
     // started late, finished too quickly: last 7 days, each until someone marks it reviewed (Admin / Ops only)
     fun flagged(f: String) = "bookings?timing=$f&reviewed=0&date_from=${t.minusDays(6)}&date_to=$t&order=schedule".takeIf { env.can("bookings.review_timing") }
     // all at once: on a weak signal the wait is the slowest one, not the sum
@@ -348,6 +350,7 @@ suspend fun loadNeeds(env: OpsEnv): List<Need> {
     fun timing(list: List<kotlinx.serialization.json.JsonObject>, f: String, group: String) = list.map(::Bk).mapNotNull { b ->
         b.flags.firstOrNull { it.flag == f }?.let { fl -> Need(f + b.id, b.id, Tone.WARN, "${b.code}: ${fl.words.replaceFirstChar { it.lowercase() }}",
             listOf(slot(b, t), b.customer).filter { it.isNotBlank() }.joinToString(" · "), group) } }
+    if (read.get() == 0) return null
     return o.map(::Bk).map { Need("a" + it.id, it.id, Tone.WARN, "${it.code} has no expert", "Today at ${time12(it.time)} · ${it.customer}", "Unassigned today") } +
         c.map(::Bk).map { Need("c" + it.id, it.id, Tone.BAD, "Two experts inspected ${it.code}", "${it.customer} · choose which counts", "Conflicts") } +
         st.map { Need("s" + it.s("id"), it.s("booking"), Tone.BAD, "Photos stuck: ${it.s("booking_id")}",

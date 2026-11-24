@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
@@ -175,9 +176,13 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
     var viewing by remember { mutableStateOf<JsonObject?>(null) }
     val list = androidx.compose.foundation.lazy.rememberLazyListState()
     val media = rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty().filter { it.s("status") in setOf("uploaded", "verified") }
+    val up = rememberOpsUploader(env, id, data, rememberLoad(env, "bookings/$id").value?.offline == false)
     viewing?.let { m ->
-        MediaViewer(env, m, fieldLabel = data?.trees?.values?.filterNotNull()?.flatMap { it.fields }?.firstOrNull { it.key == m.s("field_key") }?.label ?: m.s("field_key"),
-            canManage = false, onClose = { viewing = null }, onDelete = {}, onReplace = {})
+        val pf = PARTS.firstNotNullOfOrNull { p -> data?.trees?.get(p)?.fields?.firstOrNull { it.key == m.s("field_key") }?.let { p to it } }
+        val have = media.count { it.s("field_key") == m.s("field_key") }
+        MediaViewer(env, m, fieldLabel = pf?.second?.label ?: m.s("field_key"), onClose = { viewing = null },
+            onReplace = pf?.takeIf { up.canReplace(it.second) }?.let { { viewing = null; up.pick(it.first, it.second, m.s("id")) } },
+            onAdd = pf?.takeIf { up.canAdd(it.first, it.second, have) }?.let { { viewing = null; up.pick(it.first, it.second, null) } })
         return
     }
     BackHandler(onBack = onBack)
@@ -368,6 +373,55 @@ private fun thumb(f: File, size: Int): ImageBitmap? = runCatching {
     BitmapFactory.decodeFile(f.path, BitmapFactory.Options().apply { inSampleSize = s })?.asImageBitmap()
 }.getOrNull()
 
+/**
+ * Ops add a file to a submitted inspection, or replace one (the old one stays as history only
+ * Admin opens; nobody deletes): start the upload saying what it replaces, send it, attach it.
+ */
+class OpsUploader(val pick: (part: String, f: Field, replaces: String?) -> Unit,
+                  val canAdd: (part: String, f: Field, have: Int) -> Boolean, val canReplace: (Field) -> Boolean)
+
+@Composable
+fun rememberOpsUploader(env: OpsEnv, id: String, data: Loaded3?, online: Boolean): OpsUploader {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var target by remember { mutableStateOf<Triple<String, Field, String?>?>(null) }
+    // only once the expert has submitted, and never on a cancelled booking
+    val may = env.can("media.manage") && online && data?.insp?.s("status") == "submitted" && data.b.stage != "cancelled"
+    suspend fun upload(f: Field, file: File, type: String, replaces: String?) {
+        var loose: String? = null
+        try {
+            val init = env.data.api.mediaInitiate(id, UUID.randomUUID().toString(), f.key, f.type, type, file.length(), sha256(file), "gallery", replaces)
+            loose = init.s("id")
+            if (!transfer(env.data.api, init, file, type)) { env.say("The file arrived damaged. Try again."); return }
+            env.data.act("POST", "media/$loose/attach", buildJsonObject { if (replaces != null) put("replaces", replaces) })
+            loose = null
+            env.say(if (replaces != null) "Replaced." else "Added."); env.refresh()
+        } catch (e: ApiError) { env.say(e.message) } finally {
+            file.delete()
+            // an upload that never got attached is taken back, so it can't pile up
+            loose?.let { l -> try { env.data.act("DELETE", "media/$l") } catch (e: ApiError) { } }
+        }
+    }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val (_, f, replaces) = target ?: return@rememberLauncherForActivityResult
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val tmp = newFile(ctx.cacheDir, "up")
+            val type = withContext(Dispatchers.IO) { copyIn(ctx, uri, tmp) } ?: return@launch
+            upload(f, tmp, type, replaces)
+        }
+    }
+    fun types(f: Field): Array<String> = when (f.type) {
+        "video" -> arrayOf("video/*")
+        "file" -> ((f.config["allowed"] as? List<*>)?.map { it.toString() } ?: listOf("image", "pdf")).map { if (it == "pdf") "application/pdf" else "image/*" }.toTypedArray()
+        else -> arrayOf("image/*")
+    }
+    return OpsUploader(
+        pick = { p, f, r -> target = Triple(p, f, r); picker.launch(types(f)) },
+        canAdd = { _, f, have -> may && f.config["ops_upload"] != false && have < f.maxCount },
+        canReplace = { f -> may && f.config["ops_upload"] != false })
+}
+
 /** Photos and videos by section: view full screen, play, add, replace, delete, share a ZIP. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -378,45 +432,17 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
     val list = rememberLoad(env, "bookings/$id/media")
     val items = list.value?.data?.rows().orEmpty().filter { it.s("status") in setOf("uploaded", "verified") }
     var open by remember { mutableStateOf<JsonObject?>(null) }
-    var adding by remember { mutableStateOf<Pair<String, Field>?>(null) }
     val online = list.value?.offline == false
     val fields = PARTS.flatMap { p -> data?.trees?.get(p)?.pages.orEmpty().flatMap { pg -> pg.sections.flatMap { s -> s.fields.filter { it.isMedia }.map { Triple(p, s.title, it) } } } }
-    suspend fun upload(part: String, f: Field, file: File, type: String) {
-        val insp = data?.insp ?: return
-        try {
-            val init = env.data.api.mediaInitiate(id, UUID.randomUUID().toString(), f.key, f.type, type, file.length(), sha256(file), "gallery")
-            if (!transfer(env.data.api, init, file, type)) { env.say("The file arrived damaged. Try again."); return }
-            val cur = data.answers[part]?.get(f.key)
-            val value: Any? = if (f.type == "signature") init.s("id") else ((cur as? List<*>).orEmpty() + init.s("id"))
-            env.data.act("PATCH", "inspections/${insp.s("id")}", buildJsonObject {
-                put("row_version", insp.int("row_version") ?: 0)
-                put("answers", buildJsonObject { put(part, buildJsonObject { put(f.key, JsonLogic.toJson(value)) }) })
-            })
-            env.say("Added."); env.refresh()
-        } catch (e: ApiError) { env.say(e.message) } finally { file.delete() }
+    val up = rememberOpsUploader(env, id, data, online)
+    open?.let { m ->
+        val f = fields.firstOrNull { it.third.key == m.s("field_key") }
+        val have = items.count { it.s("field_key") == m.s("field_key") }
+        MediaViewer(env, m, fieldLabel = f?.third?.label ?: m.s("field_key"), onClose = { open = null },
+            onReplace = f?.takeIf { up.canReplace(it.third) }?.let { { open = null; up.pick(it.first, it.third, m.s("id")) } },
+            onAdd = f?.takeIf { up.canAdd(it.first, it.third, have) }?.let { { open = null; up.pick(it.first, it.third, null) } })
+        return
     }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        val (part, f) = adding ?: return@rememberLauncherForActivityResult
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val tmp = newFile(ctx.cacheDir, "up")
-            val type = withContext(Dispatchers.IO) { copyIn(ctx, uri, tmp) } ?: return@launch
-            upload(part, f, tmp, type)
-        }
-    }
-    open?.let { m -> MediaViewer(env, m, fieldLabel = fields.firstOrNull { it.third.key == m.s("field_key") }?.third?.label ?: m.s("field_key"),
-        canManage = env.can("media.manage") && online, onClose = { open = null },
-        onDelete = {
-            scope.launch {
-                try { env.data.act("DELETE", "media/${m.s("id")}"); open = null; env.say("Deleted."); env.refresh() } catch (e: ApiError) { env.say(e.message) }
-            }
-        }, onReplace = {
-            val f = fields.firstOrNull { it.third.key == m.s("field_key") }
-            if (f != null) scope.launch {
-                try { env.data.act("DELETE", "media/${m.s("id")}") } catch (e: ApiError) { env.say(e.message); return@launch }
-                open = null; adding = f.first to f.third; picker.launch(arrayOf(if (f.third.type == "video") "video/*" else "image/*"))
-            }
-        }); return }
     BackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         SubHeader("Photos and videos", data?.let { "${it.b.code} · ${it.b.customer}" }, onBack) {
@@ -437,26 +463,24 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
             val filled = data?.filled(env.today().toString())
             fields.groupBy { it.second }.forEach { (section, fs) ->
                 val here = items.filter { m -> fs.any { it.third.key == m.s("field_key") } }
-                val canAdd = env.can("media.manage") && online && data?.insp != null && fs.any { (p, _, f) ->
-                    f.config["ops_upload"] != false && filled?.visible(p, f.key) != false && here.count { it.s("field_key") == f.key } < f.maxCount }
+                val addable = fs.filter { (p, _, f) -> filled?.visible(p, f.key) != false && up.canAdd(p, f, here.count { it.s("field_key") == f.key }) }
+                val canAdd = addable.isNotEmpty()
                 // a section with nothing to show or add is left out
                 if (here.isEmpty() && !canAdd) return@forEach
                 Section(section)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     here.forEach { m -> MediaTile(env, m) { open = m } }
                     // an add tile only where Ops may add, the field shows in this inspection, and it has room
-                    if (env.can("media.manage") && online && data?.insp != null) fs.filter { (p, _, f) ->
-                        f.config["ops_upload"] != false && filled?.visible(p, f.key) != false && here.count { it.s("field_key") == f.key } < f.maxCount
-                    }.forEach { (p, _, f) ->
+                    addable.forEach { (p, _, f) ->
                         Box(Modifier.size(76.dp).clip(RoundedCornerShape(12.dp)).background(Vayu.colors.soft)
-                            .clickable(role = Role.Button) { adding = p to f; picker.launch(arrayOf(if (f.type == "video") "video/*" else "image/*", "application/pdf")) }
+                            .clickable(role = Role.Button) { up.pick(p, f, null) }
                             .semantics { contentDescription = "Add to ${f.label}" }, contentAlignment = Alignment.Center) {
                             Text("+ ${f.label}", fontSize = 11.sp, color = Vayu.colors.ink2, modifier = Modifier.padding(4.dp), maxLines = 3)
                         }
                     }
                 }
             }
-            Text("Tap one to see it full screen, replace it or delete it.", color = Vayu.colors.muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 16.dp))
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
@@ -475,7 +499,7 @@ private fun MediaTile(env: OpsEnv, m: JsonObject, size: Int = 76, onClick: () ->
 }
 
 @Composable
-private fun MediaViewer(env: OpsEnv, m: JsonObject, fieldLabel: String, canManage: Boolean, onClose: () -> Unit, onDelete: () -> Unit, onReplace: () -> Unit) {
+private fun MediaViewer(env: OpsEnv, m: JsonObject, fieldLabel: String, onClose: () -> Unit, onReplace: (() -> Unit)? = null, onAdd: (() -> Unit)? = null) {
     BackHandler(onBack = onClose)
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -521,12 +545,17 @@ private fun MediaViewer(env: OpsEnv, m: JsonObject, fieldLabel: String, canManag
                 }
             }
         }
-        if (canManage) Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-            Column(Modifier.clickable(role = Role.Button, onClick = onDelete).padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Outlined.Delete, null, tint = Color.White); Text("Delete", color = Color.White)
+        // nobody deletes a submitted file: replace it (the old one stays as history) or add another
+        if (onReplace != null || onAdd != null) Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            onReplace?.let { r ->
+                Column(Modifier.clickable(role = Role.Button, onClick = r).padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Outlined.Autorenew, null, tint = Color.White); Text("Replace", color = Color.White)
+                }
             }
-            Column(Modifier.clickable(role = Role.Button, onClick = onReplace).padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Outlined.Autorenew, null, tint = Color.White); Text("Replace", color = Color.White)
+            onAdd?.let { a ->
+                Column(Modifier.clickable(role = Role.Button, onClick = a).padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Outlined.Add, null, tint = Color.White); Text("Add", color = Color.White)
+                }
             }
         }
     }

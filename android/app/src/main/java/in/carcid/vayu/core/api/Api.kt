@@ -93,10 +93,12 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
 
     /** Register a file (same client_uuid = same file); returns id, status, part_size and part URLs. */
     suspend fun mediaInitiate(bookingId: String, clientUuid: String, fieldKey: String, kind: String,
-                              contentType: String, size: Long, sha256: String, source: String): JsonObject =
+                              contentType: String, size: Long, sha256: String, source: String, replaces: String? = null): JsonObject =
         call("POST", "media/initiate", buildJsonObject {
             put("booking", bookingId); put("client_uuid", clientUuid); put("field_key", fieldKey); put("kind", kind)
             put("content_type", contentType); put("size", size); put("sha256", sha256); put("source", source)
+            // Ops replacing a submitted file say which one (the old one stays as history)
+            if (replaces != null) put("replaces", replaces)
         })
 
     suspend fun media(id: String): JsonObject = call("GET", "media/$id")

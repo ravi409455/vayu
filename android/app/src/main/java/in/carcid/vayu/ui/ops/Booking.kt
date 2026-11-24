@@ -201,7 +201,7 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
                 // one row: Check-in, Inspection and Wrap-up are tabs inside it
                 val counts = PARTS.filter { filled.visiblePages(it).isNotEmpty() }.map { partCounts(data, filled, it) }
                 val n = counts.sumOf { it.first }; val bad = counts.sumOf { it.second }
-                NavRow("Answers", "$n answer${if (n == 1) "" else "s"}" + if (bad > 0) " · $bad problem${if (bad == 1) "" else "s"}" else "",
+                NavRow("Inspection Data", "$n answer${if (n == 1) "" else "s"}" + if (bad > 0) " · $bad problem${if (bad == 1) "" else "s"}" else "",
                     if (bad > 0) Vayu.colors.warn else Vayu.colors.muted) { onAnswers("inspection") }
             }
             val media = rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty().filter { it.s("status") in setOf("uploaded", "verified") }

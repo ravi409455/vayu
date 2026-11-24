@@ -158,7 +158,7 @@ class OpsFlowTest {
         show()
         compose.onNodeWithText("Bookings").performClick()
         waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
-        waitFor("Answers"); compose.onNodeWithText("Answers").performScrollTo().performClick()
+        waitFor("Inspection Data"); compose.onNodeWithText("Inspection Data").performScrollTo().performClick()
         waitFor("Chassis number")
         shot("ops_answers")
         compose.onNodeWithText("Odometer").performClick()
@@ -238,6 +238,22 @@ class OpsFlowTest {
         // a tile opens the bookings behind its number
         compose.onNodeWithText("Started late").performClick()
         waitFor("Showing")
+    }
+
+    @Test fun aSubmittedPhotoCanBeReplacedOrAddedToButNotDeleted() {
+        // one photo question (up to 2) with one photo the expert sent
+        server.on("GET form-versions/7", """{"id":7,"checks":[],"pages":[{"id":1,"title":"Photos","visible":true,"gate":false,"sections":[{"id":1,"title":"Outside","visible":true,
+            "fields":[{"key":"front","label":"Front","type":"photo","visible":true,"config":{"max_count":2}}]}]}]}""")
+        server.on("GET bookings/$B14/media", """[{"id":"bbbbbbbb-0000-0000-0000-000000000001","field_key":"front","kind":"photo","status":"verified"}]""")
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("Photos and videos"); compose.onNodeWithText("Photos and videos").performScrollTo().performClick()
+        waitFor("+ Front")
+        compose.onNode(androidx.compose.ui.test.hasContentDescription("photo front")).performClick()
+        waitFor("Replace")
+        compose.onNodeWithText("Add").assertExists()
+        assertTrue(compose.onAllNodes(hasText("Delete")).fetchSemanticsNodes().isEmpty())
     }
 
     @Test fun aNewBookingIsCreatedFromTheBookingForm() {

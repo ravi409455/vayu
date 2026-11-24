@@ -56,8 +56,9 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     // one load per Refresh: names first, then the lists (a second key here restarted it half-way)
     LaunchedEffect(tick) {
         refreshing = true
-        labels = Labels.load(data)
-        needs = loadNeeds(env.copy(labels = labels))
+        // without signal or a saved copy a reload comes back empty: keep what's on screen then
+        Labels.load(data).takeIf { it.people.isNotEmpty() || it.cities.isNotEmpty() || it.types.isNotEmpty() }?.let { labels = it }
+        loadNeeds(env.copy(labels = labels))?.let { needs = it }
         // Refresh says what happened (a fresh answer, or the saved copy without signal)
         if (asked) {
             asked = false
