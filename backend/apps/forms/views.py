@@ -283,10 +283,14 @@ class LibraryViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
 
     @action(detail=True, methods=["get"])
     def history(self, request, pk=None):
-        item = self.get_object()
+        from apps.accounts.models import User
+
+        revs = list(self.get_object().revisions.all())
+        names = {u.username: u.shown_name
+                 for u in User.objects.filter(username__in={r.by for r in revs})}
         return Response([{"revision": r.revision, "name": r.name, "definition": r.definition,
-                          "changed_keys": r.changed_keys, "by": r.by, "at": r.at}
-                         for r in item.revisions.all()])
+                          "changed_keys": r.changed_keys, "by": names.get(r.by, r.by),
+                          "by_login": r.by, "at": r.at} for r in revs])
 
 
 class _FromLibraryBody(serializers.Serializer):

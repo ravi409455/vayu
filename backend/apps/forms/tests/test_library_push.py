@@ -40,6 +40,9 @@ def test_every_save_is_a_revision_with_who_and_what_changed(admin):
     history = admin.get(f"/api/v1/library/{item['id']}/history").json()
     assert [h["revision"] for h in history] == [2, 1]                  # newest first
     assert history[1]["definition"]["label"] == "Tyre depth"           # restorable later
+    from apps.accounts.models import User  # login kept, name shown
+    who = User.objects.get(username=rows[1].by)
+    assert (history[0]["by"], history[0]["by_login"]) == (who.shown_name, who.username)
 
 
 def test_a_save_from_an_old_revision_is_refused_and_a_missing_revision_too(admin):

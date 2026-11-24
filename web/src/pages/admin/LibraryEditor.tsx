@@ -17,7 +17,7 @@ import { PushReview } from "./library/PushReview";
 import { useCrumb } from "../../ui/crumb";
 
 type Item = { id: number; kind: "field" | "section"; key: string; name: string; revision: number; archived: boolean; definition: Definition; usages: { form: string; version: number; status: string }[] };
-type Revision = { revision: number; name: string; definition: Definition; changed_keys: string[]; by: string; at: string };
+type Revision = { revision: number; name: string; definition: Definition; changed_keys: string[]; by: string; by_login?: string; at: string };
 type Tab = "settings" | "used" | "history";
 
 /** The library item editor: settings on the left, a live preview on the right. Saving makes a new
@@ -122,7 +122,7 @@ export function LibraryEditor() {
         <div className="table-card">
           <table className="rows"><thead><tr><th>Revision</th><th>Who</th><th>When</th><th>What changed</th><th /></tr></thead>
             <tbody>{(history.data ?? []).map((h) => (
-              <tr key={h.revision}><td>r{h.revision}{h.revision === it.revision && <> <Pill tone="ok">current</Pill></>}</td><td>{h.by || "—"}</td><td>{when(h.at)}</td>
+              <tr key={h.revision}><td>r{h.revision}{h.revision === it.revision && <> <Pill tone="ok">current</Pill></>}</td><td title={h.by_login}>{h.by || "—"}</td><td>{when(h.at)}</td>
                 <td>{h.changed_keys.length ? h.changed_keys.join(", ") : "created"}</td>
                 <td>{edit && h.revision !== it.revision && <button aria-label={`Restore revision ${h.revision}`} onClick={() => { setDef(h.definition); setName(h.name); setTab("settings"); say(`Revision ${h.revision} is loaded. Save to make it the newest.`); }}>Restore</button>}</td></tr>))}</tbody></table>
         </div>
