@@ -19,7 +19,7 @@ import { useCount, viewQuery } from "./Bookings";
 const SLOT_PX = 76;                // width of 30 minutes; the day scrolls sideways
 const LANE_W = 200;                // the expert column, kept in view while scrolling
 const GUTTER = 36;                 // room at each end of the grid so a time label is never hidden by the expert column or the edge
-const CHOSEN = "vayu:today-experts";  // the experts picked in the side panel, kept per browser
+const CHOSEN = "vayu:today-experts";  // the experts picked in the Experts menu, kept per browser
 
 const LANE_H = 76;                 // height of one row of boxes; a lane with overlapping jobs gets more rows
 export { dayWindow };
@@ -67,7 +67,7 @@ export function Today() {
   const slots = (hi - lo) * 2;                          // one column per 30 minutes
   const nowAt = now.getHours() + now.getMinutes() / 60;
 
-  // Who is on the schedule: everyone with a job today, or just the experts chosen in the side panel.
+  // Who is on the schedule: every expert, or just the ones chosen in the Experts menu.
   const everyone = [
     { id: 0, name: "Unassigned", user: null as User | null, jobs: all.filter((b) => !b.assigned_expert) },
     ...[...new Map([...(experts.data ?? []).map((u) => [u.id, u] as const),
@@ -87,7 +87,7 @@ export function Today() {
   }, [menu]);
   const [find, setFind] = useState("");
   const choose = (next: number[]) => { setSel(next); saveJSON(CHOSEN, next); };
-  const lanes = sel.length ? everyone.filter((l) => sel.includes(l.id)) : everyone.filter((l) => l.jobs.length > 0);
+  const lanes = sel.length ? everyone.filter((l) => sel.includes(l.id)) : everyone.filter((l) => l.id !== 0 || l.jobs.length > 0);   // every expert, free or not; Unassigned only when it has jobs
   const pickRows = everyone.filter((l) => l.name.toLowerCase().includes(find.trim().toLowerCase()));
 
   // The view: a 3-hour window that fills the width (no sideways scrolling needed), or the full day.
@@ -143,7 +143,7 @@ export function Today() {
             {menu && (
               <div className="sched-pop" role="listbox" aria-label="Choose experts" aria-multiselectable>
                 <input type="search" placeholder="Find an expert" aria-label="Find an expert" autoFocus value={find} onChange={(e) => setFind(e.target.value)} />
-                <div className="sched-pop-head"><span className="muted small">{sel.length ? `${sel.length} chosen` : "Everyone with a job today"}</span>{sel.length > 0 && <button className="sm" onClick={() => choose([])}>Show all</button>}</div>
+                <div className="sched-pop-head"><span className="muted small">{sel.length ? `${sel.length} chosen` : "Every expert is shown"}</span>{sel.length > 0 && <button className="sm" onClick={() => choose([])}>Show all</button>}</div>
                 <ul>
                   {pickRows.map((l) => (
                     <li key={l.id}>
