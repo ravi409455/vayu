@@ -1,0 +1,17 @@
+import { createRequire } from "module";
+const require = createRequire("/Users/ravi/DevSpace/inspex/web/package.json");
+const { chromium } = require("playwright");
+const BASE = "http://localhost:5173";
+const b = await chromium.launch(); const ctx = await b.newContext(); const page = await ctx.newPage();
+await page.goto(`${BASE}/login`); await page.getByLabel("Username").fill("ops"); await page.locator("#pw").fill("Vayu-local-1");
+await page.getByRole("button", { name: "Sign in" }).click(); await page.waitForURL((u) => !u.pathname.startsWith("/login"));
+await page.goto(`${BASE}/booking/00000000-0000-4000-8000-000000000000`); await page.waitForTimeout(3000);
+console.log("[5] unknown booking id shows:", JSON.stringify((await page.locator("main").innerText()).slice(0, 80)));
+await page.route("**/api/v1/bookings**", (r) => r.fulfill({ status: 500, contentType: "text/html", body: "<h1>Server Error</h1>" }));
+await page.goto(`${BASE}/booking/9132410c-0d5a-4ada-994a-5b5492fd34f4`); await page.waitForTimeout(3000);
+console.log("[6] booking page, API 500:", JSON.stringify((await page.locator("main").innerText()).slice(0, 80)));
+await page.goto(`${BASE}/bookings`); await page.waitForTimeout(3000);
+console.log("[7] bookings list, API 500:", JSON.stringify((await page.locator("main").innerText()).replace(/\s+/g, " ").slice(0, 300)));
+await page.goto(`${BASE}/today`); await page.waitForTimeout(3000);
+console.log("[8] today, API 500:", JSON.stringify((await page.locator("main").innerText()).replace(/\s+/g, " ").slice(0, 300)));
+await b.close();
