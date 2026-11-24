@@ -42,7 +42,11 @@ class MainActivity : ComponentActivity() {
                 AppViewModel(Api(BuildConfig.API_URL, tokens), tokens, Build.MODEL,
                     storeFor = { JobStore(java.io.File(filesDir, "jobs-$it.json")) }) as T
         }
-        setContent { AppRoot(viewModel(factory = factory)) }
+        setContent {
+            val vm: AppViewModel = viewModel(factory = factory)
+            androidx.lifecycle.compose.LifecycleResumeEffect(vm) { vm.onForeground(); onPauseOrDispose {} }
+            AppRoot(vm)
+        }
     }
 }
 
@@ -62,8 +66,8 @@ fun AppRoot(vm: AppViewModel) {
             Screen.AdminRefused -> AdminRefusedScreen(vm::backToSignIn)
             is Screen.ChangePassword -> ChangePasswordScreen(s, vm::changePassword)
             is Screen.Home -> if (s.me.role == "expert") {
-                val jobs by vm.jobs.collectAsState()
-                ExpertHome(s.me, jobs, vm.today(), vm::openProfile, vm::sync, onStart = {})  // check-in: Phase 14b
+                val jobs by vm.jobs.state.collectAsState()
+                ExpertHome(s.me, jobs, vm.jobs.today(), vm::openProfile, vm.jobs::sync, onStart = {})  // check-in: Phase 14b
             } else HomeScreen(s.me, vm::openProfile)
             is Screen.Profile -> {
                 BackHandler { vm.closeProfile() }

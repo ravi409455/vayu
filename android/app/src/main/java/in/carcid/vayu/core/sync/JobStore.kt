@@ -37,6 +37,8 @@ data class Job(
  */
 class JobStore(private val file: File) {
     private var cache: JsonObject? = null
+    /** Set by clear(): this store never writes again (a late sync can't bring the data back). */
+    private var cleared = false
 
     @Synchronized
     fun data(): JsonObject = cache ?: (runCatching { Json.parseToJsonElement(file.readText()).jsonObject }
@@ -55,6 +57,7 @@ class JobStore(private val file: File) {
 
     @Synchronized
     fun apply(payload: JsonObject, phoneNow: Long) {
+        if (cleared) return
         val jobs = payload["jobs"] as? JsonArray ?: JsonArray(emptyList())
         val used = jobs.flatMap { j -> j.jsonObject.obj("versions").values.mapNotNull { it.jsonPrimitive.intOrNull?.toString() } }.toSet()
         val forms = (data().obj("forms") + payload.obj("forms")).filterKeys { it in used }
@@ -75,7 +78,10 @@ class JobStore(private val file: File) {
     }
 
     @Synchronized
-    fun clear() { file.delete(); cache = null }
+    fun clear() {
+        cleared = true
+        file.delete(); File(file.path + ".tmp").delete(); cache = JsonObject(emptyMap())
+    }
 
     fun jobs(): List<Job> {
         val d = data()

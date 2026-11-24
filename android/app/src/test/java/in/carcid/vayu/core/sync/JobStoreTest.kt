@@ -69,6 +69,8 @@ class JobStoreTest {
         assertEquals(listOf("c", "b", "a"), s.jobs().map { it.id })
         s.clear()
         assertTrue(s.jobs().isEmpty()); assertNull(s.since()); assertFalse(file.exists())
+        s.apply(payload(job("late")), 0)                              // a sync that finishes after sign-out
+        assertFalse(file.exists())
     }
 
     @Test fun aDamagedFileReadsAsEmpty() {

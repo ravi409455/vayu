@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,6 +45,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -141,6 +144,11 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
     val todayCount = state.jobs.count { tabOf(it, today) == JobTab.TODAY }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
         VayuTopBar("My jobs", me.initials, bellCount = 0, onBell = {}, onProfile = onProfile)
+        // a thin bar while jobs download (Refresh, reopening); fixed height so nothing jumps
+        Box(Modifier.fillMaxWidth().height(3.dp).padding(horizontal = 20.dp)) {
+            if (state.syncing) LinearProgressIndicator(Modifier.fillMaxSize().semantics { contentDescription = "Updating jobs" },
+                color = Vayu.colors.brand, trackColor = Vayu.colors.soft)
+        }
         LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp)) {
             item {
                 Spacer(Modifier.height(14.dp))

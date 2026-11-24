@@ -21,8 +21,7 @@ import `in`.carcid.vayu.ui.AppViewModel
 import `in`.carcid.vayu.ui.components.Tone
 import `in`.carcid.vayu.ui.theme.ThemeMode
 import `in`.carcid.vayu.ui.theme.VayuTheme
-import okhttp3.mockwebserver.MockResponse
-import okhttp3.mockwebserver.MockWebServer
+import `in`.carcid.vayu.core.api.FakeServer
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -113,29 +112,45 @@ class MyJobsTest {
     @Test fun aPhoneSignedOutByTheServerForgetsItsJobs() = signInThen(revoke = true)
 
     private fun signInThen(revoke: Boolean) {
-        val server = MockWebServer().apply { start() }
+        val server = FakeServer()
         val file = File(Files.createTempDirectory("vayu").toFile(), "jobs.json")
-        val body = payload(job("2"), forms = """{"7":{"pages":[]}}""").toString().replace("{\"server_time\"", "{\"min_app_version\":1,\"server_time\"")
-        server.enqueue(MockResponse().setBody("""{"access":"A","refresh":"R"}"""))
-        server.enqueue(MockResponse().setBody("""{"id":3,"username":"ravi","name":"Ravi","role":"expert","must_change_password":false,"theme":"light"}"""))
-        repeat(2) { server.enqueue(MockResponse().setBody(body)) }      // sync and heartbeat, either order
+        server.on("POST auth/login", """{"access":"A","refresh":"R"}""")
+        server.on("GET auth/me", """{"id":3,"username":"ravi","name":"Ravi","role":"expert","must_change_password":false,"theme":"light"}""")
+        server.on("POST devices/heartbeat", """{"min_app_version":1}""")
+        server.on("GET sync/jobs", payload(job("2"), forms = """{"7":{"pages":[]}}""").toString())
         val tokens = MemoryTokenStore()
-        val vm = AppViewModel(Api(server.url("/api/v1/").toString(), tokens), tokens, "Test phone", storeFor = { JobStore(file) })
+        val vm = AppViewModel(Api(server.url, tokens), tokens, "Test phone", storeFor = { JobStore(file) })
         compose.setContent { `in`.carcid.vayu.AppRoot(vm) }
         compose.onNodeWithContentDescription("Username").performTextInput("ravi")
         compose.onNodeWithContentDescription("Password").performTextInput("pw")
         compose.onNode(hasText("Sign in") and androidx.compose.ui.test.hasClickAction()).performClick()
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Arjun Mehta")).fetchSemanticsNodes().isNotEmpty() }
         if (revoke) {
-            server.enqueue(MockResponse().setResponseCode(401).setBody("""{"code":"DEVICE_REVOKED","detail":"Signed out."}"""))
+            server.on("GET sync/jobs", """{"code":"DEVICE_REVOKED","detail":"Signed out."}""", 401)
             compose.onNodeWithText("Refresh").performClick()
             compose.waitUntil(5_000) { compose.onAllNodes(hasText("Welcome back", substring = true)).fetchSemanticsNodes().isNotEmpty() }
             assertEquals(false, file.exists())                          // nothing of theirs stays on the phone
-            server.shutdown(); return
+        } else {
+            server.on("GET sync/jobs", """{"detail":"Server error"}""", 502)   // server down: same as no signal
+            compose.onNodeWithText("Refresh").performClick()
+            compose.waitUntil(5_000) { compose.onAllNodes(hasText("Offline", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Arjun Mehta").assertIsDisplayed()
         }
-        server.shutdown()                                               // signal gone
-        compose.onNodeWithText("Refresh").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Offline", substring = true)).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Arjun Mehta").assertIsDisplayed()
+        server.stop()
+    }
+
+    @Test fun reopeningWithTheServerDownStillShowsTheSavedJobs() {
+        val server = FakeServer()
+        val dir = Files.createTempDirectory("vayu").toFile()
+        JobStore(File(dir, "jobs-3.json")).apply(payload(job("2")), 0)
+        val tokens = MemoryTokenStore().apply {
+            save("A", "R")
+            saveMe(mapOf("id" to "3", "username" to "ravi", "name" to "Ravi", "role" to "expert", "theme" to "light", "must_change" to "false"))
+        }
+        server.on("GET auth/me", """{"detail":"Bad gateway"}""", 502)
+        val vm = AppViewModel(Api(server.url, tokens), tokens, "Test phone", storeFor = { JobStore(File(dir, "jobs-$it.json")) })
+        compose.setContent { `in`.carcid.vayu.AppRoot(vm) }
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Arjun Mehta")).fetchSemanticsNodes().isNotEmpty() }
+        server.stop()
     }
 }

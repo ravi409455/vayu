@@ -7,7 +7,7 @@ import `in`.carcid.vayu.core.api.ApiError
 import `in`.carcid.vayu.core.api.Me
 import `in`.carcid.vayu.core.auth.TokenStore
 import `in`.carcid.vayu.core.sync.JobStore
-import `in`.carcid.vayu.ui.expert.JobsState
+import `in`.carcid.vayu.ui.expert.JobsModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -28,9 +28,7 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
                    private val clock: () -> Long = System::currentTimeMillis) : ViewModel() {
     private val _screen = MutableStateFlow<Screen>(Screen.Loading)
     val screen: StateFlow<Screen> = _screen
-    private val _jobs = MutableStateFlow(JobsState())
-    val jobs: StateFlow<JobsState> = _jobs
-    private var store: JobStore? = null
+    val jobs = JobsModel(api, storeFor, viewModelScope, clock, onRevoked = ::revoked)
     private var lastPassword = ""
     /** Below this version the app may finish a started job but not start new ones (enforced in Phase 14). */
     var minAppVersion = 0
@@ -46,11 +44,15 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
         try {
             enter(api.me())
         } catch (e: ApiError) {
-            if (e.code == "DEVICE_REVOKED") cached?.let { storeFor(it.id).clear() }
-            if (e.code == ApiError.NETWORK && cached != null) {
-                _screen.value = Screen.Home(cached)
-                openStore(cached, offline = true)
-            } else _screen.value = Screen.SignIn()
+            when {
+                e.code == "DEVICE_REVOKED" -> { tokens.clear(); jobs.forget(cached?.id); _screen.value = Screen.SignIn() }
+                // no signal or the server is down: still signed in, so open on the saved copy
+                JobsModel.unreachable(e) && cached != null -> {
+                    _screen.value = Screen.Home(cached)
+                    if (cached.role == "expert") jobs.open(cached.id, offline = true)
+                }
+                else -> _screen.value = Screen.SignIn()
+            }
         }
     }
 
@@ -90,7 +92,7 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
             "role" to me.role, "theme" to me.theme, "must_change" to me.mustChangePassword.toString()))
         if (me.mustChangePassword) { _screen.value = Screen.ChangePassword(); return }
         _screen.value = Screen.Home(me)
-        openStore(me, offline = false)
+        if (me.role == "expert") jobs.open(me.id, offline = false)
         try {
             minAppVersion = api.heartbeat(drafts = 0, files = 0)     // nothing is stored on the phone yet
         } catch (e: ApiError) {
@@ -98,53 +100,15 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
         }
     }
 
-    private fun openStore(me: Me, offline: Boolean) {
-        if (me.role != "expert") return
-        store = storeFor(me.id)
-        show(offline = offline)
-        if (!offline) sync()
-    }
-
-    private fun show(offline: Boolean, error: String? = null, syncing: Boolean = false) {
-        val s = store ?: return
-        val jobs = s.jobs()
-        val at = s.syncedAt()?.let {
-            java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
-                .let { t -> "%d:%02d".format(t.hour, t.minute) }
-        }
-        _jobs.value = JobsState(jobs, jobs.filter(s::readyOffline).map { it.id }.toSet(), syncing, offline, at, error)
-    }
-
-    /** Download jobs and forms (Refresh, opening the app). Without signal the saved copy stays. */
-    fun sync() {
-        val s = store ?: return
-        _jobs.value = _jobs.value.copy(syncing = true)
-        viewModelScope.launch {
-            try {
-                val payload = api.syncJobs(s.haveVersions(), s.since())
-                s.apply(payload, clock())
-                show(offline = false)
-            } catch (e: ApiError) {
-                when (e.code) {
-                    ApiError.NETWORK -> show(offline = true)
-                    "DEVICE_REVOKED" -> revoked()
-                    else -> show(offline = false, error = e.message)
-                }
-            }
-        }
-    }
-
     /** Signed out from the server (another phone, or an Admin): nothing of theirs stays on this phone. */
     private fun revoked() {
-        tokens.clear(); forgetJobs(); _screen.value = Screen.SignIn()
+        tokens.clear(); jobs.forget(); _screen.value = Screen.SignIn()
     }
 
-    // 14c: unsent drafts must survive this (the server refuses a second phone while they exist)
-    private fun forgetJobs() { store?.clear(); store = null; _jobs.value = JobsState() }
-
-    /** Today by the server's clock (the phone's may be wrong). */
-    fun today(): java.time.LocalDate = java.time.Instant.ofEpochMilli(clock() + (store?.clockOffset() ?: 0L))
-        .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+    /** The app came back to the front: experts get fresh jobs (and a new "today" after midnight). */
+    fun onForeground() {
+        if ((screen.value as? Screen.Home)?.me?.role == "expert") jobs.sync()
+    }
 
     fun openProfile() { (screen.value as? Screen.Home)?.let { _screen.value = Screen.Profile(it.me) } }
     fun closeProfile() { (screen.value as? Screen.Profile)?.let { _screen.value = Screen.Home(it.me) } }
@@ -166,7 +130,7 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
         viewModelScope.launch {
             runCatching { api.logout() }
             tokens.clear()
-            forgetJobs()
+            jobs.forget()
             _screen.value = Screen.SignIn()
         }
     }

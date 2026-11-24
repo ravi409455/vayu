@@ -3,9 +3,18 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.roborazzi)
+    alias(libs.plugins.kover)
 }
 
 roborazzi { outputDir.set(file("src/test/screenshots")) }
+
+// plan NF11: the domain and data code (core/) stays at least 80% covered by tests
+kover {
+    reports {
+        filters { includes { packages("in.carcid.vayu.core") } }
+        verify { rule { minBound(80) } }
+    }
+}
 
 android {
     namespace = "in.carcid.vayu"
@@ -17,16 +26,19 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
-        // the API the app talks to; override with -Pvayu.apiUrl=... (an emulator reaches this Mac at 10.0.2.2)
-        buildConfigField("String", "API_URL", "\"${project.findProperty("vayu.apiUrl") ?: "http://10.0.2.2:8000/api/v1/"}\"")
     }
 
     buildTypes {
+        // the API the app talks to; override with -Pvayu.apiUrl=... (e.g. staging)
+        val apiUrl = project.findProperty("vayu.apiUrl") as String?
         debug {
             manifestPlaceholders["cleartext"] = "true"     // the local API is plain http
+            // an emulator reaches this Mac at 10.0.2.2
+            buildConfigField("String", "API_URL", "\"${apiUrl ?: "http://10.0.2.2:8000/api/v1/"}\"")
         }
         release {
             manifestPlaceholders["cleartext"] = "false"
+            buildConfigField("String", "API_URL", "\"${apiUrl ?: "https://app.carcid.in/api/v1/"}\"")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -46,6 +58,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.coroutines.android)
     implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime)
     implementation(platform(libs.compose.bom))

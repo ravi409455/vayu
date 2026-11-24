@@ -11,10 +11,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import `in`.carcid.vayu.AppRoot
 import `in`.carcid.vayu.core.api.Api
 import `in`.carcid.vayu.core.auth.MemoryTokenStore
-import okhttp3.mockwebserver.MockResponse
-import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,20 +25,24 @@ import org.robolectric.annotation.GraphicsMode
 @Config(qualifiers = "w390dp-h844dp-xxhdpi", sdk = [34])
 class SignInFlowTest {
     @get:Rule val compose = createComposeRule()
-    private val server = MockWebServer()
+    private val server = `in`.carcid.vayu.core.api.FakeServer()
     private val options = RoborazziOptions(compareOptions = RoborazziOptions.CompareOptions(changeThreshold = 0.01F))
 
-    @Before fun start() = server.start()
-    @After fun stop() = server.shutdown()
+    @After fun stop() = server.stop()
 
-    private fun json(code: Int, body: String) = MockResponse().setResponseCode(code).setBody(body)
+    private fun signedIn(role: String, mustChange: Boolean = false) {
+        server.on("POST auth/login", """{"access":"A","refresh":"R"}""")
+        server.on("GET auth/me", me(role, mustChange))
+        server.on("POST devices/heartbeat", """{"min_app_version":1}""")
+        server.on("GET sync/jobs", """{"server_time":"2026-11-24T05:00:00Z","jobs":[]}""")
+    }
     private fun me(role: String, mustChange: Boolean = false) =
         """{"id":3,"username":"ravi","name":"Ravi Expert","role":"$role","must_change_password":$mustChange,"theme":"light"}"""
 
     private fun launch() {
         val tokens = MemoryTokenStore()
         val dir = java.nio.file.Files.createTempDirectory("vayu").toFile()
-        val vm = AppViewModel(Api(server.url("/api/v1/").toString(), tokens), tokens, "Test phone",
+        val vm = AppViewModel(Api(server.url, tokens), tokens, "Test phone",
             storeFor = { `in`.carcid.vayu.core.sync.JobStore(java.io.File(dir, "jobs-$it.json")) })
         compose.setContent { AppRoot(vm) }
     }
@@ -63,30 +64,28 @@ class SignInFlowTest {
     }
 
     @Test fun anExpertLandsOnMyJobs() {
-        server.enqueue(json(200, """{"access":"A","refresh":"R"}""")); server.enqueue(json(200, me("expert")))
-        repeat(2) { server.enqueue(json(200, """{"min_app_version":1,"server_time":"2026-11-24T05:00:00Z","jobs":[]}""")) }
+        signedIn("expert")
         launch(); signIn(); waitFor("My jobs")
     }
 
     @Test fun opsLandOnToday() {
-        server.enqueue(json(200, """{"access":"A","refresh":"R"}""")); server.enqueue(json(200, me("ops")))
-        server.enqueue(json(200, """{"min_app_version":1}"""))
+        signedIn("ops")
         launch(); signIn(); waitFor("Today")
     }
 
     @Test fun anAdminIsSentToTheWeb() {
-        server.enqueue(json(403, """{"code":"ADMIN_USE_WEB","detail":"Admins use the web."}"""))
+        server.on("POST auth/login", """{"code":"ADMIN_USE_WEB","detail":"Admins use the web."}""", 403)
         launch(); signIn(); waitFor("Admin tools live on the web")
         compose.onRoot().captureRoboImage("src/test/screenshots/admin_refused.png", roborazziOptions = options)
     }
 
     @Test fun aWrongPasswordIsExplained() {
-        server.enqueue(json(401, """{"code":"INVALID_CREDENTIALS","detail":"Username or password is wrong."}"""))
+        server.on("POST auth/login", """{"code":"INVALID_CREDENTIALS","detail":"Username or password is wrong."}""", 401)
         launch(); signIn(); waitFor("Username or password is wrong.")
     }
 
     @Test fun aFirstSignInAsksForANewPassword() {
-        server.enqueue(json(200, """{"access":"A","refresh":"R"}""")); server.enqueue(json(200, me("expert", mustChange = true)))
+        signedIn("expert", mustChange = true)
         launch(); signIn(); waitFor("Choose your password")
         compose.onRoot().captureRoboImage("src/test/screenshots/change_password.png", roborazziOptions = options)
     }

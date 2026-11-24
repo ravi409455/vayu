@@ -25,14 +25,14 @@ person. Push notifications for both roles. APK download + self-update.
 | UI | Jetpack Compose + Material 3, with a **Vayu theme** built from the web tokens (light, dark, match phone) | Approved look; standard Android behaviour (back, sheets, pickers) |
 | Structure | One `app` module; packages `core/` (api, db, sync, rules, media, push), `ui/` (design system), `expert/`, `ops/`, `shared/` (sign-in, profile, notifications) | One APK, roles split by package, no premature multi-module |
 | State | ViewModel + Kotlin Flow; manual constructor injection (no Hilt) | Small team, fewer moving parts |
-| Network | OkHttp + Retrofit + kotlinx.serialization, generated models checked against `backend/openapi.yaml` in a test | API is frozen; drift is caught in CI |
-| Local data | Room: jobs, frozen form versions, drafts (answers saved on every change), upload queue, Ops read cache | Offline-first for experts, read cache for Ops |
-| Background | WorkManager: sync, uploads (8 MB parts, resumable), heartbeat | Survives restarts and reboots |
-| Rules | `json-logic-java` behind one adapter, **must pass 100% of `shared/rule-vectors`** before anything relies on it | Same answers as Python and TypeScript |
+| Network | OkHttp + kotlinx.serialization JSON (no Retrofit: one small `Api` class); `ApiContractTest` checks every call the app makes exists in `backend/openapi.yaml` | API is frozen; drift is caught in CI |
+| Local data | App-private JSON files with atomic writes (no Room): `jobs-<user>.json` (jobs, frozen form versions, lists), one file per draft (answers saved on every change), the upload queue, the Ops read cache | Offline-first for experts; simpler than a database for a few hundred records |
+| Background | Sync on sign-in, on opening the app and on Refresh; WorkManager for uploads (8 MB parts, resumable) from Phase 15 | Uploads must survive restarts and reboots |
+| Rules | Own port of json-logic-js (`core/rules`), **passes 100% of `shared/rule-vectors`** | Same answers as Python and TypeScript (no Java library matched JS coercion) |
 | Camera | CameraX; stamp burned in on the phone; video 720p up to 60 s | Requirement |
 | Scan | ML Kit on-device text recognition (no network) | Works offline; text always shown for confirmation |
 | Push | Firebase Cloud Messaging (`android/app/google-services.json` is already present) | Requirement |
-| Errors | Sentry Android | Same as web/server |
+| Errors | Sentry Android (added in Phase 17, needs the DSN) | Same as web/server |
 
 ## Backend additions (all additive: no breaking API change, oasdiff stays green)
 | # | Change | Notes |
@@ -112,10 +112,11 @@ Each phase: tests first (red), then the code, then CI green, then a short demo o
 Unchanged from plan.md: seeds, release rehearsal, staging trial with 2–3 experts and Ops.
 
 ## Testing and gates
-- Unit (JUnit 5, MockK, Turbine), Robolectric for Room / WorkManager, Compose UI tests for every
+- Unit (JUnit 4, a route-based fake server instead of mocks), Robolectric, Compose UI tests for every
   screen, Roborazzi screenshots of every prototype screen in light and dark (reviewed against the
   canvas once, then locked).
-- Coverage: domain and data layers ≥ 80% (plan NF11); rules adapter 100% of the shared vectors.
+- Coverage: `core/` (domain and data) ≥ 80%, enforced by Kover in CI (plan NF11); rules 100% of the shared vectors.
+- CI also builds the release APK (catches shrinking problems early).
 - Backend additions follow the existing 100% branch-coverage gates.
 
 ## What you (the owner) need to provide, and when
