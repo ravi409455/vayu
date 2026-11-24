@@ -5,10 +5,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError, explain } from "../../api/client";
 import { asList, useList, useRefresh } from "../../api/hooks";
 import { STAGE_LABEL, STAGE_TONE, useInspectionTypes, useLabels, useTypeLabels } from "../../api/labels";
-import type { Booking, FormPage, FormSection, FormVersion, Inspection, MasterListItem, User } from "../../api/types";
+import type { Booking, FormPage, FormSection, FormVersion, Inspection, KeyCheckValue, MasterListItem, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { saveDirty } from "../../lib/saveDirty";
 import { usePinnedTrees, useTrees } from "../../lib/useTrees";
+import { InfoTip } from "../../ui/InfoTip";
 import { addFile, discardFile, uploaded } from "../../lib/uploadManager";
 import { FormRenderer } from "../../ui/FormRenderer";
 import { Confirm, Empty, Field, Modal, Pill, Tabs, useToast } from "../../ui/kit";
@@ -56,7 +57,7 @@ function NewBooking() {
   );
 }
 
-type Tab = "booking" | "inspection" | "media" | "ratings" | "report";
+type Tab = "booking" | "inspection" | "media" | "review" | "report";
 type Activity = { at: string; kind: string; by: { id: number; name: string; role: string } | null; changes: Record<string, [unknown, unknown]>; keys: string[] };
 type ActionKind = "assign" | "reschedule" | "cancel" | "release" | "type";
 
@@ -122,7 +123,7 @@ function Detail({ id }: { id: string }) {
           {!f.reviewedAt && can("bookings.review_timing") && <button className="sm" onClick={async () => { try { await api(`bookings/${booking.id}/timing-review`, { body: { flag: f.flag } }); say("Marked reviewed."); void reload(); void refresh("problems"); } catch (e) { fail(e); } }}>Mark reviewed</button>}
         </div>))}
       {booking.conflict && <ConflictBanner booking={booking} insps={insps.data ?? []} experts={experts.data ?? []} onResolved={reload} />}
-      <Tabs value={current} onChange={setTab} tabs={[{ id: "booking", label: "Booking" }, { id: "inspection", label: "Inspection" }, { id: "media", label: mediaCount ? `Media ${mediaCount}` : "Media" }, { id: "ratings", label: "Ratings" }, { id: "report", label: "Report" }]} />
+      <Tabs value={current} onChange={setTab} tabs={[{ id: "booking", label: "Booking" }, { id: "inspection", label: "Inspection" }, { id: "media", label: mediaCount ? `Media ${mediaCount}` : "Media" }, { id: "review", label: "Review" }, { id: "report", label: "Report" }]} />
       <button className="sm rail-toggle" aria-expanded={rail} onClick={toggleRail}>
         {rail ? <PanelLeftClose size={14} aria-hidden /> : <PanelLeftOpen size={14} aria-hidden />}{rail ? "Hide customer, car and activity" : "Show customer, car and activity"}</button>
       <div className="record-body">
@@ -143,13 +144,13 @@ function Detail({ id }: { id: string }) {
               {insp?.answers.inspection?.odometer !== undefined && insp?.answers.inspection?.odometer !== null ? <><dt>Odometer</dt><dd>{Number(insp.answers.inspection.odometer).toLocaleString("en-IN")} km</dd></> : null}
             </dl>
           </section>
-          <ActivityCard rows={activity.data ?? []} experts={experts.data ?? []} labels={(k) => { const [p, f] = k.split("."); return f ? labelOf(pinned[p as Part], f) : labelOf(trees.booking, k); }} typeLabel={typeLabel} />
+          <ActivityCard rows={activity.data ?? []} experts={experts.data ?? []} labels={(k) => { const [p, f] = k.split("."); if (p === "check") return pinned.inspection?.key_checks?.find((x) => x.key === f)?.label ?? f!; return f ? labelOf(pinned[p as Part], f) : labelOf(trees.booking, k); }} typeLabel={typeLabel} />
         </aside>}
         <div className="record-main">
           {current === "booking" && trees.booking && <BookingTab booking={booking} tree={trees.booking} onSaved={reload} />}
           {current === "inspection" && <InspectionTab booking={booking} insp={insp} trees={pinned} activity={activity.data ?? []} onSaved={reload} />}
           {current === "media" && <MediaTab booking={booking} insp={insp} trees={pinned} onChanged={reload} />}
-          {current === "ratings" && <RatingsTab insp={insp} trees={pinned} onSaved={reload} />}
+          {current === "review" && <ReviewTab booking={booking} insp={insp} trees={pinned} onSaved={reload} />}
           {current === "report" && <ReportTab booking={booking} />}
         </div>
       </div>
@@ -174,6 +175,11 @@ export function activityText(r: Activity, expertName: (id: unknown) => string, l
   if (r.kind === "created") return `Created by ${by}`;
   if (r.kind === "inspection_edited") return `${by} changed ${r.keys.length} answer${r.keys.length === 1 ? "" : "s"}`;
   if (r.kind === "ratings_changed") return `${by} changed the ratings`;
+  if (r.kind === "key_checks_changed") {
+    const moved = Object.entries(c ?? {}) as [string, [string | null, string | null]][];
+    return moved.length ? `${by} changed ${moved.map(([k, [a, b]]) => `${label(k)}: ${a || "empty"} → ${b || "empty"}`).join("; ")}`
+      : `${by} changed ${r.keys.map(label).join(", ") || "Key Checks"}`;
+  }
   if (r.kind === "media_replaced") return `${by} replaced a file in ${r.keys.map(label).join(", ") || "the inspection"}`;
   if (r.kind === "media_added") return `${by} added a file to ${r.keys.map(label).join(", ") || "the inspection"}`;
   if (r.kind === "late_reviewed") return `Late start reviewed by ${by}`;
@@ -316,7 +322,6 @@ function InspectionTab({ booking, insp, trees, activity, onSaved }: { booking: B
   const defects = rows.map((r) => defectOf(r.f, r.v)).filter(Boolean) as string[];
   const editedCount = rows.filter((r) => edited[r.part].has(r.f.key)).length;
   const missing = parts.reduce((n, { part, tree }) => n + missingFields(part, tree, vals[part], ctxFor(part)).length, 0);
-  const checks = (trees.inspection?.pages ?? []).flatMap((p) => p.sections.flatMap((s) => s.fields.filter((f) => f.type === "derived")));
   const mineKeys = PART_ORDER.flatMap((p) => Object.keys(dirty[p]));
   const change = (part: Part) => (k: string, v: unknown) => { setVals({ ...vals, [part]: { ...vals[part], [k]: v } }); setDirty({ ...dirty, [part]: { ...dirty[part], [k]: v } }); setErrors({ ...errors, [k]: "" }); };
   const cancel = () => { setDirty(NO_ANSWERS); setErrors({}); setVals(fromServer(insp, NO_ANSWERS)); setEditing(null); };
@@ -344,7 +349,7 @@ function InspectionTab({ booking, insp, trees, activity, onSaved }: { booking: B
         <div><div className="muted small">Answered</div><div className="big">{answered} <span className="muted small">of {rows.length}</span></div>
           <div className="progress thin"><div style={{ width: `${rows.length ? (answered / rows.length) * 100 : 0}%` }} /></div></div>
         <div><div className="muted small">Defects</div><div className={`big${defects.length ? " bad-text" : ""}`}>{defects.length}</div><div className="muted small">{major} major · {defects.length - major} other</div></div>
-        {insp.scores?.derived && checks.length > 0 && <div><div className="muted small">Key Checks</div><div className="chips">{checks.map((f) => <span key={f.key} className="chip">{f.label}: {insp.scores?.derived?.[f.key] === true ? String(f.config.true_label ?? "Yes") : String(f.config.false_label ?? "No")}</span>)}</div></div>}
+        {(trees.inspection?.key_checks ?? []).length > 0 && <div><div className="muted small">Key Checks</div><div className="chips">{trees.inspection!.key_checks!.map((k) => <span key={k.key} className="chip">{k.label}: {insp.scores?.key_checks?.[k.key]?.value || "—"}</span>)}</div></div>}
         <div><div className="muted small">Required, not answered</div><div className={`big${missing ? " warn-text" : ""}`}>{missing}</div></div>
       </section>
       <div className="bar">
@@ -484,7 +489,7 @@ const TYPE_GROUPS = [["photo", "Photos"], ["video", "Videos"], ["file", "Documen
 
 function MediaTab({ booking, insp, trees, onChanged }: { booking: Booking; insp?: Inspection; trees: Trees; onChanged: () => void }) {
   const { can } = useAuth();
-  const { fail, say } = useToast();
+  const { fail } = useToast();
   const [zip, setZip] = useState<string>("");
   const [view, setView] = useState<"section" | "type">(() => { try { return localStorage.getItem("vayu:media-view") === "type" ? "type" : "section"; } catch { return "section"; } });
   const pickView = (v: "section" | "type") => { setView(v); try { localStorage.setItem("vayu:media-view", v); } catch { /* private window: not remembered */ } };
@@ -607,21 +612,30 @@ function Seg<T extends string | number>({ label, value, suggested, options, onPi
   );
 }
 
-function RatingsTab({ insp, trees, onSaved }: { insp?: Inspection; trees: Trees; onSaved: () => void }) {
+/** Ops review a booking: Key Checks (their own text wins), the overall word and category ratings. */
+function ReviewTab({ booking, insp, trees, onSaved }: { booking: Booking; insp?: Inspection; trees: Trees; onSaved: () => void }) {
   const { can } = useAuth();
   const { say, fail } = useToast();
-  if (!insp) return <Empty title="No inspection yet">Ratings are calculated from the defects once the expert submits.</Empty>;
+  if (!insp) return <Empty title="No inspection yet">Key Checks and ratings are worked out once the expert submits.</Empty>;
+  const kcs = trees.inspection?.key_checks ?? [];
+  const kcOpen = booking.stage === "submitted" || booking.stage === "completed";
   const s = insp.scores;
   const cats = trees.inspection?.rating_config?.categories ?? [];
-  const checks = (trees.inspection?.pages ?? []).flatMap((p) => p.sections.flatMap((sec) => sec.fields.filter((f) => f.type === "derived")));
-  async function send(body: Record<string, unknown>) {
+  async function send(body: Record<string, unknown>): Promise<void> {
     try { await api(`inspections/${insp!.id}/overrides`, { method: "PATCH", body: { row_version: insp!.row_version, ...body } }); say("Saved."); onSaved(); } catch (e) { fail(e); }
   }
   const edit = can("ratings.override");
   const nums = [1, 2, 3, 4, 5].map((n) => ({ v: n, label: String(n) }));
-  const derivedOverride = (k: string) => (insp.overrides?.derived as Record<string, boolean> | undefined)?.[k];
   return (
     <div className="stack">
+      {kcs.length > 0 && <section className="card" aria-label="Key Checks">
+        <div className="sheet-head"><h3>Key Checks <InfoTip>Worked out from the answers (or the default). Type over any of them; your text stays even if the answers change, until you reset it.</InfoTip></h3>
+          {!kcOpen && <span className="muted small">Editable once the expert submits.</span>}</div>
+        <div className="kc-rows">
+          {kcs.map((kc) => <KeyCheckRow key={kc.key} id={`kc-${kc.key}`} label={kc.label} v={s?.key_checks?.[kc.key]} disabled={!edit || !kcOpen}
+            onSave={(text) => send({ key_checks: { [kc.key]: text } })} />)}
+        </div>
+      </section>}
       <section className="card">
         <div className="sheet-head"><h3>Overall</h3><span className="pill">{s?.overall?.word ?? "—"}</span><span className="muted small">average {s?.overall?.average ?? "—"} · suggested {s?.overall?.suggested_word ?? "—"}</span>{s?.overall?.overridden && <Pill tone="warn">Overridden</Pill>}</div>
         <Seg label="Overall word" value={s?.overall?.overridden ? s.overall.word : null} suggested={s?.overall?.suggested_word} options={WORDS.map((w) => ({ v: w, label: w[0]!.toUpperCase() + w.slice(1) }))} disabled={!edit} onPick={(v) => send({ overall: v })} />
@@ -640,23 +654,31 @@ function RatingsTab({ insp, trees, onSaved }: { insp?: Inspection; trees: Trees;
           {cats.length === 0 && <p className="muted">This form has no rating categories.</p>}
         </div>
       </section>
-      {checks.length > 0 && <section className="card">
-        <h3 style={{ marginTop: 0 }}>Key Checks</h3>
-        <div className="rating-rows">
-          {checks.map((f) => {
-            const yes = String(f.config.true_label ?? "Yes"), no = String(f.config.false_label ?? "No");
-            const o = derivedOverride(f.key);
-            return (
-              <div key={f.key} className="rating-row">
-                <div className="grow"><strong>{f.label}</strong> <span className="muted small">Now: {s?.derived?.[f.key] === true ? yes : no}</span></div>
-                <Seg label={`${f.label} override`} value={o === undefined ? null : o ? "true" : "false"} options={[{ v: "true", label: yes }, { v: "false", label: no }]} disabled={!edit}
-                  onPick={(v) => send({ derived: { [f.key]: v === null ? null : v === "true" } })} />
-              </div>);
-          })}
-        </div>
-      </section>}
     </div>
   );
+}
+
+/** One Key Check on the Review tab: a text box; Save when changed; Reset brings back the
+ *  worked-out value. */
+function KeyCheckRow({ id, label, v, disabled, onSave }: { id: string; label: string; v?: KeyCheckValue; disabled: boolean; onSave: (text: string | null) => Promise<void> }) {
+  const value = v?.value ?? "";
+  const [text, setText] = useState(value);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setText(value), [value]);
+  const changed = text !== value;
+  const save = async (t: string | null) => { setBusy(true); try { await onSave(t); } finally { setBusy(false); } };
+  return (
+    <div className="kc-row">
+      <label className="kc-label" htmlFor={id}>{label}{v?.edited && <Pill tone="warn">Edited</Pill>}</label>
+      <div className="kc-edit">
+        <input id={id} value={text} disabled={disabled || busy} placeholder="Empty"
+          onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && changed) void save(text); if (e.key === "Escape") setText(value); }} />
+        {changed && <button className="primary sm" disabled={busy} onClick={() => void save(text)}>Save</button>}
+        {changed && <button className="sm" disabled={busy} onClick={() => setText(value)}>Cancel</button>}
+      </div>
+      {v?.edited && !changed && (
+        <div className="muted small">Automatic: {v.auto || "empty"} · {!disabled && <button className="link" disabled={busy} onClick={() => void save(null)}>Reset to automatic</button>}</div>)}
+    </div>);
 }
 
 type ReportInfo = { verify_url?: string; revision: number; status: string; stale: boolean; generated_at: string | null; filename: string; error: string; url: string | null; preview_url?: string | null };

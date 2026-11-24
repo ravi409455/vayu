@@ -115,7 +115,7 @@ def test_the_pdi_form_is_the_full_one_from_the_sample_report():
     photo = Field.objects.get(version=v, key="door_driver_front_photo")
     assert photo.config["photo_of"] == "door_driver_front" and photo.show_if
     assert Field.objects.get(version=v, key="issue_photos").config["issue_photo"] is True
-    assert Field.objects.filter(version=v, type="derived").count() == 9
+    assert len(v.key_checks) == 9 and not Field.objects.filter(version=v, type="derived").exists()
     assert Field.objects.filter(version=v).count() >= 300
     # the sample booking is answered in full, with its pictures
     answers = Booking.objects.get(booking_id="DEMO-3").inspections.get().answers["inspection"]

@@ -129,8 +129,16 @@ class Source:
         form, key = field_ref(ref)
         return form != "inspection" or self.visible.get(key, True)
 
+    def key_checks(self) -> dict[str, str]:
+        """Key Checks the report may show (Admin can leave one out): key -> value."""
+        values = (self.insp.scores or {}).get("key_checks") or {}
+        return {kc["key"]: (values.get(kc["key"]) or {}).get("value", "")
+                for kc in self.version.key_checks or [] if kc.get("in_report", True)}
+
     def cell(self, ref: str) -> Cell:
         form, key = field_ref(ref)
+        if form == "check":
+            return Cell(self.key_checks().get(key, ""))
         if not self.shown(ref):
             return Cell("")
         return Cell(*display(self.get_field(ref), self.answers.get(form, {}).get(key)))
@@ -158,6 +166,7 @@ class Source:
             .values_list("name", flat=True).first() or b.inspection_type
         from django.conf import settings
 
+        out["check"] = self.key_checks()
         out["sys"] = {
             "booking_id": b.booking_id, "inspection_type": kind,
             "expert": insp.expert.name or insp.expert.username,
@@ -224,6 +233,20 @@ def flags(src: Source, ref: str, c: Cell) -> list[str]:
 
 
 def _row(src: Source, ref: str, label: str | None, fallback: str | None) -> dict | None:
+    form, key = field_ref(ref)
+    if form == "check":                  # a Key Check row: its label from the form's list
+        own = {kc["key"]: kc for kc in src.version.key_checks or [] if kc.get("in_report", True)}
+        if key not in own:
+            return None
+        kc, c = own[key], src.cell(ref)
+        if not c.text and fallback is None:
+            return None
+        # a Yes/No one keeps its colours: its "yes" means a problem was found
+        tone = None if kc["type"] != "rule" else (
+            "bad" if c.text == (kc.get("true_label") or "Yes")
+            else "ok" if c.text == (kc.get("false_label") or "No") else None)
+        return {"label": label or kc["label"], "text": c.text or fallback, "tone": tone,
+                "problem": False, "empty": not c.text, "flags": []}
     f = src.get_field(ref)
     if f is None or not src.shown(ref):
         return None

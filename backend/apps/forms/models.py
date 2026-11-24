@@ -91,6 +91,7 @@ class FormVersion(models.Model):
     published_at = models.DateTimeField(null=True, blank=True)
     row_version = models.PositiveIntegerField(default=0)
     rating_config = models.JSONField(default=dict, blank=True)  # see apps/scoring/engine.py
+    key_checks = models.JSONField(default=list, blank=True)     # see apps/scoring/keychecks.py
     # custom forms: does the expert begin with the start form / finish with the end form?
     use_start = models.BooleanField(default=True)
     use_end = models.BooleanField(default=True)

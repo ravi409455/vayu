@@ -451,6 +451,33 @@ class RatingConfigView(generics.GenericAPIView):
         return Response({"rating_config": config, "row_version": version.row_version})
 
 
+class KeyChecksView(generics.GenericAPIView):
+    """The draft's Key Checks, saved as a whole ordered list (like the rating config)."""
+
+    permission_classes = [perm("forms.view", "forms.edit")]
+    serializer_class = serializers.Serializer
+
+    def patch(self, request, pk):
+        from apps.scoring.keychecks import validate
+
+        items = request.data.get("key_checks")
+        try:
+            validate(items)
+        except ValueError as e:
+            raise CodedError("INVALID_KEY_CHECKS", str(e), 400) from e
+        with transaction.atomic():
+            lock_draft(pk)
+            version = get_object_or_404(FormVersion, pk=pk)
+            if items and version.form.type != "custom":       # only inspections are reviewed
+                raise CodedError("INVALID_KEY_CHECKS", "Only inspection forms have Key Checks.",
+                                 400)
+            version.key_checks = items
+            version.row_version += 1
+            version.save(update_fields=["key_checks", "row_version"])
+        audit.record(request.user, "form.key_checks", "form_version", pk, "Updated Key Checks")
+        return Response({"key_checks": items, "row_version": version.row_version})
+
+
 def pdf_warnings(version) -> list:
     from apps.reports.service import warnings
 

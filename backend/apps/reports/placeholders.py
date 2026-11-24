@@ -10,7 +10,7 @@ import nh3
 from jinja2 import ChainableUndefined, TemplateSyntaxError, nodes
 from jinja2.sandbox import SandboxedEnvironment
 
-ROOTS = {"booking", "start", "inspection", "end", "sys"}
+ROOTS = {"booking", "start", "inspection", "end", "check", "sys"}     # check: Key Checks
 ALLOWED_NODES = (nodes.Template, nodes.Output, nodes.TemplateData, nodes.Name, nodes.Getattr)
 TAGS = {"p", "br", "strong", "b", "em", "i", "u", "s", "ul", "ol", "li", "a", "span", "h2", "h3",
         "h4", "blockquote", "hr"}

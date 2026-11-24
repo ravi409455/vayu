@@ -6,6 +6,7 @@ from django.utils import timezone
 from apps.forms.models import Field
 from apps.forms.rules import evaluate_form, spec_from_version
 
+from . import keychecks
 from .engine import DEFAULT_CONFIG, WORDS, category_value, overall_result
 
 CHOICE = ("single_choice", "multi_choice")
@@ -55,6 +56,7 @@ def compute(insp) -> dict:
                                     cfg["thresholds"], any_critical)["word"]
     word = overrides.get("overall") or final["word"]
     return {
+        "key_checks": _key_checks(insp, version, result.data, fields, overrides),
         "derived": result.derived, "defects": result.defects, "ratings": ratings,
         "overall": {"average": final["average"], "word": word, "suggested_word": suggested_word,
                     "overridden": overrides.get("overall") is not None},
@@ -64,6 +66,24 @@ def compute(insp) -> dict:
     }
 
 
+def _key_checks(insp, version, data: dict, fields: list, overrides: dict) -> dict:
+    """key -> {auto, value, edited}: the worked-out text, what shows (Ops' text wins) and whether
+    Ops wrote it."""
+    from apps.bookings.services import booking_form_version
+
+    items = version.key_checks or []
+    if not items:
+        return {}
+    by_part = {"inspection": {f.key: f for f in fields}}
+    for part, v in (("start", insp.start_version), ("end", insp.end_version),
+                    ("booking", booking_form_version())):
+        by_part[part] = {f.key: f for f in Field.objects.filter(version=v)} if v else {}
+    auto = keychecks.auto_values(items, data, by_part)
+    given = overrides.get("key_checks", {})
+    return {k: {"auto": a, "value": given.get(k, a), "edited": k in given}
+            for k, a in auto.items()}
+
+
 def recompute(insp) -> None:
     insp.scores = compute(insp)
     insp.save(update_fields=["scores"])
@@ -71,8 +91,8 @@ def recompute(insp) -> None:
 
 def validate_overrides(version, body: Any) -> None:
     """Raises ValueError. Values may be None to clear an override."""
-    if not isinstance(body, dict) or set(body) - {"ratings", "derived", "overall"}:
-        raise ValueError("Send ratings, derived and/or overall.")
+    if not isinstance(body, dict) or set(body) - {"ratings", "derived", "overall", "key_checks"}:
+        raise ValueError("Send ratings, derived, overall and/or key_checks.")
     categories = {c["key"] for c in _cfg(version)["categories"]}
     derived = set(Field.objects.filter(version=version, type="derived")
                   .values_list("key", flat=True))
@@ -92,20 +112,32 @@ def validate_overrides(version, body: Any) -> None:
             raise ValueError(f"'{key}' is not a Key Check of this form.")
         if v is not None and not isinstance(v, bool):
             raise ValueError("Key Checks are true or false.")
+    texts = body.get("key_checks", {})
+    known = {kc["key"] for kc in version.key_checks or []}
+    if not isinstance(texts, dict):
+        raise ValueError("key_checks must be an object.")
+    for key, v in texts.items():
+        if key not in known:
+            raise ValueError(f"'{key}' is not a Key Check of this form.")
+        if v is not None and (not isinstance(v, str) or len(v) > keychecks.MAX_TEXT):
+            raise ValueError(f"A Key Check is text of at most {keychecks.MAX_TEXT} characters.")
     if body.get("overall") is not None and body["overall"] not in WORDS:
         raise ValueError(f"overall must be one of {', '.join(WORDS)}.")
 
 
 def apply_overrides(current: dict, body: dict) -> dict:
-    out = {"ratings": dict(current.get("ratings", {})), "derived": dict(current.get("derived", {}))}
+    out = {"ratings": dict(current.get("ratings", {})), "derived": dict(current.get("derived", {})),
+           "key_checks": dict(current.get("key_checks", {}))}
     if "overall" in current:
         out["overall"] = current["overall"]
-    for group in ("ratings", "derived"):
+    for group in ("ratings", "derived", "key_checks"):
         for key, v in (body.get(group) or {}).items():
             if v is None:
                 out[group].pop(key, None)
             else:
                 out[group][key] = v
+    if not out["key_checks"]:
+        del out["key_checks"]                  # nothing typed: keep the stored shape small
     if "overall" in body:
         if body["overall"] is None:
             out.pop("overall", None)

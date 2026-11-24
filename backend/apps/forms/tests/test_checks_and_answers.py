@@ -92,7 +92,7 @@ def test_required_type_and_check_errors_are_combined(form_v, add_field, admin):
     version = build(form_v, add_field, admin)
     _, errors = validate_answers(version, {"inspection": {
         "chassis_no": "X", "door": "dent", "odo": -5, "mfg": "2027-01-01"}}, today="2026-10-14")
-    assert errors == {"door_photo": "required", "odo": "OUT_OF_RANGE", "mfg": "check_failed"}
+    assert errors == {"door_photo": "required", "odo": "OUT_OF_RANGE", "mfg": "Not in the future"}
 
 
 def test_bad_value_in_a_hidden_field_is_ignored_and_dropped(form_v, add_field, admin):

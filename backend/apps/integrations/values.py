@@ -112,6 +112,9 @@ def catalogue(form, event: str | None = None, override: dict | None = None) -> l
         for c in (vers["inspection"].rating_config or {}).get("categories", []):
             add("result", f"result.rating.{c['key']}", f"Rating: {c['label']}", "number")
         add("result", "result.key_checks", "Key Check results", "list")
+        for kc in vers["inspection"].key_checks or []:
+            add("result", f"result.key_check.{kc['key']}", f"Key Check: {kc['label']}",
+                {"number": "number", "date": "date"}.get(kc["type"], "text"))
         add("result", "result.defects", "Fields with defects", "list")
     if "pdf" in keep and form.type == FormType.CUSTOM:
         add("link", "link.pdf", "PDF link", "text")
@@ -143,6 +146,19 @@ def check_syntax(text: str) -> bool:
 
 def refs_in(text: str) -> list[str]:
     return [m.group(1) for m in TOKEN.finditer(text)]
+
+
+def _kc_value(kc: dict, scores: dict) -> Any:
+    """A Key Check's value for an integration: a number when it is a Number one that reads as a
+    number, else the text."""
+    text = ((scores.get("key_checks") or {}).get(kc["key"]) or {}).get("value")
+    if kc["type"] == "number" and text:
+        try:
+            n = float(text.replace(",", ""))
+            return int(n) if n.is_integer() else n
+        except ValueError:
+            pass
+    return text
 
 
 def text_of(v: Any, sep: str = ", ") -> str:
@@ -379,7 +395,14 @@ class Resolver:
                       for c in (insp.form_version.rating_config or {}).get("categories", [])}
             return [{"category": labels.get(k, k), "rating": r["value"]}
                     for k, r in s.get("ratings", {}).items()]
-        if name == "key_checks":
+        if name == "key_checks" and insp.form_version.key_checks:
+            return [{"name": kc["label"], "value": _kc_value(kc, s)}
+                    for kc in insp.form_version.key_checks]
+        if name.startswith("key_check."):
+            kc = next((k for k in insp.form_version.key_checks or [] if k["key"] == name[10:]),
+                      None)
+            return _kc_value(kc, s) if kc else None
+        if name == "key_checks":                  # forms from before Key Checks were a list
             derived = s.get("derived", {})
             return [{"name": f.label, "result": derived.get(f.key)} for f in
                     Field.objects.filter(version=insp.form_version, type="derived").order_by("id")]

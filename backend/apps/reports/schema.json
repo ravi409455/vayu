@@ -154,7 +154,7 @@
   },
   "ref": {
    "type": "string",
-   "pattern": "^(booking|start|inspection|end)\\.[a-z][a-z0-9_]{0,62}$"
+   "pattern": "^(booking|start|inspection|end|check)\\.[a-z][a-z0-9_]{0,62}$"
   },
   "mm": {
    "type": "number",

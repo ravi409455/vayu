@@ -30,9 +30,17 @@ export type FormPage = {
 export type Check = { id: number; rule: unknown; message: string; fields: string[]; order: number };
 export type FormVersion = {
   id: number; form: number; number: number; status: "draft" | "published"; published_at: string | null;
-  row_version: number; pages: FormPage[]; checks: Check[]; rating_config?: RatingConfig;
+  row_version: number; pages: FormPage[]; checks: Check[]; rating_config?: RatingConfig; key_checks?: KeyCheck[];
   use_start?: boolean; use_end?: boolean;
 };
+export type KeyCheckType = "text" | "number" | "date" | "linked" | "rule";
+/** A fact Ops review on each booking (see backend apps/scoring/keychecks.py). */
+export type KeyCheck = {
+  key: string; label: string; type: KeyCheckType; default?: string; in_report?: boolean;
+  fields?: string[]; combine?: "join" | "template"; separator?: string; template?: string;
+  rule?: Record<string, unknown>; true_label?: string; false_label?: string;
+};
+export type KeyCheckValue = { auto: string; value: string; edited: boolean };
 export type RatingConfig = {
   categories?: { key: string; label: string; sections: string[]; cap?: number | null }[];
   deductions?: { minor: number; major: number; critical: number };
@@ -67,6 +75,7 @@ export type Scores = {
   ratings?: Record<string, { suggested: number; value: number; overridden: boolean }>;
   overall?: { average: number; word: string; suggested_word: string; overridden: boolean };
   fields?: Record<string, number>;
+  key_checks?: Record<string, KeyCheckValue>;
 };
 export type Delivery = {
   id: string; event: string; booking_id: string; status: string; attempts: number;

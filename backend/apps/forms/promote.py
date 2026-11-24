@@ -101,7 +101,8 @@ def export_bundle(version: FormVersion) -> dict:
         "form": {"key": version.form.key, "type": version.form.type, "name": version.form.name,
                  "inspection_type": version.form.inspection_type,
                  "submission_roles": version.form.submission_roles},
-        "version": {"rating_config": version.rating_config, "pages": pages,
+        "version": {"rating_config": version.rating_config, "key_checks": version.key_checks,
+                    "pages": pages,
                     "use_start": version.use_start, "use_end": version.use_end,
                     "checks": [{"rule": c.rule, "message": c.message, "fields": c.fields,
                                 "order": c.order}
@@ -206,6 +207,9 @@ def _check_content(b: dict) -> None:
         if not KEY_RE.fullmatch(b["form"]["key"]):
             raise ValueError("Invalid form key.")
         validate_rating(b["version"].get("rating_config", {}))
+        from apps.scoring.keychecks import validate as validate_key_checks
+
+        validate_key_checks(b["version"].get("key_checks", []))
         roles = b["form"].get("submission_roles", ["expert", "ops"])
         if not isinstance(roles, list) or set(roles) - {"expert", "ops"}:
             raise ValueError("submission_roles may only name expert and ops.")
@@ -374,6 +378,7 @@ def import_bundle(actor, b: Any, as_new: dict | None = None) -> dict:
         number = (form.versions.aggregate(n=Max("number"))["n"] or 0) + 1
         version = FormVersion.objects.create(
             form=form, number=number, rating_config=b["version"].get("rating_config", {}),
+            key_checks=b["version"].get("key_checks", []),
             use_start=b["version"].get("use_start", True),
             use_end=b["version"].get("use_end", True))
         for p in b["version"]["pages"]:

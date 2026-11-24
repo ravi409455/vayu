@@ -1,32 +1,8 @@
 import { useState } from "react";
 import { api } from "../../../api/client";
-import type { Check, FormVersion, RatingConfig } from "../../../api/types";
-import { ConditionBuilder, type FieldChoice } from "../../../ui/ConditionBuilder";
-import { Field, Modal } from "../../../ui/kit";
+import type { FormVersion, RatingConfig } from "../../../api/types";
+import { Field } from "../../../ui/kit";
 import { slugKey } from "../../../lib/fieldTypes";
-
-export function Checks({ version, choices, edit, run }: { version: FormVersion; choices: FieldChoice[]; edit: boolean; run: (fn: () => Promise<unknown>) => void }) {
-  const [adding, setAdding] = useState<{ rule: unknown; message: string; fields: string } | null>(null);
-  return (
-    <>
-      <p className="muted">Key Checks warn when answers contradict each other. Ops see the message on the submission; they never block the expert.</p>
-      <table><thead><tr><th>Message</th><th>Fields</th><th /></tr></thead>
-        <tbody>{version.checks.map((c: Check) => (
-          <tr key={c.id}><td>{c.message}</td><td className="mono">{c.fields.join(", ")}</td>
-            <td>{edit && <button className="link" onClick={() => run(() => api(`checks/${c.id}`, { method: "DELETE" }))}>Delete</button>}</td></tr>))}</tbody></table>
-      {edit && <button className="primary" style={{ marginTop: 10 }} onClick={() => setAdding({ rule: null, message: "", fields: "" })}>Add a check</button>}
-      {adding && (
-        <Modal title="New Key Check" onClose={() => setAdding(null)}
-          actions={<><button onClick={() => setAdding(null)}>Cancel</button><button className="primary" disabled={!adding.message || !adding.fields || adding.rule === null}
-            onClick={() => { const a = adding; setAdding(null); run(() => api(`form-versions/${version.id}/checks`, { body: { rule: a.rule, message: a.message, fields: a.fields.split(",").map((x) => x.trim()).filter(Boolean) } })); }}>Add</button></>}>
-          <ConditionBuilder label="Problem when" value={adding.rule} onChange={(r) => setAdding({ ...adding, rule: r })} fields={choices} />
-          <Field label="Message"><input value={adding.message} onChange={(e) => setAdding({ ...adding, message: e.target.value })} /></Field>
-          <Field label="Field keys it points at" help="Comma separated, e.g. odometer, door"><input value={adding.fields} onChange={(e) => setAdding({ ...adding, fields: e.target.value })} /></Field>
-        </Modal>
-      )}
-    </>
-  );
-}
 
 const DEFAULT_RATING: RatingConfig = { categories: [], deductions: { minor: 0.25, major: 1, critical: 3 }, thresholds: { excellent: 4.5, good: 3.5, average: 2.5 } };
 

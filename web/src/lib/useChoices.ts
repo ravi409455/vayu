@@ -26,6 +26,9 @@ export function useRefChoices(customFormId?: number): RefChoice[] {
     for (const t of trees.data ?? [])
       for (const p of t.v.pages) for (const s of p.sections) for (const f of s.fields)
         out.push({ value: `${t.ns}.${f.key}`, label: `${t.ns}: ${f.label || f.key}`, type: f.type });
+    for (const t of trees.data ?? [])            // Key Checks the report may show
+      for (const k of t.ns === "inspection" ? t.v.key_checks ?? [] : [])
+        if (k.in_report !== false) out.push({ value: `check.${k.key}`, label: `Key Check: ${k.label}`, type: "text" });
     return out;
   }, [trees.data]);
 }

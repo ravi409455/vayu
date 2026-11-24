@@ -1,6 +1,6 @@
 import { Link2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { Access, FormField, Option } from "../../api/types";
+import type { Access, Check as Validation, FormField, Option } from "../../api/types";
 import { uploadFile } from "../../api/client";
 import { iconFor } from "../../lib/typeIcons";
 import { AccessEditor } from "../../ui/AccessEditor";
@@ -11,25 +11,34 @@ import { MoreMenu } from "../../ui/Menu";
 import { CHOICE_TYPES, FIELD_TYPES, slugKey, SYSTEM_TYPE_LABELS } from "../../lib/fieldTypes";
 
 export type FieldDraft = Pick<FormField, "label" | "helper_text" | "type" | "config" | "required" | "required_if" | "show_if" | "visible" | "access">;
+/** A validation being edited: one saved (has an id) or new. */
+export type ValidationDraft = Pick<Validation, "rule" | "message" | "fields"> & { id?: number };
 type Pane = "settings" | "logic" | "access";
 
 /** The settings of one field, in three tabs. The key and type are fixed once a field exists
  *  (answers, PDFs and integrations rely on them); everything else can change while the version is a draft. */
-export function FieldEditor({ field, choices, lists, categories, onSave, onDelete, readOnly, kind = "inspection", parents, extra, outside, siblings }: {
+export function FieldEditor({ field, choices, lists, categories, onSave, onDelete, readOnly, kind = "inspection", parents, extra, outside, siblings, checks }: {
   field: FormField; choices: FieldChoice[]; lists: { key: string; name: string }[]; categories: string[];
   /** the other fields of this field's section (a photo can show one of them) */
   siblings?: { key: string; label: string; type: string }[];
-  onSave: (d: FieldDraft) => void; onDelete: () => void; readOnly: boolean; kind?: string;
+  onSave: (d: FieldDraft, validations?: ValidationDraft[]) => void; onDelete: () => void; readOnly: boolean; kind?: string;
+  /** this field's validations (answer rules that point at it); given: the Logic tab edits them */
+  checks?: Validation[];
   parents?: { section?: Access; page?: Access }; extra?: React.ReactNode; outside?: React.ReactNode;
 }) {
   const [d, setD] = useState<FieldDraft>(field);
   const [pane, setPane] = useState<Pane>("settings");
   const { fail } = useToast();
+  const savedVals = (checks ?? []).map(({ id, rule, message, fields }) => ({ id, rule, message, fields }));
+  const [vals, setVals] = useState<ValidationDraft[]>(savedVals);
   useEffect(() => setD(field), [field]);
+  useEffect(() => setVals(savedVals), [JSON.stringify(savedVals)]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (p: Partial<FieldDraft>) => setD({ ...d, ...p });
   const cfg = d.config as Record<string, unknown>;
   const setCfg = (p: Record<string, unknown>) => set({ config: { ...cfg, ...p } });
-  const dirty = JSON.stringify(d) !== JSON.stringify({ ...field, level: undefined });
+  const valsDirty = JSON.stringify(vals) !== JSON.stringify(savedVals);
+  const dirty = JSON.stringify(d) !== JSON.stringify({ ...field, level: undefined }) || valsDirty;
+  const ref = `${kind === "custom" ? "inspection" : kind}.${field.key}`;
   const type = FIELD_TYPES.find((t) => t.id === field.type)?.label ?? SYSTEM_TYPE_LABELS[field.type] ?? field.type;
   const locked = field.locked || field.is_system;
   const Icon = iconFor(field.type);
@@ -154,16 +163,32 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
             {extra}
           </>
         )}
-        {pane === "logic" && (
-          field.is_system ? <p className="muted">System fields are always shown and always required: the platform relies on them.</p> : (
+        {pane === "logic" && <>
+          {field.is_system ? <p className="muted small">System fields are always shown and always required: the platform relies on them. They can still have validations.</p> : (
             <>
               <ConditionBuilder label="Required only if" value={d.required_if} onChange={(r) => set({ required_if: r })} fields={choices}
                 tip="The field becomes required only when these conditions match. A field hidden by a rule is never required, even if it says “required”." />
               <ConditionBuilder label="Show only if" value={d.show_if} onChange={(r) => set({ show_if: r })} fields={choices}
                 tip="The field appears only when these conditions match." />
             </>
-          )
-        )}
+          )}
+          {checks && <section aria-label="Validation">
+            <div className="label-row" style={{ margin: "14px 0 6px" }}><strong>Validation</strong>
+              <InfoTip label="About validation">The answer must match the condition, or the expert sees your message under the field and cannot submit. Checked only once the fields it uses are answered.</InfoTip></div>
+            {vals.map((v, i) => (
+              <div key={v.id ?? `new-${i}`} className="card" style={{ marginBottom: 8 }}>
+                <ConditionBuilder label="Valid when" value={v.rule} fields={choices}
+                  onChange={(r) => setVals(vals.map((x, j) => (j === i ? { ...x, rule: r ?? { "!!": [{ var: ref }] } } : x)))} />
+                <Field label="Message when not valid">
+                  <input value={v.message} placeholder="e.g. Cannot be after the registration date" maxLength={300}
+                    onChange={(e) => setVals(vals.map((x, j) => (j === i ? { ...x, message: e.target.value } : x)))} />
+                </Field>
+                {v.fields.length > 1 && <p className="muted small">Also shown on: {v.fields.filter((k) => k !== field.key).join(", ")}</p>}
+                <button type="button" className="link danger-link" onClick={() => setVals(vals.filter((_, j) => j !== i))}>Remove validation</button>
+              </div>))}
+            <button type="button" className="link" onClick={() => setVals([...vals, { rule: { "!!": [{ var: ref }] }, message: "", fields: [field.key] }])}>+ Add validation</button>
+          </section>}
+        </>}
         {pane === "access" && <AccessEditor value={d.access} onChange={(a) => set({ access: a })} kind={kind} ftype={field.type} parents={parents} />}
       </fieldset>
       {outside}
@@ -171,7 +196,8 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
         <div className="insp-foot">
           {!field.is_system && <button className="link danger-link" onClick={onDelete}><Trash2 size={14} aria-hidden /> Delete field</button>}
           <span className="grow muted small" style={{ textAlign: "right" }}>{dirty ? "Unsaved changes" : ""}</span>
-          <button className="primary" disabled={!dirty} onClick={() => onSave(d)}>Save field</button>
+          <button className="primary" disabled={!dirty || vals.some((v) => !v.message.trim())} title={vals.some((v) => !v.message.trim()) ? "Every validation needs a message" : undefined}
+            onClick={() => (checks ? onSave(d, vals) : onSave(d))}>Save field</button>
         </div>
       )}
     </div>

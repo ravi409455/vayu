@@ -184,7 +184,8 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
       if (e instanceof ApiError && e.code === "INVALID_ANSWERS") {
         const errs = (e.body.errors ?? {}) as Record<string, string>;
         setErrors({ inspection: errs, start: errs, end: errs });
-        setMsg("Some answers need another look: " + Object.keys(errs).join(", "));
+        const label = (k: string) => Object.values(trees).flatMap((t) => t?.pages.flatMap((pg) => pg.sections.flatMap((sec) => sec.fields)) ?? []).find((f) => f.key === k)?.label || k;
+        setMsg("Some answers need another look: " + Object.keys(errs).map(label).join(", "));
       } else setMsg(explain(e));
     } finally { setBusy(false); }
   }

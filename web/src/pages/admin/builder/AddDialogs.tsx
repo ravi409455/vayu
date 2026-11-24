@@ -18,7 +18,8 @@ export function AddFieldDialog({ sectionTitle, onClose, onAdd, onLibrary }: {
   const [key, setKey] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const lib = useList<LibItem>("library", "library", { kind: "field" });
-  const groups = useMemo(() => [...new Set(FIELD_TYPES.map((t) => t.group))], []);
+  // Key Checks now live on their own tab: the old Yes/No field is no longer offered
+  const groups = useMemo(() => [...new Set(FIELD_TYPES.map((t) => t.group))].filter((g) => g !== "Old"), []);
   const match = (s: string) => s.toLowerCase().includes(q.trim().toLowerCase());
   return (
     <Modal title={`Add a field to “${sectionTitle}”`} onClose={onClose}

@@ -787,3 +787,13 @@ label.link { color: var(--info); cursor: pointer; background: none; border: 0; p
 .seg .dash-custom-box button { border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 4px 12px; border-radius: 8px; font-size: 13px; box-shadow: none; font-weight: 500; }
 .seg .dash-custom-box button.primary { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
 .seg .dash-custom-box button.primary:disabled { background: var(--hover); color: var(--muted); border-color: var(--line); }
+/* Key Checks: the admin list and the Review tab rows */
+.kc-list { display: flex; flex-direction: column; gap: 6px; }
+.kc-rows { display: flex; flex-direction: column; }
+.kc-row { display: grid; grid-template-columns: minmax(140px, 220px) minmax(0, 1fr); gap: 4px 14px; align-items: center; padding: 10px 0; }
+.kc-row + .kc-row { border-top: 1px solid var(--line); }
+.kc-row > .muted { grid-column: 2; }
+.kc-label { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.kc-edit { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.kc-edit input { flex: 1; min-width: 0; }
+@media (max-width: 640px) { .kc-row { grid-template-columns: 1fr; } .kc-row > .muted { grid-column: 1; } }

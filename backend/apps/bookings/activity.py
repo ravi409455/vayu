@@ -15,7 +15,7 @@ def log(b, actor, kind: str, changes: dict | None = None, keys: list[str] | None
     changes = changes or {}
     BookingActivity.objects.create(
         booking=b, actor=actor if getattr(actor, "pk", None) else None, kind=kind,
-        changes={k: v for k, v in changes.items() if k in SAFE_KEYS},
+        changes={k: v for k, v in changes.items() if k in SAFE_KEYS or k.startswith("check.")},
         keys=sorted(keys if keys is not None else changes), inspection=inspection)
 
 
@@ -37,6 +37,8 @@ def for_user(b, user, since=None) -> list[dict]:
     def shown(row, key: str) -> bool:
         if admin or key in COLUMNS:
             return True
+        if key.startswith("check."):          # a Key Check: Ops' review, never for experts
+            return role != "expert"
         if row.inspection_id is None:
             return booking_levels.get(key, "hidden") != "hidden"
         part, _, field = key.partition(".")

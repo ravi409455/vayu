@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { InfoTip } from "./InfoTip";
 import { fromRule, OPS, toRule, type Cond, type OpId, type Row } from "../lib/conditions";
 
-export type FieldChoice = { value: string; label: string };
+export type FieldChoice = { value: string; label: string; type?: string };
 
 /** Builds a JsonLogic rule from rows ("Door is dent AND Odometer > 100"). A rule it cannot draw
  *  stays editable as raw JSON, so nothing written elsewhere is ever lost. */

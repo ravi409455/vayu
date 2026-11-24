@@ -1017,17 +1017,11 @@ def build_pdi(admin):
                 Field.objects.filter(pk=chassis.pk).update(order=-1)
             made[stitle] = keys
     summary = Section.objects.get(version=v, title="Summary")
-    for key, label, rule, yes, no in key_checks(made):
-        Field.objects.create(
-            version=v,
-            section=summary,
-            key=key,
-            label=label,
-            type="derived",
-            order=summary.fields.count(),
-            config={"rule": rule, "true_label": yes, "false_label": no},
-        )
-        made["Summary"].append(key)
+    v.key_checks = [
+        {"key": key, "label": label, "type": "rule", "rule": rule, "true_label": yes,
+         "false_label": no}
+        for key, label, rule, yes, no in key_checks(made)
+    ]
     for ckey, clabel, _ in CATEGORIES:
         Field.objects.create(
             version=v,
@@ -1287,7 +1281,7 @@ def pdf_definition(logo: str | None, watermark: str | None, disclaimer: str) -> 
         "source": {
             "kind": "fields",
             "rows": [
-                *[{"field": f"inspection.{k}"} for k, *_ in key_checks_list()],
+                *[{"field": f"check.{k}"} for k, *_ in key_checks_list()],
                 {"field": "inspection.tyre_year"},
             ],
         },

@@ -273,7 +273,7 @@ class VersionTreeSerializer(serializers.ModelSerializer):
     class Meta:
         model = FormVersion
         fields = ["id", "form", "number", "status", "published_at", "row_version", "pages",
-                  "checks", "rating_config", "use_start", "use_end"]
+                  "checks", "rating_config", "key_checks", "use_start", "use_end"]
 
     checks = serializers.SerializerMethodField()
 

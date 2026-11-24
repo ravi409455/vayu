@@ -81,6 +81,8 @@ def _known_keys(template: PdfTemplate) -> dict[str, set[str]]:
     use_start = latest is None or latest.use_start
     use_end = latest is None or latest.use_end
     return {"inspection": keys(latest), "booking": keys(booking),
+            "check": {k["key"] for k in (latest.key_checks if latest else [])
+                      if k.get("in_report", True)},
             "start": keys(system_version("start")) if use_start else set(),
             "end": keys(system_version("end")) if use_end else set()}
 
@@ -123,7 +125,9 @@ def definition_issues(template: PdfTemplate, definition: dict) -> list[dict]:
             out.append({"path": where, "part": pid, "code": "UNKNOWN_FIELD",
                         "ref": f"{form}.{key}",
                         "suggestion": _suggest(form, _close(key, known.get(form, set()))),
-                        "message": (f"'{form}.{key}' needs the {form} form, which this form does "
+                        "message": (f"'{key}' is not a Key Check the report may show."
+                                    if form == "check" else
+                                    f"'{form}.{key}' needs the {form} form, which this form does "
                                     "not include (see its form settings)."
                                     if form in ("start", "end") and not known.get(form)
                                     else f"'{form}.{key}' is not a field of the {form} form.")})

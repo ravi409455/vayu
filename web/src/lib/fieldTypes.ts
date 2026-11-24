@@ -10,7 +10,7 @@ export const FIELD_TYPES: { id: string; label: string; group: string }[] = [
   { id: "file", label: "Files", group: "Media" }, { id: "signature", label: "Signature", group: "Media" },
   { id: "gps", label: "GPS location", group: "Media" },
   { id: "image", label: "Picture (shown to the expert)", group: "Display" },
-  { id: "derived", label: "Key Check (automatic)", group: "Automatic" }, { id: "rating", label: "Rating (automatic)", group: "Automatic" },
+  { id: "derived", label: "Key Check (old, Yes/No)", group: "Old" }, { id: "rating", label: "Rating (automatic)", group: "Automatic" },
 ];
 /** Types the system makes (not offered when adding a field) with the name to show for them. */
 export const SYSTEM_TYPE_LABELS: Record<string, string> = { form_choice: "Pick of a custom form" };

@@ -248,14 +248,13 @@ def build_inspection(admin, *, key, name, itype, pages):
                              type="rating", order=summary.fields.count(), config={"category": ckey})
     frame = [f"inspection.{k}" for k in ("frame", "underbody_rust") if k in
              {f for ks in section_keys.values() for f in ks}]
-    Field.objects.create(version=v, section=summary, key="accident_suspected", label="Accident suspected",
-                         type="derived", order=summary.fields.count(),
-                         config={"rule": {"some": [{"var": "_defects"}, {"in": [{"var": ""}, frame or ["inspection.x"]]}]},
-                                 "true_label": "Yes: check the underbody", "false_label": "No"})
-    Field.objects.create(version=v, section=summary, key="any_critical", label="Any critical defect",
-                         type="derived", order=summary.fields.count(),
-                         config={"rule": {"!!": [{"var": "_defects"}]}, "true_label": "Defects found",
-                                 "false_label": "No defects"})
+    v.key_checks = [
+        {"key": "accident_suspected", "label": "Accident suspected", "type": "rule",
+         "rule": {"some": [{"var": "_defects"}, {"in": [{"var": ""}, frame or ["inspection.x"]]}]},
+         "true_label": "Yes: check the underbody", "false_label": "No"},
+        {"key": "any_critical", "label": "Any critical defect", "type": "rule",
+         "rule": {"!!": [{"var": "_defects"}]}, "true_label": "Defects found", "false_label": "No defects"},
+    ]
     for k in ("odometer", "registration_no"):                     # keep the demo easy to complete
         Field.objects.filter(version=v, key=k).update(required=True)
     v.rating_config = {"categories": [{"key": c, "label": lb, "sections": secs} for c, lb, secs in cats]}
@@ -364,11 +363,12 @@ def build_field_tour(admin, picture_id: str):
     field(media, "documents", "Documents", "file", config={"max_count": 3})
     field(media, "car_location", "Where the car is parked", "gps", config={"auto": False})
     field(media, "customer_sign", "Customer signature", "signature")
-    field(media, "any_defect", "Any defect found", "derived",
-          config={"rule": {"!!": [{"var": "_defects"}]}, "true_label": "Defects found", "false_label": "No defects"})
     field(media, "rating_body", "Body rating", "rating", config={"category": "body"})
 
     v.rating_config = {"categories": [{"key": "body", "label": "Body", "sections": ["Body"]}]}
+    v.key_checks = [{"key": "any_defect", "label": "Any defect found", "type": "rule",
+                     "rule": {"!!": [{"var": "_defects"}]}, "true_label": "Defects found",
+                     "false_label": "No defects"}]
     v.save()
     v.refresh_from_db()
     form_services.publish_version(admin, v.id, v.row_version)

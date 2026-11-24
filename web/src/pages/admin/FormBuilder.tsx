@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { api, ApiError, uploadFile } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
-import type { FormField, FormPage, FormSummary, FormVersion, MasterList } from "../../api/types";
+import type { Check, FormField, FormPage, FormSummary, FormVersion, MasterList } from "../../api/types";
 import { useAuth } from "../../auth";
 import { photoOfDefault } from "../../lib/fieldTypes";
 import { applyDrag, isEmptyBody, reorderBody, type Ref } from "../../lib/tree";
@@ -12,12 +12,13 @@ import { type FieldChoice } from "../../ui/ConditionBuilder";
 import { Confirm, Field, InfoTip, Modal, NameDialog, PageHeader, Pill, Tabs, useToast } from "../../ui/kit";
 import { AddFieldDialog, AddSectionDialog } from "./builder/AddDialogs";
 import { Canvas, type Sel } from "./builder/Canvas";
-import { Checks, Ratings } from "./builder/FormExtras";
+import { Ratings } from "./builder/FormExtras";
+import { KeyChecks } from "./builder/KeyChecks";
 import { ContainerEditor } from "./builder/Inspector";
 import { LibraryBox } from "./builder/LibraryBox";
 import { PreviewDialog } from "./builder/PreviewDialog";
 import { DuplicateDialog } from "./ImportForm";
-import { FieldEditor, type FieldDraft } from "./FieldEditor";
+import { FieldEditor, type FieldDraft, type ValidationDraft } from "./FieldEditor";
 import { useCrumb } from "../../ui/crumb";
 import { MoreMenu } from "../../ui/Menu";
 
@@ -39,7 +40,7 @@ export function FormBuilder() {
   const [local, setLocal] = useState<FormPage[] | null>(null);
   const [sel, setSel] = useState<Sel>(null);
   const [pageId, setPageId] = useState<number | null>(null);
-  const [tab, setTab] = useState<"structure" | "checks" | "ratings">("structure");
+  const [tab, setTab] = useState<"structure" | "keychecks" | "ratings">("structure");
   const [publish, setPublish] = useState<{ issues: Issue[]; warnings: Issue[]; done: boolean } | null>(null);
   const [adding, setAdding] = useState<null | { kind: "field" | "section" | "page"; id: number }>(null);
   const [preview, setPreview] = useState(false);
@@ -137,7 +138,8 @@ export function FormBuilder() {
       </PageHeader>
       {!v ? <p className="muted">No version yet.</p> : (
         <>
-          <Tabs tabs={[{ id: "structure", label: "Questions" }, { id: "checks", label: "Key Checks" }, { id: "ratings", label: "Ratings" }]} value={tab} onChange={setTab} />
+          <Tabs tabs={[{ id: "structure", label: "Questions" },
+            ...(f.type === "custom" ? [{ id: "keychecks", label: "Key Checks" }, { id: "ratings", label: "Ratings" }] : [])]} value={tab} onChange={(t) => setTab(t as typeof tab)} />
           {tab === "structure" && (
             <div className="builder">
               <Canvas pages={pages} pageId={pageId} sel={sel} onSelect={onSelect} onPage={setPageId} readOnly={!edit} onDrag={onDrag}
@@ -160,7 +162,11 @@ export function FormBuilder() {
                     siblings={found.section!.fields.filter((x) => x.id !== found.field!.id)}
                     parents={{ section: found.section!.access, page: found.page.access }}
                     lists={(lists.data ?? []).map((l) => ({ key: l.key, name: l.name }))} categories={categories}
-                    onSave={(d: FieldDraft) => run(() => api(`fields/${found.field!.id}`, { method: "PATCH", body: d }), "Saved.")}
+                    checks={v.checks.filter((c) => c.fields.includes(found.field!.key))}
+                    onSave={(d: FieldDraft, vals?: ValidationDraft[]) => run(async () => {
+                      await api(`fields/${found.field!.id}`, { method: "PATCH", body: d });
+                      if (vals) await saveValidations(v.id, v.checks.filter((c) => c.fields.includes(found.field!.key)), vals);
+                    }, "Saved.")}
                     onDelete={() => setConfirmDel(() => () => run(async () => { await api(`fields/${found.field!.id}`, { method: "DELETE" }); setSel(null); }))}
                     extra={<>
                       {edit && !found.section!.locked && sectionOptions.length > 1 && (
@@ -184,7 +190,7 @@ export function FormBuilder() {
               </aside>
             </div>
           )}
-          {tab === "checks" && <Checks version={v} choices={choices} edit={edit} run={(fn) => void run(fn)} />}
+          {tab === "keychecks" && <KeyChecks version={v} choices={choices} edit={edit} run={(fn) => void run(fn, "Key Checks saved.")} />}
           {tab === "ratings" && <Ratings version={v} sections={pages.flatMap((p) => p.sections.map((s) => s.title))} edit={edit} run={(fn) => void run(fn)} />}
         </>
       )}
@@ -269,11 +275,21 @@ export function useFieldChoices(f: FormSummary | undefined, v: FormVersion | und
   });
   return useMemo(() => {
     const out: FieldChoice[] = [];
-    const add = (ns: string, ver: FormVersion | undefined) => ver?.pages.forEach((p) => p.sections.forEach((s) => s.fields.forEach((fl: FormField) => out.push({ value: `${ns}.${fl.key}`, label: `${ns}: ${fl.label || fl.key}` }))));
+    const add = (ns: string, ver: FormVersion | undefined) => ver?.pages.forEach((p) => p.sections.forEach((s) => s.fields.forEach((fl: FormField) => out.push({ value: `${ns}.${fl.key}`, label: `${ns}: ${fl.label || fl.key}`, type: fl.type }))));
     add(f ? nsOf(f.type) : "inspection", v);
     (tree.data ?? []).filter((t) => others.some((o) => o.type === t.ns)).forEach((t) => add(t.ns, t.v));
     return out;
   }, [f?.type, v, tree.data, others.length]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+/** Saves a field's validations: removed ones are deleted, new ones created, changed ones updated. */
+async function saveValidations(versionId: number, before: Check[], after: ValidationDraft[]) {
+  for (const c of before) if (!after.some((a) => a.id === c.id)) await api(`checks/${c.id}`, { method: "DELETE" });
+  for (const a of after) {
+    const old = before.find((c) => c.id === a.id);
+    if (!old) await api(`form-versions/${versionId}/checks`, { body: { rule: a.rule, message: a.message, fields: a.fields } });
+    else if (JSON.stringify([old.rule, old.message]) !== JSON.stringify([a.rule, a.message])) await api(`checks/${a.id}`, { method: "PATCH", body: { rule: a.rule, message: a.message } });
+  }
 }
 
 /** The name a form's answers go by in rules: the custom form is "inspection". */

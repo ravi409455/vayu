@@ -84,6 +84,7 @@ def create_draft(actor, form: Form) -> FormVersion:
     number = (form.versions.aggregate(n=Max("number"))["n"] or 0) + 1
     draft = FormVersion.objects.create(form=form, number=number,
                                        rating_config=source.rating_config,
+                                       key_checks=source.key_checks,
                                        use_start=source.use_start, use_end=source.use_end)
     for page in Page.objects.filter(version=source):
         old_page_id = page.id

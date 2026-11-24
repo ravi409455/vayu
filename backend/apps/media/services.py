@@ -90,6 +90,7 @@ OPS_KINDS = ("photo", "video", "file")
 # what a file field's "allowed" setting lets in
 FILE_TYPES = {"image": {"image/jpeg", "image/png"}, "pdf": {"application/pdf"}}
 OPS_STAGES = ("submitted", "completed")
+LOOSE_LIMIT = 10      # Ops uploads per field not in the answers (yet)
 
 
 def is_manager(user, request=None) -> bool:
@@ -101,6 +102,9 @@ def check_ops_upload(booking: Booking, field: Field, user) -> None:
     submitted, on fields the Admin has not blocked and they may see."""
     if field.key in hidden_fields(user, booking):
         raise err("UNKNOWN_FIELD", f"'{field.key}' is not a field of this inspection.")
+    if user.role != "admin" and levels_for(field.version, user.role, booking.stage).get(
+            field.key) != "edit":
+        raise err("FIELD_ACCESS", f"You cannot change '{field.label}' at this stage.", 403)
     if field.type not in OPS_KINDS:
         raise err("OPS_UPLOAD_NOT_ALLOWED", "Ops can add only photos, videos and files.", 403)
     if booking.stage not in OPS_STAGES:
@@ -190,6 +194,13 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
         if replaces is None and len(ids) >= max_count(field):
             raise err("TOO_MANY", f"'{field.label}' takes at most {max_count(field)}. "
                       "Replace one instead.", 409)
+        # uploads not (yet) in the answers: a few may be left by closed tabs, never a pile
+        loose = MediaAsset.objects.filter(booking=booking, field_key=field.key, uploaded_by=user,
+                                          replaced_at__isnull=True).exclude(pk__in=ids) \
+            .exclude(status="failed").count()
+        if loose >= LOOSE_LIMIT:
+            raise err("TOO_MANY", "Too many uploads on this field are not saved yet. Wait for "
+                      "them to finish, or reload the page.", 409)
     elif replaces is not None:
         raise err("UNKNOWN_MEDIA", "Only Ops replace a file.")
     with transaction.atomic():

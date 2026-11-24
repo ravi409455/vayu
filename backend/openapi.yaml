@@ -1173,6 +1173,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/Check'
           description: ''
+  /api/v1/form-versions/{id}/key-checks:
+    patch:
+      operationId: form_versions_key_checks_partial_update
+      description: The draft's Key Checks, saved as a whole ordered list (like the
+        rating config).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - form-versions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/form-versions/{id}/pages:
     post:
       operationId: form_versions_pages_create
@@ -4328,6 +4346,7 @@ components:
           type: string
           readOnly: true
         rating_config: {}
+        key_checks: {}
         use_start:
           type: boolean
         use_end:

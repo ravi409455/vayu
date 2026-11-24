@@ -55,7 +55,7 @@ CATALOG: list[Perm] = [
     Perm("media.download", "Inspections", "Download media as ZIP"),
     Perm("payments.record", "Inspections", "Record payments on site", scoped=True),
     Perm("payments.verify", "Inspections", "Verify recorded payments"),
-    Perm("ratings.override", "Inspections", "Override suggested ratings and Key Checks"),
+    Perm("ratings.override", "Inspections", "Review: edit Key Checks and ratings"),
     Perm("reports.view", "Reports", "View and download PDF reports", scoped=True),
     Perm("reports.regenerate", "Reports", "Regenerate PDF reports"),
     Perm("dashboards.view", "Reports", "View dashboards"),

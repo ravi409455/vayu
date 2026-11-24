@@ -235,3 +235,47 @@ def test_ops_cannot_upload_to_a_field_hidden_from_them(job, settings):
     r = env.ops.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg(), replaces=a),
                      format="json")
     assert r.status_code == 400 and r.json()["code"] == "UNKNOWN_FIELD"
+
+
+def test_ops_cannot_upload_to_a_field_read_only_for_them(job, settings):
+    env, b = job
+    [a] = submitted(env, b, settings)
+    Field.objects.filter(key="photo_a").update(access={"ops": {"completed": "view"}})
+    r = env.ops.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg(), replaces=a),
+                     format="json")
+    assert r.status_code == 403 and r.json()["code"] == "FIELD_ACCESS"
+
+
+def test_loose_ops_uploads_are_capped(job, settings):
+    from apps.media import services
+
+    env, b = job
+    [a] = submitted(env, b, settings)
+    settings_cap, services.LOOSE_LIMIT = services.LOOSE_LIMIT, 2
+    try:
+        for _ in range(2):              # started, never attached (a closed tab)
+            assert env.ops.post("/api/v1/media/initiate", initiate_body(
+                b["id"], jpeg(), replaces=a), format="json").status_code == 201
+        r = env.ops.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg(), replaces=a),
+                         format="json")
+        assert r.status_code == 409 and r.json()["code"] == "TOO_MANY"
+    finally:
+        services.LOOSE_LIMIT = settings_cap
+
+
+def test_an_inspection_edit_adds_only_own_files_on_unblocked_fields(job, settings):
+    env, b = job
+    stray = upload(env.expert, b["id"], jpeg(color=(5, 5, 5)), settings)   # expert's retake
+    [a] = submitted(env, b, settings)
+    insp = Inspection.objects.get(booking_id=b["id"])
+    r = env.ops.patch(f"/api/v1/inspections/{insp.id}", {"row_version": insp.row_version,
+                      "answers": {"inspection": {"photo_a": [a, stray.json()["id"]]}}},
+                      format="json")
+    assert r.status_code == 400 and r.json()["code"] == "UNKNOWN_MEDIA"
+    mine = ops_upload(env, b, settings).json()["id"]
+    f = Field.objects.get(key="photo_a")
+    Field.objects.filter(pk=f.pk).update(config={**f.config, "ops_upload": False})
+    r = env.ops.patch(f"/api/v1/inspections/{insp.id}", {"row_version": insp.row_version,
+                      "answers": {"inspection": {"photo_a": [a, mine]}}}, format="json")
+    assert r.status_code == 403 and r.json()["code"] == "OPS_UPLOAD_BLOCKED"
+    assert photos(b) == [a]

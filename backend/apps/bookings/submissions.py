@@ -91,6 +91,7 @@ def form_for_role(version: FormVersion, role: str, stage: str) -> dict:
     tree = {**tree, "pages": pages}
     if role == "expert":
         tree.pop("rating_config", None)     # experts must not learn how ratings are computed
+        tree.pop("key_checks", None)        # nor see the Key Checks Ops fill
     return tree
 
 
@@ -284,21 +285,36 @@ def _advance(actor, b: Booking, insp: Inspection) -> None:
     _changed(actor, b, changes or {"inspection": [None, str(insp.id)]})
 
 
-def _dropped_files(pinned, old: dict, new: dict, changed) -> list[str]:
-    """Photo, video, file and signature answers that lost a file id in this edit."""
-    from apps.media.models import KINDS
+def _check_files(actor, b: Booking, pinned, old: dict, new: dict, changed) -> None:
+    """Photo, video and file answers in an Ops edit: nobody removes a file (Ops replace it on the
+    Media tab), and a file is added only under the same rules as on the Media tab, and only one
+    the editor uploaded themselves."""
+    from apps.media.models import KINDS, MediaAsset
+    from apps.media.services import check_ops_upload
 
     def ids(v):
         return {v} if isinstance(v, str) else set(v or [])
 
-    out = []
+    dropped = []
     for part, k in changed:
         version = pinned.get(part)
-        if version is not None and Field.objects.filter(version=version, key=k,
-                                                        type__in=KINDS).exists() \
-                and not ids((old.get(part) or {}).get(k)) <= ids(new[part].get(k)):
-            out.append(f"{part}.{k}")
-    return out
+        f = version and Field.objects.filter(version=version, key=k, type__in=KINDS).first()
+        if not f:
+            continue
+        before, after = ids((old.get(part) or {}).get(k)), ids(new[part].get(k))
+        if not before <= after:
+            dropped.append(f"{part}.{k}")
+            continue
+        added = after - before
+        if added:
+            check_ops_upload(b, f, actor)
+            own = MediaAsset.objects.filter(booking=b, field_key=k, uploaded_by=actor,
+                                            replaced_at__isnull=True, pk__in=added).count()
+            if own != len(added):
+                raise err("UNKNOWN_MEDIA", "Add only files you uploaded to this field.")
+    if dropped:
+        raise err("FILE_REMOVAL_NOT_ALLOWED", "Files cannot be removed. Replace them on the "
+                  "Media tab instead.", 403, keys=dropped)
 
 
 @transaction.atomic
@@ -319,10 +335,7 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
     changed = [(part, k) for part in PARTS
                for k in sorted(set(new[part]) | set(insp.answers.get(part) or {}))
                if new[part].get(k) != (insp.answers.get(part) or {}).get(k)]
-    dropped = _dropped_files(pinned, insp.answers, new, changed)
-    if dropped:          # nobody deletes a submitted file: Ops replace it on the Media tab
-        raise err("FILE_REMOVAL_NOT_ALLOWED", "Files cannot be removed. Replace them on the "
-                  "Media tab instead.", 403, keys=dropped)
+    _check_files(actor, b, pinned, insp.answers, new, changed)
     keys = sorted(k for _, k in changed)
     if keys:
         insp.answers = new
@@ -380,6 +393,10 @@ def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Insp
         scoring.validate_overrides(insp.form_version, body)
     except ValueError as e:
         raise err("INVALID_OVERRIDES", str(e)) from e
+    texts = body.get("key_checks") or {}
+    if texts and insp.booking.stage not in ("submitted", "completed"):
+        raise err("NOT_SUBMITTED", "Key Checks can be filled once the expert submits.", 409)
+    before = {k: v["value"] for k, v in ((insp.scores or {}).get("key_checks") or {}).items()}
     insp.overrides = scoring.apply_overrides(insp.overrides, body)
     insp.row_version += 1
     insp.last_edited_by, insp.last_edited_at = actor, timezone.now()
@@ -387,9 +404,19 @@ def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Insp
                         "keys": ["overrides"]}
     insp.save()
     scoring.recompute(insp)
-    activity.log(insp.booking, actor, "ratings_changed", keys=[], inspection=insp)
+    if set(body) - {"key_checks"}:
+        activity.log(insp.booking, actor, "ratings_changed", keys=[], inspection=insp)
+    after = {k: v["value"] for k, v in insp.scores.get("key_checks", {}).items()}
+    moved = {f"check.{k}": [before.get(k), after.get(k)] for k in texts
+             if before.get(k) != after.get(k)}
+    if moved:
+        activity.log(insp.booking, actor, "key_checks_changed", moved, inspection=insp)
     events.emit("inspection.updated", booking=str(insp.booking_id), inspection=str(insp.id),
                 keys=["overrides"])
+    if moved and insp.booking.stage == "completed":
+        from apps.media.services import rebuild_report
+
+        rebuild_report(insp.booking_id)
     return insp
 
 

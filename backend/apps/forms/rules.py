@@ -95,6 +95,7 @@ class Result:
     errors: dict[str, str]
     derived: dict[str, Any]
     defects: list[str]
+    data: dict = field(default_factory=dict)      # what the rules saw (Key Checks reuse it)
 
 
 def _is_defect(f: FieldSpec, value: Any) -> bool:
@@ -162,7 +163,7 @@ def evaluate_form(spec: FormSpec, answers: dict, today: str,
             for k in check.fields:
                 errors.setdefault(k, "check_failed")
     return Result(visible=visible, required=required, errors=errors, derived=derived,
-                  defects=data["_defects"])
+                  defects=data["_defects"], data=data)
 
 
 # ------------------------------------------------------------------ from the database
@@ -210,7 +211,13 @@ def validate_answers(version, answers: dict, today: str,
                            overrides)
     visible_type_errors = {k: c for k, c in type_errors.items() if result.visible[k]}
     cleaned = {k: v for k, v in cleaned.items() if result.visible[k]}
-    return cleaned, {**result.errors, **visible_type_errors}
+    rule_errors = dict(result.errors)
+    for check in spec_from_version(version).checks:       # a broken validation: Admin's words
+        failed = [k for k in check.fields if rule_errors.get(k) == "check_failed"]
+        if failed and check.message and not truthy(check.rule, result.data):
+            for k in failed:
+                rule_errors[k] = check.message
+    return cleaned, {**rule_errors, **visible_type_errors}
 
 
 # ------------------------------------------------------------------ design time
@@ -409,9 +416,11 @@ def validate_version(version) -> list[Issue]:
                 issues.append(Issue(f"checks.{c.id}.fields", "UNKNOWN_FIELD",
                                     f"'{k}' is not a field of this form."))
     issues.extend(_cycle_issues(version, own))
+    from apps.scoring import keychecks
     from apps.scoring.service import config_issues
 
     issues.extend(Issue(*i) for i in config_issues(version))
+    issues.extend(Issue(*i) for i in keychecks.issues(version))
     return issues
 
 
