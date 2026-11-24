@@ -1,5 +1,12 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.forms.PARTS
+import `in`.carcid.vayu.core.forms.FormTree
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.FlowRow
 import `in`.carcid.vayu.ui.components.TimePick
 import `in`.carcid.vayu.ui.components.DatePick
 import `in`.carcid.vayu.ui.expert.whenStamp
@@ -81,15 +88,16 @@ import java.time.LocalDate
 import java.time.LocalTime
 
 /** Where a booking's rows lead. */
-enum class Part { ANSWERS, MEDIA, RATINGS, REPORT, HISTORY }
+enum class Part { ANSWERS, MEDIA, RATINGS, HISTORY }
 
 /** The inspection that counts on a booking: the latest submitted one, else the latest draft. */
 fun currentInspection(list: List<JsonObject>): JsonObject? =
     list.filter { it.s("status") == "submitted" }.maxByOrNull { it.s("submitted_at") }
         ?: list.filter { it.s("status") == "draft" }.maxByOrNull { it.s("created_at") }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) -> Unit, onEdit: () -> Unit) {
+fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) -> Unit, onAnswers: (String) -> Unit, onEdit: () -> Unit) {
     val uri = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     val t = env.today()
@@ -115,19 +123,24 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
             catch (e: ApiError) { env.say(e.message) }
         }
     }
+    val raw = rememberForms(env, insp)
+    val data = Loaded3(b, insp, raw.mapValues { it.value?.let(FormTree::parse) }, raw, !online, insps)
+    val filled = data.filled(t.toString())
+    val actions = listOfNotNull(
+        ("Edit booking" to "edit").takeIf { env.can("bookings.edit") && b.live },
+        ((if (b.expert == null) "Assign an expert" else "Reassign") to "assign").takeIf { env.can("bookings.assign") && b.stage in setOf("draft", "assigned") },
+        ("Reschedule" to "reschedule").takeIf { env.can("bookings.reschedule") && b.live },
+        ("Change type" to "type").takeIf { env.can("bookings.edit") && b.stage in setOf("draft", "assigned") },
+        ("Force release" to "release").takeIf { env.can("bookings.force_release") && b.stage == "in_progress" },
+        ("Sign out the expert's phone" to "signout").takeIf { env.can("users.sign_out_devices") && b.expert != null },
+        ("Cancel booking" to "cancel").takeIf { env.can("bookings.cancel") && b.live },
+        ("Delete booking" to "delete").takeIf { env.can("bookings.delete") && b.stage == "draft" },
+    )
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
-        val actions = listOfNotNull(
-                        ("Edit booking" to "edit").takeIf { env.can("bookings.edit") && b.live },
-                        ((if (b.expert == null) "Assign an expert" else "Reassign") to "assign").takeIf { env.can("bookings.assign") && b.stage in setOf("draft", "assigned") },
-                        ("Reschedule" to "reschedule").takeIf { env.can("bookings.reschedule") && b.live },
-                        ("Change type" to "type").takeIf { env.can("bookings.edit") && b.stage in setOf("draft", "assigned") },
-                        ("Force release" to "release").takeIf { env.can("bookings.force_release") && b.stage == "in_progress" },
-                        ("Sign out the expert's phone" to "signout").takeIf { env.can("users.sign_out_devices") && b.expert != null },
-                        ("Cancel booking" to "cancel").takeIf { env.can("bookings.cancel") && b.live },
-                        ("Delete booking" to "delete").takeIf { env.can("bookings.delete") && b.stage == "draft" },
-                    )
-        SubHeader(b.customer.ifBlank { b.code }, onBack = onBack) {
-            // nothing to do (a cancelled or finished job without an expert): no empty menu
+        // slim bar: the booking ID in full and the menu; the name scrolls with the page
+        Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Vayu.colors.ink) }
+            Text(b.code, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             if (actions.isNotEmpty()) Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = "More actions", tint = Vayu.colors.ink) }
                 DropdownMenu(menu, { menu = false }) {
@@ -138,8 +151,25 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
                 }
             }
         }
+        HorizontalDivider(color = Vayu.colors.line)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-            Text(listOf(b.code, env.labels.car(b.a("car_make_model")), env.labels.type(b.type)).filter { it.isNotBlank() }.joinToString(" · "), color = Vayu.colors.muted)
+            Text(b.customer.ifBlank { b.code }, fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink,
+                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+            val why = if (b.stage == "cancelled") rememberLoad(env, "master-lists/cancel_reason/items").value?.data?.rows().orEmpty()
+                .firstOrNull { it.s("key") == b.o.s("cancel_reason") }?.s("label") ?: b.o.s("cancel_reason").replace('_', ' ') else ""
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                val (st, tone) = opsStatus(b)
+                Chip(listOf(st, why).filter { it.isNotBlank() }.joinToString(" · "), tone)
+                env.labels.type(b.type).takeIf { it.isNotBlank() }?.let { Chip(it) }
+                slot(b, t).takeIf { it.isNotBlank() }?.let { Chip(it) }
+            }
+            val digits = b.phone.filter { it in '0'..'9' }
+            val place = listOf(b.a("address"), env.labels.city(b.a("city"))).filter { it.isNotBlank() }.joinToString(", ")
+            Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Tile(Icons.Outlined.Call, "Call", digits.isNotEmpty()) { uri.openUri("tel:" + (if (b.phone.trimStart().startsWith("+")) "+" else "") + digits) }
+                Tile(Icons.AutoMirrored.Outlined.Chat, "WhatsApp", digits.isNotEmpty()) { uri.openUri("https://wa.me/$digits") }
+                Tile(Icons.Outlined.Directions, "Directions", place.isNotEmpty()) { uri.openUri("https://www.google.com/maps/search/?api=1&query=" + URLEncoder.encode(place, "UTF-8")) }
+            }
             OfflineNote(load.value)
             if (b.conflict.isNotEmpty()) {
                 val subs = insps.filter { it.s("status") == "submitted" }
@@ -147,46 +177,50 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
                     ". Choose which one counts.", "Compare and choose", online && env.can("bookings.edit")) { compare = true }
             }
             b.typeRejected?.let { Attention("Your type change wasn't applied", env.labels.typeRejected(it), null, false) {} }
+            if (b.stage == "completed" || b.conflict.isNotEmpty() || report.value?.data is JsonObject) {
+                Section("Report")
+                ReportCard(env, id, b)
+            }
+            Section("Inspection")
+            if (insp == null || filled == null) Text(if (insp == null) "Not started yet." else "Loading…", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 12.dp))
+            else {
+                val names = mapOf("start" to "Check-in", "inspection" to "Inspection", "end" to "Wrap-up")
+                PARTS.filter { filled.visiblePages(it).isNotEmpty() }.forEach { part ->
+                    val (n, bad) = partCounts(data, filled, part)
+                    NavRow(names[part] ?: part, "$n answer${if (n == 1) "" else "s"}" + if (bad > 0) " · $bad problem${if (bad == 1) "" else "s"}" else "",
+                        if (bad > 0) Vayu.colors.warn else Vayu.colors.muted) { onAnswers(part) }
+                }
+            }
+            val media = rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty().filter { it.s("status") in setOf("uploaded", "verified") }
+            val photos = media.count { it.s("kind") == "photo" }; val videos = media.count { it.s("kind") == "video" }
+            NavRow("Photos and videos", listOfNotNull("$photos photo${if (photos == 1) "" else "s"}", "$videos video${if (videos == 1) "" else "s"}".takeIf { videos > 0 }).joinToString(" · ")) { onPart(Part.MEDIA) }
+            if (insp != null) {
+                val sc = insp.o("scores")
+                val word = sc.o("overall").s("word").replaceFirstChar { it.uppercase() }
+                Section("Ratings and Key Checks")
+                val nRatings = sc.o("ratings").size; val nChecks = sc.o("derived").size
+                val ov = insp.o("overrides"); val changed = ov.o("ratings").size + ov.o("derived").size + (if (ov["overall"] != null) 1 else 0)
+                NavRow("Overall: ${word.ifBlank { "—" }}", listOfNotNull("$nRatings rating${if (nRatings == 1) "" else "s"}".takeIf { nRatings > 0 },
+                    "$nChecks Key Check${if (nChecks == 1) "" else "s"}".takeIf { nChecks > 0 },
+                    "$changed changed by Ops".takeIf { changed > 0 }).joinToString(" · ")) { onPart(Part.RATINGS) }
+                Section("Payment")
+                val (title, sub) = paymentText(data)
+                NavRow(title, sub) { onAnswers("end") }
+            }
             Section("Details")
-            Detail("When", slot(b, t))
-            Detail("Customer", listOf(b.customer, phoneLabel(b.phone)).filter { it.isNotBlank() }.joinToString(" · ")) {
-                val digits = b.phone.filter { it in '0'..'9' }
-                if (digits.isNotEmpty()) {
-                    IconButton(onClick = { uri.openUri("tel:" + (if (b.phone.trimStart().startsWith("+")) "+" else "") + digits) }) { Icon(Icons.Outlined.Call, "Call", tint = Vayu.colors.ink) }
-                    IconButton(onClick = { uri.openUri("https://wa.me/$digits") }) { Icon(Icons.AutoMirrored.Outlined.Chat, "WhatsApp", tint = Vayu.colors.ink) }
-                }
-            }
-            val place = listOf(b.a("address"), env.labels.city(b.a("city"))).filter { it.isNotBlank() }.joinToString(", ")
-            Detail("Address", place) {
-                if (place.isNotEmpty()) IconButton(onClick = { uri.openUri("https://www.google.com/maps/search/?api=1&query=" + URLEncoder.encode(place, "UTF-8")) }) {
-                    Icon(Icons.Outlined.Directions, "Directions", tint = Vayu.colors.ink)
-                }
-            }
+            Detail("Car", env.labels.car(b.a("car_make_model")))
+            Detail("Address", place)
+            Detail("Phone", phoneLabel(b.phone))
             Detail("Expert", env.labels.person(b.expert).ifBlank { "Not assigned" }) {
                 if (env.can("bookings.assign") && b.stage in setOf("draft", "assigned")) IconButton(onClick = { action = "assign" }, enabled = online) {
                     Icon(Icons.Outlined.PersonAdd, if (b.expert == null) "Assign an expert" else "Reassign", tint = if (online) Vayu.colors.ink else Vayu.colors.muted)
                 }
+                // call the expert straight from the job
+                env.labels.people.firstOrNull { it.int("id") == b.expert }?.s("phone")?.filter { it in '0'..'9' || it == '+' }?.takeIf { it.isNotEmpty() }?.let { ph ->
+                    IconButton(onClick = { uri.openUri("tel:$ph") }) { Icon(Icons.Outlined.Call, "Call the expert", tint = Vayu.colors.ink) }
+                }
             }
-            val why = if (b.stage == "cancelled") rememberLoad(env, "master-lists/cancel_reason/items").value?.data?.rows().orEmpty()
-                .firstOrNull { it.s("key") == b.o.s("cancel_reason") }?.s("label") ?: b.o.s("cancel_reason").replace('_', ' ') else ""
-            Detail("Status", listOf(opsStatus(b).first, why).filter { it.isNotBlank() }.joinToString(" · "))
-            Section("Inspection")
-            val answers = insp?.o("answers")?.values?.sumOf { (it as? JsonObject)?.count { e -> e.value.toString() !in setOf("null", "\"\"", "[]") } ?: 0 } ?: 0
-            val media = rememberLoad(env, "bookings/$id/media").value?.data?.rows()?.size ?: 0
-            val overall = insp?.o("scores")?.o("overall")?.s("word").orEmpty()
-            val rep = report.value?.data as? JsonObject
-            PartRow("Answers", if (insp == null) "None yet" else "$answers") { onPart(Part.ANSWERS) }
-            PartRow("Photos and videos", "$media") { onPart(Part.MEDIA) }
-            PartRow("Ratings and payment", overall.replaceFirstChar { it.uppercase() }.ifBlank { "—" }) { onPart(Part.RATINGS) }
-            PartRow("Report", when {
-                b.conflict.isNotEmpty() -> "Waits for your choice"
-                b.stage == "cancelled" -> "None (cancelled)"
-                rep == null -> if (b.stage == "completed") "Being made" else "After completion"
-                rep.s("status") == "ready" && rep.s("stale") == "true" -> "Out of date"
-                rep.s("status") == "ready" -> "Ready"
-                else -> rep.s("status").replaceFirstChar { it.uppercase() }
-            }) { onPart(Part.REPORT) }
-            PartRow("History", "") { onPart(Part.HISTORY) }
+            NavRow("History", "") { onPart(Part.HISTORY) }
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -241,13 +275,41 @@ private fun Detail(label: String, value: String, actions: @Composable () -> Unit
 }
 
 @Composable
-private fun PartRow(label: String, value: String, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(role = Role.Button, onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = Vayu.colors.ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        Text(value, color = Vayu.colors.muted)
+private fun NavRow(title: String, sub: String, subColor: androidx.compose.ui.graphics.Color = Vayu.colors.muted, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).clickable(role = Role.Button, onClick = onClick).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Vayu.colors.ink, fontWeight = FontWeight.SemiBold)
+            if (sub.isNotBlank()) Text(sub, fontSize = 13.sp, color = subColor)
+        }
         Icon(Icons.Outlined.ChevronRight, null, tint = Vayu.colors.muted)
     }
     HorizontalDivider(color = Vayu.colors.line)
+}
+
+@Composable
+private fun Chip(text: String, tone: Tone? = null) {
+    val (bg, fg) = when (tone) {
+        Tone.OK -> Vayu.colors.okTint to Vayu.colors.ok; Tone.WARN -> Vayu.colors.warnTint to Vayu.colors.warn
+        Tone.BAD -> Vayu.colors.badTint to Vayu.colors.bad; Tone.INFO -> Vayu.colors.infoTint to Vayu.colors.info
+        else -> Vayu.colors.soft to Vayu.colors.ink2
+    }
+    Row(Modifier.heightIn(min = 28.dp).clip(RoundedCornerShape(14.dp)).background(bg).padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (tone != null) Box(Modifier.size(8.dp).clip(CircleShape).background(fg))
+        Text(text, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun RowScope.Tile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
+    val tint = if (enabled) Vayu.colors.ink else Vayu.colors.muted
+    Column(Modifier.weight(1f).heightIn(min = 64.dp).clip(RoundedCornerShape(14.dp)).background(Vayu.colors.soft)
+        .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.height(4.dp))
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = tint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
 }
 
 @Composable

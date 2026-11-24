@@ -88,7 +88,9 @@ class Labels(val cities: Map<String, String> = emptyMap(), val cars: Map<String,
              val types: List<Triple<String, String, Boolean>> = emptyList(), val people: List<JsonObject> = emptyList()) {
     fun city(k: String) = cities[k] ?: k
     fun car(k: String) = cars[k] ?: k
-    fun type(k: String) = types.firstOrNull { it.first == k }?.second ?: k
+    // a type that's no longer offered still reads as words ("ev" -> "EV", "used_car" -> "Used car")
+    fun type(k: String) = types.firstOrNull { it.first == k }?.second
+        ?: if (k.length <= 3) k.uppercase() else k.replace('_', ' ').replaceFirstChar { it.uppercase() }
     fun person(id: Int?) = people.firstOrNull { (it["id"] as? JsonPrimitive)?.intOrNull == id }?.let { it.s("name").ifBlank { it.s("username") } } ?: if (id == null) "" else "#$id"
     val experts get() = people.filter { it.s("role") == "expert" && it.s("is_active") != "false" }
     fun byUsername(u: String) = people.firstOrNull { it.s("username") == u }?.s("name")?.ifBlank { null } ?: u
@@ -159,16 +161,21 @@ fun Section(text: String) = Text(text.uppercase(), fontSize = 12.sp, fontWeight 
 
 /** One booking row: time (or day), customer, a sub line, status or an action. */
 @Composable
-fun BookingRow(b: Bk, sub: String, today: LocalDate, onOpen: () -> Unit, trailing: (@Composable () -> Unit)? = null) {
+fun BookingRow(b: Bk, detail: String, today: LocalDate, onOpen: () -> Unit, trailing: (@Composable () -> Unit)? = null) {
     val lead = if (b.date.isEmpty() || b.date == today.toString()) b.time else runCatching { LocalDate.parse(b.date).let { "${it.dayOfMonth} ${it.month.name.take(3).lowercase().replaceFirstChar(Char::uppercase)}" } }.getOrDefault("")
     Column(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onOpen)) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(lead, modifier = Modifier.width(52.dp), fontWeight = FontWeight.Bold, color = Vayu.colors.ink)
+        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(lead, modifier = Modifier.width(48.dp).padding(top = 1.dp), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Vayu.colors.ink2, maxLines = 1, softWrap = false)
             Column(Modifier.weight(1f)) {
-                Text(b.customer.ifBlank { b.code }, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(sub, fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // line 1: the name ("…" if long) and the status; line 2: the booking ID, never cut; line 3: type · who or where
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(b.customer.ifBlank { b.code }, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    trailing?.invoke() ?: opsStatus(b).let { StatusDot(it.first, it.second) }
+                }
+                Text(b.code, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Vayu.colors.ink2)
+                if (detail.isNotBlank()) Text(detail, fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            trailing?.invoke() ?: opsStatus(b).let { StatusDot(it.first, it.second) }
         }
         HorizontalDivider(color = Vayu.colors.line)
     }

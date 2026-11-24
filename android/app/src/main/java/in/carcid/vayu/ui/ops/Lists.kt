@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.ui.ops
 
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.async
 import `in`.carcid.vayu.ui.components.VayuSheet
@@ -92,7 +94,7 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
             if (unassigned.isNotEmpty()) {
                 item { Section("Unassigned · ${unassigned.size}") }
                 items(unassigned, key = { it.id }) { b ->
-                    BookingRow(b, listOf(env.labels.city(b.a("city")), env.labels.type(b.type)).filter { it.isNotBlank() }.joinToString(" · "), t,
+                    BookingRow(b, listOf(env.labels.type(b.type), env.labels.city(b.a("city"))).filter { it.isNotBlank() }.joinToString(" · "), t,
                         onOpen = { onOpen(b.id) }) { PillButton("Assign", online && env.can("bookings.assign")) { onAssign(b) } }
                 }
             }
@@ -116,17 +118,20 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Avatar(initials(name), size = 36)
                             Column(Modifier.weight(1f)) {
-                                Text(name, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
-                                Text(status, fontSize = 13.sp, color = Vayu.colors.muted)
+                                Text(name, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(status, fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
-                            Text("${jobs.count { it.stage == "completed" || it.stage == "submitted" }} of ${jobs.size}", color = Vayu.colors.muted, fontSize = 14.sp)
+                            Text("${jobs.count { it.stage == "completed" || it.stage == "submitted" }} of ${jobs.size}", color = Vayu.colors.muted, fontSize = 14.sp, maxLines = 1, softWrap = false)
                             Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = Vayu.colors.muted)
                         }
                         if (expanded) jobs.forEach { b ->
-                            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { onOpen(b.id) }.padding(start = 48.dp),
-                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text(b.time, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, fontSize = 14.sp)
-                                Text(b.customer, color = Vayu.colors.ink, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(role = Role.Button) { onOpen(b.id) }.padding(start = 48.dp, top = 4.dp, bottom = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(b.time, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink2, fontSize = 14.sp, maxLines = 1, softWrap = false)
+                                Column(Modifier.weight(1f)) {
+                                    Text(b.customer.ifBlank { b.code }, color = Vayu.colors.ink, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(b.code, fontSize = 13.sp, color = Vayu.colors.ink2)
+                                }
                                 opsStatus(b).let { StatusDot(it.first, it.second) }
                             }
                         }
@@ -204,14 +209,17 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
             item {
                 OfflineNote(first)
                 Spacer(Modifier.height(12.dp))
-                SoftField(search, { search = it }, "Name, phone, booking ID, chassis", icon = Icons.Outlined.Search)
+                SoftField(search, { search = it }, "Name, phone, ID, chassis", icon = Icons.Outlined.Search)
                 Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Segmented(listOf("Today", "Upcoming", "All"), view, { view = it }, Modifier.weight(1f))
-                    Row(Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp)).background(if (filters.isEmpty()) Vayu.colors.soft else Vayu.colors.primary)
-                        .clickable(role = Role.Button) { sheet = true }.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // an icon, so the three tabs keep their room; filled with the count when filters are on
+                    Row(Modifier.heightIn(min = 44.dp).widthIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
+                        .background(if (filters.isEmpty()) Vayu.colors.soft else Vayu.colors.primary)
+                        .clickable(role = Role.Button) { sheet = true }.padding(horizontal = 12.dp)
+                        .semantics { contentDescription = if (filters.isEmpty()) "Filter" else "Filter, ${filters.size} on" },
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                         Icon(Icons.Outlined.FilterList, null, tint = if (filters.isEmpty()) Vayu.colors.ink else Vayu.colors.onPrimary, modifier = Modifier.size(18.dp))
-                        Text(if (filters.isEmpty()) " Filter" else " Filter · ${filters.size}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                            color = if (filters.isEmpty()) Vayu.colors.ink else Vayu.colors.onPrimary)
+                        if (filters.isNotEmpty()) Text(" ${filters.size}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.onPrimary)
                     }
                 }
             }
@@ -220,7 +228,7 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
             if (need.isNotEmpty()) {
                 item { Section("Need an expert · ${need.size}") }
                 items(need, key = { "n" + it.id }) { b ->
-                    BookingRow(b, "${b.code} · ${env.labels.city(b.a("city"))}", t, onOpen = { onOpen(b.id) }) {
+                    BookingRow(b, listOf(env.labels.type(b.type), env.labels.city(b.a("city"))).filter { it.isNotBlank() }.joinToString(" · "), t, onOpen = { onOpen(b.id) }) {
                         PillButton("Assign", online && env.can("bookings.assign")) { onAssign(b) }
                     }
                 }
@@ -228,7 +236,7 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
             if (rest.isNotEmpty()) {
                 item { Section("Scheduled · ${rest.size}") }
                 items(rest, key = { "s" + it.id }) { b ->
-                    BookingRow(b, listOf(b.code, env.labels.person(b.expert)).filter { it.isNotBlank() }.joinToString(" · "), t, onOpen = { onOpen(b.id) })
+                    BookingRow(b, listOf(env.labels.type(b.type), env.labels.person(b.expert)).filter { it.isNotBlank() }.joinToString(" · "), t, onOpen = { onOpen(b.id) })
                 }
             }
             if (first == null) item { Text(if (term.isNotEmpty()) "Searching…" else "Loading…", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }

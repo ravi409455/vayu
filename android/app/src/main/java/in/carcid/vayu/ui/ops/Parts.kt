@@ -1,5 +1,15 @@
 package `in`.carcid.vayu.ui.ops
 
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.border
 import `in`.carcid.vayu.ui.expert.whenStamp
 import `in`.carcid.vayu.ui.expert.time12
 import `in`.carcid.vayu.ui.expert.dayLabel
@@ -105,11 +115,19 @@ import java.io.File
 import java.util.UUID
 
 /** A booking with its current inspection and that inspection's form trees. */
-class Loaded3(val b: Bk, val insp: JsonObject?, val trees: Map<String, FormTree?>, val raw: Map<String, JsonObject?>, val offline: Boolean) {
+class Loaded3(val b: Bk, val insp: JsonObject?, val trees: Map<String, FormTree?>, val raw: Map<String, JsonObject?>, val offline: Boolean,
+              val insps: List<JsonObject> = emptyList()) {
     @Suppress("UNCHECKED_CAST")
     val answers: Map<String, Map<String, Any?>> get() = PARTS.associateWith { p ->
         (insp?.o("answers")?.get(p)?.let { JsonLogic.fromJson(it) } as? Map<String, Any?>).orEmpty() }
     fun filled(today: String) = trees["inspection"]?.let { Filled(trees, answers, JsonLogic.fromJson(b.answers) as Map<String, Any?>, today) }
+}
+
+/** The three forms an inspection was made with (check-in, inspection, wrap-up), raw and parsed. */
+@Composable
+fun rememberForms(env: OpsEnv, insp: JsonObject?): Map<String, JsonObject?> {
+    val versions = mapOf("inspection" to insp?.int("form_version"), "start" to insp?.int("start_version"), "end" to insp?.int("end_version"))
+    return versions.mapValues { (_, v) -> rememberLoad(env, v?.let { "form-versions/$it" }).value?.data as? JsonObject }
 }
 
 @Composable
@@ -117,54 +135,141 @@ fun rememberBooking(env: OpsEnv, id: String): Loaded3? {
     val b = rememberLoad(env, "bookings/$id").value
     val insps = rememberLoad(env, "bookings/$id/inspections").value?.data?.rows()
     val insp = insps?.let(::currentInspection)
-    val versions = mapOf("inspection" to insp?.int("form_version"), "start" to insp?.int("start_version"), "end" to insp?.int("end_version"))
-    val raw = versions.mapValues { (_, v) -> rememberLoad(env, v?.let { "form-versions/$it" }).value?.data as? JsonObject }
+    val raw = rememberForms(env, insp)
     if (b == null || insps == null) return null
-    return Loaded3(Bk(b.data as JsonObject), insp, raw.mapValues { it.value?.let(FormTree::parse) }, raw, b.offline)
+    return Loaded3(Bk(b.data as JsonObject), insp, raw.mapValues { it.value?.let(FormTree::parse) }, raw, b.offline, insps)
 }
 
-/** Every answer of the inspection, page by page; tap one to change it (Ops). */
+/** An answer that is a problem: a defect option was chosen (its severity, else "Problem"). */
+fun problemOf(f: Field, v: Any?): String? {
+    val picked = when (v) { is String -> listOf(v); is List<*> -> v.filterIsInstance<String>(); else -> emptyList() }
+    return f.options.firstOrNull { it.isDefect && it.key in picked }?.let { (it.severity ?: "problem").replaceFirstChar(Char::uppercase) }
+}
+
+fun answered(v: Any?) = v != null && v != "" && !(v is List<*> && v.isEmpty())
+
+/** How much of one part (start, inspection, end) is answered, and how many answers are problems. */
+fun partCounts(data: Loaded3, filled: Filled, part: String): Pair<Int, Int> {
+    val fs = filled.visiblePages(part).flatMap { it.fields }.filter { it.answerable && filled.visible(part, it.key) }
+    val a = data.answers[part].orEmpty()
+    return fs.count { answered(a[it.key]) } to fs.count { problemOf(it, a[it.key]) != null }
+}
+
+/**
+ * The inspection's answers: Check-in · Inspection · Wrap-up, each part's pages in one scroll with a
+ * jump list, "Only problems", photos inline. Tap an answer to change it (Ops).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AnswersScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
+fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val data = rememberBooking(env, id)
-    var page by remember { mutableStateOf(0) }
-    var pages by remember { mutableStateOf(false) }
+    var part by rememberSaveable { mutableStateOf(startPart) }
+    var onlyProblems by rememberSaveable { mutableStateOf(false) }
+    var jump by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Pair<String, Field>?>(null) }
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
+    val media = rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty().filter { it.s("status") in setOf("uploaded", "verified") }
     BackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
-        SubHeader("Answers", data?.let { "${it.b.code} · ${it.b.customer}" }, onBack)
+        Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back to the booking", tint = Vayu.colors.ink) }
+            Text(data?.let { "${it.b.code} · ${it.b.customer}" }.orEmpty(), fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            IconButton(onClick = { jump = true }) { Icon(Icons.AutoMirrored.Outlined.List, contentDescription = "Jump to a page", tint = Vayu.colors.ink) }
+        }
         val filled = data?.filled(env.today().toString())
         if (data?.insp == null || filled == null) {
             Text(if (data == null) "Loading…" else "No inspection yet.", color = Vayu.colors.muted, modifier = Modifier.padding(20.dp)); return
         }
-        val steps = PARTS.flatMap { p -> filled.visiblePages(p).map { p to it } }
-        val (part, pg) = steps[page.coerceIn(0, steps.lastIndex)]
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-            OfflineNote(rememberLoad(env, "bookings/$id").value)
-            Row(Modifier.padding(top = 10.dp).fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).background(Vayu.colors.soft)
-                .clickable(role = Role.Button) { pages = true }.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${pg.title} · page ${page + 1} of ${steps.size}", fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, modifier = Modifier.weight(1f))
-                Icon(Icons.Outlined.ExpandMore, null, tint = Vayu.colors.ink)
-            }
-            pg.fields.filter { it.answerable && filled.visible(part, it.key) }.forEach { f ->
-                val v = data.answers[part]?.get(f.key)
-                val editable = env.can("submissions.edit") && !data.offline && !f.isMedia
-                Column(Modifier.fillMaxWidth().heightIn(min = 58.dp).clickable(enabled = editable, role = Role.Button) { editing = part to f }
-                    .padding(vertical = 8.dp), verticalArrangement = Arrangement.Center) {
-                    Text(f.label, fontSize = 13.sp, color = Vayu.colors.muted)
-                    Text(answerText(f, v, env), color = Vayu.colors.ink)
+        val names = mapOf("start" to "Check-in", "inspection" to "Inspection", "end" to "Wrap-up")
+        val parts = PARTS.filter { filled.visiblePages(it).isNotEmpty() }
+        if (part !in parts) part = parts.firstOrNull() ?: return
+        // part tabs with their counts
+        Row(Modifier.padding(horizontal = 20.dp, vertical = 8.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Vayu.colors.soft).padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            parts.forEach { p ->
+                val (n, bad) = partCounts(data, filled, p)
+                val on = p == part
+                Column(Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(9.dp)).background(if (on) Vayu.colors.bg else Color.Transparent)
+                    .selectable(selected = on, role = Role.Tab) { part = p; scope.launch { list.scrollToItem(0) } },
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Text(names[p] ?: p, fontSize = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        color = if (on) Vayu.colors.ink else Vayu.colors.muted)
+                    Text("$n" + if (bad > 0) " · $bad problem${if (bad == 1) "" else "s"}" else "", fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        color = if (bad > 0) Vayu.colors.warn else Vayu.colors.muted)
                 }
-                HorizontalDivider(color = Vayu.colors.line)
             }
-            Text("Tap an answer to change it. Ratings and Key Checks update when you save.", color = Vayu.colors.muted, fontSize = 13.sp,
-                modifier = Modifier.padding(vertical = 16.dp))
         }
-        if (pages) VayuSheet({ pages = false }) {
-            steps.forEachIndexed { i, (_, p) ->
-                Text("${i + 1}. ${p.title}", color = Vayu.colors.ink, fontWeight = if (i == page) FontWeight.Bold else FontWeight.Normal,
-                    modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { page = i; pages = false }.padding(horizontal = 20.dp, vertical = 14.dp))
+        val pages = filled.visiblePages(part)
+        val answers = data.answers[part].orEmpty()
+        // a check's own photos (photo_of) show on the check's row, not as a row of their own
+        val photosOf = pages.flatMap { it.fields }.filter { it.isMedia && (it.config["photo_of"] as? String) != null }.groupBy({ it.config["photo_of"] as String }, { it.key })
+        val rows = pages.map { pg -> pg to pg.fields.filter { f -> f.answerable && filled.visible(part, f.key) && (f.config["photo_of"] as? String) !in pg.fields.map { it.key }
+            && (!onlyProblems || problemOf(f, answers[f.key]) != null) } }
+        val problems = pages.sumOf { pg -> pg.fields.count { filled.visible(part, it.key) && problemOf(it, answers[it.key]) != null } }
+        val pageOf = pages.flatMap { pg -> pg.fields.map { it.key to pg.title } }.toMap()
+        if (problems > 0 || onlyProblems) Row(Modifier.padding(horizontal = 20.dp)) {
+            Row(Modifier.heightIn(min = 40.dp).clip(RoundedCornerShape(20.dp)).background(if (onlyProblems) Vayu.colors.warnTint else Vayu.colors.bg)
+                .border(1.dp, if (onlyProblems) Vayu.colors.warn else Vayu.colors.line2, RoundedCornerShape(20.dp))
+                .toggleable(onlyProblems, role = Role.Switch) { onlyProblems = it }.padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Outlined.ErrorOutline, null, tint = if (onlyProblems) Vayu.colors.warn else Vayu.colors.ink, modifier = Modifier.size(16.dp))
+                Text("Only problems · $problems", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = if (onlyProblems) Vayu.colors.warn else Vayu.colors.ink)
+            }
+        }
+        OfflineNote(rememberLoad(env, "bookings/$id").value)
+        // header index of each page, for the jump list
+        val headerAt = mutableMapOf<Int, Int>()
+        androidx.compose.foundation.lazy.LazyColumn(Modifier.weight(1f), state = list) {
+            var i = 0
+            rows.forEachIndexed { pi, (pg, fs) ->
+                if (fs.isEmpty()) return@forEachIndexed
+                headerAt[pi] = i
+                item(key = "p${pg.id}") {
+                    Row(Modifier.padding(top = 12.dp).fillMaxWidth().background(Vayu.colors.soft).padding(horizontal = 20.dp, vertical = 8.dp)) {
+                        Text(pg.title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink2, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("page ${pi + 1} of ${pages.size}", fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1, softWrap = false)
+                    }
+                }
+                i++
+                items(fs, key = { "f${it.key}" }) { f ->
+                    val v = answers[f.key]
+                    val editable = env.can("submissions.edit") && !data.offline && !f.isMedia
+                    val bad = problemOf(f, v)
+                    Column(Modifier.padding(horizontal = 20.dp)) {
+                        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).clickable(enabled = editable, role = Role.Button) { editing = part to f }.padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(Modifier.weight(1f)) {
+                                Text(f.label, fontSize = 12.sp, color = Vayu.colors.muted)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(answerText(f, v, env), color = Vayu.colors.ink, modifier = Modifier.weight(1f, fill = false))
+                                    if (bad != null) Text(bad, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.warn,
+                                        modifier = Modifier.clip(RoundedCornerShape(11.dp)).background(Vayu.colors.warnTint).padding(horizontal = 8.dp, vertical = 2.dp))
+                                }
+                            }
+                            // photos of this answer, small, right here
+                            val keys = setOf(f.key) + photosOf[f.key].orEmpty()
+                            val mine = media.filter { it.s("field_key") in keys }
+                            mine.take(2).forEach { m -> MediaTile(env, m, size = 56) {} }
+                        }
+                        HorizontalDivider(color = Vayu.colors.line)
+                    }
+                }
+                i += fs.size
+            }
+            if (rows.all { it.second.isEmpty() }) item {
+                Text(if (onlyProblems) "No problems here." else "Nothing answered here.", color = Vayu.colors.muted, modifier = Modifier.padding(20.dp))
+            }
+            item { Spacer(Modifier.height(24.dp)) }
+        }
+        if (jump) VayuSheet({ jump = false }) {
+            Text("Pages", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Vayu.colors.ink, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+            pages.forEachIndexed { pi, p ->
+                val at = headerAt[pi]
+                Text("${pi + 1}. ${p.title}", color = if (at == null) Vayu.colors.muted else Vayu.colors.ink,
+                    modifier = Modifier.fillMaxWidth().clickable(enabled = at != null, role = Role.Button) { jump = false; scope.launch { list.scrollToItem(at ?: 0) } }
+                        .padding(horizontal = 20.dp, vertical = 14.dp))
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -173,7 +278,7 @@ fun AnswersScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
             var error by remember(f.key) { mutableStateOf<String?>(null) }
             VayuSheet({ editing = null }) {
                 Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-                    Text(pg.title, fontSize = 13.sp, color = Vayu.colors.muted)
+                    Text(pageOf[f.key].orEmpty(), fontSize = 13.sp, color = Vayu.colors.muted)
                     Question(f, value, filled.required(p, f.key), false, error ?: answerProblem(f, value), false, opsFieldEnv(env)) { value = it; error = null }
                     Text("Was ${answerText(f, data.answers[p]?.get(f.key), env)}" +
                         (data.insp.int("expert")?.let { ", answered by ${env.labels.person(it)}." } ?: "."), fontSize = 13.sp, color = Vayu.colors.muted)
@@ -343,12 +448,12 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun MediaTile(env: OpsEnv, m: JsonObject, onClick: () -> Unit) {
+private fun MediaTile(env: OpsEnv, m: JsonObject, size: Int = 76, onClick: () -> Unit) {
     val ctx = LocalContext.current
     val img by produceState<ImageBitmap?>(null, m.s("id")) {
         if (m.s("kind") == "photo") value = mediaBytes(env, ctx.cacheDir, m.s("id"))?.let { thumb(it, 160) }
     }
-    Box(Modifier.size(76.dp).clip(RoundedCornerShape(12.dp)).background(Vayu.colors.illo).clickable(role = Role.Button, onClick = onClick)
+    Box(Modifier.size(size.dp).clip(RoundedCornerShape(if (size < 76) 10.dp else 12.dp)).background(Vayu.colors.illo).clickable(role = Role.Button, onClick = onClick)
         .semantics { contentDescription = "${m.s("kind")} ${m.s("field_key")}" }, contentAlignment = Alignment.Center) {
         img?.let { Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
         if (m.s("kind") == "video") Icon(Icons.Outlined.PlayCircle, null, tint = Color.White, modifier = Modifier.size(30.dp))
@@ -394,129 +499,203 @@ private fun MediaViewer(env: OpsEnv, m: JsonObject, fieldLabel: String, canManag
     }
 }
 
-/** Ratings (override), Key Checks (override), the overall word, and the payment as answered. */
+/**
+ * Ratings, Key Checks and the overall word. A dot marks what the answers suggest; changes wait for
+ * Save (Undo drops them), so a stray tap changes nothing. "Back to suggested" drops an override.
+ */
 @Composable
 fun RatingsScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val data = rememberBooking(env, id)
+    // unsaved choices: "overall" -> word, "r:<key>" -> 1..5, "d:<key>" -> true/false; null means back to suggested
+    var pending by remember(data?.insp?.int("row_version")) { mutableStateOf(mapOf<String, Any?>()) }
+    var saving by remember { mutableStateOf(false) }
     BackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
-        SubHeader("Ratings and payment", data?.let { "${it.b.code} · ${it.b.customer}" }, onBack)
+        SubHeader("Ratings and Key Checks", data?.let { "${it.b.code} · ${it.b.customer}" }, onBack)
         val insp = data?.insp
         if (insp == null) { Text(if (data == null) "Loading…" else "Ratings are calculated once the expert submits.", color = Vayu.colors.muted, modifier = Modifier.padding(20.dp)); return }
         val s = insp.o("scores")
-        val edit = env.can("ratings.override") && !data.offline
-        fun send(body: JsonObject) = scope.launch {
-            try {
-                env.data.act("PATCH", "inspections/${insp.s("id")}/overrides", JsonObject(body + ("row_version" to JsonPrimitive(insp.int("row_version") ?: 0))))
-                env.say("Saved."); env.refresh()
-            } catch (e: ApiError) { env.say(if (e.code == "STALE_INSPECTION") "Someone else changed it meanwhile; loaded their version." else e.message); env.refresh() }
-        }
+        val edit = env.can("ratings.override") && !data.offline && !saving
+        fun pick(k: String, v: Any?) { if (edit) pending = pending + (k to v) }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             if (data.offline) OfflineNote(rememberLoad(env, "bookings/$id").value)
             val overall = s.o("overall")
-            // the current value is always the one picked; "Use suggested" drops your override
-            @Composable fun Reset(text: String, body: () -> JsonObject) {
-                if (edit) Text(text, color = Vayu.colors.brand, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { send(body()) }.padding(vertical = 6.dp))
-            }
             Section("Overall")
-            ChoiceRow(listOf("Excellent", "Good", "Average", "Bad").map { it to false }, overall.s("word").replaceFirstChar { it.uppercase() }) { w ->
-                if (edit) send(buildJsonObject { put("overall", w.lowercase()) })
-            }
-            val suggested = overall.s("suggested_word").replaceFirstChar { it.uppercase() }.ifBlank { "—" }
-            if (overall.s("overridden") == "true") Reset("Set by you · use suggested ($suggested)") { buildJsonObject { put("overall", JsonNull) } }
-            else Text("Suggested: $suggested", color = Vayu.colors.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+            val sugWord = overall.s("suggested_word")
+            val nowWord = if ("overall" in pending) (pending["overall"] as String?) ?: sugWord else overall.s("word")
+            val mineOverall = if ("overall" in pending) pending["overall"] != null else overall.s("overridden") == "true"
+            Picks(listOf("excellent", "good", "average", "bad"), nowWord, sugWord, columns = 2, label = { it.replaceFirstChar(Char::uppercase) }) { pick("overall", it) }
+            if (mineOverall) BackLink("Back to suggested (${sugWord.replaceFirstChar(Char::uppercase)})") { pick("overall", null) }
             val cats = data.raw["inspection"]?.o("rating_config")?.a("categories").orEmpty().map { it as JsonObject }
             if (cats.isNotEmpty()) Section("Ratings")
             cats.forEach { c ->
+                val k = "r:" + c.s("key")
                 val r = s.o("ratings").o(c.s("key"))
-                val mine = r.s("overridden") == "true"
-                Text(c.s("label") + if (mine) " · set by you" else "  (suggested ${r.s("suggested").ifBlank { "—" }})",
-                    fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp))
-                ChoiceRow((1..5).map { "$it" to false }, r.s("value").takeIf { it.isNotBlank() }?.substringBefore(".")) { n ->
-                    if (edit) send(buildJsonObject { put("ratings", buildJsonObject { put(c.s("key"), n.toInt()) }) })
+                val sug = r.s("suggested").substringBefore(".")
+                val now = if (k in pending) (pending[k] as Int?)?.toString() ?: sug else r.s("value").substringBefore(".")
+                val mine = if (k in pending) pending[k] != null else r.s("overridden") == "true"
+                Row(Modifier.padding(top = 12.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(c.s("label"), fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, modifier = Modifier.weight(1f))
+                    if (mine) BackLink("Back to suggested ($sug)") { pick(k, null) } else Text("suggested $sug", fontSize = 13.sp, color = Vayu.colors.muted)
                 }
-                if (mine) Reset("Use suggested (${r.s("suggested").ifBlank { "—" }})") { buildJsonObject { put("ratings", buildJsonObject { put(c.s("key"), JsonNull) }) } }
+                Picks((1..5).map { "$it" }, now, sug, columns = 5) { pick(k, it.toInt()) }
             }
             val checks = data.trees["inspection"]?.fields.orEmpty().filter { it.type == "derived" }
             if (checks.isNotEmpty()) Section("Key Checks")
             checks.forEach { f ->
+                val k = "d:" + f.key
                 val yes = f.config["true_label"] as? String ?: "Yes"; val no = f.config["false_label"] as? String ?: "No"
-                val now = s.o("derived").s(f.key) == "true"
-                val mine = insp.o("overrides").o("derived").s(f.key).isNotBlank()
-                Text(f.label + if (mine) " · set by you" else "", fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp))
-                ChoiceRow(listOf(yes to false, no to false), if (now) yes else no) { v ->
-                    if (edit) send(buildJsonObject { put("derived", buildJsonObject { put(f.key, v == yes) }) })
+                val fromAnswers = (s.o("derived_suggested").s(f.key).ifBlank { null } ?: s.o("derived").s(f.key)) == "true"
+                val savedMine = insp.o("overrides").o("derived").s(f.key).isNotBlank()
+                val now = if (k in pending) (pending[k] as Boolean?) ?: fromAnswers else s.o("derived").s(f.key) == "true"
+                val mine = if (k in pending) pending[k] != null else savedMine
+                Row(Modifier.padding(top = 12.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(f.label, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, modifier = Modifier.weight(1f))
+                    if (mine) BackLink("Back to the answers' result") { pick(k, null) }
                 }
-                if (mine) Reset("Use the answers' result") { buildJsonObject { put("derived", buildJsonObject { put(f.key, JsonNull) }) } }
+                Picks(listOf(yes, no), if (now) yes else no, if (savedMine) null else if (fromAnswers) yes else no, columns = 2) { pick(k, it == yes) }
             }
-            Section("Payment")
-            val end = data.answers["end"].orEmpty()
-            val paid = end["taking_payment"]
-            Text(when (paid) {
-                true -> listOfNotNull(end["payment_mode"]?.toString()?.replaceFirstChar { it.uppercase() },
-                    (end["payment_amount"] as? Number)?.let { "₹" + shown(it.toDouble()) }).joinToString(" · ").ifBlank { "Taken" }
-                false -> "No payment taken (pay later)"
-                else -> "Not answered yet"
-            }, color = Vayu.colors.ink)
-            Text("Verifying or recording a payment isn't on the server yet; change the wrap-up answers to correct it.",
-                color = Vayu.colors.muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 12.dp))
+            Spacer(Modifier.height(24.dp))
+        }
+        if (pending.isNotEmpty()) {
+            HorizontalDivider(color = Vayu.colors.line)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("${pending.size} change${if (pending.size == 1) "" else "s"} not saved", color = Vayu.colors.warn, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                SoftButton("Undo", { pending = emptyMap() })
+                PrimaryButton(if (saving) "Saving…" else "Save", {
+                    scope.launch {
+                        saving = true
+                        val body = buildJsonObject {
+                            if ("overall" in pending) put("overall", (pending["overall"] as String?)?.let { JsonPrimitive(it) } ?: JsonNull)
+                            val rs = pending.filterKeys { it.startsWith("r:") }; val ds = pending.filterKeys { it.startsWith("d:") }
+                            if (rs.isNotEmpty()) put("ratings", buildJsonObject { rs.forEach { (k, v) -> put(k.drop(2), (v as Int?)?.let { JsonPrimitive(it) } ?: JsonNull) } })
+                            if (ds.isNotEmpty()) put("derived", buildJsonObject { ds.forEach { (k, v) -> put(k.drop(2), (v as Boolean?)?.let { JsonPrimitive(it) } ?: JsonNull) } })
+                            put("row_version", insp.int("row_version") ?: 0)
+                        }
+                        try { env.data.act("PATCH", "inspections/${insp.s("id")}/overrides", body); env.say("Saved."); env.refresh() }
+                        catch (e: ApiError) { env.say(if (e.code == "STALE_INSPECTION") "Someone else changed it meanwhile; loaded their version." else e.message); env.refresh() }
+                        finally { saving = false }
+                    }
+                }, enabled = !saving)
+            }
         }
     }
 }
 
-/** The PDF report: status, open, share, remake. */
+/** Choices in equal columns; the chosen one filled, a small dot on the one the answers suggest. */
 @Composable
-fun ReportScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
+private fun Picks(options: List<String>, chosen: String?, suggested: String?, columns: Int, label: (String) -> String = { it }, onPick: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.chunked(columns).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(if (columns > 2) 6.dp else 8.dp)) {
+                row.forEach { o ->
+                    val on = o == chosen
+                    Box(Modifier.weight(1f).heightIn(min = 46.dp).clip(RoundedCornerShape(12.dp))
+                        .background(if (on) Vayu.colors.primary else Vayu.colors.bg)
+                        .border(1.dp, if (on) Vayu.colors.primary else Vayu.colors.line2, RoundedCornerShape(12.dp))
+                        .selectable(selected = on, role = Role.RadioButton) { onPick(o) }
+                        .semantics { if (o == suggested) contentDescription = "${label(o)}, suggested" }, contentAlignment = Alignment.Center) {
+                        Text(label(o), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false,
+                            color = if (on) Vayu.colors.onPrimary else Vayu.colors.ink2)
+                        if (o == suggested) Box(Modifier.align(Alignment.TopEnd).padding(6.dp).size(6.dp).clip(CircleShape).background(Vayu.colors.info))
+                    }
+                }
+                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackLink(text: String, onClick: () -> Unit) = Text(text, color = Vayu.colors.info, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+    overflow = TextOverflow.Ellipsis, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = onClick).padding(vertical = 6.dp, horizontal = 2.dp))
+
+/** Payment as Ops read it: "₹1,499 · UPI" / "Taken at wrap-up" (mode names from the wrap-up form). */
+fun paymentText(data: Loaded3): Pair<String, String> {
+    val end = data.answers["end"].orEmpty()
+    val mode = end["payment_mode"]?.let { k -> data.trees["end"]?.fields?.firstOrNull { it.key == "payment_mode" }?.options?.firstOrNull { it.key == k }?.label ?: k.toString() }
+    return when (end["taking_payment"]) {
+        true -> listOfNotNull((end["payment_amount"] as? Number)?.let { "₹" + shown(it.toDouble()) }, mode).joinToString(" · ").ifBlank { "Taken" } to "Taken at wrap-up"
+        false -> "Pay later" to "No payment taken"
+        else -> "Not answered yet" to ""
+    }
+}
+
+/**
+ * The PDF report on the booking screen: status, a short warning when answers changed since it was
+ * made, Make it again (followed until the new one is ready), Open · Share · Check link.
+ */
+@Composable
+fun ReportCard(env: OpsEnv, id: String, b: Bk) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    val b = rememberLoad(env, "bookings/$id").value?.data?.let { Bk(it as JsonObject) }
     val r = rememberLoad(env, "bookings/$id/report")
-    val rep = r.value?.data as? JsonObject
-    BackHandler(onBack = onBack)
+    var rep by remember(r.value) { mutableStateOf(r.value?.data as? JsonObject) }
+    var making by remember { mutableStateOf(false) }
+    val online = r.value?.offline != true
+    // kept on the phone until a newer report is made: Open doesn't download it again
     suspend fun file(): File? {
         val url = rep?.s("url")?.ifBlank { null } ?: return null
+        val code = b.code.filter { it.isLetterOrDigit() || it == '-' }
+        val dir = File(ctx.cacheDir, "reports").apply { mkdirs() }
+        // our own name, never the server's (no path tricks in the cache folder)
+        val f = File(dir, "report-$code-${rep?.s("generated_at").orEmpty().filter { it.isDigit() }}.pdf")
+        if (f.exists()) return f
         return withContext(Dispatchers.IO) {
             runCatching {
-                // our own name, never the server's (no path tricks in the cache folder)
-                val f = File(File(ctx.cacheDir, "reports").apply { mkdirs() }, "report-${(b?.code ?: "booking").filter { it.isLetterOrDigit() || it == '-' }}.pdf")
+                dir.listFiles { x -> x.name.startsWith("report-$code-") }?.forEach { it.delete() }
                 writeAtomically(f, env.data.api.download(url)); f
             }.getOrNull()
         }
     }
     fun uriOf(f: File) = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
-    Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
-        SubHeader("Report", b?.let { "${it.code} · ${it.customer}" }, onBack)
-        Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            OfflineNote(r.value)
-            when {
-                rep == null -> Text(if (b?.stage == "completed") "The report is being made." else "It's made automatically when the booking is Completed.",
-                    color = Vayu.colors.muted)
-                else -> {
-                    Text(when (rep.s("status")) { "ready" -> "Ready" + (rep.s("generated_at").takeIf { it.isNotBlank() }?.let { " · made ${whenStamp(it, env.today()).replaceFirstChar { c -> c.lowercase() }}" } ?: "")
-                        else -> rep.s("status").replaceFirstChar { it.uppercase() } }, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Vayu.colors.ink)
-                    if (rep.s("stale") == "true") Banner("Out of date: answers changed after this PDF was made. Make it again to include them.", Tone.WARN, {})
-                    if (rep.s("error").isNotBlank()) Banner("Problem: ${rep.s("error")}", Tone.BAD, {})
-                    if (rep.s("url").isNotBlank()) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        SoftButton("Open", { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }, Modifier.weight(1f))
-                        PrimaryButton("Share", { scope.launch { file()?.let { ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/pdf")
-                            .putExtra(Intent.EXTRA_STREAM, uriOf(it)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Share the report")) } ?: env.say("Couldn't download the report.") } }, Modifier.weight(1f))
-                    }
-                    if (rep.s("verify_url").isNotBlank()) SoftButton("Share the check link", {
-                        ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, rep.s("verify_url")), "Share the check link"))
-                    }, Modifier.fillMaxWidth())
-                }
+    fun remake() = scope.launch {
+        val before = rep?.s("generated_at")
+        making = true
+        try { env.data.act("POST", "bookings/$id/report/regenerate", JsonObject(emptyMap())) }
+        catch (e: ApiError) { env.say(e.message); making = false; return@launch }
+        // follow it until the new one is there (or it failed), up to two minutes
+        repeat(40) {
+            kotlinx.coroutines.delay(3000)
+            val now = try { env.data.api.get("bookings/$id/report") as? JsonObject } catch (e: ApiError) { null }
+            if (now != null && (now.s("generated_at") != before || now.s("status") == "failed")) {
+                rep = now; making = false; env.say(if (now.s("status") == "failed") "The report couldn't be made." else "The report is ready."); env.refresh(); return@launch
             }
-            if (env.can("reports.regenerate") && b?.stage == "completed") SoftButton("Make it again", {
-                scope.launch {
-                    try { env.data.act("POST", "bookings/$id/report/regenerate", JsonObject(emptyMap())); env.say("Making the report. This takes a few seconds."); kotlinx.coroutines.delay(4000); env.refresh() }
-                    catch (e: ApiError) { env.say(e.message) }
-                }
-            }, Modifier.fillMaxWidth())
+        }
+        making = false; env.say("Still being made. Refresh in a minute.")
+    }
+    Column(Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Vayu.colors.soft).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        val stale = rep?.s("stale") == "true"
+        val failed = rep?.s("status") == "failed" || rep?.s("error")?.isNotBlank() == true
+        Text(when {
+            b.conflict.isNotEmpty() -> "Waits for your choice above"
+            making -> "Making the report…"
+            rep == null -> if (b.stage == "completed") "Being made" else "Made when the job is done"
+            rep!!.s("status") == "ready" -> "Ready" + (rep!!.s("generated_at").takeIf { it.isNotBlank() }?.let { " · made ${whenStamp(it, env.today()).replaceFirstChar { c -> c.lowercase() }}" } ?: "")
+            else -> rep!!.s("status").replaceFirstChar { it.uppercase() }
+        }, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
+        if (!making && stale) Note("Answers changed since this was made.", Vayu.colors.warnTint)
+        if (!making && failed) Note(rep?.s("error")?.ifBlank { null } ?: "The report couldn't be made.", Vayu.colors.badTint)
+        if (env.can("reports.regenerate") && b.stage == "completed" && b.conflict.isEmpty()) {
+            if (stale || failed) PrimaryButton(if (making) "Making…" else "Make it again", { remake() }, Modifier.fillMaxWidth(), enabled = online && !making)
+            else SoftButton(if (making) "Making…" else "Make it again", { if (online && !making) remake() }, Modifier.fillMaxWidth())
+        }
+        if (rep?.s("url")?.isNotBlank() == true && !making) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SoftButton("Open", { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }, Modifier.weight(1f))
+            SoftButton("Share", { scope.launch { file()?.let { ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/pdf")
+                .putExtra(Intent.EXTRA_STREAM, uriOf(it)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Share the report")) } ?: env.say("Couldn't download the report.") } }, Modifier.weight(1f))
+            if (rep!!.s("verify_url").isNotBlank()) SoftButton("Check link", {
+                ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, rep!!.s("verify_url")), "Share the check link"))
+            }, Modifier.weight(1f))
         }
     }
 }
+
+@Composable
+private fun Note(text: String, bg: Color) = Text(text, fontSize = 13.sp, color = Vayu.colors.ink2,
+    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(bg).padding(12.dp))
 
 /** What happened to the booking, newest first. */
 @Composable

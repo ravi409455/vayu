@@ -93,7 +93,8 @@ class MyJobsTest {
     @Test fun jobDetailsMatchTheDesign() {
         show(JobsState(jobs, ready = setOf("2")))
         compose.onNodeWithText("Arjun Mehta").performClick()
-        compose.onNodeWithText("DEMO-2 · Today, 3:30 pm").assertIsDisplayed()
+        compose.onNodeWithText("DEMO-2").assertIsDisplayed()
+        compose.onNodeWithText("Today, 3:30\u00A0pm").assertIsDisplayed()
         compose.onNodeWithText("Ready to work without signal").assertIsDisplayed()
         compose.onNodeWithText("Start inspection").assertIsDisplayed()
         compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/job_detail.png", roborazziOptions = options)
@@ -154,7 +155,7 @@ class MyJobsTest {
 
     @Test fun labelsAndTabs() {
         assertEquals("+91 98765 00000", phoneLabel("+919876500000")); assertEquals("0201234", phoneLabel("0201234"))
-        assertEquals("3:30 pm", time12("15:30")); assertEquals("12:05 pm", time12("12:05")); assertEquals("12:00 am", time12("00:00"))
+        assertEquals("3:30\u00A0pm", time12("15:30")); assertEquals("12:05\u00A0pm", time12("12:05")); assertEquals("12:00\u00A0am", time12("00:00"))
         assertEquals("Tomorrow", dayLabel("2026-11-25", today)); assertEquals("Mon 30 Nov", dayLabel("2026-11-30", today))
         assertEquals(JobTab.TODAY, tabOf(j("1", "x", "09:00", date = "2026-11-20"), today))     // overdue
         assertEquals("Reassigned" to Tone.BAD, statusOf(j("1", "x", "09:00").copy(assignedToMe = false)))

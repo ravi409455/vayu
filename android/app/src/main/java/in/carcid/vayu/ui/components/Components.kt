@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.components
 
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.verticalScroll
@@ -140,7 +141,7 @@ fun toneColor(t: Tone): Color = when (t) {
 fun StatusDot(label: String, tone: Tone) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(toneColor(tone)))
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = Vayu.colors.muted)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = Vayu.colors.muted, maxLines = 1, softWrap = false)
     }
 }
 
@@ -155,9 +156,10 @@ fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit, mod
                 .background(if (on) Vayu.colors.bg else Color.Transparent)
                 .selectable(selected = on, role = Role.Tab, onClick = { onSelect(i) }),
                 contentAlignment = Alignment.Center) {
-                Text(label, style = MaterialTheme.typography.bodyLarge,
+                // a tab never breaks mid-word: one line, "…" if it can't fit
+                Text(label, style = MaterialTheme.typography.bodyLarge, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (on) Vayu.colors.ink else Vayu.colors.muted)
+                    color = if (on) Vayu.colors.ink else Vayu.colors.muted, modifier = Modifier.padding(horizontal = 4.dp))
             }
         }
     }
@@ -270,7 +272,7 @@ fun SoftField(value: String, onValueChange: (String) -> Unit, placeholder: Strin
         horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         if (icon != null) Icon(icon, contentDescription = null, tint = Vayu.colors.muted, modifier = Modifier.size(20.dp))
         Box(Modifier.weight(1f)) {
-            if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = Vayu.colors.muted)
+            if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = Vayu.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             BasicTextField(value, onValueChange, singleLine = true, visualTransformation = visualTransformation,
                 // passwords: no suggestions, no keyboard learning
                 keyboardOptions = if (password) androidx.compose.foundation.text.KeyboardOptions(
@@ -306,7 +308,7 @@ fun BottomBar(items: List<Triple<String, ImageVector, Int?>>, active: Int, spinn
                     }
                     Spacer(Modifier.height(3.dp))
                     // while it works the button says so (no endless animation: lighter, and nothing to wait on)
-                    Text(if (i == spinning) "Updating…" else label, fontSize = 12.sp, textAlign = TextAlign.Center,
+                    Text(if (i == spinning) "Updating…" else label, fontSize = 12.sp, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         fontWeight = if (on || i == spinning) FontWeight.SemiBold else FontWeight.Medium,
                         color = if (on || i == spinning) Vayu.colors.brand else Vayu.colors.muted)
                 }

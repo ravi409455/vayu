@@ -32,7 +32,7 @@ import java.time.LocalDate
 sealed interface Route {
     data object Needs : Route
     data class Booking(val id: String) : Route
-    data class Detail(val id: String, val part: Part) : Route
+    data class Detail(val id: String, val part: Part, val group: String = "inspection") : Route
     data class Form(val id: String?) : Route
 }
 
@@ -79,12 +79,12 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
                 OpsTab.DASHBOARD -> DashboardScreen(env, needs.size, { push(Route.Needs) }, onProfile, bar)
             }
             Route.Needs -> NeedsYouScreen(env, needs, onBack = { pop() }, onOpen = { push(Route.Booking(it)) })
-            is Route.Booking -> BookingScreen(env, r.id, onBack = { pop() }, onPart = { push(Route.Detail(r.id, it)) }, onEdit = { push(Route.Form(r.id)) })
+            is Route.Booking -> BookingScreen(env, r.id, onBack = { pop() }, onPart = { push(Route.Detail(r.id, it)) },
+                onAnswers = { push(Route.Detail(r.id, Part.ANSWERS, it)) }, onEdit = { push(Route.Form(r.id)) })
             is Route.Detail -> when (r.part) {
-                Part.ANSWERS -> AnswersScreen(env, r.id) { pop() }
+                Part.ANSWERS -> AnswersScreen(env, r.id, r.group) { pop() }
                 Part.MEDIA -> MediaScreen(env, r.id) { pop() }
                 Part.RATINGS -> RatingsScreen(env, r.id) { pop() }
-                Part.REPORT -> ReportScreen(env, r.id) { pop() }
                 Part.HISTORY -> HistoryScreen(env, r.id) { pop() }
             }
             is Route.Form -> BookingFormScreen(env, r.id, onBack = { pop() }) { saved, assign ->

@@ -57,6 +57,16 @@ private val GROUPS = listOf("day", "week", "month")
 private val SPLITS = listOf("type" to "Type", "city" to "City", "expert" to "Expert", "stage" to "Stage")
 
 /** How many periods back the chart shows, and the first day of that range. */
+/** "2026-W46" -> "9 Nov" (the week's Monday), "2026-11" -> "Nov 2026", "2026-11-24" -> "24 Nov". */
+fun periodLabel(p: String): String = runCatching {
+    val day = java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.ENGLISH)
+    when {
+        "-W" in p -> LocalDate.parse(p + "-1", java.time.format.DateTimeFormatter.ISO_WEEK_DATE).format(day)
+        p.length == 7 -> java.time.YearMonth.parse(p).format(java.time.format.DateTimeFormatter.ofPattern("MMM yyyy", java.util.Locale.ENGLISH))
+        else -> LocalDate.parse(p).format(day)
+    }
+}.getOrDefault(p)
+
 fun dashRange(group: String, today: LocalDate): Pair<LocalDate, LocalDate> = when (group) {
     "day" -> today.minusDays(13) to today
     "week" -> today.minusWeeks(7).with(java.time.DayOfWeek.MONDAY) to today
@@ -89,7 +99,7 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
             if (env.can("dashboards.export")) IconButton(onClick = {
                 val f = File(File(ctx.cacheDir, "reports").apply { mkdirs() }, "vayu-$g-by-$split.csv")
                 writeAtomically(f, ("period,${split},count\n" + rows.joinToString("\n") { r ->
-                    listOf(r.s("period"), label(r.s("key")), r.s("count")).joinToString(",") { v -> "\"" + v.replace("\"", "\"\"").let { if (it.firstOrNull() in setOf('=', '+', '-', '@')) "'$it" else it } + "\"" }
+                    listOf(periodLabel(r.s("period")), label(r.s("key")), r.s("count")).joinToString(",") { v -> "\"" + v.replace("\"", "\"\"").let { if (it.firstOrNull() in setOf('=', '+', '-', '@')) "'$it" else it } + "\"" }
                 }).toByteArray())
                 val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
                 ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/csv").putExtra(Intent.EXTRA_STREAM, uri)
@@ -110,7 +120,7 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
             val max = (totals.maxOfOrNull { it.second } ?: 0).coerceAtLeast(1)
             val bar = Vayu.colors.ink; val soft = Vayu.colors.line2
             Canvas(Modifier.padding(top = 18.dp).fillMaxWidth().height(160.dp)
-                .semantics { contentDescription = "Inspections per $g: " + totals.joinToString { "${it.first} ${it.second}" } }) {
+                .semantics { contentDescription = "Inspections per $g: " + totals.joinToString { "${periodLabel(it.first)} ${it.second}" } }) {
                 if (totals.isEmpty()) return@Canvas
                 val w = size.width / totals.size
                 totals.forEachIndexed { i, (_, n) ->
@@ -119,8 +129,8 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
                 }
             }
             Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                Text(periods.firstOrNull().orEmpty(), fontSize = 12.sp, color = Vayu.colors.muted, modifier = Modifier.weight(1f))
-                Text(periods.lastOrNull().orEmpty(), fontSize = 12.sp, color = Vayu.colors.muted)
+                Text(periods.firstOrNull()?.let(::periodLabel).orEmpty(), fontSize = 12.sp, color = Vayu.colors.muted, modifier = Modifier.weight(1f))
+                Text(periods.lastOrNull()?.let(::periodLabel).orEmpty(), fontSize = 12.sp, color = Vayu.colors.muted)
             }
             Row(Modifier.padding(top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("${word.replaceFirstChar { it.uppercase() }} by", fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, modifier = Modifier.weight(1f))

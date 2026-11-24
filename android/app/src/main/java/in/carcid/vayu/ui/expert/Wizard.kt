@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.expert
 
+import androidx.compose.ui.text.style.TextOverflow
 import `in`.carcid.vayu.ui.components.VayuSheet
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -215,8 +216,8 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
             CloseButton("Close and keep the draft", onClose)
             Column(Modifier.weight(1f)) {
                 Text(if (step.part == "start" && steps.count { it.part == "start" } == 1) "Check-in" else step.title,
-                    fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Vayu.colors.ink, maxLines = 1)
-                Text("${draft.code} · ${draft.customer}", fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1)
+                    fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Vayu.colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${draft.code} · ${draft.customer}", fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Row(Modifier.heightIn(min = 40.dp).clip(RoundedCornerShape(20.dp)).background(Vayu.colors.soft)
                 .clickable(role = Role.Button) { pages = true }.padding(horizontal = 12.dp)

@@ -142,7 +142,7 @@ class OpsFlowTest {
         compose.onNodeWithText("Manoj Pillai").performClick()
         waitFor("Two experts inspected this car")
         shot("ops_booking")
-        compose.onNodeWithText("Waits for your choice").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Waits for your choice above").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Compare and choose").performClick()
         waitFor("Which inspection counts?")
         compose.onNode(hasText("· good", substring = true)).performClick()            // Meera's: 4 answers, rated good
@@ -156,7 +156,7 @@ class OpsFlowTest {
         show()
         compose.onNodeWithText("Bookings").performClick()
         waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
-        waitFor("Answers"); compose.onNodeWithText("Answers").performClick()
+        waitFor("Inspection"); compose.onNodeWithText("Inspection").performScrollTo().performClick()
         waitFor("Chassis number")
         shot("ops_answers")
         compose.onNodeWithText("Odometer").performClick()

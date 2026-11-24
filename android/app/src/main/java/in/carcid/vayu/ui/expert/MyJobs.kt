@@ -124,7 +124,8 @@ fun phoneLabel(p: String): String =
 /** "3:30 pm" from "15:30". */
 fun time12(hhmm: String): String {
     val (h, m) = hhmm.split(":").mapNotNull { it.toIntOrNull() }.let { if (it.size < 2) return "" else it[0] to it[1] }
-    return "${(h + 11) % 12 + 1}:${m.toString().padStart(2, '0')} ${if (h >= 12) "pm" else "am"}"
+    // a no-break space: "3:30 pm" never splits across lines
+    return "${(h + 11) % 12 + 1}:${m.toString().padStart(2, '0')}\u00A0${if (h >= 12) "pm" else "am"}"
 }
 
 /** A server time in words, on this phone's clock: "Today, 2:14 pm", "Mon 23 Nov, 9:15 am". */
@@ -311,21 +312,27 @@ private fun JobRow(j: Job, today: LocalDate, d: Draft?, onOpen: (Job) -> Unit) {
     }
     val (label, tone) = statusOf(j, d)
     Column(Modifier.fillMaxWidth().clickable(role = Role.Button) { onOpen(j) }) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(lead, modifier = Modifier.width(52.dp), fontWeight = FontWeight.Bold, fontSize = 15.sp,
+        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(lead, modifier = Modifier.width(52.dp), fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, softWrap = false,
                 color = when { overdue -> Vayu.colors.warn; j.open -> Vayu.colors.ink; else -> Vayu.colors.muted })
             Column(Modifier.weight(1f)) {
-                Text(j.customer, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis)
-                Text(j.bookingId + when {
-                    d != null && !d.locked && !j.assignedToMe -> " · given to another expert"
-                    d != null && !d.locked && j.stage == "cancelled" -> " · cancelled; your draft is still sent"
-                    j.stage == "completed" -> when (j.report) { "ready" -> " · Report ready"; "failed" -> " · Report problem (Ops will fix)"; else -> " · Report being made" }
-                    else -> ""
-                }, style = MaterialTheme.typography.bodyMedium, color = Vayu.colors.muted)
+                // name "…" and status; the booking ID in full; car · type; then a note if there is one
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(j.customer.ifBlank { j.bookingId }, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    StatusDot(label, tone)
+                }
+                Text(j.bookingId, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Vayu.colors.ink2)
+                listOf(j.car, j.type).filter { it.isNotBlank() }.joinToString(" · ").takeIf { it.isNotEmpty() }?.let {
+                    Text(it, fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                when {
+                    d != null && !d.locked && !j.assignedToMe -> "Given to another expert"
+                    d != null && !d.locked && j.stage == "cancelled" -> "Cancelled; your draft is still sent"
+                    j.stage == "completed" -> when (j.report) { "ready" -> "Report ready"; "failed" -> "Report problem (Ops will fix)"; else -> "Report being made" }
+                    else -> null
+                }?.let { Text(it, fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
-            StatusDot(label, tone)
         }
         HorizontalDivider(color = Vayu.colors.line)
     }
@@ -343,8 +350,8 @@ fun JobDetailScreen(j: Job, ready: Boolean, today: LocalDate, onBack: () -> Unit
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             Text(j.customer, fontSize = 26.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink,
                 modifier = Modifier.padding(top = 4.dp))
-            Text(listOf(j.bookingId, listOf(dayLabel(j.date, today), time12(j.time)).filter { it.isNotEmpty() }
-                .joinToString(", ")).filter { it.isNotEmpty() }.joinToString(" · "), color = Vayu.colors.muted)
+            Text(j.bookingId, color = Vayu.colors.ink2, fontWeight = FontWeight.Medium)
+            Text(listOf(dayLabel(j.date, today), time12(j.time)).filter { it.isNotEmpty() }.joinToString(", "), color = Vayu.colors.muted)
             Row(Modifier.padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 // digits only: a stored "*#06#"-style code must never reach the dialer
                 val digits = j.phone.filter { it in '0'..'9' }
@@ -360,7 +367,8 @@ fun JobDetailScreen(j: Job, ready: Boolean, today: LocalDate, onBack: () -> Unit
             }
             notices.forEach { Spacer(Modifier.height(12.dp)); Banner(it, Tone.WARN, {}) }
             Spacer(Modifier.height(14.dp))
-            Info("Car", listOf(j.car, j.type).filter { it.isNotBlank() }.joinToString(" · "))
+            Info("Car", j.car)
+            Info("Inspection", j.type)
             Info("Address", place)
             Info("Phone", phoneLabel(j.phone))
             if (ready) Row(Modifier.padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically,
