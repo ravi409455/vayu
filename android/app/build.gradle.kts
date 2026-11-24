@@ -126,3 +126,27 @@ tasks.matching { it.name == "assembleRelease" }.configureEach {
                 "(or set VAYU_KEYSTORE_PROPS). See docs/plan-android.md, release signing.")
     }
 }
+
+// Robolectric's Android jars come through Gradle (cached, retried) and the tests run offline. Left to
+// itself Robolectric downloads them at test time over plain HTTP, which failed in CI (IOException at
+// MavenArtifactFetcher). Add a jar here when a test uses another sdk level.
+// One configuration per jar: in a single one Gradle would keep only the newest version of the module.
+val robolectricSdks = mapOf(
+    "34" to "14-robolectric-10818077-i7",
+    "35" to "15-robolectric-12650502-i7",
+)
+val robolectricJars = robolectricSdks.map { (sdk, version) ->
+    configurations.create("robolectricSdk$sdk").also {
+        dependencies.add(it.name, "org.robolectric:android-all-instrumented:$version")
+    }
+}
+val robolectricDir = layout.buildDirectory.dir("robolectric-jars")
+val copyRobolectricJars by tasks.registering(Copy::class) {
+    from(robolectricJars)
+    into(robolectricDir)
+}
+tasks.withType<Test>().configureEach {
+    dependsOn(copyRobolectricJars)
+    systemProperty("robolectric.offline", "true")
+    systemProperty("robolectric.dependency.dir", robolectricDir.get().asFile.absolutePath)
+}

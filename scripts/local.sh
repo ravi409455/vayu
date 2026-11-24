@@ -68,6 +68,12 @@ up() {
   [ -d "$ROOT/web/node_modules" ] || (cd "$ROOT/web" && npm ci)
   echo "Starting the app..."
   cd "$ROOT/backend"
+  # pushes: take ONLY the Firebase credential path from .env.local (the file may hold other keys,
+  # e.g. real storage, that the local stack must never use)
+  if [ -z "${FIREBASE_CREDENTIALS_FILE:-}" ] && [ -f .env.local ]; then
+    FIREBASE_CREDENTIALS_FILE="$(sed -n 's/^FIREBASE_CREDENTIALS_FILE=//p' .env.local | tail -1)"
+    export FIREBASE_CREDENTIALS_FILE
+  fi
   start_bg api uv run python manage.py runserver 8000 --noreload
   start_bg worker uv run celery -A vayu worker -Q default,pdf -c 2 --loglevel=info
   start_bg beat uv run celery -A vayu beat --schedule "$RUN/celerybeat-schedule" --loglevel=info
