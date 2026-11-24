@@ -18,6 +18,7 @@ import { useCount, viewQuery } from "./Bookings";
 
 const SLOT_PX = 76;                // width of 30 minutes; the day scrolls sideways
 const LANE_W = 200;                // the expert column, kept in view while scrolling
+const GUTTER = 36;                 // room at each end of the grid so a time label is never hidden by the expert column or the edge
 const CHOSEN = "vayu:today-experts";  // the experts picked in the side panel, kept per browser
 
 const LANE_H = 76;                 // height of one row of boxes; a lane with overlapping jobs gets more rows
@@ -103,8 +104,8 @@ export function Today() {
     ro.observe(el); setViewW(el.clientWidth);
     return () => ro.disconnect();
   }, [hasJobs]);
-  const slotPx = mode === "3h" && viewW > LANE_W + 240 ? Math.floor((viewW - LANE_W) / (WINDOW_HOURS * 2)) : SLOT_PX;
-  const nowX = (nowAt - lo) * 2 * slotPx;
+  const slotPx = mode === "3h" && viewW > LANE_W + 240 ? Math.floor((viewW - LANE_W - 2 * GUTTER) / (WINDOW_HOURS * 2)) : SLOT_PX;
+  const nowX = GUTTER + (nowAt - lo) * 2 * slotPx;
   const goTo = (start: number, smooth = true) => {
     const el = scroller.current;
     if (el) el.scrollTo({ left: Math.max(0, (clampStart(start, lo, hi) - lo) * 2 * slotPx), behavior: smooth ? "smooth" : "auto" });
@@ -180,18 +181,18 @@ export function Today() {
               onPointerUp={() => setTimeout(() => { drag.current = null; }, 0)}
               onPointerCancel={() => setTimeout(() => { drag.current = null; }, 0)}
               onClickCapture={(e) => { if (drag.current?.moved) { e.preventDefault(); e.stopPropagation(); } }}>
-              <div className="sched" style={{ width: LANE_W + slots * slotPx }}>
+              <div className="sched" style={{ width: LANE_W + 2 * GUTTER + slots * slotPx }}>
                 {nowAt > lo && nowAt < hi && <span className="now-line" style={{ left: LANE_W + nowX }} />}
                 <div className="sched-row sched-hours">
                   <div className="sched-who" />
-                  <div className="sched-axis" style={{ width: slots * slotPx }}>
+                  <div className="sched-axis" style={{ width: slots * slotPx + 2 * GUTTER }}>
                     {nowAt > lo && nowAt < hi && <>
                       <span className="now-line" style={{ left: nowX, top: 0 }} />
                       <span className="now-chip" style={{ left: nowX }}>{hm(nowAt)}</span>
                     </>}
                     {Array.from({ length: slots }, (_, i) => {
                       const m = lo * 60 + i * 30;
-                      return <span key={i} className={`sched-tick${m % 60 === 0 ? " hour" : ""}${i === 0 ? " first" : ""}`} style={{ left: i * slotPx }}>{fmtTime(`${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`)}</span>;
+                      return <span key={i} className={`sched-tick${m % 60 === 0 ? " hour" : ""}`} style={{ left: GUTTER + i * slotPx }}>{fmtTime(`${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`)}</span>;
                     })}
                   </div>
                 </div>
@@ -204,7 +205,7 @@ export function Today() {
                         {l.user ? <Avatar who={l.user} size={28} /> : <span className="avatar lane-open" style={{ width: 28, height: 28 }}>?</span>}
                         <div style={{ minWidth: 0 }}><div className="small ellipsis" style={{ fontWeight: 600 }}>{l.name}</div><div className="muted" style={{ fontSize: 11 }}>{l.jobs.length ? `${l.jobs.length} job${l.jobs.length === 1 ? "" : "s"}` : "Free today"}</div></div>
                       </div>
-                      <div className="sched-track" style={{ width: slots * slotPx, height: laid.rows * LANE_H, backgroundSize: `${slotPx}px 100%, ${slotPx * 2}px 100%` }}>
+                      <div className="sched-track" style={{ width: slots * slotPx + 2 * GUTTER, height: laid.rows * LANE_H, backgroundSize: `${slotPx}px 100%, ${slotPx * 2}px 100%`, backgroundPosition: `${GUTTER}px 0, ${GUTTER}px 0` }}>
                         {l.jobs.map((b, i) => {
                           const sp = spans.get(b.id)!;
                           return (
@@ -212,7 +213,7 @@ export function Today() {
                               aria-label={`${b.booking_id}, ${String(b.answers.customer_name ?? "")}. ${spanTitle(sp).replace("\n", ". ")}`}
                               onMouseEnter={(e) => showTip(e.currentTarget, b, sp, l.name)} onMouseLeave={() => setTip(null)}
                               onFocus={(e) => showTip(e.currentTarget, b, sp, l.name)} onBlur={() => setTip(null)}
-                              style={{ left: (sp.start - lo) * 2 * slotPx + 2, width: (sp.end - sp.start) * 2 * slotPx - 4, top: laid.row[i]! * LANE_H + 8, height: LANE_H - 16, bottom: "auto" }}>
+                              style={{ left: GUTTER + (sp.start - lo) * 2 * slotPx + 2, width: (sp.end - sp.start) * 2 * slotPx - 4, top: laid.row[i]! * LANE_H + 8, height: LANE_H - 16, bottom: "auto" }}>
                               <span className="jb-top"><b>{b.booking_id}</b><span>{hm(sp.start)}</span></span>
                               <span className="jb-sub">{String(b.answers.customer_name ?? "")}</span>
                               <span className="jb-sub">{car(b.answers.car_make_model)} · {city(b.answers.city)}</span>

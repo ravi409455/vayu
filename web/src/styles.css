@@ -494,7 +494,6 @@ input.switch:focus-visible { outline: 2px solid var(--info); outline-offset: 2px
 .sched-hours .sched-who { border-right-color: transparent; }
 .sched-axis { position: relative; height: 44px; flex: none; }   /* the clock chip on top, the times below */
 .sched-tick { position: absolute; bottom: 6px; transform: translateX(-50%); font-size: 11px; color: var(--faint); white-space: nowrap; }
-.sched-tick.first { transform: none; padding-left: 4px; }
 .sched-tick.hour { color: var(--ink-2); font-weight: 600; }
 .sched-track { position: relative; height: 76px; flex: none;
   background-image: linear-gradient(to right, var(--line) 1px, transparent 1px), linear-gradient(to right, var(--line-strong) 1px, transparent 1px); }
