@@ -7,7 +7,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from apps.core.errors import CodedError
-from apps.forms.models import MasterList
+from apps.forms.models import Form, MasterList
 
 from . import activity
 from .models import Booking
@@ -50,7 +50,9 @@ def payload(user, have: set[int], since, context) -> dict:
                       for i in sorted(ml.items.all(), key=lambda i: (i.order, i.label))
                       if not i.archived]
              for ml in MasterList.objects.prefetch_related("items")}
-    return {"server_time": timezone.now(), "jobs": jobs,
+    types = dict(Form.objects.filter(type="custom").exclude(inspection_type="")
+                 .values_list("inspection_type", "name"))
+    return {"server_time": timezone.now(), "jobs": jobs, "types": types,
             "forms": {str(i): form_for_role(v, user.role, "in_progress")
                       for i, v in versions.items()},
             "lists": lists, "changes": changes}

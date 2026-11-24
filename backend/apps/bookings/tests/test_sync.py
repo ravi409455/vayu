@@ -30,6 +30,7 @@ def test_an_expert_gets_their_jobs_with_the_forms_and_lists_to_work_offline(ienv
     assert "rating_config" not in tree                                   # experts never see it
     assert any(f["key"] == "door" for p in tree["pages"] for s in p["sections"] for f in s["fields"])
     assert {"key": "delhi", "label": "Delhi"} in body["lists"]["city"]
+    assert body["types"][booking["inspection_type"]]                    # the type's name, for labels
 
 
 def test_forms_the_phone_already_has_are_not_sent_again(ienv, booking):

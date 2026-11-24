@@ -6,6 +6,8 @@ import `in`.carcid.vayu.core.api.Api
 import `in`.carcid.vayu.core.api.ApiError
 import `in`.carcid.vayu.core.api.Me
 import `in`.carcid.vayu.core.auth.TokenStore
+import `in`.carcid.vayu.core.sync.JobStore
+import `in`.carcid.vayu.ui.expert.JobsState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -20,9 +22,15 @@ sealed interface Screen {
 }
 
 /** Sign-in, the forced password change, routing by role, and the profile. */
-class AppViewModel(private val api: Api, private val tokens: TokenStore, private val deviceName: String) : ViewModel() {
+class AppViewModel(private val api: Api, private val tokens: TokenStore, private val deviceName: String,
+                   /** The signed-in person's jobs file (one per user id). */
+                   private val storeFor: (Int) -> JobStore,
+                   private val clock: () -> Long = System::currentTimeMillis) : ViewModel() {
     private val _screen = MutableStateFlow<Screen>(Screen.Loading)
     val screen: StateFlow<Screen> = _screen
+    private val _jobs = MutableStateFlow(JobsState())
+    val jobs: StateFlow<JobsState> = _jobs
+    private var store: JobStore? = null
     private var lastPassword = ""
     /** Below this version the app may finish a started job but not start new ones (enforced in Phase 14). */
     var minAppVersion = 0
@@ -38,7 +46,10 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
         try {
             enter(api.me())
         } catch (e: ApiError) {
-            _screen.value = if (e.code == ApiError.NETWORK && cached != null) Screen.Home(cached) else Screen.SignIn()
+            if (e.code == ApiError.NETWORK && cached != null) {
+                _screen.value = Screen.Home(cached)
+                openStore(cached, offline = true)
+            } else _screen.value = Screen.SignIn()
         }
     }
 
@@ -78,12 +89,53 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
             "role" to me.role, "theme" to me.theme, "must_change" to me.mustChangePassword.toString()))
         if (me.mustChangePassword) { _screen.value = Screen.ChangePassword(); return }
         _screen.value = Screen.Home(me)
+        openStore(me, offline = false)
         try {
             minAppVersion = api.heartbeat(drafts = 0, files = 0)     // nothing is stored on the phone yet
         } catch (e: ApiError) {
             if (e.code == "DEVICE_REVOKED") { tokens.clear(); _screen.value = Screen.SignIn() }
         }
     }
+
+    private fun openStore(me: Me, offline: Boolean) {
+        if (me.role != "expert") return
+        store = storeFor(me.id)
+        show(offline = offline)
+        if (!offline) sync()
+    }
+
+    private fun show(offline: Boolean, error: String? = null, syncing: Boolean = false) {
+        val s = store ?: return
+        val jobs = s.jobs()
+        val at = s.syncedAt()?.let {
+            java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+                .let { t -> "%d:%02d".format(t.hour, t.minute) }
+        }
+        _jobs.value = JobsState(jobs, jobs.filter(s::readyOffline).map { it.id }.toSet(), syncing, offline, at, error)
+    }
+
+    /** Download jobs and forms (Refresh, opening the app). Without signal the saved copy stays. */
+    fun sync() {
+        val s = store ?: return
+        _jobs.value = _jobs.value.copy(syncing = true)
+        viewModelScope.launch {
+            try {
+                val payload = api.syncJobs(s.haveVersions(), s.since())
+                s.apply(payload, clock())
+                show(offline = false)
+            } catch (e: ApiError) {
+                when (e.code) {
+                    ApiError.NETWORK -> show(offline = true)
+                    "DEVICE_REVOKED" -> { tokens.clear(); _screen.value = Screen.SignIn() }
+                    else -> show(offline = false, error = e.message)
+                }
+            }
+        }
+    }
+
+    /** Today by the server's clock (the phone's may be wrong). */
+    fun today(): java.time.LocalDate = java.time.Instant.ofEpochMilli(clock() + (store?.clockOffset() ?: 0L))
+        .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
 
     fun openProfile() { (screen.value as? Screen.Home)?.let { _screen.value = Screen.Profile(it.me) } }
     fun closeProfile() { (screen.value as? Screen.Profile)?.let { _screen.value = Screen.Home(it.me) } }
@@ -105,6 +157,7 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
         viewModelScope.launch {
             runCatching { api.logout() }
             tokens.clear()
+            store?.clear(); store = null; _jobs.value = JobsState()   // ponytail: drafts don't exist yet; 14c must keep unsent work
             _screen.value = Screen.SignIn()
         }
     }

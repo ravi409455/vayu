@@ -40,7 +40,9 @@ class SignInFlowTest {
 
     private fun launch() {
         val tokens = MemoryTokenStore()
-        val vm = AppViewModel(Api(server.url("/api/v1/").toString(), tokens), tokens, "Test phone")
+        val dir = java.nio.file.Files.createTempDirectory("vayu").toFile()
+        val vm = AppViewModel(Api(server.url("/api/v1/").toString(), tokens), tokens, "Test phone",
+            storeFor = { `in`.carcid.vayu.core.sync.JobStore(java.io.File(dir, "jobs-$it.json")) })
         compose.setContent { AppRoot(vm) }
     }
 
@@ -62,7 +64,7 @@ class SignInFlowTest {
 
     @Test fun anExpertLandsOnMyJobs() {
         server.enqueue(json(200, """{"access":"A","refresh":"R"}""")); server.enqueue(json(200, me("expert")))
-        server.enqueue(json(200, """{"min_app_version":1}"""))
+        repeat(2) { server.enqueue(json(200, """{"min_app_version":1,"server_time":"2026-11-24T05:00:00Z","jobs":[]}""")) }
         launch(); signIn(); waitFor("My jobs")
     }
 

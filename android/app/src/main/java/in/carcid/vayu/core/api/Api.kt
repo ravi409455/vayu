@@ -61,6 +61,15 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         call("POST", "devices/heartbeat", buildJsonObject { put("drafts", drafts); put("files", files) })
             .getValue("min_app_version").jsonPrimitive.intOrNull ?: 0
 
+    /** Everything an expert needs offline (B2). [have]: form versions already on the phone; [since]: last server_time. */
+    suspend fun syncJobs(have: Set<Int>, since: String?): JsonObject {
+        val q = buildList {
+            if (have.isNotEmpty()) add("have=" + have.sorted().joinToString(","))
+            if (since != null) add("since=" + java.net.URLEncoder.encode(since, "UTF-8"))
+        }
+        return call("GET", "sync/jobs" + if (q.isEmpty()) "" else "?" + q.joinToString("&"))
+    }
+
     suspend fun logout() {
         try { call("POST", "auth/logout") } finally { tokens.clear() }
     }

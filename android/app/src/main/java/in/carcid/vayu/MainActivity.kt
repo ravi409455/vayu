@@ -18,6 +18,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import `in`.carcid.vayu.core.api.Api
 import `in`.carcid.vayu.core.auth.PrefsTokenStore
+import `in`.carcid.vayu.core.sync.JobStore
+import `in`.carcid.vayu.ui.expert.ExpertHome
 import `in`.carcid.vayu.ui.AdminRefusedScreen
 import `in`.carcid.vayu.ui.AppViewModel
 import `in`.carcid.vayu.ui.ChangePasswordScreen
@@ -37,7 +39,8 @@ class MainActivity : ComponentActivity() {
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                AppViewModel(Api(BuildConfig.API_URL, tokens), tokens, Build.MODEL) as T
+                AppViewModel(Api(BuildConfig.API_URL, tokens), tokens, Build.MODEL,
+                    storeFor = { JobStore(java.io.File(filesDir, "jobs-$it.json")) }) as T
         }
         setContent { AppRoot(viewModel(factory = factory)) }
     }
@@ -58,7 +61,10 @@ fun AppRoot(vm: AppViewModel) {
             is Screen.SignIn -> SignInScreen(s, vm::signIn)
             Screen.AdminRefused -> AdminRefusedScreen(vm::backToSignIn)
             is Screen.ChangePassword -> ChangePasswordScreen(s, vm::changePassword)
-            is Screen.Home -> HomeScreen(s.me, vm::openProfile)
+            is Screen.Home -> if (s.me.role == "expert") {
+                val jobs by vm.jobs.collectAsState()
+                ExpertHome(s.me, jobs, vm.today(), vm::openProfile, vm::sync, onStart = {})  // check-in: Phase 14b
+            } else HomeScreen(s.me, vm::openProfile)
             is Screen.Profile -> {
                 BackHandler { vm.closeProfile() }
                 ProfileScreen(s, vm::closeProfile, vm::setTheme, vm::signOut)
