@@ -57,7 +57,7 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
         // Refresh says what happened (a fresh answer, or the saved copy without signal)
         if (asked) {
             asked = false
-            val online = runCatching { data.api.get("problems/reports") }.isSuccess
+            val online = try { data.api.get("problems/reports"); true } catch (e: `in`.carcid.vayu.core.api.ApiError) { false }
             env.say(if (online) "Updated." else "No signal. Showing what was saved; changes need signal.")
         }
         refreshing = false

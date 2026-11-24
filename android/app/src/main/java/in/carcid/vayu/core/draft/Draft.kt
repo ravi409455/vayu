@@ -57,6 +57,8 @@ data class Draft(
     val problemCode: String? = null,
     /** The phone's clock was never checked against the server when this was stamped. */
     val unverifiedTime: Boolean = false,
+    /** Answers the server refused, by field key (its code), until the expert changes them. */
+    val fieldErrors: Map<String, String> = emptyMap(),
 ) {
     val locked: Boolean get() = submittedAt != null
     /** Something still has to reach the server. */
@@ -64,7 +66,7 @@ data class Draft(
 
     fun answer(part: String, key: String): Any? = answers[part]?.get(key)
     fun withAnswer(part: String, key: String, v: Any?): Draft =
-        copy(answers = answers + (part to (answers[part].orEmpty() + (key to v))))
+        copy(answers = answers + (part to (answers[part].orEmpty() + (key to v))), fieldErrors = fieldErrors - key)
 
     fun toJson(): JsonObject = JsonLogic.toJson(mapOf(
         "booking" to bookingId, "code" to code, "customer" to customer, "versions" to versions,
@@ -72,6 +74,7 @@ data class Draft(
         "start_uuid" to startUuid, "started_at" to startedAt, "start_sent" to startSent,
         "submit_uuid" to submitUuid, "submitted_at" to submittedAt, "submit_sent" to submitSent,
         "problem" to problem, "problem_code" to problemCode, "unverified_time" to unverifiedTime,
+        "field_errors" to fieldErrors,
         "files" to files.map { f -> mapOf("id" to f.id, "part" to f.part, "field" to f.field, "kind" to f.kind,
             "path" to f.path, "content_type" to f.contentType, "source" to f.source, "size" to f.size,
             "sha256" to f.sha256, "label" to f.label, "server_id" to f.serverId, "sent" to f.sent,
@@ -93,6 +96,7 @@ data class Draft(
                 startUuid = s("start_uuid")!!, startedAt = s("started_at"), startSent = b("start_sent"),
                 submitUuid = s("submit_uuid")!!, submittedAt = s("submitted_at"), submitSent = b("submit_sent"),
                 problem = s("problem"), problemCode = s("problem_code"), unverifiedTime = b("unverified_time"),
+                fieldErrors = (o["field_errors"] as? JsonObject).orEmpty().mapValues { (it.value as? JsonPrimitive)?.contentOrNull ?: "" },
                 files = (o["files"] as? JsonArray).orEmpty().map { it.jsonObject }.map { f ->
                     fun fs(k: String) = (f[k] as? JsonPrimitive)?.contentOrNull
                     LocalFile(fs("id")!!, fs("part")!!, fs("field")!!, fs("kind")!!, fs("path")!!, fs("content_type")!!,

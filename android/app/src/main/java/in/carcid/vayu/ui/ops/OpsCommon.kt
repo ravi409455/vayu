@@ -94,9 +94,11 @@ class Labels(val cities: Map<String, String> = emptyMap(), val cars: Map<String,
 
     companion object {
         suspend fun load(data: OpsData): Labels {
-            suspend fun list(k: String) = runCatching { data.load("master-lists/$k/items").data.rows().associate { it.s("key") to it.s("label") } }.getOrDefault(emptyMap())
-            val types = runCatching { data.load("inspection-types").data.rows().map { Triple(it.s("key"), it.s("label"), it.s("available") != "false") } }.getOrDefault(emptyList())
-            val people = runCatching { data.load("users").data.rows() }.getOrDefault(emptyList())
+            // failures count as empty; cancellation is never swallowed (ApiError only)
+            suspend fun <T> soft(empty: T, f: suspend () -> T): T = try { f() } catch (e: ApiError) { empty }
+            suspend fun list(k: String) = soft(emptyMap()) { data.load("master-lists/$k/items").data.rows().associate { it.s("key") to it.s("label") } }
+            val types = soft(emptyList()) { data.load("inspection-types").data.rows().map { Triple(it.s("key"), it.s("label"), it.s("available") != "false") } }
+            val people = soft(emptyList()) { data.load("users").data.rows() }
             return Labels(list("city"), list("car_make_model"), types, people)
         }
     }

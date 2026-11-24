@@ -139,19 +139,13 @@ fun Question(f: Field, value: Any?, required: Boolean, missing: Boolean, error: 
             }
             Input(f, value, missing, readOnly, env, onChange)
             when {
-                error != null && error != "required" -> Note(errorText(error), Vayu.colors.bad)
+                error != null && error != "required" -> Note(error, Vayu.colors.bad)
                 missing -> Note("Needed" + (if (f.help.isNotBlank()) ": ${f.help}" else ""), Vayu.colors.bad)
                 f.help.isNotBlank() -> Note(f.help, Vayu.colors.muted)
             }
         }
     }
     HorizontalDivider(color = Vayu.colors.line)
-}
-
-private fun errorText(code: String) = when (code) {
-    "check_failed" -> "This doesn't fit with another answer."
-    "UNKNOWN_MEDIA" -> "A file didn't arrive; take it again."
-    else -> code.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
 }
 
 @Composable

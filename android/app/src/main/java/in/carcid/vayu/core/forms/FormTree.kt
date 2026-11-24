@@ -116,7 +116,8 @@ class Filled(val trees: Map<String, FormTree?>, val answers: Map<String, Map<Str
         val t = trees[part] ?: return emptyList()
         val values = answers[part].orEmpty()
         return t.pages.flatMap { p -> p.fields.filter {
-            it.answerable && visible(part, it.key) && required(part, it.key) && FormRules.isEmpty(values[it.key])
+            it.answerable && visible(part, it.key) &&
+                ((required(part, it.key) && FormRules.isEmpty(values[it.key])) || answerProblem(it, values[it.key]) != null)
         }.map { Gap(part, it.key, it.label, p.id, p.title) } }
     }
 

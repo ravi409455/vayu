@@ -104,12 +104,18 @@ class OutboxTest {
 
     @Test fun aRefusedSubmitIsKeptAndExplained() = runBlocking {
         ready()
-        server.on("POST bookings/$BOOKING/submit", """{"code":"INVALID_ANSWERS","detail":"Some answers are invalid."}""", 400)
+        server.on("POST bookings/$BOOKING/submit", """{"code":"INVALID_ANSWERS","detail":"Some answers are invalid.","errors":{"odometer":"OUT_OF_RANGE"}}""", 400)
         outbox.run()
         val d = drafts.get(BOOKING)!!
         assertFalse(d.submitSent)
         assertEquals("INVALID_ANSWERS", d.problemCode)
         assertNotNull(d.problem)
+        assertEquals(null, d.submittedAt)                                  // unlocked: the expert can fix it
+        assertEquals(mapOf("odometer" to "OUT_OF_RANGE"), d.fieldErrors)    // and sees which answer
+        val sent = server.bodiesOf("POST bookings/$BOOKING/submit").size
+        outbox.run()
+        assertEquals(sent, server.bodiesOf("POST bookings/$BOOKING/submit").size)   // no re-sending a refused submit
+        assertEquals(emptyMap<String, String>(), drafts.get(BOOKING)!!.withAnswer("inspection", "odometer", 1.0).fieldErrors)
     }
 
     @Test fun aFileThatArrivesDamagedIsSentAgainLater() = runBlocking {

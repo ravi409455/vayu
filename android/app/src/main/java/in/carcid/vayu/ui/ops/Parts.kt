@@ -63,6 +63,8 @@ import `in`.carcid.vayu.BuildConfig
 import `in`.carcid.vayu.core.api.ApiError
 import `in`.carcid.vayu.core.draft.transfer
 import `in`.carcid.vayu.core.forms.Field
+import `in`.carcid.vayu.core.forms.answerProblem
+import `in`.carcid.vayu.core.forms.refusalText
 import `in`.carcid.vayu.core.forms.Filled
 import `in`.carcid.vayu.core.forms.FormTree
 import `in`.carcid.vayu.core.forms.PARTS
@@ -164,7 +166,7 @@ fun AnswersScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
             ModalBottomSheet(onDismissRequest = { editing = null }, containerColor = Vayu.colors.bg) {
                 Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
                     Text(pg.title, fontSize = 13.sp, color = Vayu.colors.muted)
-                    Question(f, value, filled.required(p, f.key), false, error, false, opsFieldEnv(env)) { value = it }
+                    Question(f, value, filled.required(p, f.key), false, error ?: answerProblem(f, value), false, opsFieldEnv(env)) { value = it; error = null }
                     Text("Was ${answerText(f, data.answers[p]?.get(f.key), env)}" +
                         (data.insp.int("expert")?.let { ", answered by ${env.labels.person(it)}." } ?: "."), fontSize = 13.sp, color = Vayu.colors.muted)
                     Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -181,7 +183,7 @@ fun AnswersScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
                                     error = when (e.code) {
                                         "STALE_INSPECTION" -> "Someone else saved this inspection meanwhile. Their version is loaded now; check and save again."
                                             .also { env.refresh() }
-                                        "INVALID_ANSWERS" -> (e.extra["errors"] as? JsonObject)?.s(f.key)?.ifBlank { null } ?: e.message
+                                        "INVALID_ANSWERS" -> (e.extra["errors"] as? JsonObject)?.s(f.key)?.ifBlank { null }?.let { refusalText(it) } ?: e.message
                                         "FIELD_ACCESS" -> "You can't change this at this stage."
                                         else -> e.message
                                     }
@@ -220,10 +222,10 @@ private fun answerText(f: Field, v: Any?, env: OpsEnv): String = when (f.type) {
 suspend fun mediaBytes(env: OpsEnv, dir: File, id: String): File? = withContext(Dispatchers.IO) {
     val f = File(dir, "media-$id")
     if (f.exists()) return@withContext f
-    runCatching {
+    try {
         val url = (env.data.api.get("media/$id/url") as JsonObject).s("url")
         writeAtomically(f, env.data.api.download(url)); f
-    }.getOrNull()
+    } catch (e: kotlin.coroutines.cancellation.CancellationException) { throw e } catch (e: Exception) { null }
 }
 
 private fun thumb(f: File, size: Int): ImageBitmap? = runCatching {
@@ -569,7 +571,8 @@ fun BookingFormScreen(env: OpsEnv, id: String?, onBack: () -> Unit, onSaved: (St
                 val fs = s.fields.filter { it.answerable && filled.visible("booking", it.key) && it.key != "assigned_expert" && !(id != null && it.key == "inspection_type") }
                 if (fs.isNotEmpty()) Section(s.title)
                 fs.forEach { f ->
-                    Question(f, values[f.key], filled.required("booking", f.key), false, errors[f.key], false, fe) { v ->
+                    Question(f, values[f.key], filled.required("booking", f.key), false,
+                        errors[f.key]?.let { refusalText(it) } ?: answerProblem(f, values[f.key]), false, fe) { v ->
                         values = values + (f.key to v); changed = changed + f.key; errors = errors - f.key
                     }
                 }

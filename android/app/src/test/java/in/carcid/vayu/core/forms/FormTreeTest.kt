@@ -32,6 +32,11 @@ class FormTreeTest {
         assertEquals(6, f.allGaps().size)
     }
 
+    @Test fun aWrongAnswerCountsAsStillToDo() {
+        val f = filled(mapOf("inspection" to mapOf("chassis_no" to "MA3", "odometer" to 12.5, "bonnet" to "ok", "door" to "ok")))
+        assertEquals(listOf("odometer"), f.gaps("inspection").map { it.key })
+    }
+
     @Test fun aFollowUpAppearsOnlyAfterADefect() {
         assertFalse(filled().visible("inspection", "door_photos"))
         val f = filled(mapOf("inspection" to mapOf("door" to "minor")))

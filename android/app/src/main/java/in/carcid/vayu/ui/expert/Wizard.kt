@@ -65,6 +65,7 @@ import `in`.carcid.vayu.core.draft.DraftStore
 import `in`.carcid.vayu.core.draft.LocalFile
 import `in`.carcid.vayu.core.forms.Field
 import `in`.carcid.vayu.core.forms.Filled
+import `in`.carcid.vayu.core.forms.refusalText
 import `in`.carcid.vayu.core.media.Locator
 import `in`.carcid.vayu.core.media.copyIn
 import `in`.carcid.vayu.core.media.stampPhoto
@@ -254,8 +255,11 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
                     shown.forEach { f ->
                         val r = requesters.getOrPut(f.key) { BringIntoViewRequester() }
                         Box(Modifier.bringIntoViewRequester(r)) {
-                            Question(f, draft.answer(part, f.key), filled.required(part, f.key),
-                                missing = blocked.isNotEmpty() && gaps.any { it.key == f.key }, error = null,
+                            val v = draft.answer(part, f.key)
+                            Question(f, v, filled.required(part, f.key),
+                                missing = blocked.isNotEmpty() && gaps.any { it.key == f.key },
+                                // what the server refused, or what its rules would refuse, right under the answer
+                                error = draft.fieldErrors[f.key]?.let(::refusalText) ?: `in`.carcid.vayu.core.forms.answerProblem(f, v),
                                 nested = f.showIf != null, env = FieldEnv(
                                     locked = draft.locked, list = env.list, types = env.types, files = files, now = env.now,
                                     onCamera = { tool = Tool.Camera(part, it) },
@@ -372,7 +376,10 @@ private fun label(f: Field, d: Draft, part: String): String {
 @Composable
 private fun ReviewPage(draft: Draft, filled: Filled, steps: List<Step>, missingOn: (Step) -> Int, go: (Int) -> Unit,
                        modifier: Modifier, onSubmit: () -> Unit) {
-    val gaps = filled.allGaps()
+    val refused = draft.fieldErrors.keys
+    val gaps = filled.allGaps().let { g -> g + steps.mapNotNull { it.page }.flatMap { p -> p.fields }.filter { it.key in refused && g.none { x -> x.key == it.key } }
+        .map { f -> `in`.carcid.vayu.core.forms.Gap("", f.key, f.label, steps.first { s -> s.page?.fields?.any { it.key == f.key } == true }.page!!.id,
+            steps.first { s -> s.page?.fields?.any { it.key == f.key } == true }.title) } }
     val notOpened = steps.filter { !it.isReview && it.id !in draft.visited }
     val sent = draft.files.count { it.sent }
     Column(modifier.fillMaxWidth()) {
@@ -388,7 +395,7 @@ private fun ReviewPage(draft: Draft, filled: Filled, steps: List<Step>, missingO
             if (gaps.isNotEmpty()) {
                 Text("STILL NEEDED", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.muted, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
                 gaps.forEach { g ->
-                    val i = steps.indexOfFirst { it.part == g.part && it.page?.id == g.pageId }
+                    val i = steps.indexOfFirst { (g.part.isEmpty() || it.part == g.part) && it.page?.id == g.pageId }
                     ReviewRow(g.label, g.pageTitle) { if (i >= 0) go(i) }
                 }
             }

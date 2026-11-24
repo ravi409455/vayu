@@ -296,7 +296,8 @@ data class Need(val key: String, val booking: String, val tone: Tone, val title:
 /** Every problem queue as one list, most urgent first. */
 suspend fun loadNeeds(env: OpsEnv): List<Need> {
     val t = env.today()
-    suspend fun rows(path: String) = runCatching { env.data.load(path).data.rows() }.getOrDefault(emptyList())
+    // a failed list counts as empty; a cancelled load (a newer one started) must stay cancelled
+    suspend fun rows(path: String) = try { env.data.load(path).data.rows() } catch (e: `in`.carcid.vayu.core.api.ApiError) { emptyList() }
     val conflicts = rows("bookings?problem=conflict").map(::Bk)
     val open = rows("bookings?stage=draft&date_from=$t&date_to=$t&order=schedule").map(::Bk)
     val stuck = rows("problems/stuck-uploads")

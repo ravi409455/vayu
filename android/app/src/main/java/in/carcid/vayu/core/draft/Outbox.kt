@@ -90,7 +90,9 @@ class Outbox(
             drafts.update(id) { it.copy(startSent = true, problem = null, problemCode = null) }
         } catch (e: ApiError) {
             if (e.code == ApiError.NETWORK || e.status >= 500 || e.code == "DEVICE_REVOKED") throw e
-            note(id, e)
+            val errors = (e.extra["errors"] as? JsonObject).orEmpty().mapValues { (it.value as? JsonPrimitive)?.contentOrNull ?: "" }
+            drafts.update(id) { it.copy(problem = if (errors.isEmpty()) e.message else "The check-in was refused. Fix the answers marked in red.",
+                problemCode = e.code, fieldErrors = it.fieldErrors + errors, startedAt = if (errors.isEmpty()) it.startedAt else null) }
         }
     }
 
@@ -104,10 +106,15 @@ class Outbox(
         val parts = PARTS.associateWith { outgoing(d, filled, it) ?: return }
         try {
             api.submit(id, d.submitUuid, d.versions["inspection"], JsonObject(parts))
-            drafts.update(id) { it.copy(submitSent = true, problem = null, problemCode = null) }
+            drafts.update(id) { it.copy(submitSent = true, problem = null, problemCode = null, fieldErrors = emptyMap()) }
         } catch (e: ApiError) {
             if (e.code == ApiError.NETWORK || e.status >= 500 || e.code == "DEVICE_REVOKED") throw e
-            note(id, e)
+            val errors = (e.extra["errors"] as? JsonObject).orEmpty().mapValues { (it.value as? JsonPrimitive)?.contentOrNull ?: "" }
+            if (e.code == "INVALID_ANSWERS" || e.code == "FIELD_ACCESS") drafts.update(id) {
+                // back to the expert: the answers open again with the refused ones marked
+                it.copy(submittedAt = null, problemCode = e.code, fieldErrors = errors,
+                    problem = "The server refused some answers. Fix the ones marked in red and submit again.")
+            } else note(id, e)
         }
     }
 
