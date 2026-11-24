@@ -146,7 +146,7 @@ export function Bookings() {
         {view === "all" && <select aria-label="Stage" className={f.stage ? "set" : ""} value={f.stage} onChange={(e) => set({ stage: e.target.value })}><option value="">Stage</option>{Object.entries(STAGE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
         {(view === "all" || view === "completed" || view === "late" || view === "quick") && <label className="date-range"><span>From</span><input aria-label="From" type="date" value={f.date_from} onChange={(e) => set({ date_from: e.target.value })} /><span>to</span><input aria-label="To" type="date" value={f.date_to} onChange={(e) => set({ date_to: e.target.value })} /></label>}
         {f.type && (answerFields.data ?? []).length > 0 && <select aria-label="Answer" className={f.answer ? "set" : ""} value={f.answer} onChange={(e) => set({ answer: e.target.value, value: "" })}>
-          <option value="">Answer</option>{(answerFields.data ?? []).map((a) => <option key={a.field} value={a.field}>{a.form} · {a.label}</option>)}</select>}
+          <option value="">Answer</option>{(answerFields.data ?? []).map((a) => <option key={a.field} value={a.field}>{a.label}</option>)}</select>}
         {picked && <select aria-label="Answer value" className={f.value ? "set" : ""} value={f.value} onChange={(e) => set({ value: e.target.value })}>
           <option value="">Any answer</option>{picked.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}<option value={NOT_FILLED}>Not filled</option></select>}
         {filtered && <button className="link" onClick={() => setF({ ...EMPTY, search: f.search })}>Clear filters</button>}

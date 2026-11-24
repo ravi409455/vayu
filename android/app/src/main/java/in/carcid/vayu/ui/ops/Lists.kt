@@ -204,6 +204,9 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
     val rows = loads.flatMap { it.value?.data?.rows().orEmpty() }.map(::Bk)
     val total = first?.data?.count() ?: 0
     val online = first?.offline == false
+    // "Payment verified?: Not filled" for the Showing line (the questions load only with an answer filter on)
+    val answer = filters["answer"]?.let { a ->
+        answerWords(BookingFilters.answerFields(env, filters["type"]).firstOrNull { it.s("field") == a }, filters["value"]) }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         VayuTopBar("Bookings", env.me.initials, bellCount = needs, onBell = onBell, onProfile = onProfile) {
             if (env.can("bookings.create")) IconButton(onClick = onNew, enabled = online) {
@@ -218,7 +221,7 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
                 QuickFilters(filters, env.labels, onFilters) { sheet = true }
                 // what the list shows, always (today is the default), with a way back to it
                 Row(Modifier.padding(top = 4.dp).fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text((listOfNotNull(first?.let { "Showing $total" }) + BookingFilters.words(filters, env.labels)).joinToString(" · "),
+                    Text((listOfNotNull(first?.let { "Showing $total" }) + BookingFilters.words(filters, env.labels, answer)).joinToString(" · "),
                         fontSize = 13.sp, color = Vayu.colors.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     if (filters.isNotEmpty()) Text("Clear", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.info,
                         modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { onFilters(emptyMap()) }.padding(12.dp))
@@ -256,7 +259,7 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
         }
         bottomBar()
     }
-    if (sheet) FilterSheet(filters, env.labels, t, { sheet = false }, onFilters)
+    if (sheet) FilterSheet(filters, env, { sheet = false }, onFilters)
 }
 
 /** The values an answer filter offers: the field's choices, then "Not filled". */

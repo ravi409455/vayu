@@ -337,6 +337,7 @@ class OpsFlowTest {
         server.on("GET bookings/$B4/media", "[]")
         show()
         compose.onNodeWithText("Bookings").performClick()
+        waitFor("Showing 5")                                                    // New booking works once the list is in (online)
         compose.onNodeWithContentDescription("New booking").performClick()
         waitFor("Customer name")
         compose.onNodeWithContentDescription("Customer name").performTextInput("Ananya Gupta")
@@ -350,20 +351,29 @@ class OpsFlowTest {
             "options":[{"value":"verified","label":"Verified"},{"value":"mismatch","label":"Mismatch"}]}]""")
         show(user = me.copy(permissions = me.permissions + "submissions.view"))
         compose.onNodeWithText("Bookings").performClick()
-        compose.onNodeWithContentDescription("Filter").performClick()
-        waitFor("Wrap-up · Payment verified?")
-        compose.onNodeWithText("Wrap-up · Payment verified?").performScrollTo().performClick()
-        compose.onNodeWithText("Not filled").performScrollTo().performClick()
-        compose.onNodeWithText("Show bookings").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("All filters").performClick()
+        waitFor("Any type")
+        assertEquals(0, compose.onAllNodes(hasText("Answer")).fetchSemanticsNodes().size)   // only once a type is picked
+        compose.onNodeWithContentDescription("Inspection type: any").performClick()
+        compose.onNodeWithText("PDI").performClick()
+        waitFor("Any question")                                                   // that type's questions, no form name in front
+        assertTrue(server.queries.contains("type=pdi"))
+        compose.onNodeWithContentDescription("Answer: any").performScrollTo().performClick()
+        compose.onNodeWithText("Payment verified?").performClick()
+        compose.onNodeWithText("Not filled").performClick()                       // its answers open straight after
+        compose.onNodeWithText("Show bookings").performClick()
         waitFor("Payment verified?: Not filled")
-        compose.onNodeWithContentDescription("Filter, 1 on").assertExists()
+        assertTrue(server.queries.any { "type=pdi" in it && "answer=end.payment_verified&value=__none__" in it })
+        compose.onNodeWithContentDescription("All filters, 2 on").assertExists()   // type, and the answer with its value
     }
 
     @Test fun theAnswerFilterIsNotOfferedWithoutSeeingAnswers() {
         show()
         compose.onNodeWithText("Bookings").performClick()
-        compose.onNodeWithContentDescription("Filter").performClick()
-        waitFor("Stage")
+        compose.onNodeWithContentDescription("All filters").performClick()
+        compose.onNodeWithContentDescription("Inspection type: any").performClick()
+        compose.onNodeWithText("PDI").performClick()
+        waitFor("Any city")
         assertEquals(0, compose.onAllNodes(hasText("Answer")).fetchSemanticsNodes().size)
         assertTrue(server.requests.none { it.first == "GET bookings/answer-fields" })
     }

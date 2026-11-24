@@ -52,6 +52,8 @@ import `in`.carcid.vayu.ui.components.ToggleChip
 import `in`.carcid.vayu.ui.components.VayuSheet
 import `in`.carcid.vayu.ui.theme.Vayu
 import java.net.URLEncoder
+import kotlinx.serialization.json.JsonObject
+import `in`.carcid.vayu.core.ops.rows
 import java.time.LocalDate
 
 /**
@@ -92,8 +94,11 @@ object BookingFilters {
         }
     }
 
-    /** How many filters are on: today's date is the default, so it doesn't count. */
-    fun count(f: Map<String, String>): Int = f.keys.count { it !in DATE_KEYS } + (if (f["dates"] != null) 1 else 0)
+    /** How many filters are on: today's date is the default, so it doesn't count; an answer and its value count once. */
+    fun count(f: Map<String, String>): Int = f.keys.count { it !in DATE_KEYS && it != "value" } + (if (f["dates"] != null) 1 else 0)
+
+    /** A new type (or none) drops the answer: its questions belong to the old type. */
+    fun withType(f: Map<String, String>, type: String?) = if (type == f["type"]) f else set(f, "type", type) - "answer" - "value"
 
     fun experts(f: Map<String, String>): Set<String> = f["expert"]?.split(",")?.filter { it.isNotBlank() }?.toSet().orEmpty()
     fun withExperts(f: Map<String, String>, ids: Set<String>) = if (ids.isEmpty()) f - "expert" else f + ("expert" to ids.sorted().joinToString(","))
@@ -101,9 +106,15 @@ object BookingFilters {
     fun set(f: Map<String, String>, key: String, value: String?) = if (value == null) f - key else f + (key to value)
 
     /** "Today · In progress · 2 experts". */
-    fun words(f: Map<String, String>, labels: Labels): List<String> = listOfNotNull(
+    fun words(f: Map<String, String>, labels: Labels, answer: String? = null): List<String> = listOfNotNull(
         dateWord(f), f["stage"]?.let { STAGE_WORDS[it] }, f["timing"]?.let { if (it == "late") "Started late" else "Too quick" },
-        f["type"]?.let(labels::type), f["city"]?.let(labels::city), experts(f).size.takeIf { it > 0 }?.let(::expertsWord))
+        f["type"]?.let(labels::type), f["city"]?.let(labels::city), experts(f).size.takeIf { it > 0 }?.let(::expertsWord), answer)
+
+    /** The questions a type can be filtered by (choices and yes / no); none until a type is picked. */
+    @Composable
+    fun answerFields(env: OpsEnv, type: String?): List<JsonObject> =
+        rememberLoad(env, if (type != null && env.can("submissions.view")) "bookings/answer-fields?type=" + URLEncoder.encode(type, "UTF-8") else null)
+            .value?.data?.rows().orEmpty()
 }
 
 private fun expertOptions(labels: Labels) = labels.experts.map { it.s("id") to it.s("name").ifBlank { it.s("username") } }
@@ -189,9 +200,12 @@ fun ExpertsSheet(options: List<Pair<String, String>>, chosen: Set<String>, onDis
 @Composable
 private fun PickSheet(title: String, any: String, options: List<Pair<String, String>>, value: String?, onDismiss: () -> Unit, onPick: (String?) -> Unit) =
     VayuSheet(onDismiss) {
+        var find by remember { mutableStateOf("") }
         Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Vayu.colors.ink, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-        (listOf<Pair<String?, String>>(null to any) + options).forEach { (k, label) ->
-            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(role = Role.Button) { onPick(k); onDismiss() }.padding(horizontal = 20.dp),
+        // a long list (a type's questions, cities) gets a find box, like Experts
+        if (options.size > 8) Box(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) { SoftField(find, { find = it }, "Find", icon = Icons.Outlined.Search) }
+        (listOf<Pair<String?, String>>(null to any) + options.filter { find.isBlank() || it.second.contains(find.trim(), ignoreCase = true) }).forEach { (k, label) ->
+            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(role = Role.Button) { onDismiss(); onPick(k) }.padding(horizontal = 20.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Text(label, color = Vayu.colors.ink, modifier = Modifier.weight(1f), fontWeight = if (k == value) FontWeight.SemiBold else FontWeight.Normal)
                 if (k == value) Icon(Icons.Outlined.Check, contentDescription = "Chosen", tint = Vayu.colors.ink)
@@ -222,14 +236,17 @@ fun FilterBox(label: String?, value: String?, any: String, modifier: Modifier = 
 /** The full Filter view: every filter, starting from what the quick row shows; applied with "Show bookings". */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun FilterSheet(f: Map<String, String>, labels: Labels, today: LocalDate, onDismiss: () -> Unit, onApply: (Map<String, String>) -> Unit,
-                extra: @Composable (draft: Map<String, String>, set: (Map<String, String>) -> Unit) -> Unit = { _, _ -> }) {
+fun FilterSheet(f: Map<String, String>, env: OpsEnv, onDismiss: () -> Unit, onApply: (Map<String, String>) -> Unit) {
+    val labels = env.labels
+    val today = env.today()
     var draft by remember { mutableStateOf(f) }
+    val fields = BookingFilters.answerFields(env, draft["type"])
+    val question = fields.firstOrNull { it.s("field") == draft["answer"] }
     var open by remember { mutableStateOf<String?>(null) }
     VayuSheet(onDismiss, footer = {
         Row(Modifier.padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             SoftButton("Cancel", onDismiss, Modifier.weight(1f))
-            PrimaryButton("Show bookings", { onApply(draft); onDismiss() }, Modifier.weight(1f))
+            PrimaryButton("Show bookings", { onApply(if (draft["value"] == null) draft - "answer" else draft); onDismiss() }, Modifier.weight(1f))
         }
     }) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -259,9 +276,14 @@ fun FilterSheet(f: Map<String, String>, labels: Labels, today: LocalDate, onDism
             val experts = BookingFilters.experts(draft)
             FilterBox("Experts", expertOptions(labels).filter { it.first in experts }.joinToString(", ") { it.second }.ifEmpty { null }, "Any expert",
                 onClear = { draft = draft - "expert" }) { open = "expert" }
-            FilterBox("Inspection type", draft["type"]?.let(labels::type), "Any type", onClear = { draft = draft - "type" }) { open = "type" }
+            FilterBox("Inspection type", draft["type"]?.let(labels::type), "Any type", onClear = { draft = BookingFilters.withType(draft, null) }) { open = "type" }
+            // an answer only once a type is picked, from that type's questions only
+            if (draft["type"] != null && fields.isNotEmpty()) {
+                FilterBox("Answer", question?.s("label"), "Any question", onClear = { draft = draft - "answer" - "value" }) { open = "answer" }
+                if (question != null) FilterBox(question.s("label"), draft["value"]?.let { v -> answerOptions(question).firstOrNull { it.first == v }?.second ?: v },
+                    "Choose an answer", onClear = { draft = draft - "value" }) { open = "value" }
+            }
             FilterBox("City", draft["city"]?.let(labels::city), "Any city", onClear = { draft = draft - "city" }) { open = "city" }
-            extra(draft) { draft = it }
         }
     }
     when (open) {
@@ -274,8 +296,13 @@ fun FilterSheet(f: Map<String, String>, labels: Labels, today: LocalDate, onDism
                 open = if (open == "from" && draft["date_to"] == null) "to" else null
             }, onDismiss = { open = null })
         "stage" -> PickSheet("Status", "Any status", STAGE_WORDS.toList(), draft["stage"], { open = null }) { draft = BookingFilters.set(draft, "stage", it) }
-        "type" -> PickSheet("Inspection type", "Any type", labels.types.map { it.first to it.second }, draft["type"], { open = null }) { draft = BookingFilters.set(draft, "type", it) }
+        "type" -> PickSheet("Inspection type", "Any type", labels.types.map { it.first to it.second }, draft["type"], { open = null }) { draft = BookingFilters.withType(draft, it) }
         "city" -> PickSheet("City", "Any city", labels.cities.toList(), draft["city"], { open = null }) { draft = BookingFilters.set(draft, "city", it) }
+        "answer" -> PickSheet("Answer", "Any question", fields.map { it.s("field") to it.s("label") }, draft["answer"], { open = null }) {
+            draft = (draft - "answer" - "value").let { m -> if (it == null) m else m + ("answer" to it) }
+            if (it != null) open = "value"                                      // straight on to its answer
+        }
+        "value" -> question?.let { q -> PickSheet(q.s("label"), "Any answer", answerOptions(q), draft["value"], { open = null }) { draft = BookingFilters.set(draft, "value", it) } }
         "expert" -> ExpertsSheet(expertOptions(labels), BookingFilters.experts(draft), { open = null }) { draft = BookingFilters.withExperts(draft, it) }
     }
 }
