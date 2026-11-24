@@ -3,15 +3,16 @@ import { Field, Modal, Tabs, useToast } from "../../../ui/kit";
 import { themeOf, withoutTheme, type Band, type Definition, type SlotItem } from "./model";
 import { PictureLibrary, PicturePicker, ShareForm, useSharedContent, type SharedItem, type ThemeContent } from "./sharing";
 
-type Tab = "theme" | "paper" | "bands" | "look" | "images" | "pictures" | "file";
+export type Tab = "theme" | "paper" | "bands" | "look" | "images" | "pictures" | "file";
 const SIDES = ["left", "center", "right"] as const;
 const COLOR_NAMES = [["brand", "Brand"], ["text", "Text"], ["ok", "Good (green)"], ["warn", "Not checked (amber)"], ["bad", "Problem (red)"], ["muted", "Not available (grey)"]] as const;
 const DEFAULT_COLORS: Record<string, string> = { brand: "#a62830", text: "#1b1f27", ok: "#15703f", warn: "#b25e09", bad: "#b3261e", muted: "#5c6370" };
 const FONTS = ["Inter", "Barlow Semi Condensed", "Helvetica"];
 
 /** Things that apply to the whole report, out of the way until needed. */
-export function ReportSettings({ def: own, onChange, onClose, readOnly, themes }: { def: Definition; onChange: (d: Definition) => void; onClose: () => void; readOnly: boolean; themes: SharedItem[] }) {
-  const [tab, setTab] = useState<Tab>("bands");
+/** `only`: the tabs to show (a shared theme shows only what a theme holds). */
+export function ReportSettings({ def: own, onChange, onClose, readOnly, themes, only, title = "Report settings" }: { def: Definition; onChange: (d: Definition) => void; onClose: () => void; readOnly: boolean; themes: SharedItem[]; only?: Tab[]; title?: string }) {
+  const [tab, setTab] = useState<Tab>(only?.[0] ?? "bands");
   const ref = own.theme_ref;
   const linked = themes.find((t) => t.key === ref?.key);
   const content = useSharedContent<ThemeContent>(linked, ref?.revision);
@@ -21,8 +22,8 @@ export function ReportSettings({ def: own, onChange, onClose, readOnly, themes }
   const paper = own.paper ?? {};      // paper and file name are always this report's own
   const theme = def.theme ?? {};
   return (
-    <Modal title="Report settings" wide onClose={onClose} actions={<button className="primary" onClick={onClose}>Done</button>}>
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: "theme", label: "Theme" }, { id: "bands", label: "Header and footer" }, { id: "look", label: "Colours and fonts" }, { id: "images", label: "Watermark" }, { id: "pictures", label: "Pictures" }, { id: "paper", label: "Paper" }, { id: "file", label: "File name" }]} />
+    <Modal title={title} wide onClose={onClose} actions={<button className="primary" onClick={onClose}>Done</button>}>
+      <Tabs value={tab} onChange={setTab} tabs={([{ id: "theme", label: "Theme" }, { id: "bands", label: "Header and footer" }, { id: "look", label: "Colours and fonts" }, { id: "images", label: "Watermark" }, { id: "pictures", label: "Pictures" }, { id: "paper", label: "Paper" }, { id: "file", label: "File name" }] as { id: Tab; label: string }[]).filter((x) => !only || only.includes(x.id))} />
       {themed && <p className="rd-note">These come from the shared theme “{linked?.name ?? ref!.key}”. To change them, stop sharing it in the Theme tab, or change the theme and save a new version of it.</p>}
       {tab === "theme" && <ThemeTab def={own} onChange={onChange} themes={themes} readOnly={readOnly} content={content.data} />}
       {tab === "pictures" && <PictureLibrary readOnly={readOnly} />}

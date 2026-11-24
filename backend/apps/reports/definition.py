@@ -41,6 +41,8 @@ def parts(d: dict) -> Iterator[tuple[str, dict]]:
 def _part_texts(where: str, p: dict) -> Iterator[tuple[str, str]]:
     if p["type"] in ("text", "html"):
         yield f"{where}.html", p["html"]
+    if p["type"] == "button":
+        yield f"{where}.label", p["label"]
     if p["type"] == "photos" and "caption_text" in p:
         yield f"{where}.caption_text", p["caption_text"]
     if p["type"] == "table" and p["source"]["kind"] == "grid":
@@ -129,6 +131,7 @@ def validate_definition(d: Any) -> dict:
                         item["text"] = placeholders.clean_html(item["text"])
     for where, text in texts(d):
         placeholders.check(text, where)
+        placeholders.check_links(text, where)
     for where, rule in rules(d):
         if issues := rule_syntax_issues(rule, where):
             raise ValueError(issues[0].message)

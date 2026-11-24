@@ -28,6 +28,7 @@ const Problems = lazy(() => import("./pages/ops/Problems").then((m) => ({ defaul
 const Bookings = lazy(() => import("./pages/ops/Bookings").then((m) => ({ default: m.Bookings })));
 const Dashboards = lazy(() => import("./pages/ops/Dashboards").then((m) => ({ default: m.Dashboards })));
 const VerifyPage = lazy(() => import("./pages/Public").then((m) => ({ default: m.VerifyPage })));
+const ReportMediaPage = lazy(() => import("./pages/Public").then((m) => ({ default: m.ReportMediaPage })));
 const ZipPage = lazy(() => import("./pages/Public").then((m) => ({ default: m.ZipPage })));
 const FormBuilder = lazy(() => import("./pages/admin/FormBuilder").then((m) => ({ default: m.FormBuilder })));
 
@@ -43,6 +44,7 @@ export function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/verify/:token" element={<VerifyPage />} />
+        <Route path="/verify/:token/:link" element={<ReportMediaPage />} />
         <Route path="/zip/:token" element={<ZipPage />} />
         <Route path="/change-password" element={<RequireAuth><ChangePassword /></RequireAuth>} />
         <Route element={<RequireAuth><Layout /></RequireAuth>}>

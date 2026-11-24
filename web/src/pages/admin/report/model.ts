@@ -21,12 +21,19 @@ export type Part = Common & (
   | { type: "text"; html: string; columns?: 1 | 2; size?: "fine" | "small" | "normal" | "large" | "title"; align?: "left" | "center" | "right" | "justify" }
   | { type: "columns"; columns: { width?: number; parts: Part[] }[]; gap?: number; align?: "top" | "middle" }
   | { type: "verify"; size?: number }
+  | { type: "button"; link: LinkName; label: string; align?: "left" | "center" | "right" }
   | { type: "contents"; title?: string; columns?: 1 | 2 }
   | { type: "page_break" }
   | { type: "spacer"; height?: number }
   | { type: "html"; title?: string; html: string; css?: string }
   | { type: "snippet"; ref: SharedRef });
 export type PartType = Part["type"];
+/** The report's own links: the verify page, and one ZIP of every photo or every video. */
+export type LinkName = "photos" | "videos" | "verify";
+export const LINKS: [LinkName, string, string][] = [
+  ["photos", "Download all photos", "Download photos"],
+  ["videos", "Download all videos", "Download videos"],
+  ["verify", "Verify this report", "Verify this report"]];
 export type ReportPage = { id?: string; title: string; style?: "normal" | "cover" | "full"; show_if?: unknown; parts: Part[] };
 export type SlotItem = { text: string } | { image: string; height?: number; tile?: boolean };
 export type Band = { left?: SlotItem[]; center?: SlotItem[]; right?: SlotItem[]; background?: "none" | "brand"; height?: number };
@@ -139,7 +146,7 @@ export function movePage(d: Definition, id: string, overId: string): Definition 
 }
 
 export const PART_LABEL: Record<PartType, string> = {
-  table: "Table of checks", photos: "Photos", text: "Text", columns: "Side by side", verify: "Verify code",
+  table: "Table of checks", photos: "Photos", text: "Text", columns: "Side by side", verify: "Verify code", button: "Button link",
   contents: "Contents list", page_break: "Page break", spacer: "Space", html: "Custom HTML", snippet: "Shared part",
 };
 
@@ -166,6 +173,7 @@ export function newPart(type: PartType, firstSection?: string): Part {
     case "text": return { id, type, html: "<p>Text</p>" };
     case "columns": return { id, type, gap: 6, columns: [{ parts: [] }, { parts: [] }] };
     case "verify": return { id, type, size: 50 };
+    case "button": return { id, type, link: "photos", label: LINKS[0]![2] };
     case "contents": return { id, type, columns: 2 };
     case "spacer": return { id, type, height: 10 };
     case "html": return { id, type, html: '<div class="note">\n  <p>Booking {{ sys.booking_id }}</p>\n</div>', css: ".note { border-left: 1mm solid var(--brand); padding-left: 3mm }" };

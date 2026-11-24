@@ -257,3 +257,130 @@ describe("sharing helpers", () => {
     expect([keyOf("Car C.I.D. theme"), keyOf("2024 look"), keyOf("  ")]).toEqual(["car_c_i_d_theme", "x_2024_look", "x_"]);
   });
 });
+
+describe("download links", () => {
+  it("starts a button on the photos ZIP and lets rich text link only to the report's own links", async () => {
+    expect(newPart("button")).toMatchObject({ type: "button", link: "photos", label: "Download photos" });
+    expect(partName(newPart("button"))).toBe("Button link");
+    const { cleanHtml } = await import("./pages/admin/report/RichText");
+    expect(cleanHtml('<a href="{{ sys.photos_url }}">p</a><a href="{{ inspection.note }}">n</a>'))
+      .toBe('<a href="{{ sys.photos_url }}">p</a><a>n</a>');
+  });
+  it("picks what a button opens and resets its text to match", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { PartSettings } = await import("./pages/admin/report/PartSettings");
+    const onChange = vi.fn();
+    const u = userEvent.setup();
+    render(<PartSettings part={newPart("button")} ctx={{ readOnly: false, sections: [], fields: [] }} onChange={onChange} onDelete={() => {}} onDuplicate={() => {}} onMove={() => {}} />);
+    expect(screen.getByText(/One tap downloads a ZIP of every photo/)).toBeTruthy();
+    await u.selectOptions(screen.getByLabelText("Opens"), "videos");
+    expect(onChange).toHaveBeenLastCalledWith({ link: "videos", label: "Download videos" });
+    await u.click(screen.getByRole("button", { name: "Left" }));
+    expect(onChange).toHaveBeenLastCalledWith({ align: "left" });
+  });
+  it("shows the customer how many photos, then starts the ZIP download", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const { MemoryRouter, Route, Routes } = await import("react-router-dom");
+    const { ReportMediaPage } = await import("./pages/Public");
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "Content-Type": "application/json" } });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (u) => String(u).includes("/zips/")
+      ? json({ status: "ready", progress: 100, url: "https://files.test/DEMO-3%20photos.zip" })
+      : json({ booking_id: "DEMO-3", link: "photos", count: 48, zip: "zips/abc" }));
+    render(<MemoryRouter initialEntries={["/verify/tok/photos"]}><Routes><Route path="/verify/:token/:link" element={<ReportMediaPage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: "48 photos" })).toBeTruthy();
+    expect(screen.getByText(/booking DEMO-3/)).toBeTruthy();
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("https://files.test/DEMO-3%20photos.zip"));
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+  it("says plainly when a report has no videos", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const { MemoryRouter, Route, Routes } = await import("react-router-dom");
+    const { ReportMediaPage } = await import("./pages/Public");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ code: "NO_MEDIA", message: "x" }), { status: 404, headers: { "Content-Type": "application/json" } }));
+    render(<MemoryRouter initialEntries={["/verify/tok/videos"]}><Routes><Route path="/verify/:token/:link" element={<ReportMediaPage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByText("This report has no videos.")).toBeTruthy();
+    vi.restoreAllMocks();
+  });
+});
+
+describe("photo and video storage setting", () => {
+  it("lets Admin keep photos 90 days and refuses fewer than 30", async () => {
+    const { render, screen, waitFor } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+    const { MemoryRouter } = await import("react-router-dom");
+    const { AuthProvider } = await import("./auth");
+    const { Settings } = await import("./pages/admin/Settings");
+    const puts: unknown[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      const u = String(url);
+      if (init?.method === "PUT") puts.push(JSON.parse(String(init.body)));
+      const body = u.includes("auth/me") ? { id: 1, username: "a", name: "A", role: "admin", permissions: { "settings.view": "all", "settings.edit": "all" } }
+        : u.includes("settings/media") ? { photo_days: 0, video_days: 0 }
+        : u.includes("settings/timing") ? { late_grace_minutes: 15, min_minutes_default: 30, min_minutes_by_type: {} } : [];
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    const u = userEvent.setup();
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><AuthProvider><Settings /></AuthProvider></MemoryRouter></QueryClientProvider>);
+    const box = await screen.findByLabelText("Keep photos for (days)");
+    expect(screen.getAllByText("kept for ever")).toHaveLength(2);
+    const section = screen.getByRole("region", { name: "Photo and video storage" });
+    const save = section.querySelector("button")!;
+    await u.clear(box); await u.type(box, "5");
+    expect(save).toBeDisabled();                                   // 1 to 29 days is refused
+    await u.clear(box); await u.type(box, "90");
+    expect(save).toBeEnabled();
+    await u.click(save);
+    await waitFor(() => expect(puts).toContainEqual({ photo_days: 90, video_days: 0 }));
+    vi.restoreAllMocks();
+  });
+});
+
+describe("the shared library", () => {
+  it("says who uses an item at which version", async () => {
+    const { usedBy } = await import("./pages/admin/report/SharedLibrary");
+    expect(usedBy([{ template: 1, form: "PDI", published: 4, draft: 4 }, { template: 2, form: "EV", published: 3, draft: 4 }, { template: 3, form: "Used car", draft: 2 }]))
+      .toBe("PDI (uses v4) · EV (live uses v3, draft uses v4) · Used car (draft uses v2)");
+  });
+  it("lists themes and shared parts, edits a part and saves it as the next version after a warning", async () => {
+    const { render, screen, waitFor, within } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+    const { SharedLibrary } = await import("./pages/admin/report/SharedLibrary");
+    const posts: { url: string; body: unknown }[] = [];
+    const items = [{ id: 1, kind: "theme", key: "carcid", name: "Car C.I.D.", revision: 4, used_by: [{ template: 7, form: "PDI", published: 4, draft: 4 }] },
+      { id: 2, kind: "snippet", key: "disc", name: "PDI disclaimer", revision: 2, used_by: [{ template: 7, form: "PDI", published: 2 }] }];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      const u = String(url);
+      if (init?.method === "POST") posts.push({ url: u, body: JSON.parse(String(init.body)) });
+      const body = u.includes("/preview") ? { pdf: "", pages: [] }
+        : u.includes("pdf-shared/2") ? { ...items[1], content: { parts: [{ type: "text", html: "<p>Terms</p>" }] } }
+        : u.endsWith("pdf-shared") && init?.method === "POST" ? { ...items[1], revision: 3, updated: ["PDI v13 (published)"] }
+        : u.includes("pdf-shared") ? items
+        : u.includes("pdf-template-versions/70") ? { id: 70, definition: { schema: 2, theme_ref: { key: "carcid", revision: 4 }, pages: [] } }
+        : u.includes("bookings") ? { count: 0, next: null, previous: null, results: [] } : [];
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    const u = userEvent.setup();
+    render(<QueryClientProvider client={new QueryClient()}><SharedLibrary editable forms={[]}
+      templates={[{ id: 7, form: 3, form_key: "pdi", versions: [{ id: 70, number: 12, status: "published" }] }]} /></QueryClientProvider>);
+    const parts = await screen.findByRole("region", { name: "Shared parts" });
+    expect(within(parts).getByRole("row", { name: /PDI disclaimer v2 PDI \(uses v2\)/ })).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Themes" })).getByText("Car C.I.D.")).toBeTruthy();
+    await u.click(within(parts).getByRole("button", { name: "Edit" }));
+    const save = await screen.findByRole("button", { name: "Save as version 3" });
+    expect(save).toBeDisabled();                                       // nothing changed yet
+    await u.click(await screen.findByText("Terms"));                   // the part in the list
+    await u.click(screen.getByRole("button", { name: "Centre" }));
+    await u.click(save);
+    expect(screen.getByText(/Every report using it changes: PDI \(uses v2\)/)).toBeTruthy();
+    await u.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(posts.find((p) => p.url.endsWith("pdf-shared"))?.body)
+      .toEqual({ kind: "snippet", key: "disc", name: "PDI disclaimer", content: { parts: [{ type: "text", html: "<p>Terms</p>", align: "center" }] } }));
+    vi.restoreAllMocks();
+  });
+});

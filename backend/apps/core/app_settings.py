@@ -7,6 +7,8 @@ from .models import Setting
 DEFAULTS: dict[str, dict] = {
     "timing": {"late_grace_minutes": 15, "min_minutes_default": 30,
                "min_minutes_by_type": {"pdi": 30, "used_car": 45, "ev": 40}},
+    # how long original photos and videos stay on the server; 0 keeps them for ever
+    "media": {"photo_days": 0, "video_days": 0},
 }
 MAX_MINUTES = 24 * 60
 
@@ -27,7 +29,22 @@ def _clean_timing(v: dict) -> dict:
                                     for k, m in by_type.items()}}
 
 
-CLEANERS = {"timing": _clean_timing}
+MIN_KEEP_DAYS, MAX_KEEP_DAYS = 30, 3650
+
+
+def _days(name: str, v) -> int:
+    if isinstance(v, bool) or not isinstance(v, int) or not (
+            v == 0 or MIN_KEEP_DAYS <= v <= MAX_KEEP_DAYS):
+        raise ValidationError({name: f"Use 0 (keep for ever) or {MIN_KEEP_DAYS} to "
+                                     f"{MAX_KEEP_DAYS} days."})
+    return v
+
+
+def _clean_media(v: dict) -> dict:
+    return {k: _days(k, v.get(k)) for k in ("photo_days", "video_days")}
+
+
+CLEANERS = {"timing": _clean_timing, "media": _clean_media}
 
 
 def get(key: str) -> dict:

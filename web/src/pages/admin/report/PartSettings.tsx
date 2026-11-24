@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, Copy, Trash2 } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { ConditionBuilder } from "../../../ui/ConditionBuilder";
 import { Field, Modal } from "../../../ui/kit";
-import { fillGrid, PART_LABEL, type Box, type Cell, type Look, type Part, type ReportPage, type Row, type Source, type StyleRule } from "./model";
+import { fillGrid, LINKS, PART_LABEL, type Box, type Cell, type Look, type Part, type ReportPage, type Row, type Source, type StyleRule } from "./model";
 import { RichText, ValuePicker } from "./RichText";
 import { ShareForm, snippetContent, type SharedItem } from "./sharing";
 
@@ -94,6 +94,14 @@ export function PartSettings({ part, onChange, onDelete, onDuplicate, onMove, ct
         )}
         {t === "html" && <HtmlSettings part={part} set={set} ctx={ctx} />}
         {t === "snippet" && <SnippetSettings part={part} set={set} items={ctx.snippets ?? []} onUnlink={onUnlink} />}
+        {t === "button" && (
+          <>
+            <Field label="Opens"><select value={part.link} onChange={(e) => { const l = LINKS.find(([v]) => v === e.target.value)!; set({ link: l[0], label: l[2] }); }}>
+              {LINKS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+            <Field label="Button text"><input value={part.label} onChange={(e) => set({ label: e.target.value })} /></Field>
+            <Field label="Align"><Seg label="Align" value={part.align ?? "center"} options={[["left", "Left"], ["center", "Centre"], ["right", "Right"]]} onChange={(align) => set({ align })} /></Field>
+            <p className="muted small">{part.link === "verify" ? "Opens the page that proves the report is genuine." : `One tap downloads a ZIP of every ${part.link === "photos" ? "photo" : "video"} of the inspection, in folders by section. The link keeps working for as long as the report does. Hidden when there are none.`}</p>
+          </>)}
         {t === "verify" && <Field label="Code size (mm)"><input type="number" min={15} max={120} value={part.size ?? 40} onChange={(e) => set({ size: Number(e.target.value) })} /></Field>}
         {t === "contents" && <Field label="Columns"><Seg label="Contents columns" value={part.columns ?? 1} options={[[1, "1"], [2, "2"]]} onChange={(columns) => set({ columns })} /></Field>}
         {t === "spacer" && <Field label="Height (mm)"><input type="number" min={1} max={200} value={part.height ?? 10} onChange={(e) => set({ height: Number(e.target.value) })} /></Field>}

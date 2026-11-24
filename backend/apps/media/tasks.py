@@ -67,3 +67,42 @@ def verify_asset(asset_id: str) -> str:
             rebuild_report(booking.id)
     check_completion(asset.booking_id)
     return "verified"
+
+
+@shared_task
+def purge_expired(batch: int = 500) -> int:
+    """Admin's retention setting: original photos and videos of completed jobs are deleted for
+    good once they are older than the days set (0 keeps them). Their previews, print copies and
+    any ZIP holding them go too. The asset row stays, marked purged, so reports and links can
+    say the files were removed. Runs every hour, a batch at a time."""
+    import logging
+    from datetime import timedelta
+
+    from apps.core import app_settings
+    from apps.reports.render import print_keys
+
+    from .models import MediaZip
+
+    days = app_settings.get("media")
+    done, bookings = 0, set()
+    for kind in ("photo", "video"):
+        keep = days[f"{kind}_days"]
+        if not keep:
+            continue
+        old = MediaAsset.objects.filter(kind=kind, booking__stage="completed",
+                                        created_at__lt=timezone.now() - timedelta(days=keep)) \
+            .exclude(status="purged").order_by("created_at")[:batch]
+        for a in old:
+            for key in filter(None, (a.key, a.preview_key, *print_keys(a.id))):
+                storage.delete(key)
+            a.status = "purged"
+            a.save(update_fields=["status"])
+            bookings.add(a.booking_id)
+            done += 1
+    for z in MediaZip.objects.filter(booking_id__in=bookings):      # ZIPs made before
+        if z.key:
+            storage.delete(z.key)
+        z.delete()
+    if done:
+        logging.getLogger(__name__).info("purged old media", extra={"files": done})
+    return done

@@ -34,16 +34,18 @@ export function VerifyPage() {
   );
 }
 
-/** "Preparing… x%" and then the download starts by itself. */
-export function ZipPage() {
-  const token = useParams().token!;
-  const [state, setState] = useState<{ status: string; progress: number; url?: string } | null>(null);
+type ZipState = { status: string; progress: number; url?: string };
+
+/** Polls a ZIP link until it is ready, then starts the download. `path` null: not known yet. */
+function useZip(path: string | null): { state: ZipState | null; gone: boolean } {
+  const [state, setState] = useState<ZipState | null>(null);
   const [gone, setGone] = useState(false);
   useEffect(() => {
+    if (!path) return;
     let stop = false;
     const tick = async () => {
       try {
-        const r = await api<{ status: string; progress: number; url?: string }>(`zips/${token}`, { query: { format: "json" } });
+        const r = await api<ZipState>(path, { query: { format: "json" } });
         if (stop) return;
         setState(r);
         if (r.status === "ready" && r.url) { window.location.assign(r.url); return; }
@@ -52,15 +54,55 @@ export function ZipPage() {
     };
     void tick();
     return () => { stop = true; };
-  }, [token]);
+  }, [path]);
+  return { state, gone };
+}
+
+function Progress({ state, note }: { state: ZipState | null; note: string }) {
+  return state?.status === "ready"
+    ? <p className="ok"><strong>Ready.</strong> Your download is starting… <a href={state.url}>Tap here if it does not.</a></p>
+    : <><p><strong>Preparing… {state?.progress ?? 0}%</strong></p><div className="progress"><div style={{ width: `${state?.progress ?? 0}%` }} /></div><p className="muted small">{note}</p></>;
+}
+
+/** "Preparing… x%" and then the download starts by itself. */
+export function ZipPage() {
+  const token = useParams().token!;
+  const { state, gone } = useZip(`zips/${token}`);
   return (
     <div className="public-page">
       <p><Logo /></p>
       <h1 style={{ fontSize: 22 }}>Download</h1>
       {gone ? <div className="card" role="alert"><strong>This download link is invalid, expired or has nothing in it.</strong></div> : (
+        <div className="card" role="status"><Progress state={state} note="This takes a moment the first time. The file is kept for 7 days." /></div>)}
+    </div>
+  );
+}
+
+type ReportMedia = { booking_id: string; link: "photos" | "videos"; count: number; zip: string };
+
+/** Behind "Download all photos / videos" in a report: one ZIP, in folders by section. The link
+ *  works for as long as the report does. */
+export function ReportMediaPage() {
+  const { token, link } = useParams() as { token: string; link: string };
+  const [info, setInfo] = useState<ReportMedia | null>(null);
+  const [bad, setBad] = useState<string | null>(null);
+  useEffect(() => {
+    api<ReportMedia>(`verify/${token}/${link}`).then(setInfo)
+      .catch((e) => setBad(e instanceof ApiError && e.code === "NO_MEDIA" ? `This report has no ${link}.`
+        : e instanceof ApiError && e.code === "MEDIA_REMOVED" ? `These ${link} are no longer available. Files are kept on our server for a limited time after the inspection.`
+          : "We could not find this report. The link may be wrong."));
+  }, [token, link]);
+  const { state, gone } = useZip(info?.zip ?? null);
+  const what = link === "videos" ? "videos" : "photos";
+  return (
+    <div className="public-page">
+      <p><Logo /></p>
+      <h1 style={{ fontSize: 22 }}>{info ? `${info.count} ${info.count === 1 ? what.slice(0, -1) : what}` : `Inspection ${what}`}</h1>
+      {info && <p className="muted">From the Car C.I.D. inspection, booking {info.booking_id}. They download as one ZIP file, in a folder for each part of the car.</p>}
+      {bad || gone ? <div className="card" role="alert"><strong>{bad ?? "This download is not available right now. Please try again later."}</strong></div> : (
         <div className="card" role="status">
-          {state?.status === "ready" ? <p className="ok"><strong>Ready.</strong> Your download is starting… <a href={state.url}>Click here if it does not.</a></p>
-            : <><p><strong>Preparing… {state?.progress ?? 0}%</strong></p><div className="progress"><div style={{ width: `${state?.progress ?? 0}%` }} /></div><p className="muted small">This takes a moment the first time. The file is kept for 7 days.</p></>}
+          <Progress state={state} note={what === "videos" ? "Videos are large: use Wi-Fi if you can. This takes a moment the first time." : "This takes a moment the first time."} />
+          <p className="muted small">On a phone, open the file from your Downloads or Files app to see them.</p>
         </div>)}
     </div>
   );

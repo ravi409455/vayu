@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import media_links, views
 
 urlpatterns = [
     path("pdf-templates", views.Templates.as_view()),
@@ -21,4 +21,5 @@ urlpatterns = [
     path("bookings/<uuid:pk>/report/shared", views.Shared.as_view()),
     path("problems/reports", views.Problems.as_view()),
     path("verify/<str:token>", views.Verify.as_view()),
+    path("verify/<str:token>/<str:link>", media_links.ReportMedia.as_view()),
 ]

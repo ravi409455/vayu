@@ -47,6 +47,21 @@ def render(text: str, values: dict[str, Any], html: bool = True) -> str:
     return (_env if html else _plain).from_string(text).render(**values)
 
 
+# what a link in report text may point at when it holds a value: only the report's own links
+LINK_VALUES = ("verify_url", "photos_url", "videos_url")
+HREF = re.compile(r'href="([^"]*)"')
+SYS_LINK = re.compile(r"\{\{\s*sys\.(" + "|".join(LINK_VALUES) + r")\s*\}\}")
+
+
+def check_links(text: str, where: str) -> None:
+    """A link is a fixed https/mailto/tel address or exactly one report link like
+    {{ sys.photos_url }}: a form answer can never become where a link goes."""
+    for href in HREF.findall(text):
+        if "{" in href and not SYS_LINK.fullmatch(href.strip()):
+            raise ValueError(f"{where}: a link can hold only one of "
+                             f"{', '.join('{{ sys.' + v + ' }}' for v in LINK_VALUES)}.")
+
+
 def _class_ok(tag: str, attr: str, value: str) -> str | None:
     if attr == "class":
         kept = [c for c in value.split() if c in CLASSES]

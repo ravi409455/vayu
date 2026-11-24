@@ -2918,7 +2918,7 @@ paths:
   /api/v1/settings/{key}:
     get:
       operationId: settings_retrieve
-      description: GET / PUT one settings group (only "timing" today). Ops may read,
+      description: GET / PUT one settings group ("timing", "media"). Ops may read,
         only Admin may change.
       parameters:
       - in: path
@@ -2935,7 +2935,7 @@ paths:
           description: No response body
     put:
       operationId: settings_update
-      description: GET / PUT one settings group (only "timing" today). Ops may read,
+      description: GET / PUT one settings group ("timing", "media"). Ops may read,
         only Admin may change.
       parameters:
       - in: path
@@ -3194,6 +3194,30 @@ paths:
         Public page behind the QR code: proves a report is genuine. Summary only, no customer
         data.
       parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - verify
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/verify/{token}/{link}:
+    get:
+      operationId: verify_retrieve_2
+      description: |-
+        Public, behind a link in the PDF: starts (or reuses) the ZIP and says where to wait for
+        it. The report token is the credential, as for the verify page.
+      parameters:
+      - in: path
+        name: link
+        schema:
+          type: string
+        required: true
       - in: path
         name: token
         schema:

@@ -15,6 +15,7 @@ import { PageSettings, PartSettings, type SectionChoice } from "./report/PartSet
 import { Preview, type LayoutPage } from "./report/Preview";
 import { ReportSettings } from "./report/ReportSettings";
 import { useShared, type SharedItem } from "./report/sharing";
+import { SharedLibrary } from "./report/SharedLibrary";
 
 type Template = { id: number; form: number; form_key: string; versions: { id: number; number: number; status: string }[] };
 type TVersion = { id: number; template: number; number: number; status: string; definition: Definition; row_version: number };
@@ -27,8 +28,9 @@ export function PdfDesigner() {
   const refresh = useRefresh();
   const templates = useList<Template>("pdf-templates", "pdf-templates");
   const forms = useList<FormSummary>("forms", "forms");
-  const [tid, setTid] = useState<number | null>(null);
-  const t = (templates.data ?? []).find((x) => x.id === tid) ?? (templates.data ?? [])[0] ?? null;
+  const [tid, setTid] = useState<number | "library" | null>(null);
+  const library = tid === "library";
+  const t = library ? null : (templates.data ?? []).find((x) => x.id === tid) ?? (templates.data ?? [])[0] ?? null;
   const formName = (x: Template) => (forms.data ?? []).find((f) => f.id === x.form)?.name ?? x.form_key;
   const editable = can("pdf_templates.edit");
   const withoutTemplate = (forms.data ?? []).filter((f) => f.type === "custom" && !(templates.data ?? []).some((x) => x.form === f.id));
@@ -41,8 +43,10 @@ export function PdfDesigner() {
             <option value="">+ New template for…</option>{withoutTemplate.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select>)}
       </PageHeader>
       <div className="tabs" role="tablist" aria-label="Templates">{(templates.data ?? []).map((x) => (
-        <button key={x.id} role="tab" aria-selected={(t?.id ?? null) === x.id} className={t?.id === x.id ? "on" : ""} onClick={() => setTid(x.id)}>{formName(x)}</button>))}</div>
-      {t ? <Designer key={t.id} template={t} form={(forms.data ?? []).find((f) => f.id === t.form)} editable={editable} refresh={() => refresh("pdf-templates")}
+        <button key={x.id} role="tab" aria-selected={(t?.id ?? null) === x.id} className={t?.id === x.id ? "on" : ""} onClick={() => setTid(x.id)}>{formName(x)}</button>))}
+        <button role="tab" aria-selected={library} className={`rd-libtab${library ? " on" : ""}`} onClick={() => setTid("library")}>Shared library</button></div>
+      {library ? <SharedLibrary templates={templates.data ?? []} forms={forms.data ?? []} editable={editable} />
+        : t ? <Designer key={t.id} template={t} form={(forms.data ?? []).find((f) => f.id === t.form)} editable={editable} refresh={() => refresh("pdf-templates")}
         copyTargets={withoutTemplate} onOpen={setTid} />
         : <Empty title="No PDF templates yet">Create one for an inspection form with “New template for…”.</Empty>}
     </>

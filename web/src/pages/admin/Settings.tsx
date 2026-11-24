@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useRefresh } from "../../api/hooks";
 import { useInspectionTypes } from "../../api/labels";
@@ -56,6 +56,40 @@ export function Settings() {
           })}</tbody></table>
         <p className="muted small">Times are the server's: when it got Start and when it got Submit. A job whose Start never reached the server is never flagged.</p>
       </section>
+      <MediaRetention edit={edit} />
     </>
+  );
+}
+
+type MediaSettings = { photo_days: number; video_days: number };
+
+/** How long original photos and videos stay on the server (0: for ever). */
+function MediaRetention({ edit }: { edit: boolean }) {
+  const { say, fail } = useToast();
+  const refresh = useRefresh();
+  const q = useQuery({ queryKey: ["settings", "media"], queryFn: () => api<MediaSettings>("settings/media") });
+  const [v, setV] = useState<MediaSettings | null>(null);
+  useEffect(() => { if (q.data) setV(q.data); }, [q.data]);
+  const save = useMutation({
+    mutationFn: () => api("settings/media", { method: "PUT", body: v }),
+    onSuccess: () => { say("Saved. Older files are removed within the hour."); void refresh("settings"); },
+    onError: fail,
+  });
+  if (!v) return null;
+  const row = (key: keyof MediaSettings, label: string) => (
+    <Field label={label} help="0 keeps them for ever. Otherwise 30 to 3650 days, counted from when the file was uploaded.">
+      <input type="number" min={0} max={3650} step={1} aria-label={label} disabled={!edit} value={v[key]} style={{ width: 90 }}
+        onChange={(e) => setV({ ...v, [key]: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
+      <span className="muted small"> {v[key] ? `days` : "kept for ever"}</span>
+    </Field>);
+  const bad = (n: number) => n !== 0 && (n < 30 || n > 3650);
+  return (
+    <section className="card stack" aria-label="Photo and video storage">
+      <div className="bar"><h3 className="grow">Photo and video storage</h3>
+        {edit && <button className="primary" disabled={save.isPending || bad(v.photo_days) || bad(v.video_days) || JSON.stringify(v) === JSON.stringify(q.data)} onClick={() => save.mutate()}>Save</button>}</div>
+      {row("photo_days", "Keep photos for (days)")}
+      {row("video_days", "Keep videos for (days)")}
+      <p className="muted small">After that, the original photos and videos of completed jobs are deleted from the server for good. Reports already made keep their pictures, but the report's Download photos and Download videos buttons then tell the customer the files are no longer available. Jobs not yet completed are never touched.</p>
+    </section>
   );
 }

@@ -47,6 +47,11 @@ def _jpeg_uri(data: bytes) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(data).decode()
 
 
+def print_keys(media_id) -> list[str]:
+    """The print-size copies a report keeps of a photo (removed with the photo)."""
+    return [f"print/{media_id}-{edge}.jpg" for edge in (PRINT_EDGE, SMALL_EDGE)]
+
+
 def print_image(media_id: str, edge: int = PRINT_EDGE) -> str | None:
     """A verified photo as a data URI, shrunk once for print and kept (originals untouched).
     edge <= 480 uses the preview made at upload (the designer's live preview)."""
@@ -258,6 +263,10 @@ def part_html(part: dict, width_mm: float, ctx: dict) -> str:
         url = ctx["verify_url"]
         inner = (f'<div class="verify"><img src="{qr_uri(url)}" style="width:{size}mm;'
                  f'height:{size}mm"><div class="url">{e(url)}</div></div>')
+    elif t == "button":
+        href = ctx.get("links", {}).get(part["link"], "")
+        inner = (f'<div class="btnrow" style="text-align:{part.get("align", "center")}">'
+                 f'<a class="btn" href="{e(href)}">{part["label_out"]}</a></div>')
     elif t == "columns":
         gap = part.get("gap", 6)
         cols = part["columns"]
@@ -449,6 +458,8 @@ table.t.emphasis thead th {{ border-bottom: .2mm solid var(--line); color: var(-
 .verify {{ text-align: center }} .verify img {{ display: block; margin: 0 auto }}
 .verify .url {{ font-family: monospace; margin: 2.5mm auto 0; display: inline-block; padding: 1.4mm 3mm;
   background: rgba(27,31,39,.05); border-radius: 1.4mm }}
+.btn {{ display: inline-block; padding: 2.6mm 6mm; border-radius: 1.6mm; background: var(--brand);
+  color: #fff; font-weight: 700; text-decoration: none }}
 ol.toc {{ list-style: none; padding: 0; margin: 0 }} ol.toc.cols2 {{ columns: 2; column-gap: 10mm }}
 ol.toc li {{ padding: 1mm 0; border-bottom: .2mm dotted var(--line); break-inside: avoid }}
 ol.toc a {{ color: var(--text); text-decoration: none }}
@@ -481,7 +492,11 @@ def render_html(pages: list[dict], d: dict, values: dict, *, edge: int = PRINT_E
         # the contents list names the pages after this one that are not full-page designs
         toc = [(f"pg-{k}", p["title"]) for k, p in enumerate(pages)
                if k > n and p.get("style", "normal") != "full"]
-        ctx = {"edge": edge, "verify_url": values["sys"]["verify_url"], "toc": toc, "css": custom}
+        sv = values["sys"]
+        links = {"verify": sv["verify_url"], "photos": sv.get("photos_url", ""),
+                 "videos": sv.get("videos_url", "")}
+        ctx = {"edge": edge, "verify_url": sv["verify_url"], "links": links, "toc": toc,
+               "css": custom}
         inner = "".join(part_html(p, w if style == "full" else width, ctx) for p in page["parts"])
         # each page is a bookmark in the PDF reader, its part titles under it
         mark_pg = f' data-title="{e(page["title"])}"' if page.get("title") else ""

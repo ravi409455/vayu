@@ -44,7 +44,7 @@ class HealthView(APIView):
 
 
 class SettingView(APIView):
-    """GET / PUT one settings group (only "timing" today). Ops may read, only Admin may change."""
+    """GET / PUT one settings group ("timing", "media"). Ops may read, only Admin may change."""
 
     permission_classes = [perm("settings.view", "settings.edit")]
     declared_permissions = ("settings.view", "settings.edit")

@@ -398,7 +398,7 @@ def test_zip_is_built_once_cached_and_opened_through_a_signed_link(job, settings
     assert again.json()["url"].split(":")[0] == link.split(":")[0] and MediaZip.objects.count() == 1  # cached
 
 
-def test_zip_contents_are_named_by_field_and_index(job, settings):
+def test_zip_contents_are_named_by_section_and_label(job, settings):
     import zipfile
 
     env, b = job
@@ -408,7 +408,10 @@ def test_zip_contents_are_named_by_field_and_index(job, settings):
     env.ops.post(f"/api/v1/bookings/{b['id']}/media-zip", {"kind": "image"}, format="json")
     z = MediaZip.objects.get()
     with zipfile.ZipFile(io.BytesIO(storage.read(z.key))) as archive:
-        assert sorted(archive.namelist()) == ["photo_a-1.jpg", "photo_a-2.jpg"]
+        names = sorted(archive.namelist())
+    # a folder per section, files named by the field's label (numbered when it holds several)
+    assert [n.split("/")[1] for n in names] == ["photo_a 1.jpg", "photo_a 2.jpg"]
+    assert len({n.split("/")[0] for n in names}) == 1
 
 
 def test_preparing_page_while_building_and_bad_links(job, settings):

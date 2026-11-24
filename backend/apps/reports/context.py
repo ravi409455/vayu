@@ -187,6 +187,9 @@ class Source:
         unsure = [f.label for f, _ in checks if answered.get(f.key) == "not_checked"]
         out["sys"].update(checks=str(len(checks)), not_checked=str(len(unsure)),
                           not_checked_list=", ".join(unsure))
+        from . import media_links
+
+        out["sys"].update(media_links.values(self))      # photos_url, photo_count, videos_...
         return out
 
     def media(self, ref: str) -> list[str]:
@@ -346,6 +349,10 @@ def _resolve(src: Source, parts: list[dict], data: dict, values: dict) -> list[d
         elif t == "photos":
             item["items"] = photo_items(src, part)
             empty = not item["items"]
+        elif t == "button":                    # a link the customer taps in the PDF
+            item["label_out"] = placeholders.render(part["label"], values)
+            count = values["sys"].get(f"{part['link'][:-1]}_count", "")
+            empty = count == "0"                           # nothing behind the link
         elif t in ("text", "html"):
             item["html_out"] = placeholders.render(part["html"], values)
             empty = not part["html"].strip()

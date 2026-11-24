@@ -1,7 +1,7 @@
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronRight, Code, Columns2, FileText, Link2, GripVertical, Image, LayoutList, ListOrdered, MoveVertical, QrCode, Scissors, Table2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Code, Columns2, Download, FileText, Link2, GripVertical, Image, LayoutList, ListOrdered, MoveVertical, QrCode, Scissors, Table2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import type { FormPage } from "../../../api/types";
 import { addPart, blankPage, movePage, movePart, newPart, pageFromForm, partName, sharedPart, uid, updatePart, type Definition, type Part, type PartType, type ReportPage, type SharedRef } from "./model";
@@ -10,7 +10,7 @@ import type { SharedItem } from "./sharing";
 export type Sel = { kind: "page" | "part"; id: string } | null;
 
 const ICON: Record<PartType, typeof Table2> = {
-  table: Table2, photos: Image, text: FileText, columns: Columns2, verify: QrCode, contents: ListOrdered, page_break: Scissors, spacer: MoveVertical, html: Code, snippet: Link2,
+  table: Table2, photos: Image, text: FileText, columns: Columns2, verify: QrCode, button: Download, contents: ListOrdered, page_break: Scissors, spacer: MoveVertical, html: Code, snippet: Link2,
 };
 const ADD: { type: PartType; label: string; hint: string }[] = [
   { type: "table", label: "Table of checks", hint: "rows of check and answer" },
@@ -18,6 +18,7 @@ const ADD: { type: PartType; label: string; hint: string }[] = [
   { type: "text", label: "Text", hint: "headings, notes, disclaimer" },
   { type: "columns", label: "Side by side", hint: "e.g. photo next to a table" },
   { type: "verify", label: "Verify code", hint: "QR code for this report" },
+  { type: "button", label: "Button link", hint: "download all photos or videos, verify" },
   { type: "contents", label: "Contents list", hint: "pages and page numbers" },
   { type: "spacer", label: "Space", hint: "empty space" },
   { type: "page_break", label: "Page break", hint: "next part on a new page" },
@@ -51,9 +52,11 @@ function AddMenu({ onPick, label = "+ Add to this page", small, snippets = [] }:
   );
 }
 
-export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, readOnly, snippets = [], bad = new Set() }: {
+export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, readOnly, snippets = [], bad = new Set(), onePage = false }: {
   def: Definition; sel: Sel; onSelect: (s: Sel) => void; onChange: (d: Definition) => void;
   formPages: FormPage[]; sections: Record<string, string>; readOnly: boolean; snippets?: SharedItem[]; bad?: Set<string>;
+  /** a shared part: one list of parts, no pages to add */
+  onePage?: boolean;
 }) {
   const sharedNames = Object.fromEntries(snippets.map((x) => [x.key, x.name]));
   // pages fold up so a long report fits; the page of the part being changed opens by itself
@@ -145,7 +148,7 @@ export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, 
         </SortableContext>
       </DndContext>
       {def.pages.length === 0 && <p className="muted small">No pages yet. Start with “+ Add page”: pick a page of the form and get a ready page to adjust.</p>}
-      {!readOnly && (
+      {!readOnly && !onePage && (
         <div className="rd-add">
           <button type="button" className="sm" aria-expanded={adding} onClick={() => setAdding(!adding)}><LayoutList size={14} aria-hidden /> Add page</button>
           {adding && (

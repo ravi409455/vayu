@@ -129,7 +129,7 @@ class ZipDownload(APIView):
         if z is None or not zips.fresh(z):
             raise err("LINK_EXPIRED", "This download link is invalid or has expired.", 404)
         if z.status == "ready":
-            url = storage.presign_get(z.key, f"{z.booking.booking_id}.zip")
+            url = storage.presign_get(z.key, zips.download_name(z))
             if request.query_params.get("format") == "json":    # the "Preparing..." web page
                 return Response({"status": "ready", "progress": 100, "url": url})
             return HttpResponseRedirect(url)

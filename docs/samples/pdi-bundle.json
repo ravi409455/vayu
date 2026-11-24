@@ -26801,6 +26801,20 @@
          "width": 20.0
         }
        ]
+      },
+      {
+       "type": "spacer",
+       "height": 8
+      },
+      {
+       "type": "button",
+       "link": "photos",
+       "label": "Download photos"
+      },
+      {
+       "type": "button",
+       "link": "videos",
+       "label": "Download videos"
       }
      ],
      "style": "normal",
@@ -26927,7 +26941,7 @@
      "watermark": {
       "image": "6440e3c9-6316-4dab-b0f6-6d973a22a371",
       "width": 62,
-      "opacity": 0.35
+      "opacity": 0.15
      }
     }
    },

@@ -152,6 +152,26 @@ problems).
 - All problems found, as table rows.
 - Dates print as dd-mm-yyyy.
 
+### Download links (2026-11-24)
+
+- Every report has two more links: all photos and all videos of the inspection, each as one
+  ZIP. They are the verify link plus `/photos` or `/videos` (`{{ sys.photos_url }}`,
+  `{{ sys.videos_url }}`), so they work as long as the report does. `{{ sys.photo_count }}` and
+  `{{ sys.video_count }}` say how many.
+- Use them anywhere: the **Button link** part (Download photos / Download videos / Verify; it
+  hides when nothing is behind it), a link in rich text (Link… in the toolbar), or as text.
+  A link in report text can only hold these three values, never a form answer.
+- What goes in: photo or video fields of the inspection form that show for this car. Start and
+  end forms and Ops-only uploads stay out. Inside the ZIP: a folder per section, files named by
+  the field ("Engine bay/Engine oil photo.jpg").
+- The customer's page builds the ZIP once, shows progress, then the download starts. A built
+  ZIP is kept 7 days, then built again on the next tap.
+- **Retention** (Admin → Settings → Photo and video storage): keep photos / videos N days
+  (0 = for ever, else 30–3650). An hourly job deletes older originals of completed jobs for
+  good, with their previews, print copies and ZIPs. Stored PDFs keep their pictures; the
+  report's links then say the files are no longer available.
+- PDI template: Download photos and Download videos under the verify box.
+
 ## 7. Changes to the form builder
 
 - **Print colour on each answer option**, e.g. Ok = green, Loose = amber, Damaged = red,

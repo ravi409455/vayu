@@ -912,6 +912,9 @@
     },
     {
      "$ref": "#/$defs/snippet"
+    },
+    {
+     "$ref": "#/$defs/button"
     }
    ]
   },
@@ -1136,6 +1139,45 @@
     },
     "ref": {
      "$ref": "#/$defs/sharedref"
+    }
+   }
+  },
+  "button": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "link",
+    "label"
+   ],
+   "properties": {
+    "id": true,
+    "show_if": true,
+    "hide_when_empty": true,
+    "new_page": true,
+    "keep_together": true,
+    "keep_title": true,
+    "box": true,
+    "type": {
+     "const": "button"
+    },
+    "link": {
+     "enum": [
+      "photos",
+      "videos",
+      "verify"
+     ]
+    },
+    "label": {
+     "type": "string",
+     "maxLength": 300
+    },
+    "align": {
+     "enum": [
+      "left",
+      "center",
+      "right"
+     ]
     }
    }
   }

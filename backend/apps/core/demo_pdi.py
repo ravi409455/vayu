@@ -1570,6 +1570,10 @@ def pdf_definition(logo: str | None, watermark: str | None, disclaimer: str) -> 
                 {"type": "verify", "size": 62},
                 {"type": "spacer", "height": 6},
                 _centre(verify_rows, width=60),
+                {"type": "spacer", "height": 8},
+                # one under the other, centred: a link with nothing behind it is left out
+                {"type": "button", "link": "photos", "label": "Download photos"},
+                {"type": "button", "link": "videos", "label": "Download videos"},
             ],
         ),
         _page("Disclaimer", [{"type": "text", "columns": 2, "size": "fine", "html": disclaimer}]),
@@ -1625,7 +1629,7 @@ def pdf_definition(logo: str | None, watermark: str | None, disclaimer: str) -> 
                 },
             },
         },
-        **({"watermark": {"image": watermark, "opacity": 0.35, "width": 62}} if watermark else {}),
+        **({"watermark": {"image": watermark, "opacity": 0.15, "width": 62}} if watermark else {}),
         "pages": pages,
     }
 
