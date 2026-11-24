@@ -145,8 +145,12 @@ def test_push_sends_to_live_phones_and_forgets_dead_tokens(env, booking, setting
     live = Device.objects.create(user=env.expert_user, push_token="live", push_token_at=timezone.now())
     Device.objects.create(user=env.expert_user, push_token="old", revoked_at=timezone.now())
     sent = []
+
+    def send(t, d):
+        sent.append((t, d))
+        return False
     with mock.patch.object(fcm, "credential", return_value={"project_id": "p"}), \
-            mock.patch.object(fcm, "send", side_effect=lambda t, d: sent.append((t, d)) or False):
+            mock.patch.object(fcm, "send", side_effect=send):
         assign(env, booking)
     assert [t for t, _ in sent] == ["live"]
     n = Notification.objects.get(user=env.expert_user)

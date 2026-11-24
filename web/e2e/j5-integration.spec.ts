@@ -83,7 +83,7 @@ test("J5: a designed request reaches the receiver, the ZIP downloads and the ver
     const download = zipPage.waitForEvent("download", { timeout: 30_000 });
     await zipPage.goto(payload.images);
     const file = await download;
-    expect(file.suggestedFilename()).toBe("J5-1.zip");
+    expect(file.suggestedFilename()).toBe("J5-1 files.zip");
 
     // the verify page: a summary and nothing about the customer
     const verify = await page.context().newPage();

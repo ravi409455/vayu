@@ -19,7 +19,7 @@ test("J2: Ops run a booking from creation to cancellation", async ({ page }) => 
   await page.getByRole("button", { name: "Create booking" }).click();
   await expect(page.getByRole("heading", { name: /Sunita Rao/ })).toBeVisible();
   await expect(page.getByText(/J2-100/).first()).toBeVisible();
-  await expect(page.getByText("Not assigned").first()).toBeVisible();
+  await expect(page.getByText("Unassigned").first()).toBeVisible();
 
   // assign
   await page.getByRole("button", { name: "Assign", exact: true }).click();

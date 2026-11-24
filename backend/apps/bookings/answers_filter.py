@@ -1,6 +1,8 @@
 """Filter bookings by an answer in their inspection (owner, 2026-11-24): generic, for any choice or
 yes/no field the person may see, e.g. "Payment verified?: not filled" or "Pay later". Nothing here
 knows about payments; payments are ordinary wrap-up fields."""
+from typing import Any
+
 from django.db.models import Exists, OuterRef, Q
 from rest_framework.exceptions import ValidationError
 
@@ -12,8 +14,9 @@ from .submissions import latest_published
 
 TYPES = ("single_choice", "multi_choice", "yes_no")
 NOT_FILLED = "__none__"
-PARTS = {FormType.START: "start", FormType.CUSTOM: "inspection", FormType.END: "end"}
-FORM_WORD = {FormType.START: "Check-in", FormType.END: "Wrap-up"}
+PARTS: dict[str, str] = {FormType.START: "start", FormType.CUSTOM: "inspection",
+                         FormType.END: "end"}
+FORM_WORD: dict[str, str] = {FormType.START: "Check-in", FormType.END: "Wrap-up"}
 
 
 def fields_for(user, inspection_type: str | None = None) -> list[dict]:
@@ -28,7 +31,7 @@ def _rows(user, inspection_type: str | None = None) -> list[dict]:
     """fields_for, plus per row the forms where the field is visible to this person ("forms"):
     the filter looks only at inspections made with those, never at a form that hides it."""
     hidden_forms = set(hidden_inspection_forms(user))
-    rows: dict[str, dict] = {}
+    rows: dict[str, dict[str, Any]] = {}
     for form in Form.objects.filter(is_active=True, type__in=list(PARTS)).order_by("type", "name"):
         if form.id in hidden_forms:
             continue
@@ -46,12 +49,14 @@ def _rows(user, inspection_type: str | None = None) -> list[dict]:
                 continue
             choices = [o for o in f.config.get("options") or []
                        if isinstance(o, dict) and "key" in o]
-            options = ([{"value": "true", "label": "Yes"}, {"value": "false", "label": "No"}]
+            options: list[dict[str, Any]] = (
+                [{"value": "true", "label": "Yes"}, {"value": "false", "label": "No"}]
                        if f.type == "yes_no" else
                        [{"value": o["key"], "label": o.get("label", o["key"])} for o in choices])
-            row = rows.setdefault(f"{part}.{f.key}", {
+            new: dict[str, Any] = {
                 "field": f"{part}.{f.key}", "label": f.label, "type": f.type, "options": [],
-                "form": FORM_WORD.get(form.type, form.name), "forms": []})
+                "form": FORM_WORD.get(form.type, form.name), "forms": []}
+            row = rows.setdefault(f"{part}.{f.key}", new)
             row["forms"].append(form.id)
             known = {o["value"] for o in row["options"]}
             row["options"] += [o for o in options if o["value"] not in known]

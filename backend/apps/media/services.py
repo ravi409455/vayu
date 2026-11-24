@@ -552,5 +552,5 @@ def finish_without_missing(actor, booking: Booking) -> Booking:
                      {"stage": ["submitted", "completed"], "missing": left},
                      keys=["stage", *(f"{r['part']}.{r['key']}" for r in rows)], inspection=insp)
     events.emit("inspection.completed", booking=str(b.id), booking_id=b.booking_id,
-                inspection=str(insp.id))
+                inspection=str(insp.id) if insp else "")
     return b

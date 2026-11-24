@@ -62,7 +62,7 @@ def test_yes_no_and_multi_choice_answers(ienv):
     from apps.bookings.models import Booking
     a = done(ienv, "A1", accident=True, extras=["mats"])
     done(ienv, "B1", accident=False, extras=[])
-    rows = [{"field": "inspection.accident", "type": "yes_no", "label": "a",
+    rows: list[dict] = [{"field": "inspection.accident", "type": "yes_no", "label": "a",
              "options": [{"value": "true", "label": "Yes"}, {"value": "false", "label": "No"}], "form": "x"},
             {"field": "inspection.extras", "type": "multi_choice", "label": "e",
              "options": [{"value": "mats", "label": "Mats"}], "form": "x"}]

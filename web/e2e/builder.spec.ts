@@ -87,14 +87,14 @@ test.describe("form builder", () => {
     await page.goto(`/forms/${form.id}`);
     await page.getByRole("button", { name: /Driver front door/ }).first().click();
     await page.getByRole("tab", { name: "Access" }).click();
-    await expect(page.getByRole("button", { name: "expert Working: Can edit" })).toBeVisible();      // the standard rule
+    await expect(page.getByRole("button", { name: "expert In progress: Can edit" })).toBeVisible();      // the standard rule
     await page.getByRole("button", { name: "Ops only" }).click();
-    await expect(page.getByRole("button", { name: "expert Working: Hidden" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "expert In progress: Hidden" })).toBeVisible();
     await page.getByRole("button", { name: "Read-only for experts" }).click();
-    await expect(page.getByRole("button", { name: "expert Working: Can see" })).toBeVisible();
-    await page.getByRole("button", { name: "ops Submitted: Can edit" }).click();                 // cycles to the next level
+    await expect(page.getByRole("button", { name: "expert In progress: Can see" })).toBeVisible();
+    await page.getByRole("button", { name: "ops Uploading: Can edit" }).click();                 // cycles to the next level
     await page.getByRole("button", { name: "Reset to inherited" }).click();
-    await expect(page.getByRole("button", { name: "expert Working: Can edit" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "expert In progress: Can edit" })).toBeVisible();
   });
 
   test("a photo field can be camera-only, and the preview honours it", async ({ page }) => {

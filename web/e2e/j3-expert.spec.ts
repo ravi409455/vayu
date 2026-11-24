@@ -27,7 +27,7 @@ test("J3: expert completes a full inspection on the web", async ({ page }) => {
   const id = await assignedJob("J3-1");
   await signIn(page, "expert");
   await expect(page).toHaveURL(/\/jobs$/);
-  await page.getByRole("link", { name: "Job J3-1" }).click();
+  await page.getByRole("link", { name: "Lead J3-1" }).click();
   await expect(page.getByText("7 Lake View Rd")).toBeVisible();
   await expect(page.getByRole("link", { name: /9876500011/ })).toHaveAttribute("href", "tel:+919876500011");
   await page.getByRole("button", { name: "Start inspection" }).click();
