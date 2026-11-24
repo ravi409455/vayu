@@ -243,8 +243,10 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
                             Column(Modifier.weight(1f)) {
                                 Text(f.label, fontSize = 12.sp, color = Vayu.colors.muted)
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(answerText(f, v, env), color = Vayu.colors.ink, modifier = Modifier.weight(1f, fill = false))
-                                    if (bad != null) Text(bad, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.warn,
+                                    val shownText = answerText(f, v, env)
+                                    Text(shownText, color = Vayu.colors.ink, modifier = Modifier.weight(1f, fill = false))
+                                    // the tag only when it adds something ("Minor" twice says nothing)
+                                    if (bad != null && !bad.equals(shownText, ignoreCase = true)) Text(bad, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.warn,
                                         modifier = Modifier.clip(RoundedCornerShape(11.dp)).background(Vayu.colors.warnTint).padding(horizontal = 8.dp, vertical = 2.dp))
                                 }
                             }
@@ -596,7 +598,9 @@ private fun Picks(options: List<String>, chosen: String?, suggested: String?, co
                         .border(1.dp, if (on) Vayu.colors.primary else Vayu.colors.line2, RoundedCornerShape(12.dp))
                         .selectable(selected = on, role = Role.RadioButton) { onPick(o) }
                         .semantics { if (o == suggested) contentDescription = "${label(o)}, suggested" }, contentAlignment = Alignment.Center) {
-                        Text(label(o), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false,
+                        // a long choice wraps to two lines (then "…"), never a hard cut
+                        Text(label(o), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                             color = if (on) Vayu.colors.onPrimary else Vayu.colors.ink2)
                         if (o == suggested) Box(Modifier.align(Alignment.TopEnd).padding(6.dp).size(6.dp).clip(CircleShape).background(Vayu.colors.info))
                     }
@@ -680,16 +684,27 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
         if (!making && failed) Note(rep?.s("error")?.ifBlank { null } ?: "The report couldn't be made.", Vayu.colors.badTint)
         if (env.can("reports.regenerate") && b.stage == "completed" && b.conflict.isEmpty()) {
             if (stale || failed) PrimaryButton(if (making) "Making…" else "Make it again", { remake() }, Modifier.fillMaxWidth(), enabled = online && !making)
-            else SoftButton(if (making) "Making…" else "Make it again", { if (online && !making) remake() }, Modifier.fillMaxWidth())
+            else CardButton(if (making) "Making…" else "Make it again", Modifier.fillMaxWidth(), online && !making) { remake() }
         }
         if (rep?.s("url")?.isNotBlank() == true && !making) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SoftButton("Open", { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }, Modifier.weight(1f))
-            SoftButton("Share", { scope.launch { file()?.let { ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/pdf")
-                .putExtra(Intent.EXTRA_STREAM, uriOf(it)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Share the report")) } ?: env.say("Couldn't download the report.") } }, Modifier.weight(1f))
-            if (rep!!.s("verify_url").isNotBlank()) SoftButton("Check link", {
+            CardButton("Open", Modifier.weight(1f)) { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }
+            CardButton("Share", Modifier.weight(1f)) { scope.launch { file()?.let { ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/pdf")
+                .putExtra(Intent.EXTRA_STREAM, uriOf(it)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Share the report")) } ?: env.say("Couldn't download the report.") } }
+            if (rep!!.s("verify_url").isNotBlank()) CardButton("Check link", Modifier.weight(1f)) {
                 ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, rep!!.s("verify_url")), "Share the check link"))
-            }, Modifier.weight(1f))
+            }
         }
+    }
+}
+
+/** A button on a grey card: white with a border, one line. */
+@Composable
+private fun CardButton(text: String, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+    Box(modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).background(Vayu.colors.bg)
+        .border(1.dp, Vayu.colors.line2, RoundedCornerShape(12.dp)).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+        .padding(horizontal = 6.dp), contentAlignment = Alignment.Center) {
+        Text(text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            color = if (enabled) Vayu.colors.ink else Vayu.colors.muted)
     }
 }
 

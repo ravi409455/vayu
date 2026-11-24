@@ -164,15 +164,16 @@ fun Section(text: String) = Text(text.uppercase(), fontSize = 12.sp, fontWeight 
 fun BookingRow(b: Bk, detail: String, today: LocalDate, onOpen: () -> Unit, trailing: (@Composable () -> Unit)? = null) {
     val lead = if (b.date.isEmpty() || b.date == today.toString()) b.time else runCatching { LocalDate.parse(b.date).let { "${it.dayOfMonth} ${it.month.name.take(3).lowercase().replaceFirstChar(Char::uppercase)}" } }.getOrDefault("")
     Column(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onOpen)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(lead, modifier = Modifier.width(48.dp).padding(top = 1.dp), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Vayu.colors.ink2, maxLines = 1, softWrap = false)
-            Column(Modifier.weight(1f)) {
-                // line 1: the name ("…" if long) and the status; line 2: the booking ID, never cut; line 3: type · who or where
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(b.customer.ifBlank { b.code }, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    trailing?.invoke() ?: opsStatus(b).let { StatusDot(it.first, it.second) }
-                }
+        Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+            // line 1: time, the name ("…" if long) and the status or button, all on one centre line;
+            // line 2: the booking ID, never cut; line 3: type · who or where
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(lead, modifier = Modifier.width(48.dp), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Vayu.colors.ink2, maxLines = 1, softWrap = false)
+                Text(b.customer.ifBlank { b.code }, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                trailing?.invoke() ?: opsStatus(b).let { StatusDot(it.first, it.second) }
+            }
+            Column(Modifier.padding(start = 60.dp)) {
                 Text(b.code, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Vayu.colors.ink2)
                 if (detail.isNotBlank()) Text(detail, fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }

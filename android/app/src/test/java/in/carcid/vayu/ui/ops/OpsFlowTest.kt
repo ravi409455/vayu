@@ -141,6 +141,8 @@ class OpsFlowTest {
         waitFor("Manoj Pillai")
         compose.onNodeWithText("Manoj Pillai").performClick()
         waitFor("Two experts inspected this car")
+        // the same picture every run: wait for the forms (not "Loading…")
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Loading…")).fetchSemanticsNodes().isEmpty() }
         shot("ops_booking")
         compose.onNodeWithText("Waits for your choice above").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Compare and choose").performClick()
