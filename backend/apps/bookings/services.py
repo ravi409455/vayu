@@ -158,7 +158,8 @@ def assign(actor, b: Booking, expert_id) -> Booking:
     if expert is None:
         raise err("INVALID_EXPERT", "Choose an active expert.")
     if b.stage == "in_progress":
-        raise err("ALREADY_STARTED", "The expert has started; force-release the job first.", 409)
+        raise err("ALREADY_STARTED", "The expert has started; force-release the booking first.",
+                  409)
     if not can_transition(b.stage, "assigned"):
         raise err("INVALID_STAGE", f"A {b.stage} booking cannot be assigned.", 409)
     changes = {"stage": [b.stage, "assigned"], "assigned_expert": [b.assigned_expert_id, expert.id]}
@@ -209,7 +210,7 @@ def cancel(actor, b: Booking, reason) -> Booking:
 def force_release(actor, b: Booking) -> Booking:
     b = _lock(b)
     if b.stage != "in_progress":
-        raise err("NOT_STARTED", "Only a started job can be force-released.", 409)
+        raise err("NOT_STARTED", "Only a started booking can be force-released.", 409)
     b.stage, b.started_at, b.late_minutes = "assigned", None, None
     b.late_reviewed_by = b.late_reviewed_at = None     # the next start is judged afresh
     b.released_by, b.released_at, b.released_draft_expected = actor, timezone.now(), True
@@ -236,7 +237,7 @@ def review_timing(actor, b: Booking, flag) -> Booking:
 def change_type(actor, b: Booking, inspection_type) -> Booking:
     b = _lock(b)
     if b.started_at is not None or b.stage not in ("draft", "assigned"):
-        raise err("TYPE_LOCKED", "The inspection type is locked once the job has started.", 409)
+        raise err("TYPE_LOCKED", "The inspection type is locked once the booking has started.", 409)
     if not isinstance(inspection_type, str) or not active_inspection_type(inspection_type):
         raise err("INVALID_TYPE", "Choose an inspection type from the list.")
     changes = {"inspection_type": [b.inspection_type, inspection_type]}

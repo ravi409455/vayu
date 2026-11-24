@@ -349,7 +349,7 @@ describe("the integration editor", () => {
     await u.keyboard("{Escape}");
     await u.selectOptions(screen.getByRole("combobox", { name: "Send when" }), "booking.created");
     await u.click(screen.getByRole("button", { name: "Insert a value into URL" }));
-    expect(screen.getByText(/only booking values, job facts and event details exist yet/)).toBeInTheDocument();
+    expect(screen.getByText(/only booking-form answers, booking details and event details exist yet/)).toBeInTheDocument();
     await u.keyboard("{Escape}");
     await u.selectOptions(screen.getByRole("combobox", { name: "Form" }), "Booking");
     await u.click(screen.getByRole("button", { name: "Insert a value into URL" }));
@@ -372,7 +372,7 @@ describe("the integration editor", () => {
     });
     await screen.findByRole("textbox", { name: "Name" });
     await u.type(screen.getByRole("textbox", { name: "URL" }), "https://crm.example.com/");
-    expect(await screen.findByText(/Sample values: no job exists yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/Sample values: no booking exists yet/)).toBeInTheDocument();
     await u.type(screen.getByRole("textbox", { name: "Preview with booking" }), "SA9{Enter}");
     expect(await screen.findByText(/Values of SA9/)).toBeInTheDocument();
     expect(sent(calls, "integrations/preview").at(-1)).toMatchObject({ booking: "b9" });

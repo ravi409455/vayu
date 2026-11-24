@@ -297,7 +297,7 @@ class Preview(APIView):
         try:
             req = webhooks.build_request(d, "preview" if booking else "sample", types)
         except values.MissingPathValue as e:
-            raise err("PATH_VALUE_EMPTY", f"{e} is empty for this job, so the URL cannot be "
+            raise err("PATH_VALUE_EMPTY", f"{e} is empty for this booking, so the URL cannot be "
                       "built.") from e
         except ValueError as e:                              # the body would be too large
             raise err("REQUEST_FAILED", f"The request cannot be built: {e}.") from e

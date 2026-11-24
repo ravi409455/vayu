@@ -15,7 +15,7 @@ TOKEN = re.compile(r"\{\{\s*([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_\-]+)+)(\s*\|\
 MAX_NODES, MAX_HEADERS, MAX_QUERY, MAX_DEPTH = 500, 20, 30, 8
 
 GROUPS = {"booking": "Booking form", "start": "Check-in (start)", "inspection": "Inspection",
-          "end": "Wrap-up (end)", "job": "Job", "result": "Results", "link": "Links",
+          "end": "Wrap-up (end)", "job": "Booking details", "result": "Results", "link": "Links",
           "event": "Event"}
 JOB = {"job.booking_id": ("Booking ID", "text"),
        "job.previous_booking_id": ("Previous Booking ID", "text"),

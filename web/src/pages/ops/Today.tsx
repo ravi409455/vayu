@@ -55,7 +55,7 @@ export function Today() {
   const lateToday = useCount({ ...viewQuery("today", new Date()), ...viewQuery("late") }, seesTiming);
   const quickToday = useCount({ ...viewQuery("today", new Date()), ...viewQuery("quick") }, seesTiming);
   const kpis = [
-    { label: "Today's jobs", value: todayN ?? "—", sub: `${by("completed")} done · ${by("in_progress")} in progress${cancelled ? ` · ${cancelled} cancelled` : ""}`, to: "/bookings?all=1" },
+    { label: "Today's bookings", value: todayN ?? "—", sub: `${by("completed")} done · ${by("in_progress")} in progress${cancelled ? ` · ${cancelled} cancelled` : ""}`, to: "/bookings?all=1" },
     { label: "Unassigned", value: unassigned ?? "—", sub: unassigned ? "on any day, need an expert" : "all assigned", to: "/bookings?view=unassigned&all=1", tone: unassigned ? "warn" : "" },
     { label: "In progress", value: inProgress ?? "—", sub: "experts on site", to: "/bookings?view=in_progress&all=1", tone: "info" },
     { label: "Uploading", value: uploading ?? "—", sub: "files still coming", to: "/bookings?view=uploading&all=1" },
@@ -209,7 +209,7 @@ export function Today() {
                     <div key={l.id} className="sched-row">
                       <div className="sched-who">
                         {l.user ? <Avatar who={l.user} size={28} /> : <span className="avatar lane-open" style={{ width: 28, height: 28 }}>?</span>}
-                        <div style={{ minWidth: 0 }}><div className="small ellipsis" style={{ fontWeight: 600 }}>{l.name}</div><div className="muted" style={{ fontSize: 11 }}>{l.jobs.length ? `${l.jobs.length} job${l.jobs.length === 1 ? "" : "s"}` : "Free today"}</div></div>
+                        <div style={{ minWidth: 0 }}><div className="small ellipsis" style={{ fontWeight: 600 }}>{l.name}</div><div className="muted" style={{ fontSize: 11 }}>{l.jobs.length ? `${l.jobs.length} booking${l.jobs.length === 1 ? "" : "s"}` : "Free today"}</div></div>
                       </div>
                       <div className="sched-track" style={{ width: slots * slotPx + 2 * GUTTER, height: laid.rows * LANE_H, backgroundSize: `${slotPx}px 100%, ${slotPx * 2}px 100%`, backgroundPosition: `${GUTTER}px 0, ${GUTTER}px 0` }}>
                         {l.jobs.map((b, i) => {

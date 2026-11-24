@@ -62,7 +62,7 @@ export function Job() {
   });
 
   if (booking.isLoading) return <p className="muted pad">Loading…</p>;
-  if (!b) return <p className="error pad">This job could not be opened.</p>;
+  if (!b) return <p className="error pad">This lead could not be opened.</p>;
   const canWork = b.stage === "assigned" || b.stage === "in_progress";
   return (
     <div style={{ maxWidth: session && canWork ? 1100 : 680 }}>
@@ -101,7 +101,7 @@ function Finished({ booking }: { booking: Booking }) {
     <div className="card" role="status">
       {booking.stage === "submitted" && <p><strong>Submitted.</strong> Uploading photos{total ? ` (${done}/${total})` : ""}… keep this page open until it says Completed.</p>}
       {booking.stage === "completed" && <p className="ok"><strong>Completed.</strong> Everything arrived and the report is being made.</p>}
-      {booking.stage === "cancelled" && <p>This job was cancelled.</p>}
+      {booking.stage === "cancelled" && <p>This lead was cancelled.</p>}
       {ups.some((u) => u.status === "failed") && <button onClick={retryFailed}>Retry uploads</button>}
     </div>
   );
@@ -228,8 +228,8 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
       {unstarted && (
         <div className="banner" role="status">
           {startError && checkinDone
-            ? <><strong>The job could not be started.</strong> {startError} <button className="link" onClick={() => { tried.current = ""; onStart(draft.start); }}>Try again</button></>
-            : <><strong>Not started yet.</strong> The job starts as soon as the check-in is complete.</>}
+            ? <><strong>The lead could not be started.</strong> {startError} <button className="link" onClick={() => { tried.current = ""; onStart(draft.start); }}>Try again</button></>
+            : <><strong>Not started yet.</strong> The lead starts as soon as the check-in is complete.</>}
         </div>)}
       <p className="muted small" style={{ margin: "6px 0 14px" }}>Step {step + 1} of {steps.length}: {cur.title}{total > 0 && ` · files ${done}/${total} sent`}</p>
       <label className="wizard-jump"><span className="muted small">Go to</span>
@@ -258,7 +258,7 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
       {confirm === "discard" && (
         <Confirm title="Start this inspection again?" danger confirmLabel="Discard draft" onCancel={() => setConfirm(null)} onConfirm={() => void discard()}>
           <p>Every answer saved on this device for {booking.booking_id} is cleared and you start again at step 1. Photos that have not finished sending are dropped. This cannot be undone.</p>
-          <p className="muted small">The job stays yours and stays started; nothing has been sent to the office yet.</p>
+          <p className="muted small">The lead stays yours and stays started; nothing has been sent to the office yet.</p>
         </Confirm>)}
       {confirm === "submit" && (
         <Confirm title={`Submit with ${notOpened.length} page${notOpened.length === 1 ? "" : "s"} not opened?`} confirmLabel="Submit anyway" onCancel={() => setConfirm(null)} onConfirm={() => { setConfirm(null); void submit(); }}>

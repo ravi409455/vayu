@@ -214,11 +214,11 @@ export function FormBuilder() {
           actions={<><button onClick={() => setVisibility(null)}>Cancel</button>
             <button className="primary" disabled={!can("forms.edit")} onClick={async () => { try { await api(`forms/${id}`, { method: "PATCH", body: { submission_roles: visibility } }); say("Saved."); setVisibility(null); await reload(); } catch (e) { fail(e); } }}>Save</button></>}>
           <p className="muted">Choose who can open the answers of this form after they are submitted. Someone left out sees nothing of it: not on the booking, not in search, not in the report, not in downloads.
-            <InfoTip>This is about seeing the finished submission. Experts can always fill in and submit their own jobs. Per-field access (the Access tab on each field) still applies on top for everyone who is allowed.</InfoTip></p>
+            <InfoTip>This is about seeing the finished submission. Experts can always fill in and submit their own bookings. Per-field access (the Access tab on each field) still applies on top for everyone who is allowed.</InfoTip></p>
           <label className="check"><input type="checkbox" checked disabled /> Admin (always)</label>
           {(["ops", "expert"] as const).map((r) => (
             <label className="check" key={r}><input type="checkbox" checked={visibility.includes(r)}
-              onChange={(e) => setVisibility(e.target.checked ? [...visibility, r] : visibility.filter((x) => x !== r))} /> {r === "ops" ? "Ops" : "Experts (their own jobs only)"}</label>
+              onChange={(e) => setVisibility(e.target.checked ? [...visibility, r] : visibility.filter((x) => x !== r))} /> {r === "ops" ? "Ops" : "Experts (their own bookings only)"}</label>
           ))}
         </Modal>
       )}

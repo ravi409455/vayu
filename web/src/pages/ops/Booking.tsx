@@ -270,7 +270,7 @@ export function WaitingFiles({ booking, onFinished, onMedia }: { booking: Bookin
           onClick={() => setAsking(true)}>Finish without the missing files</button>
       </div>
       {asking && <Confirm title="Finish without the missing files?" confirmLabel="Finish" onConfirm={finish} onCancel={() => setAsking(false)}>
-        The job is marked Completed and the report is made without {total} file{total === 1 ? "" : "s"}. If the expert's phone sends them later, they are added and the report is made again.
+        The booking is marked Completed and the report is made without {total} file{total === 1 ? "" : "s"}. If the expert's phone sends them later, they are added and the report is made again.
       </Confirm>}
     </div>
   );
@@ -810,7 +810,7 @@ export function Actions({ kind, booking, experts, onClose, onDone, fail }: { kin
   const types = useInspectionTypes();
   const typeLabel = useTypeLabels();
   const go = async (path: string, body: unknown) => { try { await api(`bookings/${booking.id}/${path}`, { body }); onDone(); } catch (e) { fail(e); } };
-  if (kind === "release") return <Confirm title="Force release this job?" danger confirmLabel="Force release" onCancel={onClose} onConfirm={() => go("force-release", {})}><p>The expert is taken off the job. If they still have a draft on their phone and submit it later, Ops will see a conflict to resolve.</p></Confirm>;
+  if (kind === "release") return <Confirm title="Force release this booking?" danger confirmLabel="Force release" onCancel={onClose} onConfirm={() => go("force-release", {})}><p>The expert is taken off the booking. If they still have a draft on their phone and submit it later, Ops will see a conflict to resolve.</p></Confirm>;
   const title = { assign: "Assign an expert", reschedule: "Reschedule", cancel: "Cancel this booking", type: "Change inspection type" }[kind];
   const ok = kind === "assign" ? !!expert : kind === "reschedule" ? !!date && !!time && !!reason : kind === "cancel" ? !!reason : !!type && type !== booking.inspection_type;
   const submit = () => kind === "assign" ? go("assign", { expert: Number(expert) }) : kind === "reschedule" ? go("reschedule", { date, time, reason }) : kind === "cancel" ? go("cancel", { reason }) : go("change-type", { inspection_type: type });

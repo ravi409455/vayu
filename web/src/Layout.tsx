@@ -14,7 +14,7 @@ import { TopBar } from "./ui/TopBar";
 type Item = { to: string; label: string; icon: LucideIcon; perm?: string; role?: string };
 const GROUPS: { title: string; items: Item[] }[] = [
   { title: "Work", items: [
-    { to: "/jobs", label: "My jobs", icon: Briefcase, role: "expert" },
+    { to: "/jobs", label: "My leads", icon: Briefcase, role: "expert" },
     { to: "/today", label: "Today", icon: Home, perm: "bookings.view", role: "ops-admin" },
     { to: "/bookings", label: "Bookings", icon: ClipboardList, perm: "bookings.view", role: "ops-admin" },
     { to: "/problems", label: "Needs you", icon: AlertTriangle, perm: "bookings.view", role: "ops-admin" },

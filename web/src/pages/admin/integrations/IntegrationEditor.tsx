@@ -154,7 +154,7 @@ function Preview({ d, onError }: { d: Draft; onError: (m: string) => void }) {
       {problem && <div className="banner bad" role="alert">{problem}</div>}
       {shown && (
         <>
-          <p className="muted small">{shown.sample ? "Sample values: no job exists yet for this form." : `Values of ${job?.ref ?? "the latest job"}. Nothing is sent from here.`}</p>
+          <p className="muted small">{shown.sample ? "Sample values: no booking exists yet for this form." : `Values of ${job?.ref ?? "the latest booking"}. Nothing is sent from here.`}</p>
           {shown.broken_refs.length > 0 && <div className="banner warn">Uses {shown.broken_refs.join(", ")}, which the form no longer has. They are sent as empty.</div>}
           <pre className="mono" data-testid="preview-request">{`${shown.method} ${shown.url}\n${shown.headers.map((h) => `${h.name}: ${h.value}`).join("\n")}${shown.body ? `\n\n${shown.body}` : ""}`}</pre>
         </>)}

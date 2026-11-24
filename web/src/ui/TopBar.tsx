@@ -14,7 +14,7 @@ import { useNeeds } from "../lib/problems";
 /** Section of the app for each first path segment; detail pages name their parent list. */
 const SECTION: Record<string, [string, string]> = {
   bookings: ["Bookings", "/bookings"], booking: ["Bookings", "/bookings"], today: ["Today", "/today"],
-  problems: ["Needs you", "/problems"], dashboards: ["Dashboard", "/dashboards"], jobs: ["My jobs", "/jobs"],
+  problems: ["Needs you", "/problems"], dashboards: ["Dashboard", "/dashboards"], jobs: ["My leads", "/jobs"],
   forms: ["Forms", "/forms"], library: ["Library", "/library"], lists: ["Master lists", "/lists"],
   pdf: ["PDF templates", "/pdf"], users: ["Users", "/users"], roles: ["Roles & permissions", "/roles"],
   integrations: ["Integrations", "/integrations"], "api-keys": ["API keys", "/api-keys"], promote: ["Promote", "/promote"],

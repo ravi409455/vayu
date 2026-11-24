@@ -44,8 +44,13 @@ def writable_booking(request, booking_id, moved_ok: bool = False) -> Booking:
         qs = qs.filter(deliver_filter(user) if moved_ok else own_filter(user)).distinct()
     b = qs.filter(pk=booking_id).first()
     if b is None:
-        raise err("NOT_FOUND", "Booking not found.", 404)
+        raise err("NOT_FOUND", f"{word(user).capitalize()} not found.", 404)
     return b
+
+
+def word(user) -> str:
+    """What this person calls a booking (docs/plan-leads-bookings-words.md): experts a lead."""
+    return "lead" if getattr(user, "role", "") == "expert" else "booking"
 
 
 def readable_booking(request, booking_id) -> Booking:
@@ -54,7 +59,7 @@ def readable_booking(request, booking_id) -> Booking:
         qs = qs.filter(own_filter(request.user)).distinct()
     b = qs.filter(pk=booking_id).first()
     if b is None:
-        raise err("NOT_FOUND", "Booking not found.", 404)
+        raise err("NOT_FOUND", f"{word(request.user).capitalize()} not found.", 404)
     return b
 
 
@@ -154,7 +159,7 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
     closed = booking.stage == "cancelled" or (booking.stage == "completed" and not manager)
     if closed and (manager or booking.inspections.filter(
             expert=user, status__in=("submitted", "superseded")).exists()):
-        raise err("BOOKING_CLOSED", f"A {booking.stage} booking takes no new files.", 409)
+        raise err("BOOKING_CLOSED", f"A {booking.stage} {word(user)} takes no new files.", 409)
     kind, ctype = data.get("kind"), data.get("content_type")
     size, sha = data.get("size"), data.get("sha256")
     if kind not in KINDS:
@@ -529,7 +534,7 @@ def finish_without_missing(actor, booking: Booking) -> Booking:
     with transaction.atomic():
         b = Booking.objects.select_for_update().get(pk=booking.pk)
         if b.stage != "submitted":
-            raise err("INVALID_STAGE", "Only a job waiting for its files can be finished.", 409)
+            raise err("INVALID_STAGE", "Only a booking waiting for its files can be finished.", 409)
         rows = missing_files(b)
         need = [r for r in rows if r["required"]]
         if need:

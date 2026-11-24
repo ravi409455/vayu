@@ -57,17 +57,17 @@ export function MyJobs() {
   const current = all.find((b) => b.id === sel) ?? groups[0]?.rows[0];
   return (
     <>
-      <PageHeader title="My jobs" count={countOf("open")} />
+      <PageHeader title="My leads" count={countOf("open")} />
       {everything.length > 0 && (
         <div className="filters">
           <div className="seg" role="group" aria-label="Show">
             {JOB_FILTERS.map((x) => <button key={x.id} aria-pressed={filter === x.id} onClick={() => setFilter(x.id)}>{x.label} <span className="muted">{countOf(x.id)}</span></button>)}
           </div>
-          <input aria-label="Find a job" className="filter-search" placeholder="Find: customer, booking ID, car, area" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input aria-label="Find a lead" className="filter-search" placeholder="Find: customer, booking ID, car, area" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>)}
       {jobs.isLoading && <p className="muted">Loading…</p>}
-      {!jobs.isLoading && everything.length === 0 && <Empty title="No jobs right now">New jobs show here as soon as Ops assign them to you.</Empty>}
-      {!jobs.isLoading && everything.length > 0 && all.length === 0 && <Empty title="Nothing here">{needle ? "No job matches what you typed." : "No jobs in this view."}</Empty>}
+      {!jobs.isLoading && everything.length === 0 && <Empty title="No leads right now">New leads show here as soon as Ops assign them to you.</Empty>}
+      {!jobs.isLoading && everything.length > 0 && all.length === 0 && <Empty title="Nothing here">{needle ? "No lead matches what you typed." : "No leads in this view."}</Empty>}
       <div className="split-view">
         <div className="job-list">
           {groups.map(({ g, rows }) => (
@@ -75,7 +75,7 @@ export function MyJobs() {
               <h2 className="gallery-h">{g} <span className="muted small">{rows.length}</span></h2>
               <div className="table-card">
                 {rows.map((b) => (
-                  <Link key={b.id} to={`/jobs/${b.id}`} aria-label={`Job ${b.booking_id}`} className={`job-row${current?.id === b.id ? " on" : ""}`}
+                  <Link key={b.id} to={`/jobs/${b.id}`} aria-label={`Lead ${b.booking_id}`} className={`job-row${current?.id === b.id ? " on" : ""}`}
                     onMouseEnter={() => setSel(b.id)} onFocus={() => setSel(b.id)}>
                     <span className="job-time">{g === "Earlier" || g === "Later" ? fmtDay(b.answers.inspection_date)
                       : b.answers.inspection_date !== today() ? <span className="warn-text" title="Overdue">{fmtDay(b.answers.inspection_date)}</span> : fmtTime(b.answers.inspection_time)}</span>
@@ -87,7 +87,7 @@ export function MyJobs() {
             </section>))}
         </div>
         {current && (
-          <aside className="card job-preview" aria-label="Job details">
+          <aside className="card job-preview" aria-label="Lead details">
             <div className="muted small">{current.booking_id} · {type(current.inspection_type)}</div>
             <h2 style={{ margin: "2px 0 4px" }}>{String(current.answers.customer_name ?? "")}</h2>
             <div className="chips" style={{ marginBottom: 10 }}><Pill tone={STAGE_TONE[current.stage]}>{STAGE_LABEL[current.stage] ?? current.stage}</Pill><span className="chip">{fmtDay(current.answers.inspection_date)}, {fmtTime(current.answers.inspection_time)}</span></div>

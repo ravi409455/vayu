@@ -147,7 +147,7 @@ test("every number on Today is the count of the list it opens, even with filters
   await page.goto("/bookings?view=all");
   await page.getByLabel("City").selectOption("pune");         // a filter left behind on the Bookings page
   await page.goto("/today");
-  for (const name of ["Today's jobs", "Unassigned", "In progress", "Uploading", "Completed"]) {
+  for (const name of ["Today's bookings", "Unassigned", "In progress", "Uploading", "Completed"]) {
     await page.goto("/today");
     const card = page.getByRole("link", { name: new RegExp(`^${name}`) });
     await expect(card.locator(".kpi-value")).not.toHaveText("—");          // wait for the number to arrive

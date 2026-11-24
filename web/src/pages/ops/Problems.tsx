@@ -18,7 +18,7 @@ export function Problems() {
           <button aria-pressed={kind === ""} onClick={() => setKind("")}>All {needs.length}</button>
           {kinds.map((k) => <button key={k} aria-pressed={kind === k} onClick={() => setKind(k)}>{NEED_KIND[k]} {needs.filter((n) => n.kind === k).length}</button>)}
         </div>)}
-      {!loading && needs.length === 0 && <Empty title="All clear">No unassigned jobs today, stuck uploads, conflicts, report problems or rejected type changes.</Empty>}
+      {!loading && needs.length === 0 && <Empty title="All clear">No unassigned bookings today, stuck uploads, conflicts, report problems or rejected type changes.</Empty>}
       {shown.length > 0 && (
         <div className="table-card inbox" role="list" aria-label="Needs you">
           {shown.map((n) => (

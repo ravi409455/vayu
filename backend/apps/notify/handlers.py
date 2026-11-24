@@ -88,12 +88,12 @@ def on_event(name: str, payload: dict) -> None:
         if b.created_by and b.created_by.username == SERVICE_USERNAME:   # API / ERP only
             to_ops(b, "new_booking", f"New booking {bid}", who)
         if b.assigned_expert_id:                       # created with an expert already chosen
-            to_user(b.assigned_expert_id, b, "assigned", f"New job: {bid}",
+            to_user(b.assigned_expert_id, b, "assigned", f"New lead: {bid}",
                     " · ".join(x for x in (who, _when(*(b.answers.get(k) for k in WHEN))) if x))
     elif name == "booking.assigned":
         if payload.get("expert") is None:
             return
-        to_user(payload["expert"], b, "assigned", f"New job: {bid}",
+        to_user(payload["expert"], b, "assigned", f"New lead: {bid}",
                 " · ".join(x for x in (who, _when(*(b.answers.get(k) for k in WHEN))) if x))
     else:
         _updated(b, payload.get("changes") or {}, bid, who, payload.get("by"))

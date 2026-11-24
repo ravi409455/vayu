@@ -37,7 +37,7 @@ export function removeValue(value: string, i: number): string {
 
 export const GROUP_LABEL: Record<string, string> = {
   booking: "Booking form", start: "Check-in (start)", inspection: "Inspection", end: "Wrap-up (end)",
-  job: "Job", result: "Results", link: "Links", event: "Event",
+  job: "Booking details", result: "Results", link: "Links", event: "Event",
 };
 
 export const EVENT_LABEL: Record<string, string> = {
@@ -52,10 +52,10 @@ export const eventsFor = (formType: string): string[] =>
   Object.keys(EVENT_LABEL).filter((e) => formType !== "booking" || e.startsWith("booking."));
 /** Why the value list holds what it holds: the form and the event decide which values exist. */
 export function pickerHint(formType: string, event: string): string {
-  if (formType === "booking") return "The booking form can use booking values, job facts and event details. For inspection answers, results and PDF links, choose an inspection form.";
+  if (formType === "booking") return "The booking form can use its own answers, booking details and event details. For inspection answers, results and PDF links, choose an inspection form.";
   const later = "Inspection answers, results and links come with the later events (from “Inspection submitted”; PDF and ZIP links from “PDF ready”).";
   if (event === "booking.deleted") return "Nothing of a deleted booking is sent except its Booking ID and the event details.";
-  if (["booking.created", "alert.conflict", "alert.stuck_upload"].includes(event)) return `For “${eventWord(event)}” only booking values, job facts and event details exist yet. ${later} Pick one of those events to use them.`;
+  if (["booking.created", "alert.conflict", "alert.stuck_upload"].includes(event)) return `For “${eventWord(event)}” only booking-form answers, booking details and event details exist yet. ${later} Pick one of those events to use them.`;
   if (event === "inspection.started") return `Check-in answers exist now. ${later}`;
   if (["inspection.submitted", "media.completed"].includes(event)) return "Inspection answers, results and photo links exist now. The PDF link comes with “PDF ready”.";
   return "";

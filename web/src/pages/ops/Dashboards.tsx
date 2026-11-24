@@ -244,12 +244,12 @@ export function Dashboards() {
       <section className="card dash-card flush" aria-label="By expert">
         <div className="dash-card-head">
           <h3>By expert</h3>
-          {experts.length > 0 && <span className="muted small">{experts.length} expert{experts.length === 1 ? "" : "s"} · most jobs first</span>}
+          {experts.length > 0 && <span className="muted small">{experts.length} expert{experts.length === 1 ? "" : "s"} · most bookings first</span>}
         </div>
-        {experts.length === 0 ? <p className="muted small dash-empty">No assigned jobs in this range.</p> : (
+        {experts.length === 0 ? <p className="muted small dash-empty">No assigned bookings in this range.</p> : (
           <div className="dash-table-wrap">
             <table className="rows dash-table">
-              <thead><tr><th>Expert</th><th className="num">Jobs</th><th className="num">Avg time on site</th><th className="num">On time</th>{seesTiming && <><th className="num">Started late</th><th className="num">Too quick</th></>}</tr></thead>
+              <thead><tr><th>Expert</th><th className="num">Bookings</th><th className="num">Avg time on site</th><th className="num">On time</th>{seesTiming && <><th className="num">Started late</th><th className="num">Too quick</th></>}</tr></thead>
               <tbody>{shownExperts.map((r) => { const u = who(r.expert); const low = r.on_time !== null && r.on_time < 90; return (
                 <tr key={r.expert}><td><span className="who-avatar"><Avatar who={u ?? { id: r.expert }} size={24} />{u?.name || u?.username || `#${r.expert}`}</span></td>
                   <td className="num">{r.bookings}</td>

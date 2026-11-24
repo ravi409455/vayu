@@ -36,7 +36,7 @@ def test_expert_hears_assigned_moved_changed_and_cancelled(env, booking):
     got = bell(env.expert)
     assert got["unread"] == len(got["results"])
     t = [n["title"] for n in got["results"]]
-    assert t[-1] == "New job: SA37926" and "SA37926 details changed" in t
+    assert t[-1] == "New lead: SA37926" and "SA37926 details changed" in t
     changed = next(n for n in got["results"] if n["kind"] == "changed")
     assert changed["body"] == "Address: 12 MG Road → Aundh" and changed["booking"] == b
     assert titles(env.ops) == []                       # Ops don't hear about their own edits
@@ -289,7 +289,7 @@ def test_nobody_hears_about_their_own_action_or_internal_marks(ienv, booking):
 def test_an_expert_set_at_creation_hears_new_job(env):
     r = create(env.ops, booking_id="NEW-1", assigned_expert=env.expert_user.id)
     assert r.status_code == 201, r.json()
-    assert titles(env.expert) == ["New job: NEW-1"]
+    assert titles(env.expert) == ["New lead: NEW-1"]
 
 
 def test_the_same_problem_is_told_once_a_day(env, booking):

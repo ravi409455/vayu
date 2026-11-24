@@ -134,18 +134,18 @@ def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, ap
             raise err("UUID_CONFLICT", "That request ID belongs to another request.", 409)
         return b, existing
     if app_version is not None and app_version < settings.MIN_APP_VERSION:
-        raise err("APP_TOO_OLD", "Update the app to start new jobs.", 426)
+        raise err("APP_TOO_OLD", "Update the app to start new leads.", 426)
     if b.assigned_expert_id != actor.pk:
-        raise err("NOT_ASSIGNED", "This job is no longer assigned to you.", 409)
+        raise err("NOT_ASSIGNED", "This lead is no longer assigned to you.", 409)
     if b.stage == "in_progress":
         # the expert's phone lost its saved session (new device, cleared storage): hand back
         # their own open inspection so they can carry on instead of being locked out
         mine = Inspection.objects.filter(booking=b, expert=actor, status="draft").last()
         if mine is None:
-            raise err("ALREADY_STARTED", "This job is already started.", 409)
+            raise err("ALREADY_STARTED", "This lead is already started.", 409)
         return b, mine
     if b.stage != "assigned":
-        raise err("INVALID_STAGE", f"A {b.stage} job cannot be started.", 409)
+        raise err("INVALID_STAGE", f"A {b.stage} lead cannot be started.", 409)
     changes = {"stage": ["assigned", "in_progress"]}
     if inspection_type is not None and inspection_type != b.inspection_type:
         # the expert physically started this type offline: it wins over Ops' later change

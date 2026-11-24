@@ -65,11 +65,11 @@ describe("route guards", () => {
   });
   it("navigation follows role and permissions", () => {
     const titles = (role: string, perms: string[]) => visibleNav(role, (p) => perms.includes(p)).flatMap((g) => g.items.map((i) => i.label));
-    expect(titles("expert", [])).toEqual(["My jobs"]);
+    expect(titles("expert", [])).toEqual(["My leads"]);
     const ops = titles("ops", ["bookings.view", "dashboards.view", "forms.view"]);
     expect(ops).toEqual(["Today", "Bookings", "Needs you", "Dashboard"]);
     expect(ops).not.toContain("Users");
-    expect(ops).not.toContain("My jobs");
+    expect(ops).not.toContain("My leads");
     expect(titles("admin", ["users.view", "roles.manage", "forms.view"])).toEqual(expect.arrayContaining(["Users", "Roles & permissions", "Forms"]));
   });
 });
