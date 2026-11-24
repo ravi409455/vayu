@@ -20,6 +20,10 @@ def push(ids: list[int]) -> int:
     for n in Notification.objects.filter(pk__in=ids).select_related("booking"):
         for d in Device.objects.filter(user_id=n.user_id, revoked_at__isnull=True).exclude(
                 push_token=""):
+            # a token belongs to one phone: only the device that sent it last gets pushes
+            if Device.objects.filter(push_token=d.push_token, push_token_at__gt=d.push_token_at
+                                     ).exclude(pk=d.pk).exists():
+                continue
             data = {"id": str(n.id), "kind": n.kind, "title": n.title, "body": n.body,
                     "booking": str(n.booking_id or "")}
             if fcm.send(d.push_token, data):

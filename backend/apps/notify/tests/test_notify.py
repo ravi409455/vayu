@@ -125,10 +125,11 @@ def test_push_token_belongs_to_the_signed_in_phone(db, make_user, login):
     assert c.post("/api/v1/devices/push-token", {"token": "abc"}, format="json").status_code == 204
     assert Device.objects.get(pk=tok["device_id"]).push_token == "abc"
     assert c.post("/api/v1/devices/push-token", {"token": ""}, format="json").status_code == 400
-    earlier = Device.objects.create(user=make_user(Role.OPS), push_token="abc")   # same phone, before
+    earlier = Device.objects.create(user=make_user(Role.OPS), push_token="abc",
+                                    push_token_at=timezone.now() - timedelta(days=1))
     assert c.post("/api/v1/devices/push-token", {"token": "abc"}, format="json").status_code == 204
     earlier.refresh_from_db()
-    assert earlier.push_token == ""               # their notices no longer reach this phone
+    assert earlier.push_token == "abc"            # someone else's row is never written
     web = APIClient()
     web.force_authenticate(u)
     assert web.post("/api/v1/devices/push-token", {"token": "abc"},
@@ -136,7 +137,11 @@ def test_push_token_belongs_to_the_signed_in_phone(db, make_user, login):
 
 
 def test_push_sends_to_live_phones_and_forgets_dead_tokens(env, booking, settings):
-    live = Device.objects.create(user=env.expert_user, push_token="live")
+    live = Device.objects.create(user=env.expert_user, push_token="live", push_token_at=timezone.now())
+    # the same phone, used by someone else since: the expert's old row must not get their pushes
+    Device.objects.create(user=env.expert_user, push_token="handed-on",
+                          push_token_at=timezone.now() - timedelta(days=1))
+    Device.objects.create(user=env.ops_user, push_token="handed-on", push_token_at=timezone.now())
     Device.objects.create(user=env.expert_user, push_token="old", revoked_at=timezone.now())
     sent = []
     with mock.patch.object(fcm, "credential", return_value={"project_id": "p"}), \
@@ -250,7 +255,7 @@ def test_edge_cases_stay_quiet_or_summarise(env, booking):
     events.emit("inspection.started", booking=booking["id"])          # no Ops left to tell
     assert not Notification.objects.exists()
     assert handlers._changed({"a_b": [1, 2], "c": [[1], [2]]}) == "A b, C"
-    Device.objects.create(user=env.expert_user, push_token="live")
+    Device.objects.create(user=env.expert_user, push_token="live", push_token_at=timezone.now())
     with mock.patch.object(fcm, "credential", return_value={"project_id": "p"}), \
             mock.patch.object(fcm, "send", return_value=True):
         assign(env, booking)

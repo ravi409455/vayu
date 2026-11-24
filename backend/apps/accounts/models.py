@@ -74,6 +74,7 @@ class Device(models.Model):
     unsynced = models.JSONField(null=True, blank=True)
     last_seen_at = models.DateTimeField(null=True, blank=True)
     push_token = models.CharField(max_length=4096, blank=True)   # Firebase token; "" = none
+    push_token_at = models.DateTimeField(null=True, blank=True)  # when this device last sent it
 
     def holds_work(self) -> bool:
         """True when this phone may still hold answers or files the server doesn't have."""
