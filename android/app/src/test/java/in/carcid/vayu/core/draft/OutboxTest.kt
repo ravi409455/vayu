@@ -46,12 +46,12 @@ class OutboxTest {
                 "inspection" to mapOf("chassis_no" to "MA3", "odometer" to 12450.0, "bonnet" to "ok", "door" to "minor", "door_photos" to listOf(f.id)),
                 "end" to mapOf("taking_payment" to false)),
             startedAt = "2026-11-24T15:28:00+05:30", submittedAt = "2026-11-24T16:10:00+05:30", files = listOf(f)))
-        server.on("POST media/initiate", """{"id":"asset-1","status":"pending","part_size":5,
+        server.on("POST media/initiate", """{"id":"0000bbbb-0000-0000-0000-000000000001","status":"pending","part_size":5,
             "parts":[{"part_number":1,"url":"${server.raw("/s3/p1")}"},{"part_number":2,"url":"${server.raw("/s3/p2")}"}]}""")
-        server.on("GET media/asset-1", """{"uploaded_parts":[]}""")
+        server.on("GET media/0000bbbb-0000-0000-0000-000000000001", """{"uploaded_parts":[]}""")
         server.on("PUT /s3/p1", "", headers = mapOf("ETag" to "e1"))
         server.on("PUT /s3/p2", "", headers = mapOf("ETag" to "e2"))
-        server.on("POST media/asset-1/complete", """{"status":"uploaded"}""")
+        server.on("POST media/0000bbbb-0000-0000-0000-000000000001/complete", """{"status":"uploaded"}""")
         server.on("POST bookings/$BOOKING/start", """{}""")
         server.on("POST bookings/$BOOKING/submit", """{}""")
         return f
@@ -63,7 +63,7 @@ class OutboxTest {
         val d = drafts.get(BOOKING)!!
         assertTrue(d.startSent && d.submitSent)
         assertTrue(d.files.single().sent)
-        assertEquals("asset-1", d.files.single().serverId)
+        assertEquals("0000bbbb-0000-0000-0000-000000000001", d.files.single().serverId)
         val order = server.requests.map { it.first }
         assertTrue(order.indexOf("POST media/initiate") < order.indexOf("POST bookings/$BOOKING/start"))
         assertTrue(order.indexOf("POST bookings/$BOOKING/submit") < order.indexOf("PUT /s3/p1"))   // answers never wait for bytes
@@ -71,9 +71,9 @@ class OutboxTest {
         assertEquals("car", start["start_answers"]!!.jsonObject["travel"]!!.jsonPrimitive.content)
         val answers = Json.parseToJsonElement(server.bodiesOf("POST bookings/$BOOKING/submit").single()).jsonObject["answers"]!!.jsonObject
         val insp = answers["inspection"]!!.jsonObject
-        assertEquals("asset-1", insp["door_photos"]!!.jsonArray.single().jsonPrimitive.content)   // the server's id, not the phone's
+        assertEquals("0000bbbb-0000-0000-0000-000000000001", insp["door_photos"]!!.jsonArray.single().jsonPrimitive.content)   // the server's id, not the phone's
         assertEquals("12450", insp["odometer"].toString())                                       // whole numbers stay whole
-        val complete = Json.parseToJsonElement(server.bodiesOf("POST media/asset-1/complete").single()).jsonObject
+        val complete = Json.parseToJsonElement(server.bodiesOf("POST media/0000bbbb-0000-0000-0000-000000000001/complete").single()).jsonObject
         assertEquals(2, complete["parts"]!!.jsonArray.size)
     }
 
@@ -120,7 +120,7 @@ class OutboxTest {
 
     @Test fun aFileThatArrivesDamagedIsSentAgainLater() = runBlocking {
         ready()
-        server.on("POST media/asset-1/complete", """{"status":"failed"}""")
+        server.on("POST media/0000bbbb-0000-0000-0000-000000000001/complete", """{"status":"failed"}""")
         outbox.run()
         val f = drafts.get(BOOKING)!!.files.single()
         assertFalse(f.sent)
@@ -143,27 +143,27 @@ class OutboxTest {
     @Test fun aSentFileRemovedOnThePhoneIsTakenBackOnTheServer() = runBlocking {
         val f = ready()
         outbox.run()
-        server.on("DELETE media/asset-1", "", 204)
+        server.on("DELETE media/0000bbbb-0000-0000-0000-000000000001", "", 204)
         drafts.update(BOOKING) { it.copy(submittedAt = null) }                              // still editing
         val model = `in`.carcid.vayu.ui.expert.InspectionModel(drafts, jobs, BOOKING, { java.time.Instant.now() }, {})
         model.removeFile("inspection", "door_photos", f.id)
-        assertEquals(listOf("asset-1"), drafts.get(BOOKING)!!.discards)
+        assertEquals(listOf("0000bbbb-0000-0000-0000-000000000001"), drafts.get(BOOKING)!!.discards)
         outbox.run()
-        assertEquals(1, server.bodiesOf("DELETE media/asset-1").size)
+        assertEquals(1, server.bodiesOf("DELETE media/0000bbbb-0000-0000-0000-000000000001").size)
         assertTrue(drafts.get(BOOKING)!!.discards.isEmpty())
     }
 
     @Test fun filesFromBeforeArePickedUpWhenTheServerSaysTheFieldIsFull() = runBlocking {
         ready()
         server.on("POST media/initiate", """{"code":"TOO_MANY","detail":"'door_photos' takes at most 1."}""", 409)
-        server.on("GET bookings/$BOOKING/media", """[{"id":"old-1","field_key":"door_photos","kind":"photo","status":"verified"},
-            {"id":"half","field_key":"door_photos","kind":"photo","status":"pending"}]""")
-        server.on("DELETE media/half", "", 204)
+        server.on("GET bookings/$BOOKING/media", """[{"id":"0000aaaa-0000-0000-0000-000000000001","field_key":"door_photos","kind":"photo","status":"verified"},
+            {"id":"0000aaaa-0000-0000-0000-000000000002","field_key":"door_photos","kind":"photo","status":"pending"}]""")
+        server.on("DELETE media/0000aaaa-0000-0000-0000-000000000002", "", 204)
         outbox.run()
         val d = drafts.get(BOOKING)!!
-        val old = d.files.single { it.serverId == "old-1" }
+        val old = d.files.single { it.serverId == "0000aaaa-0000-0000-0000-000000000001" }
         assertTrue(old.sent)                                                               // the finished one is back in the answers
         assertTrue((d.answer("inspection", "door_photos") as List<*>).contains(old.id))
-        assertEquals(1, server.bodiesOf("DELETE media/half").size)                         // the half-sent one stops counting
+        assertEquals(1, server.bodiesOf("DELETE media/0000aaaa-0000-0000-0000-000000000002").size)                         // the half-sent one stops counting
     }
 }

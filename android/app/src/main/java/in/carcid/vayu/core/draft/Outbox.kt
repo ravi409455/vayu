@@ -60,13 +60,17 @@ class Outbox(
             if (!File(f.path).exists()) continue
             try {
                 val r = api.mediaInitiate(id, f.id, f.field, f.kind, f.contentType, f.size, f.sha256, f.source)
-                val server = r.str("id")
+                val server = r.str("id").takeIf { it.matches(SERVER_ID) } ?: throw ApiError("BAD_ID", "The server sent an odd file id.", 0)
                 val done = r.str("status") in arrived
                 drafts.update(id) { d -> d.copy(files = d.files.map { if (it.id == f.id) it.copy(serverId = server, sent = done, error = null) else it }) }
             } catch (e: ApiError) {
                 if (e.code == ApiError.NETWORK || e.status >= 500 || e.code == "DEVICE_REVOKED") throw e
                 // the field is full on the server: files from before; pick them up and try again next run
-                if (e.code == "TOO_MANY") { drafts.update(id) { it.copy(reconcile = true) }; continue }
+                if (e.code == "TOO_MANY") {
+                    drafts.update(id) { d -> d.copy(reconcile = true, files = d.files.map {
+                        if (it.id == f.id) it.copy(error = "This field already has its photos from before. Delete one to send this.") else it }) }
+                    continue
+                }
                 drafts.update(id) { d -> d.copy(files = d.files.map { if (it.id == f.id) it.copy(error = e.message) else it }) }
             }
         }
@@ -75,6 +79,7 @@ class Outbox(
     /** Delete on the server the files the expert removed or replaced after they were sent. */
     private suspend fun takeBack(id: String) {
         for (server in drafts.get(id)!!.discards) {
+            if (!server.matches(SERVER_ID)) { drafts.update(id) { it.copy(discards = it.discards - server) }; continue }
             try {
                 api.act("DELETE", "media/$server")
             } catch (e: ApiError) {
@@ -87,32 +92,35 @@ class Outbox(
 
     /**
      * The job was started before (another phone, cleared storage): the server's finished files go
-     * back into the answers (marked sent) while there is room; half-sent ones, and any that no
-     * longer fit, are taken back so they stop counting against the field's limit (web: reconcileMedia).
+     * back into the answers (marked sent), even past the field's limit, so the expert sees them and
+     * chooses which to delete; finished files are never deleted here. Only half-sent leftovers of
+     * the expert's own are taken back (web: reconcileMedia). Applied to the draft as it is now.
      */
     private suspend fun reconcile(id: String) {
         val rows = (api.get("bookings/$id/media") as? JsonArray).orEmpty().map { it.jsonObject }
-        val d = drafts.get(id)!!
-        val filled = filledOf(d)
-        val known = d.files.mapNotNull { it.serverId }.toSet() + d.discards
-        val fields = PARTS.flatMap { p -> filled?.trees?.get(p)?.fields.orEmpty().map { p to it } }.associateBy { it.second.key }
-        var next = d
-        val drop = mutableListOf<String>()
-        for (r in rows) {
-            val server = r.str("id")
-            if (server in known) continue
-            val (part, f) = fields[r.str("field_key")] ?: continue
-            val used = (next.answer(part, f.key) as? List<*>)?.size ?: if (next.answer(part, f.key) != null) 1 else 0
-            if (r.str("status") !in arrived || used >= f.maxCount) { drop += server; continue }
-            val file = LocalFile(java.util.UUID.randomUUID().toString(), part, f.key, r.str("kind"), "", "", "server", 0, "",
-                "${f.label} (from before)", serverId = server, sent = true, progress = 1f)
-            val value: Any? = if (f.type == "signature") file.id else ((next.answer(part, f.key) as? List<*>).orEmpty() + file.id)
-            next = next.copy(files = next.files + file).withAnswer(part, f.key, value)
+            .filter { it.str("id").matches(SERVER_ID) }
+        val fields = filledOf(drafts.get(id)!!)?.trees.orEmpty()
+            .flatMap { (p, t) -> t?.fields.orEmpty().map { p to it } }.associateBy { it.second.key }
+        drafts.update(id) { cur ->
+            val known = cur.files.mapNotNull { it.serverId }.toSet() + cur.discards
+            var next = cur
+            val drop = mutableListOf<String>()
+            for (r in rows) {
+                val server = r.str("id")
+                if (server in known) continue
+                val (part, f) = fields[r.str("field_key")] ?: continue
+                if (r.str("status") !in arrived) { drop += server; continue }
+                val file = LocalFile(java.util.UUID.randomUUID().toString(), part, f.key, r.str("kind"), "", "", "server", 0, "",
+                    "${f.label} (from before)", serverId = server, sent = true, progress = 1f)
+                val value: Any? = if (f.type == "signature") (next.answer(part, f.key) ?: file.id)
+                    else ((next.answer(part, f.key) as? List<*>).orEmpty() + file.id)
+                next = next.copy(files = next.files + file).withAnswer(part, f.key, value)
+            }
+            next.copy(reconcile = false, discards = next.discards + drop)
         }
-        val picked = next
-        drafts.update(id) { picked.copy(reconcile = false, discards = it.discards + drop) }
         takeBack(id)
     }
+
 
     /** The answers of one part as the server takes them: visible ones only, file ids swapped for the server's. */
     private fun outgoing(d: Draft, filled: Filled, part: String): JsonObject? {
@@ -189,6 +197,9 @@ class Outbox(
     private fun mark(id: String, fileId: String, change: (LocalFile) -> LocalFile) =
         drafts.update(id) { d -> d.copy(files = d.files.map { if (it.id == fileId) change(it) else it }) }
 }
+
+/** A server file id (a UUID): checked before it goes into a request path. */
+private val SERVER_ID = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
 private fun JsonObject.str(k: String) = (this[k] as? JsonPrimitive)?.contentOrNull ?: ""
 

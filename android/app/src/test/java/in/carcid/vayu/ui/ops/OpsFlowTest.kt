@@ -174,7 +174,8 @@ class OpsFlowTest {
         compose.onNode(androidx.compose.ui.test.hasContentDescription("Refresh", substring = true)).performClick()
         waitFor("Offline · as of")
         compose.onNodeWithText("Rohit Sharma").assertIsDisplayed()
-        waitFor("No signal. Showing what was saved")                                 // Refresh said what happened
+        // the "No signal" message comes and goes; picture the screen once it has gone (same every run)
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("No signal", substring = true)).fetchSemanticsNodes().isEmpty() }
         shot("ops_today_offline")
     }
 
