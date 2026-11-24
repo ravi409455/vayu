@@ -1,6 +1,8 @@
 """Large, realistic demo forms for local review: PDI, Used car and EV, each with many pages,
 sections and fields, Key Checks, rating categories and a PDF template. Built from a compact table
 so a form is a few lines of data. Never used outside local, test and e2e settings."""
+from typing import Any
+
 from apps.forms import library
 from apps.forms import services as form_services
 from apps.forms.models import Field, Page, Section
@@ -268,6 +270,18 @@ def build_inspection(admin, *, key, name, itype, pages):
     return form, section_keys
 
 
+# last page: the QR code that proves the report, and the photos and videos in one tap each
+VERIFY_PAGE: dict[str, Any] = {"title": "Verify this report", "parts": [
+    {"type": "spacer", "height": 18},
+    {"type": "text", "align": "center",
+     "html": "<h2>Verify this report</h2><p>Scan the code or open the link to see this report as "
+             "Car C.I.D. issued it.</p>"},
+    {"type": "verify", "size": 60},
+    {"type": "spacer", "height": 8},
+    {"type": "button", "link": "photos", "label": "Download photos"},
+    {"type": "button", "link": "videos", "label": "Download videos"}]}
+
+
 def pdf_definition(code, title, form) -> dict:
     """A plain report: a page per form page, a table of each section, then its photos."""
     version = form.versions.get(status="published")
@@ -280,6 +294,7 @@ def pdf_definition(code, title, form) -> dict:
             parts.append({"type": "photos", "per_row": 3, "caption": "label",
                           "source": {"kind": "section", "section": f"inspection.{sec.key}"}})
         pages.append({"title": page.title, "parts": parts})
+    pages.append(VERIFY_PAGE)
     header = {"left": [{"text": "<strong>CAR C.I.D.</strong>"}],
               "right": [{"text": f"<strong>{title}</strong>"}, {"text": "{{ sys.booking_id }}"}],
               "background": "brand", "height": 16}

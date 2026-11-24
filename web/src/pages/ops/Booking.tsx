@@ -1,4 +1,4 @@
-import { Download, FileText, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, ZoomIn, ZoomOut } from "lucide-react";
+import { Download, FileText, ImageOff, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
@@ -15,7 +15,7 @@ import { FormRenderer } from "../../ui/FormRenderer";
 import { Confirm, Empty, Field, Modal, Pill, Tabs, useToast } from "../../ui/kit";
 import { AnswerSheet, AnswerValue, defectOf, readableFields, type SheetFilter } from "../../ui/AnswerSheet";
 import { Avatar } from "../../ui/Avatar";
-import { isPdf, mediaUrl, useMediaUrl, Thumb } from "../../ui/MediaThumb";
+import { isPdf, mediaUrl, REMOVED_NOTE, useMediaUrl, Thumb } from "../../ui/MediaThumb";
 import { MoreMenu } from "../../ui/Menu";
 import { fmtPhone, fmtSlot, fmtStamp, mapsUrl } from "../../lib/format";
 import { FLAG_NAME, timingFlags } from "../../lib/timing";
@@ -162,7 +162,7 @@ function Detail({ id }: { id: string }) {
 /** Admin only (the server sends the old file's id to nobody else): open a replaced file. */
 function openOld(id: string) {
   const w = window.open("", "_blank");            // opened now, so the pop-up blocker allows it
-  void mediaUrl(id).then((l) => { if (l && w) w.location.href = l.url; else w?.close(); });
+  void mediaUrl(id).then((l) => { if (l?.url && w) w.location.href = l.url; else w?.close(); });
 }
 
 const labelOf = (tree: FormVersion | null | undefined, key: string) =>
@@ -597,6 +597,7 @@ function AnswerNear({ insp, trees, f }: { insp: Inspection; trees: Trees; f: Med
 function PreviewMedia({ id, video }: { id: string; video: boolean }) {
   const links = useMediaUrl(id);
   if (!links) return <div className="preview-media empty" aria-label="Not ready yet" />;
+  if (links.removed) return <div className="preview-media doc" role="note"><ImageOff size={40} aria-hidden /><span>{REMOVED_NOTE}.</span></div>;
   if (isPdf(links)) return <a className="preview-media doc" href={links.url} target="_blank" rel="noreferrer"><FileText size={40} aria-hidden /><span>Open the PDF</span></a>;
   return video ? <video className="preview-media" src={links.url} controls preload="metadata" />
     : <a href={links.url} target="_blank" rel="noreferrer"><img className="preview-media" src={links.preview_url ?? links.url} alt="" /></a>;

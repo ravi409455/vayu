@@ -308,6 +308,15 @@ describe("download links", () => {
 });
 
 describe("photo and video storage setting", () => {
+  it("shows a deleted file as deleted, not as still loading", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+    const { Thumb } = await import("./ui/MediaThumb");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ code: "MEDIA_REMOVED", detail: "x" }), { status: 410, headers: { "Content-Type": "application/json" } }));
+    render(<QueryClientProvider client={new QueryClient()}><Thumb id="a" /></QueryClientProvider>);
+    expect(await screen.findByLabelText("Deleted after the storage time set in Settings")).toHaveTextContent("Deleted");
+    vi.restoreAllMocks();
+  });
   it("lets Admin keep photos 90 days and refuses fewer than 30", async () => {
     const { render, screen, waitFor } = await import("@testing-library/react");
     const userEvent = (await import("@testing-library/user-event")).default;

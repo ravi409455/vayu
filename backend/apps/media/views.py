@@ -82,6 +82,9 @@ class Url(APIView):
         if asset.field_key in services.hidden_fields(request.user, asset.booking) or (
                 asset.replaced_at is not None and request.user.role != "admin"):  # history: Admin
             raise err("NOT_FOUND", "Media not found.", 404)      # same answer as a missing file
+        if asset.status == "purged":                 # Admin's storage time (Settings)
+            raise err("MEDIA_REMOVED", "This file was deleted after the storage time set in "
+                      "Settings (Photo and video storage).", 410)
         if asset.status != "verified":
             raise err("NOT_READY", "This file is not verified yet.", 409)
         return Response({"url": storage.presign_get(asset.key),

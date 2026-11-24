@@ -161,6 +161,8 @@ def test_old_photos_of_completed_jobs_are_purged_and_the_link_says_so(done, sett
     assert res.status_code == 410 and res.json()["code"] == "MEDIA_REMOVED"
     assert source(b, token=r.token).values()["sys"]["photo_count"] == "0"   # button hides
     assert storage.exists(Report.objects.get(pk=r.pk).key)           # the PDF itself stays
+    staff = env.admin.get(f"/api/v1/media/{assets[0].id}/url")     # staff screens say why
+    assert staff.status_code == 410 and staff.json()["code"] == "MEDIA_REMOVED"
     from apps.media.services import stuck_uploads
     assert not stuck_uploads(hours=1).exists()                       # not "stuck uploads"
 

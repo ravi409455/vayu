@@ -1,4 +1,4 @@
-import { Camera, Image as ImageIcon, MapPin, Paperclip, Video as VideoIcon } from "lucide-react";
+import { Camera, Image as ImageIcon, ImageOff, MapPin, Paperclip, Video as VideoIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "../api/client";
@@ -23,7 +23,7 @@ export type RenderProps = {
   bookingId?: string;                 // needed for photo / video / file fields
   preview?: boolean;                  // the builder's preview: nothing is uploaded or located
   pages?: FormPage[];                 // render only these pages (the wizard shows one at a time)
-  mediaUrl?: (id: string) => Promise<{ url: string; preview_url: string | null } | null>;
+  mediaUrl?: (id: string) => Promise<{ url: string; preview_url: string | null; removed?: boolean } | null>;
   onMediaRemove?: (field: FormField, id: string) => void;
   mediaEditor?: (field: FormField, ids: string[]) => React.ReactNode;   // Ops: their own Replace / Add
 };
@@ -265,6 +265,7 @@ function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: 
 function RemoteThumb({ id, kind, mediaUrl }: { id: string; kind: string; mediaUrl?: RenderProps["mediaUrl"] }) {
   const q = useQuery({ queryKey: ["media-url", id], enabled: !!mediaUrl, staleTime: 600_000, queryFn: () => mediaUrl!(id) });
   const u = q.data?.preview_url ?? q.data?.url;
+  if (q.data?.removed) return <div className="fake-photo" title="Deleted after the storage time set in Settings" aria-label="Deleted after the storage time set in Settings"><ImageOff size={22} aria-hidden /></div>;
   if (!u) return <div style={{ aspectRatio: "4/3", background: "#eee", borderRadius: 8 }} aria-label="Preview not ready" />;
   return kind === "video" ? <video src={q.data!.url} controls preload="metadata" /> : <img src={u} alt="" />;
 }

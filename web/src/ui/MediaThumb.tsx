@@ -1,9 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { FileText } from "lucide-react";
-import { api } from "../api/client";
+import { FileText, ImageOff } from "lucide-react";
+import { api, ApiError } from "../api/client";
 
-export type MediaLinks = { url: string; preview_url: string | null; content_type?: string };
-export const mediaUrl = (id: string) => api<MediaLinks>(`media/${id}/url`).catch(() => null);
+/** `removed`: deleted after the storage time Admin set (Settings); no links then. */
+export type MediaLinks = { url: string; preview_url: string | null; content_type?: string; removed?: boolean };
+export const REMOVED_NOTE = "Deleted after the storage time set in Settings";
+export const mediaUrl = (id: string) => api<MediaLinks>(`media/${id}/url`)
+  .catch((e) => (e instanceof ApiError && e.code === "MEDIA_REMOVED" ? { url: "", preview_url: null, removed: true } : null));
 /** A document (a PDF) has no picture to show: it gets a document tile instead. */
 export const isPdf = (l: MediaLinks) => l.content_type === "application/pdf";
 
@@ -19,6 +22,7 @@ export function Thumb({ id, video, size }: { id: string; video?: boolean; size?:
   const links = useMediaUrl(id);
   const style = size ? { width: size, height: (size * 3) / 4 } : undefined;
   if (!links) return <span className="thumb empty" style={style} aria-label="Not ready yet" />;
+  if (links.removed) return <span className="thumb doc" style={style} aria-label={REMOVED_NOTE} title={REMOVED_NOTE}><ImageOff size={size ? 16 : 24} aria-hidden />{!size && "Deleted"}</span>;
   if (isPdf(links)) return <span className="thumb doc" style={style} aria-label="PDF"><FileText size={size ? 16 : 24} aria-hidden />{!size && "PDF"}</span>;
   return video
     ? <video className="thumb" style={style} src={links.url} preload="metadata" muted />
