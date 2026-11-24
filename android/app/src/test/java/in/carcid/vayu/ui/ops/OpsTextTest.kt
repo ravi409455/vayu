@@ -75,4 +75,14 @@ class OpsTextTest {
         assertEquals("18–24 Nov", rangeLabel(java.time.LocalDate.of(2026, 11, 18), java.time.LocalDate.of(2026, 11, 24)))
         assertEquals("28 Oct – 3 Nov", rangeLabel(java.time.LocalDate.of(2026, 10, 28), java.time.LocalDate.of(2026, 11, 3)))
     }
+
+    @Test fun reportDownloadsAndSharesReadAsWords() {
+        val env = OpsEnv(`in`.carcid.vayu.core.api.Me(id = 1, username = "ops", name = "Priya Ops", role = "ops", mustChangePassword = false, theme = "light"), `in`.carcid.vayu.core.ops.OpsData(
+            `in`.carcid.vayu.core.api.Api("http://localhost/", `in`.carcid.vayu.core.auth.MemoryTokenStore()), java.io.File("build/tmp-ops")),
+            Labels(), { LocalDate.of(2026, 11, 24) }, 0, {}, {})
+        fun row(kind: String, changes: String) = Json.parseToJsonElement("""{"kind":"$kind","by":{"name":"Priya Ops"},"changes":$changes}""").jsonObject
+        assertEquals("Priya Ops downloaded the report", activityText(row("report_downloaded", """{"revision":2}"""), env))
+        assertEquals("Priya Ops shared the report PDF", activityText(row("report_shared", """{"revision":2,"how":"pdf"}"""), env))
+        assertEquals("Priya Ops copied the report's check link", activityText(row("report_shared", """{"revision":2,"how":"check_link"}"""), env))
+    }
 }

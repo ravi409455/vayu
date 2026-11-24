@@ -149,24 +149,44 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         val u = url.toHttpUrlOrNull()
         if (u == null || (!u.isHttps && !`in`.carcid.vayu.BuildConfig.DEBUG)) throw ApiError("BAD_LINK", "That download link isn't safe to open.", 0)
         try {
-            http.newCall(Request.Builder().url(u).build()).execute().use { r ->
-                if (!r.isSuccessful) throw ApiError("HTTP_${r.code}", "Couldn't download it (${r.code}).", r.code)
-                val body = r.body!!
-                if (body.contentLength() > maxBytes) throw ApiError("TOO_LARGE", "That file is too large to open on the phone.", 0)
-                val out = java.io.ByteArrayOutputStream()
-                body.byteStream().use { input ->
-                    val buf = ByteArray(1 shl 16)
-                    while (true) {
-                        val n = input.read(buf); if (n < 0) break
-                        out.write(buf, 0, n)
-                        if (out.size() > maxBytes) throw ApiError("TOO_LARGE", "That file is too large to open on the phone.", 0)
-                    }
-                }
-                out.toByteArray()
-            }
+            http.newCall(Request.Builder().url(u).build()).execute().use { r -> capped(r, maxBytes) }
         } catch (e: IOException) {
             throw ApiError(ApiError.NETWORK, "No connection. Check your signal and try again.", 0)
         }
+    }
+
+    /**
+     * A booking's report PDF through the server, signed in, so the download is logged on the
+     * booking; the server redirects to the file (the sign-in header is not sent on to storage).
+     */
+    suspend fun reportPdf(bookingId: String, maxBytes: Long = 100L * 1024 * 1024): ByteArray = withContext(Dispatchers.IO) {
+        // our own address from the booking ID, never a link taken from a reply
+        val path = "bookings/" + java.util.UUID.fromString(bookingId) + "/report/download"
+        fun get() = http.newCall(Request.Builder().url(baseUrl + path)
+            .apply { tokens.access()?.let { header("Authorization", "Bearer $it") } }.build()).execute()
+        try {
+            var r = get()
+            if (r.code == 401) { r.close(); if (refresh()) r = get() }
+            r.use { capped(it, maxBytes) }
+        } catch (e: IOException) {
+            throw ApiError(ApiError.NETWORK, "No connection. Check your signal and try again.", 0)
+        }
+    }
+
+    private fun capped(r: okhttp3.Response, maxBytes: Long): ByteArray {
+        if (!r.isSuccessful) throw ApiError("HTTP_${r.code}", "Couldn't download it (${r.code}).", r.code)
+        val body = r.body!!
+        if (body.contentLength() > maxBytes) throw ApiError("TOO_LARGE", "That file is too large to open on the phone.", 0)
+        val out = java.io.ByteArrayOutputStream()
+        body.byteStream().use { input ->
+            val buf = ByteArray(1 shl 16)
+            while (true) {
+                val n = input.read(buf); if (n < 0) break
+                out.write(buf, 0, n)
+                if (out.size() > maxBytes) throw ApiError("TOO_LARGE", "That file is too large to open on the phone.", 0)
+            }
+        }
+        return out.toByteArray()
     }
 
     suspend fun logout() {

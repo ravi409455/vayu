@@ -687,8 +687,9 @@ fun paymentText(data: Loaded3): Pair<String, String> {
 }
 
 /**
- * The PDF report on the booking screen: status, a short warning when answers changed since it was
- * made, Make it again (followed until the new one is ready), Open · Share · Check link.
+ * The PDF report on the booking screen. It updates by itself after any change (the card says
+ * "Updating…" and checks again until it's done); Open · Share · Check link. Opening downloads it
+ * through the server (logged); sharing the PDF or the check link is logged too.
  */
 @Composable
 fun ReportCard(env: OpsEnv, id: String, b: Bk) {
@@ -696,61 +697,60 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
     val scope = rememberCoroutineScope()
     val r = rememberLoad(env, "bookings/$id/report")
     var rep by remember(r.value) { mutableStateOf(r.value?.data as? JsonObject) }
-    var making by remember { mutableStateOf(false) }
     val online = r.value?.offline != true
-    // kept on the phone until a newer report is made: Open doesn't download it again
+    val updating = rep?.s("updating") == "true"
+    // while a new revision is being made, look again every few seconds until it's done
+    LaunchedEffect(updating, id) {
+        while (rep?.s("updating") == "true") {
+            kotlinx.coroutines.delay(4000)
+            val now = try { env.data.api.get("bookings/$id/report") as? JsonObject } catch (e: ApiError) { null } ?: continue
+            rep = now
+            if (now.s("updating") != "true") env.refresh()
+        }
+    }
+    // one download per revision: kept on the phone until a newer one is made
     suspend fun file(): File? {
-        val url = rep?.s("url")?.ifBlank { null } ?: return null
+        if (rep?.s("url").isNullOrBlank()) return null
         val code = b.code.filter { it.isLetterOrDigit() || it == '-' }
         val dir = File(ctx.cacheDir, "reports").apply { mkdirs() }
         // our own name, never the server's (no path tricks in the cache folder)
-        val f = File(dir, "report-$code-${rep?.s("generated_at").orEmpty().filter { it.isDigit() }}.pdf")
+        val f = File(dir, "report-$code-${rep?.s("revision").orEmpty().filter { it.isDigit() }}.pdf")
         if (f.exists()) return f
         return withContext(Dispatchers.IO) {
-            runCatching {
+            try {
                 dir.listFiles { x -> x.name.startsWith("report-$code-") }?.forEach { it.delete() }
-                writeAtomically(f, env.data.api.download(url)); f
-            }.getOrNull()
+                writeAtomically(f, env.data.api.reportPdf(id)); f
+            } catch (e: ApiError) { null }
         }
     }
     fun uriOf(f: File) = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
-    fun remake() = scope.launch {
-        val before = rep?.s("generated_at")
-        making = true
-        try { env.data.act("POST", "bookings/$id/report/regenerate", JsonObject(emptyMap())) }
-        catch (e: ApiError) { env.say(e.message); making = false; return@launch }
-        // follow it until the new one is there (or it failed), up to two minutes
-        repeat(40) {
-            kotlinx.coroutines.delay(3000)
-            val now = try { env.data.api.get("bookings/$id/report") as? JsonObject } catch (e: ApiError) { null }
-            if (now != null && (now.s("generated_at") != before || now.s("status") == "failed")) {
-                rep = now; making = false; env.say(if (now.s("status") == "failed") "The report couldn't be made." else "The report is ready."); env.refresh(); return@launch
-            }
-        }
-        making = false; env.say("Still being made. Refresh in a minute.")
+    // who passed it on, and how, goes on the booking's history
+    fun logShared(how: String) = scope.launch {
+        try { env.data.act("POST", "bookings/$id/report/shared", buildJsonObject { put("how", how) }) } catch (e: ApiError) { }
     }
     Column(Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Vayu.colors.soft).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        val stale = rep?.s("stale") == "true"
-        val failed = rep?.s("status") == "failed" || rep?.s("error")?.isNotBlank() == true
+        val failed = rep?.s("status") == "failed"
         Text(when {
             b.conflict.isNotEmpty() -> "Waits for your choice above"
-            making -> "Making the report…"
             rep == null -> if (b.stage == "completed") "Being made" else "Made when the job is done"
+            updating -> "Updating…"
+            failed -> "Couldn't be made · tried again by itself"
             rep!!.s("status") == "ready" -> "Ready" + (rep!!.s("generated_at").takeIf { it.isNotBlank() }?.let { " · made ${whenStamp(it, env.today()).replaceFirstChar { c -> c.lowercase() }}" } ?: "")
-            else -> rep!!.s("status").replaceFirstChar { it.uppercase() }
+            else -> "Being made"
         }, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
-        if (!making && stale) Note("Answers changed since this was made.", Vayu.colors.warnTint)
-        if (!making && failed) Note(rep?.s("error")?.ifBlank { null } ?: "The report couldn't be made.", Vayu.colors.badTint)
-        if (env.can("reports.regenerate") && b.stage == "completed" && b.conflict.isEmpty()) {
-            if (stale || failed) PrimaryButton(if (making) "Making…" else "Make it again", { remake() }, Modifier.fillMaxWidth(), enabled = online && !making)
-            else CardButton(if (making) "Making…" else "Make it again", Modifier.fillMaxWidth(), online && !making) { remake() }
-        }
-        if (rep?.s("url")?.isNotBlank() == true && !making) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CardButton("Open", Modifier.weight(1f)) { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }
-            CardButton("Share", Modifier.weight(1f)) { scope.launch { file()?.let { ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/pdf")
-                .putExtra(Intent.EXTRA_STREAM, uriOf(it)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Share the report")) } ?: env.say("Couldn't download the report.") } }
-            if (rep!!.s("verify_url").isNotBlank()) CardButton("Check link", Modifier.weight(1f)) {
+        if (failed && rep?.s("error")?.isNotBlank() == true) Note(rep!!.s("error"), Vayu.colors.badTint)
+        if (rep?.s("url")?.isNotBlank() == true) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CardButton("Open", Modifier.weight(1f), online) { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }
+            CardButton("Share", Modifier.weight(1f), online) { scope.launch {
+                file()?.let {
+                    logShared("pdf")
+                    ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/pdf")
+                        .putExtra(Intent.EXTRA_STREAM, uriOf(it)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Share the report"))
+                } ?: env.say("Couldn't download the report.")
+            } }
+            if (rep!!.s("verify_url").isNotBlank()) CardButton("Check link", Modifier.weight(1f), online) {
+                logShared("check_link")
                 ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, rep!!.s("verify_url")), "Share the check link"))
             }
         }
@@ -800,6 +800,8 @@ fun activityText(r: JsonObject, env: OpsEnv): String {
     fun old(k: String) = (c[k] as? kotlinx.serialization.json.JsonArray)?.getOrNull(0)?.let { (it as? JsonPrimitive)?.content }
     return when {
         r.s("kind") == "created" -> "Created by $by"
+        r.s("kind") == "report_downloaded" -> "$by downloaded the report"
+        r.s("kind") == "report_shared" -> if (new("how") == "check_link" || c.s("how") == "check_link") "$by copied the report's check link" else "$by shared the report PDF"
         r.s("kind") == "inspection_edited" -> "$by changed ${r.a("keys").size} answer${if (r.a("keys").size == 1) "" else "s"}"
         r.s("kind") == "ratings_changed" -> "$by changed the ratings"
         r.s("kind") == "late_reviewed" -> "Late start reviewed by $by"
