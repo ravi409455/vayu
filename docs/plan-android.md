@@ -1,6 +1,6 @@
 # Plan: Vayu Android app (Experts and Ops)
 
-Status: **planned, not started.** Design approved by the product owner on 2026-11-24.
+Status: **built through Phase 17** (expert offline inspection, Ops screens, notifications, self-update; see `git log -- android`). Open items are in [`plan-fixes.md`](plan-fixes.md) (e.g. Android still says "job": batch 4). *(Status corrected 2026-11-25 by the full review.)*
 This plan **replaces plan.md Phases 13–15** (Android expert screens only). The old Phase 16
 (Launch) becomes Phase 18.
 

@@ -23,6 +23,7 @@ dependencies = [
   "requests>=2.34.2",
   "jsonschema>=4.23",
   "nh3>=0.2.18",
+  "cryptography>=44",
 ]
 
 [dependency-groups]

@@ -6,7 +6,7 @@ reports, webhooks. See `REQUIREMENTS.md` (what) and `plan.md` (how/when).
 ```
 backend/   Django + DRF (Python 3.12, managed by uv)
 web/       React app
-android/   Kotlin app (from Phase 13)
+android/   Kotlin app (Experts and Ops)
 shared/    test vectors shared by all clients
 infra/     docker compose + Caddy
 docs/      setup guides, benchmarks
@@ -29,7 +29,16 @@ DJANGO_SETTINGS_MODULE=vayu.settings.test uv run pytest
 cd web && npm ci && npm test
 ```
 
-Rule logic is shared by backend, web and (later) Android: `shared/rule-vectors/` holds the
+## Android: build and test
+
+Needs JDK 17 (e.g. `brew install openjdk@17`) and the Android SDK (`android/local.properties`
+with `sdk.dir=...`). Robolectric's Android jars come through Gradle, so tests run offline.
+
+```bash
+cd android && JAVA_HOME=$(/usr/libexec/java_home -v 17 2>/dev/null || echo /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home) ./gradlew testDebugUnitTest
+```
+
+Rule logic is shared by backend, web and Android: `shared/rule-vectors/` holds the
 cases all three must pass; `shared/rule-vectors/SCHEMA.md` defines the semantics.
 
 Secrets never go in git: use `.env.*` files (git-ignored) and see `.env.example`.

@@ -261,8 +261,9 @@ def part_html(part: dict, width_mm: float, ctx: dict) -> str:
     elif t == "verify":
         size = part.get("size", 40)
         url = ctx["verify_url"]
+        link = f'<div class="url">{e(url)}</div>' if part.get("show_url", True) else ""
         inner = (f'<div class="verify"><img src="{qr_uri(url)}" style="width:{size}mm;'
-                 f'height:{size}mm"><div class="url">{e(url)}</div></div>')
+                 f'height:{size}mm">{link}</div>')
     elif t == "button":
         href = ctx.get("links", {}).get(part["link"], "")
         inner = (f'<div class="btnrow" style="text-align:{part.get("align", "center")}">'
@@ -404,7 +405,8 @@ h1, h2, h3, h4, h5, h6 {{ bookmark-level: none }}
 .slot {{ display: flex; align-items: center; gap: 2.6mm }}
 .center .slot {{ justify-content: center }} .right .slot {{ justify-content: flex-end }}
 .stack {{ display: inline-block; line-height: 1.15 }} .stack .line {{ display: block }}
-.band strong {{ font-family: var(--head); font-weight: 700; letter-spacing: .06em; font-size: 1.35em }}
+.band strong {{ font-family: var(--head); font-weight: 700; letter-spacing: .06em; font-size: 1.35em;
+               text-transform: uppercase }}
 .band .large {{ font-family: var(--head); font-weight: 700; letter-spacing: .08em; font-size: 2.1em }}
 .band .small {{ font-size: .8em; letter-spacing: .16em; opacity: .85 }}
 .logo {{ display: block }} .logo.tile {{ background: #fff; border-radius: 1.4mm; padding: .8mm }}

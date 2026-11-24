@@ -1,6 +1,6 @@
 # PDF reports: the plan
 
-Status: Phase 0 (agree on layouts) in review. No code written yet. Last updated 2026-11-24.
+Status: **designer built** (picture library, shared themes and parts, copy, export and import: `a4a9a32`). Open items: [`plan-fixes.md`](plan-fixes.md) batch 2. *(Status corrected 2026-11-25.)*
 
 Mockups: https://claude.ai/artifact/BP1E3mUr3vukcR2yZXX97T · Field list: `docs/pdi-field-map.md`
 

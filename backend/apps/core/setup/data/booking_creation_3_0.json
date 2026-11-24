@@ -1,0 +1,807 @@
+{
+ "app": "booking_creation_3_0",
+ "read_at": "2026-11-24T12:24:21.603Z",
+ "blocked_writes": [
+  "POST https://n.clarity.ms/collect",
+  "POST https://apiv2.clappia.com/analytics/logEvent",
+  "POST https://n.clarity.ms/collect",
+  "POST https://n.clarity.ms/collect",
+  "POST https://n.clarity.ms/collect"
+ ],
+ "sections": [
+  {
+   "title": "Booking Details",
+   "sdesc": "",
+   "settings": {
+    "basic": [
+     [
+      "Section name",
+      "Booking Details"
+     ]
+    ],
+    "advanced": [
+     [
+      "Section name",
+      "Booking Details"
+     ]
+    ]
+   },
+   "fields": [
+    {
+     "kind": "ng:input:text",
+     "label": "Booking ID",
+     "key": "bookingid",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "bookingid"
+      ],
+      [
+       "Label",
+       "Booking ID"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "bookingid"
+      ],
+      [
+       "Label",
+       "Booking ID"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ]
+    },
+    {
+     "kind": "app-select",
+     "label": "Expert ID",
+     "key": "assignedexpert_id",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "assignedexpert_id"
+      ],
+      [
+       "Label",
+       "Expert ID"
+      ],
+      [
+       "Options",
+       "NCRA1\nNCRI1\nNCRM1\nNCRJ1\nNCRK1\nNCRK2\nNCRP1\nNCRR1\nNCRR2\nNCRV1\nNCRV2\nHYDU1\nHYDR1\nHYDN1\nHYDN2\nAMDBDM1\nBLRS1\nBLRS2"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "assignedexpert_id"
+      ],
+      [
+       "Label",
+       "Expert ID"
+      ],
+      [
+       "Options",
+       "NCRA1\nNCRI1\nNCRM1\nNCRJ1\nNCRK1\nNCRK2\nNCRP1\nNCRR1\nNCRR2\nNCRV1\nNCRV2\nHYDU1\nHYDR1\nHYDN1\nHYDN2\nAMDBDM1\nBLRS1\nBLRS2"
+      ]
+     ]
+    },
+    {
+     "kind": "ng:input:text",
+     "label": "Customer Name",
+     "key": "customer_n",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "customer_n"
+      ],
+      [
+       "Label",
+       "Customer Name"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "customer_n"
+      ],
+      [
+       "Label",
+       "Customer Name"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ]
+    },
+    {
+     "kind": "ng:input:text",
+     "label": "Customer Phone",
+     "key": "customer_p",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "customer_p"
+      ],
+      [
+       "Label",
+       "Customer Phone"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "customer_p"
+      ],
+      [
+       "Label",
+       "Customer Phone"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ]
+    },
+    {
+     "kind": "app-text-area",
+     "label": "Inspection Address",
+     "key": "inspection",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "inspection"
+      ],
+      [
+       "Label",
+       "Inspection Address"
+      ],
+      [
+       "Placeholder",
+       "Provide complete address ..."
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "inspection"
+      ],
+      [
+       "Label",
+       "Inspection Address"
+      ],
+      [
+       "Placeholder",
+       "Provide complete address ..."
+      ]
+     ]
+    },
+    {
+     "kind": "ng:input:text",
+     "label": "Date(DD/MM/YY)",
+     "key": "dateddmmyy",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "dateddmmyy"
+      ],
+      [
+       "Label",
+       "Date(DD/MM/YY)"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "dateddmmyy"
+      ],
+      [
+       "Label",
+       "Date(DD/MM/YY)"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ]
+    },
+    {
+     "kind": "ng:input:text",
+     "label": "Time",
+     "key": "timehhmm_a",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "timehhmm_a"
+      ],
+      [
+       "Label",
+       "Time"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "timehhmm_a"
+      ],
+      [
+       "Label",
+       "Time"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ]
+    },
+    {
+     "kind": "app-radio",
+     "label": "Type of Inspection",
+     "key": "type_of_in",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "type_of_in"
+      ],
+      [
+       "Label",
+       "Type of Inspection"
+      ],
+      [
+       "Options",
+       "PDI\nUsed Car\nEV"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "type_of_in"
+      ],
+      [
+       "Label",
+       "Type of Inspection"
+      ],
+      [
+       "Options",
+       "PDI\nUsed Car\nEV"
+      ]
+     ]
+    },
+    {
+     "kind": "app-radio",
+     "label": "OBD Scanning",
+     "key": "obd_scanni",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "obd_scanni"
+      ],
+      [
+       "Label",
+       "OBD Scanning"
+      ],
+      [
+       "Options",
+       "Yes\nNo"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "obd_scanni"
+      ],
+      [
+       "Label",
+       "OBD Scanning"
+      ],
+      [
+       "Options",
+       "Yes\nNo"
+      ]
+     ]
+    },
+    {
+     "kind": "ng:input:text",
+     "label": "OBD Amount",
+     "key": "obd_amount",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "obd_amount"
+      ],
+      [
+       "Label",
+       "OBD Amount"
+      ],
+      [
+       "Maximum Value",
+       "800"
+      ],
+      [
+       "Default value",
+       "600"
+      ],
+      [
+       "Display this field if",
+       "{obd_scanni}='Yes'"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "obd_amount"
+      ],
+      [
+       "Label",
+       "OBD Amount"
+      ],
+      [
+       "Maximum Value",
+       "800"
+      ],
+      [
+       "Default value",
+       "600"
+      ],
+      [
+       "Display this field if",
+       "{obd_scanni}='Yes'"
+      ]
+     ]
+    },
+    {
+     "kind": "app-formula",
+     "label": "Pending Amount",
+     "key": "pending_am",
+     "required": false,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "pending_am"
+      ],
+      [
+       "Label",
+       "Pending Amount"
+      ],
+      [
+       "Formula",
+       "{final_amou}-{advance_am}"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "pending_am"
+      ],
+      [
+       "Label",
+       "Pending Amount"
+      ],
+      [
+       "Formula",
+       "{final_amou}-{advance_am}"
+      ]
+     ]
+    },
+    {
+     "kind": "ng:input:text",
+     "label": "Hidden(Extra Conveyance)",
+     "key": "extra_conveyance",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "extra_conveyance"
+      ],
+      [
+       "Label",
+       "Hidden(Extra Conveyance)"
+      ],
+      [
+       "Validation",
+       "None"
+      ],
+      [
+       "Display this field if",
+       "{bookingid} = \"XYZ\""
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "extra_conveyance"
+      ],
+      [
+       "Label",
+       "Hidden(Extra Conveyance)"
+      ],
+      [
+       "Validation",
+       "None"
+      ],
+      [
+       "Display this field if",
+       "{bookingid} = \"XYZ\""
+      ]
+     ]
+    },
+    {
+     "kind": "ng:input:text",
+     "label": "Car",
+     "key": "car",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "car"
+      ],
+      [
+       "Label",
+       "Car"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "car"
+      ],
+      [
+       "Label",
+       "Car"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ]
+    },
+    {
+     "kind": "ng:input:text",
+     "label": "Final Amount",
+     "key": "final_amou",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "final_amou"
+      ],
+      [
+       "Label",
+       "Final Amount"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "final_amou"
+      ],
+      [
+       "Label",
+       "Final Amount"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ]
+    },
+    {
+     "kind": "ng:input:text",
+     "label": "Advance Amount",
+     "key": "advance_am",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "advance_am"
+      ],
+      [
+       "Label",
+       "Advance Amount"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "advance_am"
+      ],
+      [
+       "Label",
+       "Advance Amount"
+      ],
+      [
+       "Validation",
+       "None"
+      ]
+     ]
+    },
+    {
+     "kind": "app-select",
+     "label": "Car Inspection City",
+     "key": "car_inspec",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "car_inspec"
+      ],
+      [
+       "Label",
+       "Car Inspection City"
+      ],
+      [
+       "Options",
+       "Delhi\nFaridabad\nGhaziabad\nGreater Noida\nGurgaon\nHyderabad\nManesar\nMeerut\nNoida\nPune\nGandhinagar\nAhmedabad\nBangalore"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "car_inspec"
+      ],
+      [
+       "Label",
+       "Car Inspection City"
+      ],
+      [
+       "Options",
+       "Delhi\nFaridabad\nGhaziabad\nGreater Noida\nGurgaon\nHyderabad\nManesar\nMeerut\nNoida\nPune\nGandhinagar\nAhmedabad\nBangalore"
+      ]
+     ]
+    },
+    {
+     "kind": "app-radio",
+     "label": "Service History Taken?",
+     "key": "service_hi",
+     "required": true,
+     "opts": [
+      "Yes",
+      "No"
+     ],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "service_hi"
+      ],
+      [
+       "Label",
+       "Service History Taken?"
+      ],
+      [
+       "Options",
+       "Yes\nNo"
+      ],
+      [
+       "Display this field if",
+       "{type_of_in}='Used Car'"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "service_hi"
+      ],
+      [
+       "Label",
+       "Service History Taken?"
+      ],
+      [
+       "Options",
+       "Yes\nNo"
+      ],
+      [
+       "Display this field if",
+       "{type_of_in}='Used Car'"
+      ]
+     ]
+    },
+    {
+     "kind": "app-radio",
+     "label": "Any Offer Given",
+     "key": "any_offer_",
+     "required": true,
+     "opts": [
+      "Yes",
+      "No"
+     ],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "any_offer_"
+      ],
+      [
+       "Label",
+       "Any Offer Given"
+      ],
+      [
+       "Options",
+       "Yes\nNo"
+      ],
+      [
+       "Default value",
+       "No"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "any_offer_"
+      ],
+      [
+       "Label",
+       "Any Offer Given"
+      ],
+      [
+       "Options",
+       "Yes\nNo"
+      ],
+      [
+       "Default value",
+       "No"
+      ]
+     ]
+    },
+    {
+     "kind": "ng:input:text",
+     "label": "Why was the offer given?",
+     "key": "why_offer_",
+     "required": true,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "why_offer_"
+      ],
+      [
+       "Label",
+       "Why was the offer given?"
+      ],
+      [
+       "Validation",
+       "None"
+      ],
+      [
+       "Display this field if",
+       "{any_offer_}=\"Yes\""
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "why_offer_"
+      ],
+      [
+       "Label",
+       "Why was the offer given?"
+      ],
+      [
+       "Validation",
+       "None"
+      ],
+      [
+       "Display this field if",
+       "{any_offer_}=\"Yes\""
+      ]
+     ]
+    },
+    {
+     "kind": "app-formula",
+     "label": "Lead Owner",
+     "key": "lead_owner",
+     "required": false,
+     "opts": [],
+     "desc": "",
+     "basic": [
+      [
+       "Variable name",
+       "lead_owner"
+      ],
+      [
+       "Label",
+       "Lead Owner"
+      ],
+      [
+       "Formula",
+       "{$submitterName}"
+      ]
+     ],
+     "advanced": [
+      [
+       "Variable name",
+       "lead_owner"
+      ],
+      [
+       "Label",
+       "Lead Owner"
+      ],
+      [
+       "Formula",
+       "{$submitterName}"
+      ]
+     ]
+    }
+   ]
+  }
+ ]
+}
