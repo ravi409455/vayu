@@ -22,7 +22,7 @@ def jobs_for(user):
     recent = timezone.localdate() - timedelta(days=DONE_DAYS)
     return (Booking.objects.filter(own_filter(user))
             .filter(Q(stage__in=ACTIVE) | Q(inspection_date__gte=recent))
-            .distinct().order_by("inspection_date", "created_at"))
+            .select_related("report").distinct().order_by("inspection_date", "created_at"))
 
 
 def payload(user, have: set[int], since, context) -> dict:
@@ -37,7 +37,10 @@ def payload(user, have: set[int], since, context) -> dict:
             if v is not None and v.id not in have:
                 versions[v.id] = v
         draft = b.inspections.filter(expert=user, status="draft").first()
+        report = getattr(b, "report", None)
         jobs.append({**BookingSerializer(b, context=context).data,
+                     # the finished job's PDF, in a word (no link: experts don't open it)
+                     "report": report.status if report else None,
                      "assigned_to_me": b.assigned_expert_id == user.pk,
                      "my_draft": str(draft.id) if draft else None,
                      "versions": {part: v.id if v else None for part, v in pinned.items()}})

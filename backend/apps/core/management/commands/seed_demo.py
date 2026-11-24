@@ -150,6 +150,7 @@ class Command(BaseCommand):
         definition = demo_pdi.pdf_definition(str(logo.id), str(mark.id),
                                              disclaimer.read_text())
         definition = self._shared(admin, definition)
+        d.build_field_tour(admin, str(logo.id))     # every field type once, to try the app
         saved = reports.save_definition(admin, draft, definition, draft.row_version)
         reports.publish(admin, saved, saved.row_version)
         for key, name, itype, pages, code, title in (
@@ -237,10 +238,10 @@ class Command(BaseCommand):
                                          "city": city, "car_make_model": car,
                                          "inspection_date": day})
 
-        make("DEMO-1", "Kavya Rao (not assigned)", "delhi", "maruti_victoris", "2026-12-01")
-        b2 = make("DEMO-2", "Arjun Mehta (assigned to Ravi)", "pune", "tata_nexon", "2026-12-01")
+        make("DEMO-1", "Kavya Rao", "delhi", "maruti_victoris", "2026-12-01")
+        b2 = make("DEMO-2", "Arjun Mehta", "pune", "tata_nexon", "2026-12-01")
         services.assign(ops, b2, expert.id)
-        b3 = make("DEMO-3", "Sunita Iyer (completed, has a PDF)", "delhi", "mahindra_xuv_3xo",
+        b3 = make("DEMO-3", "Sunita Iyer", "delhi", "mahindra_xuv_3xo",
                   "2026-11-24")
         services.assign(ops, b3, expert.id)
         selfie = self._selfie(b3, expert)          # the check-in selfie: the job starts with it
@@ -250,6 +251,13 @@ class Command(BaseCommand):
             "inspection": self._pdi_answers(b3, expert, "MA1NS2NP1T2H75335", 39),
             "start": {"selfie": [selfie]}, "end": {"taking_payment": False}})
         check_completion(b3.id)        # Completed: the PDF is made by the worker
+        # a short job with every field type, for trying the app quickly
+        tour = services.create(ops, {
+            **base, "booking_id": "DEMO-90", "customer_name": "Neha Kapoor",
+            "address": "DEMO-90 demo street, Pune", "city": "pune",
+            "car_make_model": "hyundai_creta", "inspection_type": "tour",
+            "inspection_date": str(timezone.localdate()), "inspection_time": "12:00"})
+        services.assign(ops, tour, expert.id)
 
 
     # ---------------------------------------------------------------- more bookings and problems

@@ -21,7 +21,7 @@ Logs are in `.local/` (`api.log`, `worker.log`, `beat.log`, `web.log`).
 |---|---|---|
 | `admin` | Admin | forms, PDF templates, users, roles, integrations, API keys, audit |
 | `ops` | Ops | job board, bookings, reports, problems, dashboards |
-| `expert` | Expert | My jobs → DEMO-2 (assigned to Ravi) |
+| `expert` | Expert | My jobs → DEMO-2 (Arjun Mehta, assigned to them) |
 | `expert2` | Expert | a second expert, to try reassigning and conflicts |
 | `expert3` to `expert20` | Expert | the rest of the team: 20 experts in all (`expert3` to `expert14` have jobs today, the others none) |
 | `ops2` | Ops | a second Ops user; with `ops` and `newuser` that makes 3 Ops |

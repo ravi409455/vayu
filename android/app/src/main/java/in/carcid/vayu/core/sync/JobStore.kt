@@ -29,6 +29,8 @@ data class Job(
     val assignedToMe: Boolean, val myDraft: String?,
     /** The inspection type's key (type is its name). */
     val typeKey: String = "",
+    /** The finished job's PDF: "ready", "pending", "failed", or null before it is completed. */
+    val report: String? = null,
     /** Form version per part (start, inspection, end); null = that part has no form. */
     val versions: Map<String, Int?>,
 ) {
@@ -122,6 +124,7 @@ class JobStore(private val file: File) {
                 myDraft = j["my_draft"]?.jsonPrimitive?.contentOrNull,
                 versions = j.obj("versions").mapValues { it.value.jsonPrimitive.intOrNull },
                 typeKey = type,
+                report = j["report"]?.jsonPrimitive?.contentOrNull,
             )
         }.sortedWith(compareBy({ it.date }, { it.time }))
     }

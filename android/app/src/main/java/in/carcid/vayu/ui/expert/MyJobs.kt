@@ -271,6 +271,7 @@ private fun JobRow(j: Job, today: LocalDate, d: Draft?, onOpen: (Job) -> Unit) {
                 Text(j.bookingId + when {
                     d != null && !d.locked && !j.assignedToMe -> " · given to another expert"
                     d != null && !d.locked && j.stage == "cancelled" -> " · cancelled; your draft is still sent"
+                    j.stage == "completed" -> when (j.report) { "ready" -> " · Report ready"; "failed" -> " · Report problem (Ops will fix)"; else -> " · Report being made" }
                     else -> ""
                 }, style = MaterialTheme.typography.bodyMedium, color = Vayu.colors.muted)
             }

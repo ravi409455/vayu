@@ -287,3 +287,89 @@ def pdf_definition(code, title, form) -> dict:
     footer = {"right": [{"text": "Page {{ sys.page }} of {{ sys.pages }}"}], "height": 8}
     return {"schema": 2, "filename": "{{ sys.booking_id }}" + code + ".pdf",
             "bands": {"normal": {"header": header, "footer": footer}}, "pages": pages}
+
+
+def build_field_tour(admin, picture_id: str):
+    """A short inspection with every field type once (and each choice layout), for trying the app
+    without filling a 200-question form: 4 pages, a gate page, a follow-up on a defect, the
+    check-in and the wrap-up."""
+    form = form_services.create_form(admin, key="tour", name="Field tour", inspection_type="tour")
+    v = form.versions.get(status="draft")
+    order = {"n": 0}
+
+    def page(title, n, gate=False):
+        p = Page.objects.get(version=v) if n == 0 else Page.objects.create(version=v, title=title, order=n)
+        p.title, p.gate = title, gate
+        p.save()
+        return p
+
+    def section(p, title, first=False):
+        if first:
+            s = Section.objects.get(page=p)
+            s.title = title
+            s.save()
+            return s
+        return Section.objects.create(version=v, page=p, title=title, order=p.sections.count())
+
+    def field(s, key, label, type_, **kw):
+        order["n"] += 1
+        return Field.objects.create(version=v, section=s, key=key, label=label, type=type_,
+                                    order=order["n"], config=kw.pop("config", {}), **kw)
+
+    opts = lambda *labels: [{"key": lb.lower().replace(" ", "_").replace(",", "")[:40], "label": lb} for lb in labels]  # noqa: E731
+
+    car = section(page("Car", 0, gate=True), "Identity", first=True)
+    Field.objects.filter(version=v, key="chassis_no").update(config={"scan": True}, order=0)
+    field(car, "registration_no", "Registration number", "short_text", required=True,
+          helper_text="Tap the scan button to read the number plate.", config={"scan": True})
+    field(car, "odometer", "Odometer", "number", required=True, config={"unit": "km", "min": 0, "max": 999999})
+
+    text = section(page("Text and time", 1), "Details", first=False)
+    field(text, "remarks", "Remarks", "long_text", helper_text="Anything the customer should know.")
+    field(text, "quoted_price", "Quoted price", "currency")
+    field(text, "owner_phone", "Owner's phone", "phone")
+    field(text, "purchase_date", "Purchase date", "date")
+    field(text, "service_time", "Usual service time", "time")
+    field(text, "last_service", "Last service", "datetime")
+    field(text, "visit_date", "Visit date", "date", config={"auto": True})
+
+    body = section(page("Choices", 2), "Body")
+    field(body, "bonnet", "Bonnet", "single_choice", required=True, config=CONDITION)
+    bad = {"in": [{"var": "inspection.bonnet"}, ["minor", "major", "critical"]]}
+    field(body, "bonnet_photo", "Bonnet photo", "photo", show_if=bad, required_if=bad, config={"max_count": 2})
+    field(body, "paint", "Paint condition", "single_choice", config={"options": [
+        {"key": "original", "label": "Original paint"},
+        {"key": "repainted", "label": "Repainted", "is_defect": True, "severity": "minor"},
+        {"key": "mismatch", "label": "Repainted, colour does not match the rest of the car", "is_defect": True, "severity": "major"},
+        {"key": "putty", "label": "Putty or filler work visible", "is_defect": True, "severity": "major"},
+        {"key": "rust", "label": "Rust through the paint", "is_defect": True, "severity": "critical"},
+        {"key": "replaced", "label": "Panel replaced", "is_defect": True, "severity": "major"},
+        {"key": "not_checked", "label": "Could not check"}]})
+    field(body, "tyre_brand", "Tyre brand", "single_choice", config={"options": opts(
+        "Apollo", "Bridgestone", "CEAT", "Continental", "Goodyear", "JK Tyre", "Michelin", "MRF", "Pirelli", "Yokohama")})
+    field(body, "accident", "Accident history", "yes_no")
+    field(body, "scratches", "Scratches found on", "multi_choice", config={"options": opts(
+        "Front bumper", "Rear bumper", "Roof", "Boot")})
+    field(body, "features", "Features present", "multi_choice", config={"options": opts(
+        "Sunroof", "Cruise control", "Rear camera", "Parking sensors", "Alloy wheels", "Fog lamps",
+        "Wireless charging", "Ventilated seats", "Air purifier", "Surround camera")})
+    field(body, "registered_city", "Registered in", "master_list", config={"list": "city"})
+    field(body, "second_opinion", "Second opinion by", "user_picker", config={"role": "expert"})
+
+    media = section(page("Photos and more", 3), "Evidence")
+    field(media, "how_to", "Where to stand for the front photo", "image", config={"asset": picture_id})
+    field(media, "front_photo", "Front photos", "photo", config={"max_count": 3})
+    field(media, "odometer_photo", "Odometer photo (camera only)", "photo", config={"max_count": 1, "capture": "camera"})
+    field(media, "engine_video", "Engine running video", "video", config={"max_count": 1})
+    field(media, "documents", "Documents", "file", config={"max_count": 3})
+    field(media, "car_location", "Where the car is parked", "gps", config={"auto": False})
+    field(media, "customer_sign", "Customer signature", "signature")
+    field(media, "any_defect", "Any defect found", "derived",
+          config={"rule": {"!!": [{"var": "_defects"}]}, "true_label": "Defects found", "false_label": "No defects"})
+    field(media, "rating_body", "Body rating", "rating", config={"category": "body"})
+
+    v.rating_config = {"categories": [{"key": "body", "label": "Body", "sections": ["Body"]}]}
+    v.save()
+    v.refresh_from_db()
+    form_services.publish_version(admin, v.id, v.row_version)
+    return form

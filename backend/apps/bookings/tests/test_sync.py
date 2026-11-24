@@ -25,6 +25,7 @@ def test_an_expert_gets_their_jobs_with_the_forms_and_lists_to_work_offline(ienv
     assert body["server_time"] and body["changes"] == []
     (job,) = body["jobs"]
     assert job["id"] == booking["id"] and job["assigned_to_me"] is True and job["my_draft"] is None
+    assert job["report"] is None                                        # no PDF until it is completed
     version = str(job["versions"]["inspection"])
     tree = body["forms"][version]
     assert "rating_config" not in tree                                   # experts never see it
@@ -107,3 +108,12 @@ def test_changes_hide_fields_the_expert_may_not_see(ienv, booking):
 def test_bad_query_values_are_refused(ienv, query):
     r = sync(ienv.expert, **query)
     assert r.status_code == 400 and r.json()["code"] == "INVALID_QUERY"
+
+
+def test_a_finished_job_says_whether_its_report_is_ready(ienv, booking):
+    from apps.reports.models import Report
+
+    assign(ienv, booking)
+    Report.objects.create(booking_id=booking["id"], status="ready")
+    (job,) = sync(ienv.expert).json()["jobs"]
+    assert job["report"] == "ready"
