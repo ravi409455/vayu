@@ -47,7 +47,8 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     var assigning by remember { mutableStateOf<Bk?>(null) }
     var labels by remember { mutableStateOf(Labels()) }
     val env = OpsEnv(me, data, labels, today, tick, refresh = { tick++ }, say = { scope.launch { snack.showSnackbar(it) } })
-    var needs by remember { mutableStateOf(emptyList<Need>()) }
+    // null until the first load is back (so the bell never says "All clear" too early)
+    var needs by remember { mutableStateOf<List<Need>?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     var asked by remember { mutableStateOf(false) }
     // one load per Refresh: names first, then the lists (a second key here restarted it half-way)
@@ -73,10 +74,10 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     Box(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
         when (val r = stack.lastOrNull()) {
             null -> when (tab) {
-                OpsTab.TODAY -> TodayScreen(env, needs.size, { push(Route.Needs) }, onProfile, { push(Route.Booking(it)) }, { assigning = it }, bar)
-                OpsTab.BOOKINGS -> BookingsScreen(env, needs.size, { push(Route.Needs) }, onProfile, { push(Route.Booking(it)) }, { assigning = it },
+                OpsTab.TODAY -> TodayScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { push(Route.Booking(it)) }, { assigning = it }, bar)
+                OpsTab.BOOKINGS -> BookingsScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { push(Route.Booking(it)) }, { assigning = it },
                     onNew = { push(Route.Form(null)) }, bar)
-                OpsTab.DASHBOARD -> DashboardScreen(env, needs.size, { push(Route.Needs) }, onProfile, bar)
+                OpsTab.DASHBOARD -> DashboardScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, bar)
             }
             Route.Needs -> NeedsYouScreen(env, needs, onBack = { pop() }, onOpen = { push(Route.Booking(it)) })
             is Route.Booking -> BookingScreen(env, r.id, onBack = { pop() }, onPart = { push(Route.Detail(r.id, it)) },

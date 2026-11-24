@@ -282,7 +282,8 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
 
 /** The bell: what needs a person (Problems), and Updates (with notifications, Phase 17). */
 @Composable
-fun NeedsYouScreen(env: OpsEnv, problems: List<Need>, onBack: () -> Unit, onOpen: (String) -> Unit) {
+fun NeedsYouScreen(env: OpsEnv, loaded: List<Need>?, onBack: () -> Unit, onOpen: (String) -> Unit) {
+    val problems = loaded.orEmpty()
     var tab by rememberSaveable { mutableStateOf(0) }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         SubHeader("Needs you", onBack = onBack)
@@ -291,6 +292,7 @@ fun NeedsYouScreen(env: OpsEnv, problems: List<Need>, onBack: () -> Unit, onOpen
         }
         LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp)) {
             if (tab == 1) item { Text("Updates (new bookings, jobs started, submitted) arrive here with notifications.", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
+            else if (loaded == null) item { Text("Loading…", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
             else if (problems.isEmpty()) item { Text("All clear. Nothing needs you right now.", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
             else items(problems, key = { it.key }) { n ->
                 Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).clickable(role = Role.Button) { onOpen(n.booking) },
