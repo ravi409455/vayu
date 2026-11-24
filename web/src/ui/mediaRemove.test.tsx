@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FormField, FormPage } from "../api/types";
 
 const discard = vi.fn(async (_id: string) => {});
-vi.mock("../lib/uploadManager", () => ({ addFile: vi.fn(), discardFile: (id: string) => discard(id), useUploads: () => [] }));
+vi.mock("../lib/uploadManager", () => ({ addFile: vi.fn(), discardFile: (id: string) => discard(id), useUploads: () => [], uploadFor: () => undefined, isLocalId: () => false }));
 import { FormRenderer } from "./FormRenderer";
 
 const selfie: FormField = {

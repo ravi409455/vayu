@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, type ReactN
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api, ApiError, setApiHandlers } from "./api/client";
 import type { Me } from "./api/types";
+import * as uploads from "./lib/uploadManager";
 
 type Auth = {
   me: Me | null;
@@ -18,6 +19,7 @@ const Ctx = createContext<Auth | null>(null);
  *  the screens watching a query that no longer exists). */
 function wipe(qc: QueryClient): void {
   qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "me" });
+  uploads.reset();                  // nothing keeps sending (or retrying) under the next person
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

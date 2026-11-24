@@ -12,6 +12,7 @@ import { FieldEditor } from "./pages/admin/FieldEditor";
 import { FormBuilder, PublishDialog } from "./pages/admin/FormBuilder";
 import { AccessMatrix } from "./ui/AccessMatrix";
 import type { FormField, Me } from "./api/types";
+import * as uploads from "./lib/uploadManager";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -229,7 +230,9 @@ describe("identity changes clear what was cached", () => {
     const p = probe();
     await screen.findByText((_, el) => el === null || true).catch(() => {});
     await vi.waitFor(() => expect(p.auth.me).not.toBeNull());
+    const stop = vi.spyOn(uploads, "reset");
     await expect(p.auth.logout()).rejects.toBeInstanceOf(ApiError);
+    expect(stop).toHaveBeenCalled();                    // the upload queue stops too (F-072)
     expect(p.qc.getQueryData(["bookings"])).toBeUndefined();
     expect(p.qc.getQueryData(["me"])).toBeNull();
   });

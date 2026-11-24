@@ -5,7 +5,7 @@ import { api, ApiError } from "../api/client";
 import { asList } from "../api/hooks";
 import { useInspectionTypes } from "../api/labels";
 import type { FormField, FormPage, FormVersion, MasterListItem, Option, User } from "../api/types";
-import { addFile, discardFile, useUploads } from "../lib/uploadManager";
+import { addFile, discardFile, isLocalId, uploadFor, useUploads } from "../lib/uploadManager";
 import { evaluateTree, type Answers, type Ctx, type Kind } from "../lib/formSpec";
 import { CameraCapture } from "./CameraCapture";
 import { Field } from "./kit";
@@ -204,7 +204,7 @@ function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: 
   const ids = (single ? (value ? [String(value)] : []) : Array.isArray(value) ? (value as string[]) : []);
   const max = single ? 1 : Number(f.config.max_count ?? (f.type === "video" ? 3 : 10));
   const mode = f.type === "file" ? "upload" : String(f.config.capture ?? "both");     // both | camera | upload
-  const uploads = useUploads(p.bookingId);
+  useUploads(p.bookingId);                       // re-render as the files' uploads move on
   const input = useRef<HTMLInputElement>(null);
   const cam = useRef<HTMLInputElement>(null);
   const [err, setErr] = useState("");
@@ -219,25 +219,25 @@ function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: 
     let next = [...ids];
     for (const file of Array.from(files).slice(0, Math.max(0, max - ids.length))) {
       try {
-        const id = p.preview ? `preview-${Date.now()}-${next.length}` : await addFile({ bookingId: p.bookingId!, fieldKey: f.key, kind: f.type as "photo", file, name: file.name, source });
+        const id = p.preview ? `preview-${Date.now()}-${next.length}` : await addFile({ bookingId: p.bookingId!, fieldKey: f.key, kind: f.type as "photo", file, name: file.name, source, keepOffline: true });
         next = single ? [id] : [...next, id];
         onChange(single ? id : next);
       } catch (e) { setErr(e instanceof ApiError && e.status < 500 && e.code !== "HTTP_" + e.status ? e.message : "That file could not be added. Check its type and size, then try again."); }
     }
   }
-  const mine = new Map(uploads.map((u) => [u.assetId, u]));
   const room = ids.length < max;
   const noun = f.type === "video" ? "video" : f.type === "file" ? "file" : "photo";
   return (
     <div>
       <div className="photo-grid">
         {ids.map((id) => {
-          const u = mine.get(id);
+          const u = uploadFor(id);
           return (
             <div key={id} data-testid="media-item" style={{ position: "relative" }}>
-              {u?.preview ? <img src={u.preview} alt="" /> : id.startsWith("preview-") ? <div className="fake-photo"><ImageIcon size={22} aria-hidden /></div> : <RemoteThumb id={id} kind={f.type} mediaUrl={p.mediaUrl} />}
+              {u?.preview ? <img src={u.preview} alt="" /> : id.startsWith("preview-") || isLocalId(id) ? <div className="fake-photo"><ImageIcon size={22} aria-hidden /></div> : <RemoteThumb id={id} kind={f.type} mediaUrl={p.mediaUrl} />}
               {u && u.status !== "done" && <div className="progress" aria-label={`Upload ${u.status}`}><div style={{ width: `${Math.round(u.progress * 100)}%` }} /></div>}
-              {u?.status === "failed" && <span className="error small">Will retry</span>}
+              {u?.status === "failed" && <span className="error small">{u.permanent ? `Not accepted: ${u.error}. Remove it and try another.` : isLocalId(u.assetId) ? "No connection: kept on this device, sent when you are back online" : "Not sent yet: will retry"}</span>}
+              {u?.deviceOnly && u.status !== "done" && <span className="error small">This browser could not store it: kept only while this tab is open</span>}
               {!readOnly && <button type="button" className="link" aria-label="Remove" onClick={() => { const rest = ids.filter((x) => x !== id); onChange(single ? null : rest); p.onMediaRemove?.(f, id); if (!p.preview && p.bookingId && !id.startsWith("preview-")) void discardFile(id); }}>Remove</button>}
             </div>
           );
