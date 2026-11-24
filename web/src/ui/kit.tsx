@@ -33,8 +33,8 @@ export function Modal({ title, children, onClose, actions, wide }: { title: stri
 
 /** Asks before doing something. The button stays disabled while the action runs (`busy`, or the
  *  promise `onConfirm` returns), so a double click sends it once. */
-export function Confirm({ title, children, confirmLabel = "Confirm", danger, onConfirm, onCancel, busy }: {
-  title: string; children: ReactNode; confirmLabel?: string; danger?: boolean; onConfirm: () => void | Promise<unknown>; onCancel: () => void; busy?: boolean;
+export function Confirm({ title, children, confirmLabel = "Confirm", cancelLabel = "Cancel", danger, onConfirm, onCancel, busy }: {
+  title: string; children: ReactNode; confirmLabel?: string; cancelLabel?: string; danger?: boolean; onConfirm: () => void | Promise<unknown>; onCancel: () => void; busy?: boolean;
 }) {
   const [running, setRunning] = useState(false);
   const go = () => {
@@ -44,7 +44,7 @@ export function Confirm({ title, children, confirmLabel = "Confirm", danger, onC
   };
   return (
     <Modal title={title} onClose={onCancel}
-      actions={<><button onClick={onCancel}>Cancel</button>
+      actions={<><button onClick={onCancel}>{cancelLabel}</button>
         <button className={danger ? "danger" : "primary"} disabled={running || busy} onClick={go}>{confirmLabel}</button></>}>
       {children}
     </Modal>

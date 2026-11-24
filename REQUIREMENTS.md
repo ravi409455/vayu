@@ -141,6 +141,7 @@ forms at the end of the day; the app keeps its generic nature").
 - **Cancelled while the expert has a draft:** the draft still syncs and is kept on the cancelled booking.
 - **Reassigned while the expert has a draft:** the job **stays in that expert's list** as "Reassigned – submit or discard". If submitted, **the submission is accepted** and the booking is flagged "Conflict: two experts". If the new expert hasn't started, their job is withdrawn; otherwise Ops choose which inspection to keep.
 - **Logout is blocked while data is unsynced.** If Admin disables an account with unsynced data, the Admin sees a data-loss warning.
+- **Web sign-out** first says what the browser still holds that has not reached the office (inspection drafts, photos and files not sent or not checked yet); signing out anyway deletes them. Every sign-out clears the inspection drafts and queued files from that browser, so nothing stays behind on a shared computer.
 - **Time:** server-corrected using the offset from the last sync. If there's been no sync that day, the last known offset is used and the time is **flagged "unverified"**.
 
 ## 7. PDF reports

@@ -1,4 +1,5 @@
 import { Bell, ChevronDown, LogOut, Search, UserRound } from "lucide-react";
+import { useSignOut } from "./SignOut";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -97,7 +98,8 @@ function GlobalSearch() {
 }
 
 function AccountMenu() {
-  const { me, logout } = useAuth();
+  const { me } = useAuth();
+  const signOut = useSignOut();
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -119,9 +121,10 @@ function AccountMenu() {
         <div className="menu" role="menu">
           <div className="menu-head"><strong>{name}</strong><div className="muted small" style={{ textTransform: "capitalize" }}>{me.role}</div></div>
           <Link role="menuitem" to="/profile" onClick={() => setOpen(false)}><UserRound size={16} aria-hidden /> Your profile</Link>
-          <button role="menuitem" onClick={() => logout()}><LogOut size={16} aria-hidden /> Sign out</button>
+          <button role="menuitem" onClick={() => { setOpen(false); signOut.start(); }}><LogOut size={16} aria-hidden /> Sign out</button>
         </div>
       )}
+      {signOut.dialog}
     </div>
   );
 }

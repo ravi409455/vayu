@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 import { api, ApiError, setApiHandlers } from "./api/client";
 import type { Me } from "./api/types";
 import * as uploads from "./lib/uploadManager";
+import { wipeWork } from "./lib/store";
 
 type Auth = {
   me: Me | null;
@@ -64,8 +65,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout: async () => {
         try {
           await api("auth/logout", { method: "POST", body: {} });
-        } finally {                       // even if the call fails, this browser forgets the person
+        } finally {                       // even if the call fails, this browser forgets the person and their work
           wipe(qc);
+          await wipeWork();
           qc.setQueryData(["me"], null);
         }
       },

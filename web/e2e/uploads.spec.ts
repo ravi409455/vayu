@@ -95,3 +95,30 @@ test("two tabs on one lead do not silently overwrite each other", async ({ page,
   await other.waitForTimeout(500);
   await expect(page.getByLabel("Chassis number")).toHaveValue("BBB");
 });
+
+// R-06 / F-242: sign-out says what is not sent yet; signing out anyway leaves nothing behind.
+test("sign-out warns about unsent work, then leaves no drafts or files in the browser", async ({ page }) => {
+  const id = await assignedJob("UP-5");
+  await signIn(page, "expert");
+  await page.goto(`/jobs/${id}`);
+  await page.getByRole("button", { name: "Start inspection" }).click();
+  await page.route("**/api/v1/media/initiate", (r) => r.abort("internetdisconnected"));     // the photo stays on this computer
+  await page.getByTestId("camera-selfie").setInputFiles(photo("selfie.jpg"));
+  await expect(page.getByText(/No connection: kept on this device/)).toBeVisible();
+  const jobs = () => page.evaluate(() => new Promise<number>((res) => { const r = indexedDB.open("vayu-uploads", 1); r.onsuccess = () => { const q = r.result.transaction("jobs").objectStore("jobs").count(); q.onsuccess = () => res(q.result); }; }));
+  expect(await jobs()).toBe(1);
+
+  await page.getByRole("button", { name: /account menu/ }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  const dialog = page.getByRole("dialog", { name: "Sign out with work not sent?" });
+  await expect(dialog).toContainText("1 inspection draft and 1 photo or file");
+  await dialog.getByRole("button", { name: "Stay signed in" }).click();
+  await expect(page).toHaveURL(new RegExp(`/jobs/${id}`));                  // nothing lost
+
+  await page.getByRole("button", { name: /account menu/ }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Sign out and delete it" }).click();
+  await expect(page).toHaveURL(/\/login/);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("vayu:draft:") || k.startsWith("vayu:job:")))).toEqual([]);
+  expect(await jobs()).toBe(0);
+});
