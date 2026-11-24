@@ -16,6 +16,7 @@ describe("web errors to Sentry (R-36, F-235)", () => {
   it("drops console and typing breadcrumbs, and the query part of URLs", () => {
     expect(scrubCrumb({ category: "console", message: "Kavya 98765" })).toBeNull();
     expect(scrubCrumb({ category: "ui.input" })).toBeNull();
+    expect(scrubCrumb({ category: "ui.click", message: 'a[aria-label="Call 9876500011"]', data: { x: 1 } })).toEqual({ category: "ui.click", message: undefined, data: undefined });
     expect(scrubCrumb({ category: "fetch", data: { url: "/api/v1/bookings?search=Sharma", method: "GET" } })?.data).toEqual({ url: "/api/v1/bookings", method: "GET" });
     expect(scrubCrumb({ category: "navigation", data: { from: "/bookings?search=Sharma", to: "/booking/1" } })?.data).toEqual({ from: "/bookings", to: "/booking/1" });
   });

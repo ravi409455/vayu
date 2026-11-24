@@ -17,6 +17,8 @@ export function scrub(e: ErrorEvent): ErrorEvent {
 }
 export function scrubCrumb(b: Breadcrumb): Breadcrumb | null {
   if (b.category === "console" || b.category === "ui.input") return null;
+  // a click's description is the element's selector, which can hold its label ("Call 98765…"): keep only that it happened
+  if (b.category?.startsWith("ui.")) return { ...b, message: undefined, data: undefined };
   const d = b.data as Record<string, unknown> | undefined;
   if (d) for (const k of ["url", "from", "to"]) if (typeof d[k] === "string") d[k] = stripQuery(d[k] as string);
   return b;

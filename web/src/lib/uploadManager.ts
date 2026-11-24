@@ -73,7 +73,10 @@ async function run(e: Entry): Promise<void> {
     const stop = permanent(err);
     set(e, { status: "failed", error: reason(err), permanent: stop });
     // F-235: a refused file, or one still failing after a few tries, is reported (the reason only, no file data)
-    if (stop || e.tries === 3) report(err, { where: "upload", kind: e.job.kind, code: err instanceof ApiError ? err.code : "network" });
+    if (stop || e.tries === 3) {
+      const code = err instanceof ApiError ? err.code : "network";      // the code only: a server message can name a booking
+      report(new Error(`Upload failed: ${code}`), { where: "upload", kind: e.job.kind, code });
+    }
     if (!stop) later(e);
   } finally {
     if (mine === gen) { running--; pump(); }

@@ -77,7 +77,7 @@ describe("upload queue", () => {
     await vi.advanceTimersByTimeAsync(RETRY_MAX());
     expect(transfer).toHaveBeenCalledTimes(1);
     expect(uploadFor(id)).toMatchObject({ status: "failed", permanent: true, error: "'door' takes at most 1." });
-    expect(reported).toHaveBeenCalledWith(expect.any(ApiError), { where: "upload", kind: "file", code: "TOO_MANY" });   // F-235
+    expect(reported).toHaveBeenCalledWith(new Error("Upload failed: TOO_MANY"), { where: "upload", kind: "file", code: "TOO_MANY" });   // F-235, code only
     retryFailed();                                           // the person asked: try anyway
     await flush();
     expect(transfer).toHaveBeenCalledTimes(2);
