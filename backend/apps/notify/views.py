@@ -1,5 +1,4 @@
 from django.utils import timezone
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -16,7 +15,8 @@ def _device_id(request):
 
 
 class PushTokenView(APIView):
-    """The phone's Firebase token. A token moves with the phone, so it leaves any other device."""
+    """The phone's Firebase token, kept on this signed-in device. Only the caller's own rows are
+    touched: their older devices with the same token lose it."""
 
     allow_password_change_pending = True
 
@@ -27,7 +27,8 @@ class PushTokenView(APIView):
         token = request.data.get("token") if isinstance(request.data, dict) else None
         if not isinstance(token, str) or not 0 < len(token) <= 4096:
             raise CodedError("INVALID_TOKEN", "Send the phone's push token.", 400)
-        Device.objects.filter(push_token=token).exclude(pk=device_id).update(push_token="")
+        Device.objects.filter(user=request.user, push_token=token).exclude(pk=device_id).update(
+            push_token="")
         Device.objects.filter(pk=device_id, user=request.user).update(push_token=token)
         return Response(status=204)
 
@@ -91,10 +92,7 @@ class AppLatestView(APIView):
 
 
 class AppDownloadView(APIView):
-    """The web download link: sends the browser to the newest APK."""
-
-    authentication_classes: list = []
-    permission_classes = [AllowAny]
+    """The web download link (signed in): sends the browser to the newest APK."""
 
     def get(self, request):
         from django.http import HttpResponseRedirect

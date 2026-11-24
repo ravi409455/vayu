@@ -125,6 +125,10 @@ def test_push_token_belongs_to_the_signed_in_phone(db, make_user, login):
     assert c.post("/api/v1/devices/push-token", {"token": "abc"}, format="json").status_code == 204
     assert Device.objects.get(pk=tok["device_id"]).push_token == "abc"
     assert c.post("/api/v1/devices/push-token", {"token": ""}, format="json").status_code == 400
+    other = Device.objects.create(user=make_user(Role.OPS), push_token="abc")
+    assert c.post("/api/v1/devices/push-token", {"token": "abc"}, format="json").status_code == 204
+    other.refresh_from_db()
+    assert other.push_token == "abc"              # someone else's device is never touched
     web = APIClient()
     web.force_authenticate(u)
     assert web.post("/api/v1/devices/push-token", {"token": "abc"},
@@ -212,7 +216,8 @@ def test_app_latest_and_download(env, settings, tmp_path):
     from rest_framework.test import APIClient
     settings.MIN_APP_VERSION = 3
     assert env.expert.get("/api/v1/app/latest").json() == {"version_code": None, "min_version": 3}
-    assert APIClient().get("/api/v1/app/download").status_code == 404
+    assert APIClient().get("/api/v1/app/download").status_code == 401     # sign-in needed
+    assert env.ops.get("/api/v1/app/download").status_code == 404
     apk = tmp_path / "app-release.apk"
     apk.write_bytes(b"PK fake apk")
     with mock.patch("apps.media.storage.upload_file") as up, \
@@ -221,7 +226,7 @@ def test_app_latest_and_download(env, settings, tmp_path):
                      "--notes", "Faster uploads\\nScan plates")
         assert up.call_args.args[1:] == ("app/vayu-5.apk", "application/vnd.android.package-archive")
         got = env.expert.get("/api/v1/app/latest").json()
-        r = APIClient().get("/api/v1/app/download")
+        r = env.expert.get("/api/v1/app/download")
     assert got == {"version_code": 5, "version_name": "1.1.0", "size": 11, "min_version": 3,
                    "sha256": hashlib.sha256(b"PK fake apk").hexdigest(),
                    "notes": ["Faster uploads", "Scan plates"], "url": "https://r2/x"}

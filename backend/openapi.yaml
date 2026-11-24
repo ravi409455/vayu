@@ -75,11 +75,12 @@ paths:
   /api/v1/app/download:
     get:
       operationId: app_download_retrieve
-      description: 'The web download link: sends the browser to the newest APK.'
+      description: 'The web download link (signed in): sends the browser to the newest
+        APK.'
       tags:
       - app
       security:
-      - {}
+      - cookieAuth: []
       responses:
         '200':
           description: No response body
@@ -931,8 +932,9 @@ paths:
   /api/v1/devices/push-token:
     post:
       operationId: devices_push_token_create
-      description: The phone's Firebase token. A token moves with the phone, so it
-        leaves any other device.
+      description: |-
+        The phone's Firebase token, kept on this signed-in device. Only the caller's own rows are
+        touched: their older devices with the same token lose it.
       tags:
       - devices
       security:
