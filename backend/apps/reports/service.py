@@ -43,6 +43,7 @@ def save_definition(actor, v: PdfTemplateVersion, definition,
         raise err("INVALID_TEMPLATE", str(e)) from e
     with transaction.atomic():
         v = PdfTemplateVersion.objects.select_for_update().get(pk=v.pk)
+        shared.lock_refs(definition)          # a delete of an item it uses waits for this save
         if v.status == "published":
             raise err("VERSION_PUBLISHED", "Published templates cannot be changed.", 409)
         if row_version != v.row_version:

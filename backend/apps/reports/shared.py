@@ -177,18 +177,31 @@ def rename(actor, item: SharedItem, name) -> SharedItem:
     return item
 
 
+def lock_refs(d: dict) -> None:
+    """Inside a template save's transaction: lock the shared items it points at, so a delete
+    running at the same moment waits and then sees this template using them."""
+    for kind in KINDS:
+        keys = {r["key"] for k, _, r in refs(d) if k == kind}
+        if keys:
+            list(SharedItem.objects.select_for_update().filter(kind=kind, key__in=keys))
+
+
 def delete(actor, item: SharedItem) -> None:
     """Only an item no template version uses, live, draft or old (an old version can still be
-    shown or brought back), so no report ever points at a missing item."""
-    users = sorted({v.template.form.name for v in PdfTemplateVersion.objects
-                    .select_related("template__form")
-                    if uses(v.definition, item.kind, item.key) is not None})
-    if users:
-        raise err("SHARED_IN_USE", f"Still used by {', '.join(users)}. Remove it from those "
-                  "reports first.", 409)
-    audit.record(actor, f"pdf_{item.kind}.delete", "pdf_shared", item.id,
-                 f"Deleted {item.kind} {item.key} ({item.name})")
-    item.delete()
+    shown or brought back), so no report ever points at a missing item. The item stays locked
+    from the check to the delete; template saves lock the items they use (lock_refs)."""
+    with transaction.atomic():
+        item = SharedItem.objects.select_for_update().get(pk=item.pk)
+        maybe = PdfTemplateVersion.objects.select_related("template__form") \
+            .filter(definition__icontains=item.key)          # narrows the scan; uses() decides
+        users = sorted({v.template.form.name for v in maybe
+                        if uses(v.definition, item.kind, item.key) is not None})
+        if users:
+            raise err("SHARED_IN_USE", f"Still used by {', '.join(users)}. Remove it from those "
+                      "reports first.", 409)
+        audit.record(actor, f"pdf_{item.kind}.delete", "pdf_shared", item.id,
+                     f"Deleted {item.kind} {item.key} ({item.name})")
+        item.delete()
 
 
 def usage(item: SharedItem) -> list[dict]:
