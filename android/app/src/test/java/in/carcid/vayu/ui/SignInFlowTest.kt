@@ -75,6 +75,7 @@ class SignInFlowTest {
     @Test fun anAdminIsSentToTheWeb() {
         server.enqueue(json(403, """{"code":"ADMIN_USE_WEB","detail":"Admins use the web."}"""))
         launch(); signIn(); waitFor("Admin tools live on the web")
+        compose.onRoot().captureRoboImage("src/test/screenshots/admin_refused.png", roborazziOptions = options)
     }
 
     @Test fun aWrongPasswordIsExplained() {
@@ -85,6 +86,7 @@ class SignInFlowTest {
     @Test fun aFirstSignInAsksForANewPassword() {
         server.enqueue(json(200, """{"access":"A","refresh":"R"}""")); server.enqueue(json(200, me("expert", mustChange = true)))
         launch(); signIn(); waitFor("Choose your password")
+        compose.onRoot().captureRoboImage("src/test/screenshots/change_password.png", roborazziOptions = options)
     }
 }
 

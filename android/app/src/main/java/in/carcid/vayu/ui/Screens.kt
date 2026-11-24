@@ -14,12 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Visibility
@@ -36,7 +33,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -86,14 +82,8 @@ private fun Brand() = Row(verticalAlignment = Alignment.CenterVertically, horizo
 }
 
 @Composable
-private fun Illustration(icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    Box(Modifier.fillMaxWidth().height(240.dp), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(210.dp).clip(CircleShape).background(Vayu.colors.soft), contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = null, tint = Vayu.colors.ink, modifier = Modifier.size(120.dp))
-            Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = Vayu.colors.brand,
-                modifier = Modifier.align(Alignment.TopEnd).padding(28.dp).size(40.dp))
-        }
-    }
+private fun Illustration(height: Int, drawing: @Composable () -> Unit) {
+    Box(Modifier.fillMaxWidth().height(height.dp), contentAlignment = Alignment.Center) { drawing() }
 }
 
 @Composable
@@ -108,8 +98,8 @@ fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String) -> Unit) = She
     var pass by remember { mutableStateOf("") }          // never saved to disk (no rememberSaveable)
     var show by remember { mutableStateOf(false) }
     Brand()
-    Illustration(Icons.Outlined.DirectionsCar)
-    Text("Sign in", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink)
+    Illustration(300) { SignInDrawing() }
+    Text("Sign in", fontSize = 30.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink)
     Text("Welcome back. Your jobs are waiting.", color = Vayu.colors.muted)
     Spacer(Modifier.height(16.dp))
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -132,8 +122,8 @@ fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String) -> Unit) = She
 @Composable
 fun AdminRefusedScreen(onBack: () -> Unit) = Shell {
     Brand()
-    Illustration(Icons.Outlined.Lock)
-    Text("Admin tools live on the web", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink)
+    Illustration(300) { AdminRefusedDrawing() }
+    Text("Admin tools live on the web", fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink)
     Spacer(Modifier.height(8.dp))
     Text("The app is for Ops and experts. Open app.carcid.in on a laptop to manage forms, users and settings.",
         color = Vayu.colors.muted)
@@ -146,8 +136,8 @@ fun ChangePasswordScreen(state: Screen.ChangePassword, onSave: (String, String) 
     var a by remember { mutableStateOf("") }
     var b by remember { mutableStateOf("") }
     Brand()
-    Illustration(Icons.Outlined.Lock)
-    Text("Choose your password", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink)
+    Illustration(210) { ChangePasswordDrawing() }
+    Text("Choose your password", fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink)
     Text("Your Admin gave you a temporary one. Pick your own to carry on.", color = Vayu.colors.muted)
     Spacer(Modifier.height(16.dp))
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
