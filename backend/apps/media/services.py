@@ -219,10 +219,13 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
         Booking.objects.select_for_update().get(pk=booking.pk)   # two uploads must not both fit
         # an expert's limit counts their own uploads: two experts on one job (a conflict for Ops)
         # never use up each other's places
-        # (a failed upload holds no place: the retake replaces it)
+        # a failed upload holds no place (the retake replaces it), nor one left unfinished past
+        # the stuck limit (a closed tab, cleared storage: no device resumes it any more)
+        stale = timezone.now() - timedelta(hours=settings.STUCK_UPLOAD_HOURS)
         if not manager and MediaAsset.objects.filter(
                 booking=booking, field_key=field.key, uploaded_by=user).exclude(
-                status="failed").count() >= max_count(field):
+                status="failed").exclude(status="pending", created_at__lt=stale).count() \
+                >= max_count(field):
             raise err("TOO_MANY", f"'{field.key}' takes at most {max_count(field)}.", 409)
         asset = MediaAsset(client_uuid=client_uuid, booking=booking, uploaded_by=user,
                            field_key=field.key, kind=kind, content_type=ctype, size=size,

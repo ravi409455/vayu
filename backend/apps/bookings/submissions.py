@@ -1,5 +1,6 @@
 """Start, submit and Ops edits of inspections, including the offline conflict rules."""
 from datetime import timedelta
+from typing import NoReturn
 
 from django.conf import settings
 from django.db import transaction
@@ -132,14 +133,28 @@ class _OldVersion(Exception):
     """The phone filled a version that was already replaced when the expert started."""
 
 
+def _replaced_by(version: FormVersion):
+    """When the next published version of the same form came out (None: it is the latest)."""
+    return (FormVersion.objects.filter(form_id=version.form_id, status=VersionStatus.PUBLISHED,
+                                       number__gt=version.number)
+            .order_by("number").values_list("published_at", flat=True).first())
+
+
 def _was_latest(version: FormVersion, at) -> bool:
     """Was [version] the newest published version of its form at [at], give or take the clock
     allowance?"""
-    newer = (FormVersion.objects.filter(form_id=version.form_id, status=VersionStatus.PUBLISHED,
-                                        number__gt=version.number)
-             .order_by("number").values_list("published_at", flat=True).first())
+    newer = _replaced_by(version)
     return ((version.published_at or at) <= at + CLOCK_ALLOWANCE
             and (newer is None or newer > at - CLOCK_ALLOWANCE))
+
+
+def _kept_notes(version: FormVersion) -> list[str]:
+    """What Ops are told when work arrives on a version that is no longer the one a new start
+    would get (each case is allowed, but rare enough to be looked at)."""
+    notes = [] if version.form.is_active else ["the form was switched off since."]
+    if _replaced_by(version) is not None:
+        notes.append(f"version {version.number} kept: a newer one was published since.")
+    return notes
 
 
 def _named_version(raw, forms) -> FormVersion | None:
@@ -153,14 +168,14 @@ def _named_version(raw, forms) -> FormVersion | None:
     return version[0]
 
 
-def phone_pins(b: Booking, named: dict, at) -> tuple[dict, bool]:
+def phone_pins(b: Booking, named: dict, at) -> tuple[dict, list[str]]:
     """The versions a start pins. The phone names those it pinned when the expert started (offline
     perhaps): each is kept if it was the latest published at that time, else _OldVersion. When it
-    names none (older apps), the latest. Returns (pinned, its form was switched off since)."""
+    names none (older apps), the latest. Returns (pinned, notes for Ops: see _kept_notes)."""
     custom = Form.objects.filter(type=FormType.CUSTOM, inspection_type=b.inspection_type)
     phone = _named_version(named.get("inspection"), custom)
     if phone is None:
-        return versions_to_pin(inspection_version(b.inspection_type)), False
+        return versions_to_pin(inspection_version(b.inspection_type)), []
     # a start / end version is looked at only when this version goes through that form
     start_v = (_named_version(named.get("start"), Form.objects.filter(type=FormType.START))
                if phone.use_start else None)
@@ -171,7 +186,7 @@ def phone_pins(b: Booking, named: dict, at) -> tuple[dict, bool]:
     return {"inspection": phone,
             "start": (start_v or system_version(FormType.START)) if phone.use_start else None,
             "end": (end_v or system_version(FormType.END)) if phone.use_end else None}, \
-        not phone.form.is_active
+        _kept_notes(phone)
 
 
 def _before_too_old(at) -> bool:
@@ -184,7 +199,7 @@ def _before_too_old(at) -> bool:
 
     first = (AppRelease.objects.filter(version_code__gte=settings.MIN_APP_VERSION)
              .order_by("created_at").values_list("created_at", flat=True).first())
-    return at is not None and first is not None and at < first
+    return first is not None and at < first
 
 
 def _late_work(b: Booking, code: str, detail: str) -> None:
@@ -200,14 +215,18 @@ def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, ap
         return _start(actor, b, client_uuid, client_started_at, inspection_type, app_version,
                       start_answers, versions or {})
     except _OldVersion:
-        with transaction.atomic():        # the refusal rolled the start back; the alert stays
-            b = _lock(b)
-            if "FORM_VERSION_REFUSED" not in [a["code"] for a in b.alerts]:    # retries: once
-                _late_work(b, "FORM_VERSION_REFUSED",
-                           "The expert filled a form version replaced before they started.")
-                b.save(update_fields=["alerts"])
-        raise err("FORM_VERSION_OLD", "This lead was filled on a form that had already been "
-                  "replaced. Ops have been told.", 409) from None
+        _refuse_old(b)
+
+
+def _refuse_old(b: Booking) -> NoReturn:
+    with transaction.atomic():        # the refusal rolled the request back; the alert stays
+        b = _lock(b)
+        if "FORM_VERSION_REFUSED" not in [a["code"] for a in b.alerts]:    # retries: once
+            _late_work(b, "FORM_VERSION_REFUSED",
+                       "The expert filled a form version replaced before they started.")
+            b.save(update_fields=["alerts"])
+    raise err("FORM_VERSION_OLD", "This lead was filled on a form that had already been "
+              "replaced. Ops have been told.", 409) from None
 
 
 @transaction.atomic
@@ -219,8 +238,10 @@ def _start(actor, b: Booking, client_uuid, client_started_at, inspection_type, a
         if existing.booking_id != b.id or existing.expert_id != actor.pk:
             raise err("UUID_CONFLICT", "That request ID belongs to another request.", 409)
         return b, existing
+    # the phone's clock is trusted only back to when the booking existed: nobody started it before
+    at = max(client_started_at or timezone.now(), b.created_at - CLOCK_ALLOWANCE)
     too_old = app_version is not None and app_version < settings.MIN_APP_VERSION
-    if too_old and not _before_too_old(client_started_at):
+    if too_old and not _before_too_old(at):
         raise err("APP_TOO_OLD", "Update the app to start new leads.", 426)
     if b.assigned_expert_id != actor.pk:
         raise err("NOT_ASSIGNED", "This lead is no longer assigned to you.", 409)
@@ -244,9 +265,9 @@ def _start(actor, b: Booking, client_uuid, client_started_at, inspection_type, a
         events.emit("alert.type_change_rejected", booking=str(b.id), booking_id=b.booking_id)
         b.answers = {**b.answers, "inspection_type": inspection_type}
         sync_columns(b)
-    pinned, switched_off = phone_pins(b, versions, client_started_at or timezone.now())
-    if switched_off:
-        _late_work(b, "LATE_WORK", "Started on a form switched off since.")
+    pinned, notes = phone_pins(b, versions, at)
+    if notes:
+        _late_work(b, "LATE_WORK", "Started offline; " + " ".join(notes))
     if too_old:
         _late_work(b, "LATE_WORK", f"Started on app version {app_version} before it had to be "
                    "updated.")
@@ -321,8 +342,15 @@ def _locked_keys(role: str, stage: str, pinned: dict, answers: dict, old: dict) 
     return sorted(locked)
 
 
-@transaction.atomic
 def submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id=None):
+    try:
+        return _submit(actor, b, submission_uuid, answers, form_version_id)
+    except _OldVersion:
+        _refuse_old(b)
+
+
+@transaction.atomic
+def _submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id):
     check_shape(answers)
     b = _lock(b)
     done = Inspection.objects.filter(client_submission_uuid=submission_uuid).first()
@@ -340,8 +368,13 @@ def submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id=No
             if form_version_id else None
         if version is None:
             raise err("NOT_STARTED", "Start the inspection first.", 409)
-        if not version.form.is_active:     # switched off since the expert started (R-35)
-            _late_work(b, "LATE_WORK", "Submitted on a form switched off since.")
+        # it must have been the latest at some moment since the booking existed (start unknown)
+        replaced = _replaced_by(version)
+        if replaced is not None and replaced <= b.created_at - CLOCK_ALLOWANCE:
+            raise _OldVersion
+        notes = _kept_notes(version)          # e.g. the form was switched off since (R-35)
+        if notes:
+            _late_work(b, "LATE_WORK", "Submitted without its start; " + " ".join(notes))
         pinned = versions_to_pin(version)
         insp = Inspection.objects.create(booking=b, expert=actor, form_version=version,
                                          start_version=pinned["start"],

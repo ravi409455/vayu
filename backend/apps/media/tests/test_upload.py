@@ -607,3 +607,20 @@ def test_a_video_shorter_than_a_box_header_fails(job, settings):
     r = upload(env.expert, b["id"], b"\x00\x00", settings, field_key="clip", kind="video",
                content_type="video/mp4")
     assert r.status_code == 409 and MediaAsset.objects.get().status == "failed"
+
+
+def test_an_abandoned_pending_upload_stops_holding_a_place_after_the_stuck_limit(job, settings):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    env, b = job
+    for _ in range(2):                                    # photo_a takes 2: both never finished
+        assert env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),
+                               format="json").status_code == 201
+    fresh = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),
+                            format="json")
+    assert fresh.status_code == 409 and fresh.json()["code"] == "TOO_MANY"   # may still arrive
+    MediaAsset.objects.update(created_at=timezone.now() - timedelta(
+        hours=settings.STUCK_UPLOAD_HOURS, minutes=1))
+    assert upload(env.expert, b["id"], jpeg(), settings).status_code == 200   # a retake fits

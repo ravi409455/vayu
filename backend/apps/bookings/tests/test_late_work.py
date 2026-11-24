@@ -48,6 +48,7 @@ def two_versions(ienv, booking):
     """v_old was published well before the phone's start; the booking is assigned."""
     old = _versions()[-1]
     FormVersion.objects.filter(form=old.form).update(published_at=STARTED - timedelta(days=10))
+    Booking.objects.filter(pk=booking["id"]).update(created_at=STARTED - timedelta(days=1))
     assign(ienv, booking)
     return ienv, booking, FormVersion.objects.get(pk=old.pk)
 
@@ -73,6 +74,7 @@ def test_a_version_published_after_the_phones_start_does_not_replace_the_one_it_
     insp = Inspection.objects.get(booking_id=booking["id"])
     assert insp.form_version_id == old.id
     assert r.json()["form"]["id"] == old.id
+    assert _alerts(booking) == ["LATE_WORK"]            # allowed, but Ops look at it
     # the answers are checked against the version the expert filled (no "new_must" there)
     assert submit(env.expert, booking).status_code == 200
 
@@ -82,6 +84,22 @@ def test_without_a_version_the_start_pins_the_latest_as_before(two_versions):
     new = _publish_new_inspection_version(env, STARTED + timedelta(hours=2))
     assert start(env.expert, booking).status_code == 200
     assert Inspection.objects.get(booking_id=booking["id"]).form_version_id == new.id
+    assert _alerts(booking) == []
+
+
+def test_the_latest_version_named_by_the_phone_raises_no_alert(two_versions):
+    env, booking, old = two_versions
+    assert start(env.expert, booking, form_version=old.id).status_code == 200
+    assert _alerts(booking) == []
+
+
+def test_a_start_time_before_the_booking_existed_is_not_believed(two_versions):
+    env, booking, old = two_versions
+    # replaced two days before the booking was made: the phone claims it started before that
+    _publish_new_inspection_version(env, STARTED - timedelta(days=3))
+    r = start(env.expert, booking, form_version=old.id,
+              client_started_at=(STARTED - timedelta(days=5)).isoformat())
+    assert r.status_code == 409 and r.json()["code"] == "FORM_VERSION_OLD"
 
 
 def test_the_clock_allowance_covers_a_phone_a_few_minutes_off(two_versions):
@@ -182,7 +200,8 @@ def test_a_start_on_a_form_switched_off_since_is_accepted_and_ops_are_told(two_v
         r = start(env.expert, booking, form_version=old.id)
     assert r.status_code == 200, r.json()
     assert Inspection.objects.get(booking_id=booking["id"]).form_version_id == old.id
-    assert _alerts(booking) == ["LATE_WORK"]
+    (alert,) = Booking.objects.get(pk=booking["id"]).alerts
+    assert alert["code"] == "LATE_WORK" and "switched off" in alert["detail"]
     assert "alert.late_work" in [n for n, _ in seen]
 
 
@@ -193,6 +212,22 @@ def test_a_submit_alone_on_a_form_switched_off_since_is_accepted_and_ops_are_tol
     assert r.status_code == 200, r.json()
     assert Inspection.objects.get(booking_id=booking["id"]).form_version_id == old.id
     assert _alerts(booking) == ["LATE_WORK"]
+
+
+def test_a_submit_alone_on_an_older_version_still_valid_since_the_booking_is_accepted(two_versions):
+    env, booking, old = two_versions
+    _publish_new_inspection_version(env, STARTED + timedelta(hours=2))   # after the booking
+    r = submit(env.expert, booking, form_version=old.id)
+    assert r.status_code == 200, r.json()
+    assert _alerts(booking) == ["LATE_WORK"]
+
+
+def test_a_submit_alone_on_a_version_replaced_before_the_booking_existed_is_refused(two_versions):
+    env, booking, old = two_versions
+    _publish_new_inspection_version(env, STARTED - timedelta(days=3))
+    r = submit(env.expert, booking, form_version=old.id)
+    assert r.status_code == 409 and r.json()["code"] == "FORM_VERSION_OLD"
+    assert not Inspection.objects.exists() and _alerts(booking) == ["FORM_VERSION_REFUSED"]
 
 
 def test_work_started_before_the_app_became_too_old_is_accepted(two_versions, settings):
@@ -217,6 +252,18 @@ def test_new_work_on_a_too_old_app_still_needs_the_update(two_versions, settings
                               {"client_uuid": str(uuid.uuid4()),
                                "inspection_type": "pdi"}, format="json", HTTP_X_APP_VERSION="9")
     assert no_time.status_code == 426
+
+
+def test_a_too_old_app_cannot_date_its_start_before_the_booking_existed(two_versions, settings):
+    env, booking, _ = two_versions          # the booking was made a day before STARTED
+    settings.MIN_APP_VERSION = 10
+    AppRelease.objects.create(version_code=10, version_name="1.10", file_key="k", size=1,
+                              sha256="0" * 64, created_at=STARTED - timedelta(days=2))
+    early = (STARTED - timedelta(days=3)).isoformat()      # before the build, and the booking
+    r = env.expert.post(f"/api/v1/bookings/{booking['id']}/start",
+                        {"client_uuid": str(uuid.uuid4()), "client_started_at": early,
+                         "inspection_type": "pdi"}, format="json", HTTP_X_APP_VERSION="9")
+    assert r.status_code == 426
 
 
 # ---------------------------------------------------------------- sync keeps the drafts' forms
