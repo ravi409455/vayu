@@ -39,6 +39,8 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
     private suspend fun resume() {
         if (tokens.access() == null) { _screen.value = Screen.SignIn(); return }
         // offline: open on the saved profile only for an app role with no pending password change
+        // read before calling the server: a revoked phone's sign-in (and this id) is cleared by the call
+        val savedId = tokens.me()?.get("id")?.toIntOrNull()
         val cached = tokens.me()?.takeIf { it["role"] in setOf("expert", "ops") && it["must_change"] == "false" }
             ?.let { Me(it["id"]!!.toIntOrNull() ?: 0, it["username"]!!, it["name"]!!, it["role"]!!, false, it["theme"]!!) }
         try {
@@ -46,7 +48,7 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         } catch (e: ApiError) {
             when {
                 e.code == "DEVICE_REVOKED" -> {
-                    tokens.clear(); jobs.forget(cached?.id); cached?.let { graph.ops(it.id).clear() }; _screen.value = Screen.SignIn()
+                    tokens.clear(); jobs.forget(savedId); savedId?.let { graph.ops(it).clear() }; _screen.value = Screen.SignIn()
                 }
                 // no signal or the server is down: still signed in, so open on the saved copy
                 JobsModel.unreachable(e) && cached != null -> {
