@@ -16,6 +16,7 @@ VALID = [
     ("master_list", {"list": "city"}),
     ("user_picker", {"role": "expert"}),
     ("short_text", {}),
+    ("short_text", {"scan": True}),
     ("short_text", {"max_length": 17, "pattern": "[A-HJ-NPR-Z0-9]{17}",
                     "pattern_message": "17-character VIN"}),
     ("long_text", {"max_length": 2000}),
@@ -33,6 +34,8 @@ VALID = [
 ]
 
 INVALID = [
+    ("short_text", {"scan": "yes"}),
+    ("long_text", {"scan": True}),
     ("single_choice", {}),                                         # options required
     ("single_choice", {"options": []}),
     ("single_choice", {"options": [{"key": "ok", "label": "Ok"},

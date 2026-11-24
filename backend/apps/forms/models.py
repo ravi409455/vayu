@@ -298,10 +298,10 @@ CHOICE_FIELD_TYPES = ("single_choice", "multi_choice")
 
 def only_choices_changed(ftype: str, old: dict, new: dict) -> bool:
     """For a system field that offers choices (such as the payment mode) the Admin may change
-    the choices themselves; everything else about its config stays as the platform made it."""
-    if ftype not in CHOICE_FIELD_TYPES:
-        return old == new
-    keep = lambda c: {k: v for k, v in (c or {}).items() if k not in ("options", "display")}  # noqa: E731
+    the choices themselves, and on any system field whether the app may scan it (the chassis
+    number); everything else about its config stays as the platform made it."""
+    free = {"options", "display", "scan"} if ftype in CHOICE_FIELD_TYPES else {"scan"}
+    keep = lambda c: {k: v for k, v in (c or {}).items() if k not in free}  # noqa: E731
     return keep(old) == keep(new)
 
 

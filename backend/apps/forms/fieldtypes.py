@@ -37,7 +37,8 @@ ALLOWED_KEYS: dict[str, set[str]] = {
     "master_list": {"list"},
     "form_choice": set(),
     "user_picker": {"role"},
-    "short_text": {"max_length", "pattern", "pattern_message"},
+    # scan: the Android app offers to read it with the camera (the expert can still type over it)
+    "short_text": {"max_length", "pattern", "pattern_message", "scan"},
     "long_text": {"max_length"},
     "number": {"unit", "min", "max", "decimals"},
     # issue_photo: always an issue photo when filled; photo_of: the check this photo shows
@@ -117,6 +118,8 @@ def validate_config(type: str, config: Any) -> None:
             raise ConfigError(f"role must be one of {', '.join(ROLES)}.")
     elif type in ("short_text", "long_text"):
         _int_in(config, "max_length", 1, 500 if type == "short_text" else 10000)
+        if not isinstance(config.get("scan", False), bool):
+            raise ConfigError("scan must be true or false.")
         if "pattern" in config:
             try:
                 regex.compile(config["pattern"])

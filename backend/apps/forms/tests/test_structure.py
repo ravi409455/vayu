@@ -153,6 +153,15 @@ def test_system_fields_can_be_relabelled_not_removed_or_reconfigured(make_form, 
     assert r.status_code == 400 and r.json()["code"] == "SYSTEM_FIELD"
 
 
+def test_the_app_may_be_allowed_to_scan_a_system_text_field(make_form, admin, tree):
+    t = tree(make_form(key="scantest")["draft_version"]["id"])
+    chassis = [f for f in first_section(t)["fields"] if f["key"] == "chassis_no"][0]
+    r = admin.patch(f"/api/v1/fields/{chassis['id']}", {"config": {"scan": True}}, format="json")
+    assert r.status_code == 200 and r.json()["config"] == {"scan": True}
+    r = admin.patch(f"/api/v1/fields/{chassis['id']}", {"config": {"scan": True, "max_length": 9}}, format="json")
+    assert r.status_code == 400 and r.json()["code"] == "SYSTEM_FIELD"      # nothing else changes
+
+
 def test_published_version_is_immutable(make_form, admin, tree, add_field):
     v = make_form()["draft_version"]["id"]
     t = tree(v)

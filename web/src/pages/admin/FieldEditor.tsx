@@ -116,6 +116,12 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
                 <Field label="At most"><input type="number" min={1} value={String(cfg.max_count ?? 1)} onChange={(e) => setCfg({ max_count: Number(e.target.value) })} /></Field>
               </div>
             )}
+            {!field.locked && field.type === "short_text" && (
+              <label className="check" style={{ alignItems: "flex-start" }}>
+                <input type="checkbox" checked={cfg.scan === true} onChange={(e) => setCfg({ scan: e.target.checked || undefined })} />
+                <span><strong>Let the expert scan this with the camera</strong><br /><span className="muted small">In the Android app, a scan button reads the text (a chassis number, a registration). The expert can still type over it.</span></span>
+              </label>
+            )}
             {!locked && field.type === "photo" && (
               <>
                 <label className="check" style={{ alignItems: "flex-start" }}>
