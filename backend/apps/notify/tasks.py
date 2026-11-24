@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from celery import shared_task
+from django.db.models import F
 from django.utils import timezone
 
 from . import push as fcm
@@ -20,12 +21,12 @@ def push(ids: list[int]) -> int:
     for n in Notification.objects.filter(pk__in=ids).select_related("booking"):
         for d in Device.objects.filter(user_id=n.user_id, revoked_at__isnull=True).exclude(
                 push_token=""):
-            # a token belongs to one phone: only the device that sent it last gets pushes
-            newer = (Device.objects.filter(push_token=d.push_token).exclude(pk=d.pk)
-                     .exclude(push_token_at=None))           # no time (older rows) = oldest
-            if d.push_token_at is not None:
-                newer = newer.filter(push_token_at__gt=d.push_token_at)
-            if newer.exists():
+            # a token belongs to one phone: exactly one device row wins it, the one that sent it
+            # last (rows signed out since count too, so a handed-on phone never falls back to an
+            # earlier person); rows saved before the time existed lose, ties go to the newest row
+            winner = Device.objects.filter(push_token=d.push_token).order_by(
+                F("push_token_at").desc(nulls_last=True), "-created_at", "-pk").first()
+            if winner is None or winner.pk != d.pk:
                 continue
             data = {"id": str(n.id), "kind": n.kind, "title": n.title, "body": n.body,
                     "booking": str(n.booking_id or "")}
