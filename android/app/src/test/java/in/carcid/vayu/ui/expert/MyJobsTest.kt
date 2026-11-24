@@ -108,7 +108,11 @@ class MyJobsTest {
         assertEquals("Reassigned" to Tone.BAD, statusOf(j("1", "x", "09:00").copy(assignedToMe = false)))
     }
 
-    @Test fun signingInDownloadsJobsAndTheyStayWhenSignalDrops() {
+    @Test fun signingInDownloadsJobsAndTheyStayWhenSignalDrops() = signInThen(revoke = false)
+
+    @Test fun aPhoneSignedOutByTheServerForgetsItsJobs() = signInThen(revoke = true)
+
+    private fun signInThen(revoke: Boolean) {
         val server = MockWebServer().apply { start() }
         val file = File(Files.createTempDirectory("vayu").toFile(), "jobs.json")
         val body = payload(job("2"), forms = """{"7":{"pages":[]}}""").toString().replace("{\"server_time\"", "{\"min_app_version\":1,\"server_time\"")
@@ -122,6 +126,13 @@ class MyJobsTest {
         compose.onNodeWithContentDescription("Password").performTextInput("pw")
         compose.onNode(hasText("Sign in") and androidx.compose.ui.test.hasClickAction()).performClick()
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Arjun Mehta")).fetchSemanticsNodes().isNotEmpty() }
+        if (revoke) {
+            server.enqueue(MockResponse().setResponseCode(401).setBody("""{"code":"DEVICE_REVOKED","detail":"Signed out."}"""))
+            compose.onNodeWithText("Refresh").performClick()
+            compose.waitUntil(5_000) { compose.onAllNodes(hasText("Welcome back", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+            assertEquals(false, file.exists())                          // nothing of theirs stays on the phone
+            server.shutdown(); return
+        }
         server.shutdown()                                               // signal gone
         compose.onNodeWithText("Refresh").performClick()
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Offline", substring = true)).fetchSemanticsNodes().isNotEmpty() }

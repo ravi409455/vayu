@@ -211,8 +211,11 @@ fun JobDetailScreen(j: Job, ready: Boolean, today: LocalDate, onBack: () -> Unit
             Text(listOf(j.bookingId, listOf(dayLabel(j.date, today), time12(j.time)).filter { it.isNotEmpty() }
                 .joinToString(", ")).filter { it.isNotEmpty() }.joinToString(" · "), color = Vayu.colors.muted)
             Row(Modifier.padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                val digits = j.phone.filter { it.isDigit() }
-                Action(Icons.Outlined.Call, "Call", Modifier.weight(1f), enabled = digits.isNotEmpty()) { uri.openUri("tel:${j.phone}") }
+                // digits only: a stored "*#06#"-style code must never reach the dialer
+                val digits = j.phone.filter { it in '0'..'9' }
+                Action(Icons.Outlined.Call, "Call", Modifier.weight(1f), enabled = digits.isNotEmpty()) {
+                    uri.openUri("tel:" + (if (j.phone.trimStart().startsWith("+")) "+" else "") + digits)
+                }
                 Action(Icons.AutoMirrored.Outlined.Chat, "WhatsApp", Modifier.weight(1f), enabled = digits.isNotEmpty()) {
                     uri.openUri("https://wa.me/$digits")
                 }

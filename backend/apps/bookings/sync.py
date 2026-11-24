@@ -50,8 +50,9 @@ def payload(user, have: set[int], since, context) -> dict:
                       for i in sorted(ml.items.all(), key=lambda i: (i.order, i.label))
                       if not i.archived]
              for ml in MasterList.objects.prefetch_related("items")}
-    types = dict(Form.objects.filter(type="custom").exclude(inspection_type="")
-                 .values_list("inspection_type", "name"))
+    # names only for the types of the expert's own jobs
+    types = dict(Form.objects.filter(type="custom", inspection_type__in={b.inspection_type for b in bookings})
+                 .exclude(inspection_type="").values_list("inspection_type", "name"))
     return {"server_time": timezone.now(), "jobs": jobs, "types": types,
             "forms": {str(i): form_for_role(v, user.role, "in_progress")
                       for i, v in versions.items()},

@@ -46,6 +46,7 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
         try {
             enter(api.me())
         } catch (e: ApiError) {
+            if (e.code == "DEVICE_REVOKED") cached?.let { storeFor(it.id).clear() }
             if (e.code == ApiError.NETWORK && cached != null) {
                 _screen.value = Screen.Home(cached)
                 openStore(cached, offline = true)
@@ -93,7 +94,7 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
         try {
             minAppVersion = api.heartbeat(drafts = 0, files = 0)     // nothing is stored on the phone yet
         } catch (e: ApiError) {
-            if (e.code == "DEVICE_REVOKED") { tokens.clear(); _screen.value = Screen.SignIn() }
+            if (e.code == "DEVICE_REVOKED") revoked()
         }
     }
 
@@ -126,12 +127,20 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
             } catch (e: ApiError) {
                 when (e.code) {
                     ApiError.NETWORK -> show(offline = true)
-                    "DEVICE_REVOKED" -> { tokens.clear(); _screen.value = Screen.SignIn() }
+                    "DEVICE_REVOKED" -> revoked()
                     else -> show(offline = false, error = e.message)
                 }
             }
         }
     }
+
+    /** Signed out from the server (another phone, or an Admin): nothing of theirs stays on this phone. */
+    private fun revoked() {
+        tokens.clear(); forgetJobs(); _screen.value = Screen.SignIn()
+    }
+
+    // 14c: unsent drafts must survive this (the server refuses a second phone while they exist)
+    private fun forgetJobs() { store?.clear(); store = null; _jobs.value = JobsState() }
 
     /** Today by the server's clock (the phone's may be wrong). */
     fun today(): java.time.LocalDate = java.time.Instant.ofEpochMilli(clock() + (store?.clockOffset() ?: 0L))
@@ -157,7 +166,7 @@ class AppViewModel(private val api: Api, private val tokens: TokenStore, private
         viewModelScope.launch {
             runCatching { api.logout() }
             tokens.clear()
-            store?.clear(); store = null; _jobs.value = JobsState()   // ponytail: drafts don't exist yet; 14c must keep unsent work
+            forgetJobs()
             _screen.value = Screen.SignIn()
         }
     }
