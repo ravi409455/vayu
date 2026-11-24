@@ -707,3 +707,12 @@ label.btn.disabled { opacity: .5; pointer-events: none; }
 .rd-add-menu, .rd-add-menu.wide { position: static; width: auto; max-height: none; margin: 4px 0 6px; box-shadow: 0 4px 12px rgba(16,24,40,.08); }
 .rd-left .rd-add { margin-right: 4px; }
 label.link { color: var(--info); cursor: pointer; background: none; border: 0; padding: 2px 4px; }
+.rd-layout.no-left { grid-template-columns: 34px minmax(0, 1fr) 340px; }
+@media (max-width: 1200px) { .rd-layout.no-left { grid-template-columns: 34px minmax(0, 1fr); } }
+.rd-rail { position: sticky; top: 68px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 0; width: 34px; border: 1px solid var(--line); border-radius: 10px; background: var(--card, #fff); font-size: 12px; }
+.rd-rail span { writing-mode: vertical-rl; }
+.rd-fold { border: 0; background: none; padding: 2px; display: inline-flex; color: var(--muted); }
+.rd-folded { display: block; margin: 0 0 2px 30px; }
+.rd-gridbox { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+.rd-gridbox .sm { justify-self: start; }
+.modal .rd-grid-t input, .modal .rd-grid-t select { min-width: 110px; }

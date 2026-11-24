@@ -1,4 +1,4 @@
-import { AlertTriangle, Settings2 } from "lucide-react";
+import { AlertTriangle, ChevronsLeft, ChevronsRight, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, ApiError, type Page } from "../../api/client";
@@ -74,6 +74,8 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
   const importInput = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState<unknown>(null);
   const [copying, setCopying] = useState(false);
+  const [pagesShown, setPagesShown] = useState(() => { try { return localStorage.getItem("rd-pages") !== "hidden"; } catch { return true; } });
+  const showPages = (v: boolean) => { setPagesShown(v); try { localStorage.setItem("rd-pages", v ? "shown" : "hidden"); } catch { /* private window */ } };
   const reload = useRefresh();
   const draftMeta = template.versions.find((v) => v.status === "draft");
   const latest = template.versions[template.versions.length - 1];
@@ -259,11 +261,13 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
         try { const r = await api<{ id: number }>(`pdf-templates/${template.id}/copy`, { body: { form: formId } }); setCopying(false); await refresh(); onOpen(r.id); say("Copied. The new template is a draft; check its warnings."); }
         catch (e) { fail(e); }
       }} />}
-      <div className="rd-layout">
-        <aside className="card rd-left" aria-label="Pages">
-          <div className="rd-h">Pages</div>
+      <div className={`rd-layout${pagesShown ? "" : " no-left"}`}>
+        {!pagesShown && <button type="button" className="rd-rail" onClick={() => showPages(true)} aria-label="Show the pages list"><ChevronsRight size={16} aria-hidden /><span>Pages</span></button>}
+        {pagesShown && <aside className="card rd-left" aria-label="Pages">
+          <div className="rd-h bar" style={{ margin: 0 }}><span className="grow">Pages</span>
+            <button type="button" className="icon-btn" aria-label="Hide the pages list" title="Hide the pages list" onClick={() => showPages(false)}><ChevronsLeft size={15} aria-hidden /></button></div>
           <PagesPanel def={def} sel={sel} onSelect={setSel} onChange={edit} formPages={tree.data?.pages ?? []} sections={sectionNames} readOnly={!ok} snippets={snippets} bad={bad} />
-        </aside>
+        </aside>}
         <section className="rd-mid" aria-label="Preview">
           <div className="rd-status muted small">{rendering ? "Updating…" : chosen ? "This is the real PDF. Click a part to change it." : "Complete one booking inspected with this form to see the report with real answers."}</div>
           {preview ? <Preview pdf={preview.pdf} pages={preview.pages} selected={sel?.kind === "part" ? sel.id : null} names={nameMap} onSelect={(id) => setSel({ kind: "part", id })} />

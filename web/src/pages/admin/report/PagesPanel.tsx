@@ -1,8 +1,8 @@
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Code, Columns2, FileText, Link2, GripVertical, Image, LayoutList, ListOrdered, MoveVertical, QrCode, Scissors, Table2 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { ChevronDown, ChevronRight, Code, Columns2, FileText, Link2, GripVertical, Image, LayoutList, ListOrdered, MoveVertical, QrCode, Scissors, Table2 } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { FormPage } from "../../../api/types";
 import { addPart, blankPage, movePage, movePart, newPart, pageFromForm, partName, sharedPart, uid, updatePart, type Definition, type Part, type PartType, type ReportPage, type SharedRef } from "./model";
 import type { SharedItem } from "./sharing";
@@ -56,6 +56,14 @@ export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, 
   formPages: FormPage[]; sections: Record<string, string>; readOnly: boolean; snippets?: SharedItem[]; bad?: Set<string>;
 }) {
   const sharedNames = Object.fromEntries(snippets.map((x) => [x.key, x.name]));
+  // pages fold up so a long report fits; the page of the part being changed opens by itself
+  const [closed, setClosed] = useState<Set<string>>(() => new Set(def.pages.slice(1).map((p) => p.id!)));
+  const toggle = (id: string) => setClosed((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  useEffect(() => {
+    if (sel?.kind !== "part") return;
+    const pg = def.pages.find((p) => JSON.stringify(p.parts).includes(`"id":"${sel.id}"`));
+    if (pg && closed.has(pg.id!)) setClosed((c) => { const n = new Set(c); n.delete(pg.id!); return n; });
+  }, [sel]); // eslint-disable-line react-hooks/exhaustive-deps
   const make = (type: PartType, ref?: SharedRef) => (ref ? sharedPart(ref) : newPart(type, firstSection));
   const [adding, setAdding] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
@@ -106,6 +114,11 @@ export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, 
 
   return (
     <div className="rd-pages-panel">
+      {def.pages.length > 1 && (
+        <div className="bar small" style={{ margin: "0 0 4px" }}>
+          <button type="button" className="link small" onClick={() => setClosed(new Set())}>Open all</button>
+          <button type="button" className="link small" onClick={() => setClosed(new Set(def.pages.map((p) => p.id!)))}>Fold all</button>
+        </div>)}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={def.pages.map((p) => `pg:${p.id}`)} strategy={verticalListSortingStrategy}>
           {def.pages.map((pg, i) => (
@@ -113,6 +126,8 @@ export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, 
               <section className="rd-pg" aria-label={`Page ${i + 1}: ${pg.title}`}>
                 <div className={`rd-pg-h${sel?.kind === "page" && sel.id === pg.id ? " on" : ""}`}>
                   {handle}
+                  <button type="button" className="rd-fold" aria-expanded={!closed.has(pg.id!)} aria-label={`${closed.has(pg.id!) ? "Open" : "Fold"} page ${i + 1}`} onClick={() => toggle(pg.id!)}>
+                    {closed.has(pg.id!) ? <ChevronRight size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />}</button>
                   <button type="button" className="rd-pg-name" onClick={() => onSelect({ kind: "page", id: pg.id! })}>
                     <span className="rd-pg-n">{i + 1}</span><span className="ellipsis">{pg.title || "Untitled page"}</span>
                   </button>
@@ -120,8 +135,11 @@ export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, 
                   {pg.style === "cover" && <span className="rd-badge">cover</span>}
                   {pg.show_if ? <span className="rd-badge" title="Only shown sometimes">if</span> : null}
                 </div>
-                {parts(pg.parts, 0)}
-                {!readOnly && <AddMenu snippets={snippets} onPick={(t, r) => add(pg, t, r)} />}
+                {closed.has(pg.id!) ? <span className="muted small rd-folded">{pg.parts.length} part{pg.parts.length === 1 ? "" : "s"}{pg.parts.some((p) => bad.has(p.id!)) ? " · has something to fix" : ""}</span> : (
+                  <>
+                    {parts(pg.parts, 0)}
+                    {!readOnly && <AddMenu snippets={snippets} onPick={(t, r) => add(pg, t, r)} />}
+                  </>)}
               </section>)}
             </Sortable>))}
         </SortableContext>

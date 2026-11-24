@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, Copy, Trash2 } from "lucide-react";
-import { useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { ConditionBuilder } from "../../../ui/ConditionBuilder";
-import { Field } from "../../../ui/kit";
+import { Field, Modal } from "../../../ui/kit";
 import { fillGrid, PART_LABEL, type Box, type Cell, type Look, type Part, type ReportPage, type Row, type Source, type StyleRule } from "./model";
 import { RichText, ValuePicker } from "./RichText";
 import { ShareForm, snippetContent, type SharedItem } from "./sharing";
@@ -174,7 +174,7 @@ function TableSettings({ part, set, ctx }: { part: Extract<Part, { type: "table"
         </>
       )}
       {src.kind === "fields" && <RowsEditor rows={src.rows} onChange={(rows) => setSrc({ ...src, rows })} fields={fields} sections={ctx.sections} />}
-      {src.kind === "grid" && <GridEditor src={src} onChange={setSrc} fields={fields} />}
+      {src.kind === "grid" && <GridBox src={src} onChange={setSrc} fields={fields} />}
       {(src.kind === "fields" || src.kind === "section") && (
         <Field label="Checks per row"><Seg label="Checks per row" value={part.per_row ?? 1} options={[[1, "1"], [2, "2"], [3, "3"], [4, "4"]]} onChange={(per_row) => set({ per_row })} /></Field>)}
       <More title="Look" summary={[look.header ?? (src.kind === "defects" || src.kind === "grid") ? "header row" : "", look.stripes ?? true ? "stripes" : "", look.lines ?? "rows", look.emphasis ? "big numbers" : ""].filter(Boolean).join(" · ")}>
@@ -213,6 +213,24 @@ function RowsEditor({ rows, onChange, fields, sections }: { rows: Row[]; onChang
         }}><option value="">+ Add all from a section…</option>{sections.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
       </div>
     </div>
+  );
+}
+
+/** The grid needs room: a summary here, the editor in a wide window. */
+function GridBox({ src, onChange, fields }: { src: Extract<Source, { kind: "grid" }>; onChange: (s: Source) => void; fields: Ctx["fields"] }) {
+  const [open, setOpen] = useState(false);
+  const filled = src.rows.reduce((n, r) => n + r.cells.filter((c) => "field" in c).length, 0);
+  return (
+    <>
+      <div className="rd-gridbox">
+        <span><strong>{src.columns.length}</strong> column{src.columns.length === 1 ? "" : "s"} × <strong>{src.rows.length}</strong> row{src.rows.length === 1 ? "" : "s"}, {filled} cell{filled === 1 ? "" : "s"} with a field</span>
+        <span className="muted small">{src.columns.map((c) => c.label).join(" · ")}</span>
+        <button type="button" className="sm" onClick={() => setOpen(true)}>Edit grid</button>
+      </div>
+      {open && <Modal title="Edit grid" wide onClose={() => setOpen(false)} actions={<button className="primary" onClick={() => setOpen(false)}>Done</button>}>
+        <GridEditor src={src} onChange={onChange} fields={fields} />
+      </Modal>}
+    </>
   );
 }
 

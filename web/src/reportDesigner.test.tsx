@@ -197,6 +197,41 @@ describe("the part settings panel", () => {
   });
 });
 
+describe("room to work", () => {
+  it("edits a grid in a wide window", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { PartSettings } = await import("./pages/admin/report/PartSettings");
+    const u = userEvent.setup();
+    const ctx = { readOnly: false, sections: [], fields: [] };
+    const part: Part = { id: "g", type: "table", source: { kind: "grid", columns: [{ label: "Engine" }, { label: "A.C." }], rows: [{ label: "", cells: [{ field: "inspection.e" }, { text: "" }] }] } };
+    render(<PartSettings part={part} ctx={ctx} onChange={() => {}} onDelete={() => {}} onDuplicate={() => {}} onMove={() => {}} />);
+    expect(screen.getByText(/1 cell with a field/)).toBeTruthy();
+    expect(screen.queryByLabelText("Column 1 name")).toBeNull();
+    await u.click(screen.getByRole("button", { name: "Edit grid" }));
+    expect((screen.getByLabelText("Column 1 name") as HTMLInputElement).value).toBe("Engine");
+  });
+  it("folds pages and opens the page of the part being changed", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { PagesPanel } = await import("./pages/admin/report/PagesPanel");
+    const u = userEvent.setup();
+    const d = def();
+    const props = { def: d, onSelect: () => {}, onChange: () => {}, formPages: [], sections: {}, readOnly: true };
+    const { rerender } = render(<PagesPanel {...props} sel={null} />);
+    expect(screen.queryByText("c")).toBeNull();                                   // page 2 folded
+    expect(screen.getByText("1 part")).toBeTruthy();
+    rerender(<PagesPanel {...props} sel={{ kind: "part", id: "c" }} />);
+    expect(screen.getByText("c")).toBeTruthy();                                   // opened by itself
+    await u.click(screen.getByRole("button", { name: "Fold all" }));
+    expect(screen.queryByText("a")).toBeNull();
+    await u.click(screen.getByRole("button", { name: "Open page 1" }));
+    expect(screen.getByText("a")).toBeTruthy();
+    await u.click(screen.getByRole("button", { name: "Open all" }));
+    expect(screen.getByText("c")).toBeTruthy();
+  });
+});
+
 describe("sharing helpers", () => {
   it("swaps a field the form lacks for the suggested one everywhere in a part", () => {
     const p: Part = { id: "t", type: "table", title: "{{ inspection.odo }} km", source: { kind: "fields", rows: [{ field: "inspection.odo" }, { field: "inspection.odometer_x" }] } };

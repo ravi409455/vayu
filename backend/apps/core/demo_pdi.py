@@ -358,7 +358,7 @@ def pdi_pages() -> list:
             ],
         ),
         c("roof_inside", "Car roof from inside", "OKNOT"),
-        ("p", "roof_inside_picture", "Car roof from inside: picture", 1, False),
+        ("p", "roof_inside_picture", "Car roof from inside: picture", 1, False, "roof_inside"),
     ]
     brakes = []
     for k, where in WHEELS:
@@ -383,7 +383,7 @@ def pdi_pages() -> list:
             ("n", f"tyre_{k}_depth", f"{who} tyre tread depth", "mm"),
             ("dot", f"tyre_{k}_dot", f"{who} tyre manufacturing week and year"),
             c(f"tyre_{k}_shape", f"{who} tyre shape", "SHAPE", photo=False),
-            ("p", f"tyre_{k}_photo", f"{who} tyre photo", 2, True),
+            ("p", f"tyre_{k}_photo", f"{who} tyre photo", 2, True, f"tyre_{k}_shape"),
         ]
     tyres += [
         ("n", "tyre_year", "Tyre manufacturing year", ""),
@@ -460,7 +460,16 @@ def pdi_pages() -> list:
                 (
                     "Documents",
                     [c(k, label, "DOC", photo=False) for k, label in DOCS]
-                    + [("p", "doc_bifuel_photo", "Bi-fuel certificate photo", 1, False)],
+                    + [
+                        (
+                            "p",
+                            "doc_bifuel_photo",
+                            "Bi-fuel certificate photo",
+                            1,
+                            False,
+                            "doc_bifuel",
+                        )
+                    ],
                 )
             ],
         ),
@@ -541,7 +550,14 @@ def pdi_pages() -> list:
                         ("v", "engine_noise_video", "Engine noise video"),
                         c("engine_vibration", "Engine vibration", "PRESENCE"),
                         c("engine_oil_quality", "Engine oil quality", "OIL"),
-                        ("p", "engine_oil_photo", "Engine oil photo", 1, True),
+                        (
+                            "p",
+                            "engine_oil_photo",
+                            "Engine oil photo",
+                            1,
+                            True,
+                            "engine_oil_quality",
+                        ),
                         c("engine_oil_cap", "Engine oil cap", "CAP"),
                         c("dipstick_smoke", "Smoke from the dipstick point", "PRESENCE"),
                         c("engine_oil_leak", "Oil leaks near the engine", "PRESENCE"),
@@ -589,7 +605,7 @@ def pdi_pages() -> list:
                             {"==": [{"var": "inspection.obd_fault_codes"}, "yes"]},
                             [("t", "obd_codes", "Codes found")],
                         ),
-                        ("p", "obd_photo", "OBD scan screenshot", 1, False),
+                        ("p", "obd_photo", "OBD scan screenshot", 1, False, "obd_fault_codes"),
                     ],
                 )
             ],
@@ -746,7 +762,7 @@ def pdi_pages() -> list:
                     "Equipment",
                     [
                         c("tool_kit", "Tool kit", "TOOLKIT", photo=False),
-                        ("p", "tool_kit_photo", "Tool kit photo", 1, False),
+                        ("p", "tool_kit_photo", "Tool kit photo", 1, False, "tool_kit"),
                     ],
                 ),
                 ("Car pictures", [("p", f"picture_{k}", label, 1, True) for k, label in PICTURES]),
@@ -864,7 +880,10 @@ def _make(v, sec, item, show=None, made=None) -> None:
             required=item[1] not in ("battery_state", "generator_state"),
         )
     elif kind == "p":
-        add(item[1], item[2], "photo", {"max_count": item[3]}, required=item[4])
+        # an optional 6th item: the check this photo shows (its caption, and an issue photo
+        # when that check's answer is a problem)
+        of = {"photo_of": item[5]} if len(item) > 5 else {}
+        add(item[1], item[2], "photo", {"max_count": item[3], **of}, required=item[4])
     elif kind == "pi":
         add(item[1], item[2], "photo", {"max_count": item[3], "issue_photo": True})
     elif kind == "v":

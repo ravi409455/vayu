@@ -147,7 +147,7 @@ def _add(version, section, item) -> list[str]:
         make(key, label, "single_choice", config=CONDITION)
         bad = {"in": [{"var": f"inspection.{key}"}, ["major", "critical"]]}
         make(f"{key}_photo", f"{label}: photo", "photo", required_if=bad, show_if=bad,
-             config={"max_count": 3, "min_count": 0})
+             config={"max_count": 3, "min_count": 0, "photo_of": key})
     elif kind == "n":
         unit, lo, hi = rest
         make(key, label, "number", config={k: v for k, v in
