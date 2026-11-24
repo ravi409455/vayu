@@ -32,6 +32,10 @@ android {
         versionName = (project.findProperty("vayu.versionName") as String?) ?: "0.1.0"
     }
 
+    // crash reports: the Sentry DSN comes from -Pvayu.sentryDsn or SENTRY_DSN_ANDROID (never in git);
+    // empty = no reports
+    val sentryDsn = (project.findProperty("vayu.sentryDsn") as String?) ?: System.getenv("SENTRY_DSN_ANDROID") ?: ""
+    defaultConfig { buildConfigField("String", "SENTRY_DSN", "\"$sentryDsn\"") }
     buildTypes {
         // the API the app talks to; override with -Pvayu.apiUrl=... (e.g. staging)
         val apiUrl = project.findProperty("vayu.apiUrl") as String?
@@ -59,6 +63,7 @@ android {
 dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
+    implementation(libs.sentry.android)
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)

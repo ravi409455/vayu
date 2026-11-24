@@ -17,6 +17,7 @@ camerax = "1.4.1"
 mlkitText = "19.0.1"
 firebaseBom = "33.7.0"
 googleServices = "4.4.2"
+sentry = "7.18.1"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -54,6 +55,8 @@ camera-video = { module = "androidx.camera:camera-video", version.ref = "camerax
 mlkit-text = { module = "com.google.android.gms:play-services-mlkit-text-recognition", version.ref = "mlkitText" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
+# crash reports only (no replay, no native, no tracing): the light core library
+sentry-android = { module = "io.sentry:sentry-android-core", version.ref = "sentry" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

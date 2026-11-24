@@ -75,6 +75,24 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
 }
 
 class VayuApp : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        // crash reports, tagged with this build; nothing about people or their jobs is sent.
+        // Started beside the first screen, not before it (it would add ~35 ms to every start).
+        if (BuildConfig.SENTRY_DSN.isNotBlank()) Thread { io.sentry.android.core.SentryAndroid.init(this) { o ->
+            o.dsn = BuildConfig.SENTRY_DSN
+            o.release = "vayu@${BuildConfig.VERSION_NAME}+${BuildConfig.VERSION_CODE}"
+            o.environment = if (BuildConfig.DEBUG) "debug" else "release"
+            o.isSendDefaultPii = false
+            o.isEnableAutoSessionTracking = false
+            o.isEnableUserInteractionBreadcrumbs = false
+            o.isEnableNetworkEventBreadcrumbs = false
+            o.isEnableActivityLifecycleTracingAutoFinish = false
+            o.tracesSampleRate = null
+        }; android.util.Log.i("Vayu", "crash reports on: ${io.sentry.Sentry.isEnabled()}") }
+            .apply { priority = Thread.MIN_PRIORITY }.start()
+    }
+
     val graph: Graph by lazy {
         val tokens = PrefsTokenStore(this)
         Graph(Api(BuildConfig.API_URL, tokens), tokens, filesDir, { OutboxWorker.enqueue(this) }, cacheDir,
