@@ -42,9 +42,10 @@ ALLOWED_KEYS: dict[str, set[str]] = {
     "long_text": {"max_length"},
     "number": {"unit", "min", "max", "decimals"},
     # issue_photo: always an issue photo when filled; photo_of: the check this photo shows
-    "photo": {"min_count", "max_count", "capture", "issue_photo", "photo_of"},
-    "video": {"min_count", "max_count", "capture"},
-    "file": {"max_count", "allowed"},
+    # ops_upload: Ops and Admin may add or replace this field's files on the web (default yes)
+    "photo": {"min_count", "max_count", "capture", "issue_photo", "photo_of", "ops_upload"},
+    "video": {"min_count", "max_count", "capture", "ops_upload"},
+    "file": {"max_count", "allowed", "ops_upload"},
     "derived": {"rule", "true_label", "false_label"},
     "rating": {"category"},
 }
@@ -145,6 +146,8 @@ def validate_config(type: str, config: Any) -> None:
     elif type in ("photo", "video"):
         if config.get("capture", "both") not in CAPTURE_MODES:
             raise ConfigError(f"capture must be one of {', '.join(CAPTURE_MODES)}.")
+        if not isinstance(config.get("ops_upload", True), bool):
+            raise ConfigError("ops_upload must be true or false.")
         if not isinstance(config.get("issue_photo", False), bool):
             raise ConfigError("issue_photo must be true or false.")
         if "photo_of" in config and not (isinstance(config["photo_of"], str)
@@ -156,6 +159,8 @@ def validate_config(type: str, config: Any) -> None:
             raise ConfigError("min_count must not exceed max_count.")
     elif type == "file":
         _int_in(config, "max_count", 1, 10)
+        if not isinstance(config.get("ops_upload", True), bool):
+            raise ConfigError("ops_upload must be true or false.")
         allowed = config.get("allowed", ["image", "pdf"])
         if not isinstance(allowed, list) or not allowed or set(allowed) - {"image", "pdf"}:
             raise ConfigError("allowed must be a non-empty subset of ['image', 'pdf'].")

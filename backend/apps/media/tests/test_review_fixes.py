@@ -96,13 +96,16 @@ def test_nul_bytes_in_filters_are_a_400(job, q):
 
 # ---------------------------------------------------- stuck booking, races, bad images
 
-def test_deleting_the_missing_file_completes_the_booking(job):
+def test_replacing_the_missing_file_completes_the_booking(job, settings):
     env, b = job
     init = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),
                            format="json").json()                    # never uploaded
     assert submit_with(env, b, photo_a=[init["id"]]).status_code == 200
     assert Booking.objects.get(pk=b["id"]).stage == "submitted"
-    assert env.ops.delete(f"/api/v1/media/{init['id']}").status_code == 204
+    assert env.ops.delete(f"/api/v1/media/{init['id']}").status_code == 403   # no delete
+    new = upload(env.ops, b["id"], jpeg(color=(3, 3, 3)), settings, replaces=init["id"]).json()
+    r = env.ops.post(f"/api/v1/media/{new['id']}/attach", {"replaces": init["id"]}, format="json")
+    assert r.status_code == 204
     assert Booking.objects.get(pk=b["id"]).stage == "completed"
 
 
@@ -110,11 +113,11 @@ def test_storage_is_cleaned_only_after_the_commit(job, settings, monkeypatch):
     from apps.core import tasks as core_tasks
 
     env, b = job
-    a = completed(env, b, settings)
+    a = upload(env.expert, b["id"], jpeg(), settings).json()["id"]
     key = MediaAsset.objects.get(pk=a).key
     later: list = []
     monkeypatch.setattr(core_tasks, "after_commit", later.append)      # hold the callbacks
-    assert env.ops.delete(f"/api/v1/media/{a}").status_code == 204
+    assert env.expert.delete(f"/api/v1/media/{a}").status_code == 204
     assert storage.exists(key) and later                                # not deleted yet
     for fn in later:
         fn()

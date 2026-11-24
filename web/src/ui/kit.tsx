@@ -1,4 +1,4 @@
-import { cloneElement, createContext, isValidElement, useCallback, useContext, useId, useState, type ReactElement, type ReactNode } from "react";
+import { cloneElement, createContext, isValidElement, useCallback, useContext, useId, useState, type InputHTMLAttributes, type ReactElement, type ReactNode } from "react";
 import { Inbox } from "lucide-react";
 import { explain } from "../api/client";
 import { fmtStamp } from "../lib/format";
@@ -44,6 +44,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {t && <div className={`toast${t.bad ? " bad" : ""}`} role="status">{t.msg}</div>}
     </Toasts.Provider>
   );
+}
+
+/** A checkbox with a short name; the details go in the little "i", kept outside the label so a
+ *  click on it does not tick the box. */
+export function Check({ label, tip, ...input }: { label: string; tip?: ReactNode } & InputHTMLAttributes<HTMLInputElement>) {
+  const id = useId();
+  return (
+    <div className="check-row">
+      <input id={id} type="checkbox" {...input} />
+      <label htmlFor={id}>{label}</label>
+      {tip && <InfoTip label={`About ${label}`}>{tip}</InfoTip>}
+    </div>);
 }
 
 /** A labelled input. The label points at the input by id (so the little "i" next to it is not

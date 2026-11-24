@@ -52,13 +52,15 @@ function putPart(url: string, body: Blob, onBytes: (n: number) => void): Promise
 export type UploadSpec = {
   clientUuid: string; bookingId: string; fieldKey: string; kind: string; contentType: string;
   sha256: string; source: "camera" | "gallery"; blob: Blob;
+  replaces?: string;                 // Ops: the file this one takes the place of
 };
 
 /** Registers the upload with the server (safe to repeat: same client UUID, same asset). */
 export function initiate(s: UploadSpec): Promise<Initiated> {
   return api<Initiated>("media/initiate", { body: {
     booking: s.bookingId, client_uuid: s.clientUuid, field_key: s.fieldKey, kind: s.kind,
-    content_type: s.contentType, size: s.blob.size, sha256: s.sha256, source: s.source } });
+    content_type: s.contentType, size: s.blob.size, sha256: s.sha256, source: s.source,
+    ...(s.replaces ? { replaces: s.replaces } : {}) } });
 }
 
 /** Sends what is missing and finishes. Returns when the server says "verified". */

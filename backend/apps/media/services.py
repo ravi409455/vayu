@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from botocore.exceptions import ClientError
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
 
@@ -85,15 +86,41 @@ def hidden_fields(user, booking: Booking) -> set[str]:
     return out
 
 
+OPS_KINDS = ("photo", "video", "file")
+# what a file field's "allowed" setting lets in
+FILE_TYPES = {"image": {"image/jpeg", "image/png"}, "pdf": {"application/pdf"}}
+OPS_STAGES = ("submitted", "completed")
+
+
+def is_manager(user, request=None) -> bool:
+    return scope_for(user, "media.manage", request) is not None
+
+
+def check_ops_upload(booking: Booking, field: Field, user) -> None:
+    """What Ops and Admin may put on a booking: photos, videos and files, once the expert has
+    submitted, on fields the Admin has not blocked and they may see."""
+    if field.key in hidden_fields(user, booking):
+        raise err("UNKNOWN_FIELD", f"'{field.key}' is not a field of this inspection.")
+    if field.type not in OPS_KINDS:
+        raise err("OPS_UPLOAD_NOT_ALLOWED", "Ops can add only photos, videos and files.", 403)
+    if booking.stage not in OPS_STAGES:
+        raise err("NOT_SUBMITTED", "Files can be added only after the expert submits.", 409)
+    if field.config.get("ops_upload", True) is not True:
+        raise err("OPS_UPLOAD_BLOCKED", f"Admin has blocked uploads by Ops on '{field.label}'.",
+                  403)
+
+
 def booking_media(request, booking_id) -> list[dict]:
     """The files this person put on the booking (media managers: every file), oldest first, so a
     phone that lost its draft can pick them up again. Fields they may not see are left out."""
     booking = writable_booking(request, booking_id)
-    qs = MediaAsset.objects.filter(booking=booking).order_by("created_at")
+    qs = MediaAsset.objects.filter(booking=booking, replaced_at__isnull=True) \
+        .select_related("uploaded_by").order_by("created_at")
     if scope_for(request.user, "media.manage", request) is None:
         qs = qs.filter(uploaded_by=request.user)
     hidden = hidden_fields(request.user, booking)
-    return [{"id": str(a.id), "field_key": a.field_key, "kind": a.kind, "status": a.status}
+    return [{"id": str(a.id), "field_key": a.field_key, "kind": a.kind, "status": a.status,
+             "by_ops": a.uploaded_by.role != "expert"}
             for a in qs if a.field_key not in hidden]
 
 
@@ -115,8 +142,8 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
     """Returns (body, created). Retrying with the same client_uuid returns the same asset."""
     user = request.user
     booking = writable_booking(request, data.get("booking"))
-    if booking.stage == "cancelled" or (
-            booking.stage == "completed" and scope_for(user, "media.manage", request) is None):
+    manager = is_manager(user, request)
+    if booking.stage == "cancelled" or (booking.stage == "completed" and not manager):
         raise err("BOOKING_CLOSED", f"A {booking.stage} booking takes no new files.", 409)
     kind, ctype = data.get("kind"), data.get("content_type")
     size, sha = data.get("size"), data.get("sha256")
@@ -151,13 +178,25 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
     field = field_for(booking, data.get("field_key", ""))
     if field.type != kind:
         raise err("WRONG_KIND", f"'{field.key}' takes {field.type}, not {kind}.")
-    limit_count = field.config.get("max_count", DEFAULT_MAX_COUNT.get(kind, 1))
-    if kind == "signature":
-        limit_count = 1
+    if kind == "file" and ctype not in set().union(
+            *(FILE_TYPES[a] for a in field.config.get("allowed", ["image", "pdf"]))):
+        raise err("INVALID_CONTENT_TYPE", f"'{field.label}' does not take {ctype}.")
+    replaces = data.get("replaces")
+    if manager:      # Ops: the limit is what the submitted answers hold (checked again on attach)
+        check_ops_upload(booking, field, user)
+        _, _, ids = submitted_answer(booking, field)
+        if replaces is not None and str(replaces) not in ids:
+            raise err("UNKNOWN_MEDIA", "The file to replace is not on this field.")
+        if replaces is None and len(ids) >= max_count(field):
+            raise err("TOO_MANY", f"'{field.label}' takes at most {max_count(field)}. "
+                      "Replace one instead.", 409)
+    elif replaces is not None:
+        raise err("UNKNOWN_MEDIA", "Only Ops replace a file.")
     with transaction.atomic():
         Booking.objects.select_for_update().get(pk=booking.pk)   # two uploads must not both fit
-        if MediaAsset.objects.filter(booking=booking, field_key=field.key).count() >= limit_count:
-            raise err("TOO_MANY", f"'{field.key}' takes at most {limit_count}.", 409)
+        if not manager and MediaAsset.objects.filter(
+                booking=booking, field_key=field.key).count() >= max_count(field):
+            raise err("TOO_MANY", f"'{field.key}' takes at most {max_count(field)}.", 409)
         asset = MediaAsset(client_uuid=client_uuid, booking=booking, uploaded_by=user,
                            field_key=field.key, kind=kind, content_type=ctype, size=size,
                            sha256=sha, source=source)
@@ -165,6 +204,92 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
         asset.upload_id = storage.create_multipart(asset.key, ctype)
         asset.save()
     return _body(asset, True), True
+
+
+def max_count(field: Field) -> int:
+    if field.type == "signature":
+        return 1
+    return field.config.get("max_count", DEFAULT_MAX_COUNT.get(field.type, 1))
+
+
+def submitted_answer(booking: Booking, field: Field, lock=False):
+    """(inspection, part, file ids) of a field in the submitted inspection."""
+    qs = booking.inspections.filter(status="submitted").order_by("-submitted_at")
+    insp = (qs.select_for_update() if lock else qs).first()
+    part = next((p for p, v in (insp.pinned() if insp else {}).items()
+                 if v is not None and v.id == field.version_id), None)
+    if insp is None or part is None:
+        raise err("NOT_SUBMITTED", "Files can be added only after the expert submits.", 409)
+    value = (insp.answers.get(part) or {}).get(field.key)
+    return insp, part, [value] if isinstance(value, str) else list(value or [])
+
+
+def live_asset(booking: Booking, field_key: str, asset_id) -> MediaAsset | None:
+    """A file on this booking's field that has not been replaced."""
+    try:
+        return MediaAsset.objects.filter(booking=booking, field_key=field_key,
+                                         replaced_at__isnull=True, pk=asset_id).first()
+    except (ValueError, DjangoValidationError):     # not a UUID
+        return None
+
+
+def attach(request, new: MediaAsset, replaces=None) -> None:
+    """Ops put a file they uploaded into the submitted inspection: in place of `replaces` (kept as
+    history, Admin can still open it) or added to the field. The report is rebuilt."""
+    from apps.scoring import service as scoring
+
+    user = request.user
+    with transaction.atomic():
+        booking = Booking.objects.select_for_update().get(pk=new.booking_id)
+        new = MediaAsset.objects.select_for_update().get(pk=new.pk)
+        field = field_for(booking, new.field_key)
+        check_ops_upload(booking, field, user)
+        if new.uploaded_by_id != user.pk or new.replaced_at is not None or new.status == "failed":
+            raise err("UNKNOWN_MEDIA", "Upload the file first.")
+        if new.status not in ("uploaded", "verified"):   # half-sent: must not push out a good one
+            raise err("UPLOAD_NOT_FINISHED", "The file is still uploading.", 409)
+        insp, part, ids = submitted_answer(booking, field, lock=True)
+        answers = dict(insp.answers.get(part) or {})
+        if str(new.id) in ids:
+            return                                           # a retry: already in place
+        old = None
+        if replaces is not None:
+            old = live_asset(booking, field.key, replaces)
+            if old is None or str(old.id) not in ids:
+                raise err("UNKNOWN_MEDIA", "The file to replace is not on this field.")
+            ids[ids.index(str(old.id))] = str(new.id)
+        else:
+            limit = max_count(field)
+            if len(ids) >= limit:
+                raise err("TOO_MANY",
+                          f"'{field.label}' takes at most {limit}. Replace one instead.", 409)
+            ids.append(str(new.id))
+        answers[field.key] = ids
+        insp.answers = {**insp.answers, part: answers}
+        insp.row_version += 1
+        insp.last_edited_by, insp.last_edited_at = user, timezone.now()
+        insp.last_change = {"by": user.username, "at": insp.last_edited_at.isoformat(),
+                            "keys": [field.key]}
+        insp.save()
+        if old is not None:
+            old.replaced_by, old.replaced_at = new, timezone.now()
+            old.save(update_fields=["replaced_by", "replaced_at"])
+        scoring.recompute(insp)
+        MediaZip.objects.filter(booking=booking).delete()       # cached ZIPs no longer match
+        activity.log(booking, user, "media_replaced" if old else "media_added",
+                     {"media": [str(old.id) if old else None, str(new.id)]},
+                     keys=[f"{part}.{field.key}"], inspection=insp)
+        events.emit("inspection.updated", booking=str(booking.id), inspection=str(insp.id),
+                    keys=[field.key])
+        if booking.stage == "completed" and new.status == "verified":
+            rebuild_report(booking.id)
+    check_completion(booking.id)     # a submitted booking now also waits for this file
+
+
+def rebuild_report(booking_id) -> None:
+    from apps.reports.tasks import render_report
+
+    core_tasks.after_commit(lambda: render_report.delay(str(booking_id)))
 
 
 def progress(asset: MediaAsset) -> dict:
@@ -266,17 +391,16 @@ def check_completion(booking_id) -> bool:
 
 
 def remove(request, asset: MediaAsset) -> None:
-    """Media managers (Ops, Admin) remove any file. Anyone else may only take back a file they
-    uploaded themselves that no submitted inspection uses yet (the expert's Remove button), so
-    a retake is never blocked by a file that is no longer wanted."""
+    """Nobody deletes a submitted file (Ops replace it instead). Anyone may only take back a file
+    they uploaded themselves that no submitted inspection uses yet (the expert's Remove button, an
+    Ops upload that was never attached), so a retake is never blocked by an unwanted file."""
     user = request.user
-    if scope_for(user, "media.manage", request) is not None:
-        delete_asset(user, asset)
-        return
     booking = asset.booking
     used = any(str(asset.id) in json.dumps(i.answers) for i in booking.inspections.filter(
         status="submitted"))
-    if asset.uploaded_by_id != user.pk or booking.stage in ("completed", "cancelled") or used:
+    mine_unused = asset.uploaded_by_id == user.pk and not used and asset.replaced_at is None
+    if not mine_unused or (booking.stage in ("completed", "cancelled")
+                           and not is_manager(user, request)):
         raise err("DELETE_NOT_ALLOWED", "You can only take back your own file before it is "
                   "submitted.", 403)
     delete_asset(user, asset)

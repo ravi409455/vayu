@@ -1,4 +1,4 @@
-import { Download, Phone } from "lucide-react";
+import { Download, FileText, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
@@ -9,12 +9,12 @@ import type { Booking, FormPage, FormSection, FormVersion, Inspection, MasterLis
 import { useAuth } from "../../auth";
 import { saveDirty } from "../../lib/saveDirty";
 import { usePinnedTrees, useTrees } from "../../lib/useTrees";
-import { addFile } from "../../lib/uploadManager";
+import { addFile, discardFile, uploaded } from "../../lib/uploadManager";
 import { FormRenderer } from "../../ui/FormRenderer";
 import { Confirm, Empty, Field, Modal, Pill, Tabs, useToast } from "../../ui/kit";
 import { AnswerSheet, AnswerValue, defectOf, readableFields, type SheetFilter } from "../../ui/AnswerSheet";
 import { Avatar } from "../../ui/Avatar";
-import { useMediaUrl, Thumb } from "../../ui/MediaThumb";
+import { isPdf, mediaUrl, useMediaUrl, Thumb } from "../../ui/MediaThumb";
 import { MoreMenu } from "../../ui/Menu";
 import { fmtPhone, fmtSlot, fmtStamp, mapsUrl } from "../../lib/format";
 import { FLAG_NAME, timingFlags } from "../../lib/timing";
@@ -70,6 +70,8 @@ function Detail({ id }: { id: string }) {
   const activity = useQuery({ queryKey: ["activity", id], queryFn: () => api<Activity[]>(`bookings/${id}/activity`) });
   const [tab, setTab] = useState<Tab | null>(null);
   const [action, setAction] = useState<null | ActionKind>(null);
+  const [rail, setRail] = useState(() => { try { return localStorage.getItem("vayu:booking-rail") !== "hidden"; } catch { return true; } });
+  const toggleRail = () => { setRail(!rail); try { localStorage.setItem("vayu:booking-rail", rail ? "hidden" : "shown"); } catch { /* private window: it just will not be remembered */ } };
   const booking = b.data;
   const experts = useList<User>("experts", "users", { role: "expert" });
   const trees = useTrees(booking?.inspection_type);
@@ -121,8 +123,10 @@ function Detail({ id }: { id: string }) {
         </div>))}
       {booking.conflict && <ConflictBanner booking={booking} insps={insps.data ?? []} experts={experts.data ?? []} onResolved={reload} />}
       <Tabs value={current} onChange={setTab} tabs={[{ id: "booking", label: "Booking" }, { id: "inspection", label: "Inspection" }, { id: "media", label: mediaCount ? `Media ${mediaCount}` : "Media" }, { id: "ratings", label: "Ratings" }, { id: "report", label: "Report" }]} />
+      <button className="sm rail-toggle" aria-expanded={rail} onClick={toggleRail}>
+        {rail ? <PanelLeftClose size={14} aria-hidden /> : <PanelLeftOpen size={14} aria-hidden />}{rail ? "Hide customer, car and activity" : "Show customer, car and activity"}</button>
       <div className="record-body">
-        <aside className="record-rail" aria-label="Summary">
+        {rail && <aside className="record-rail" aria-label="Summary">
           <section className="card">
             <h2 className="rail-h">Customer</h2>
             <div style={{ fontWeight: 600 }}>{String(a.customer_name ?? "")}</div>
@@ -139,8 +143,8 @@ function Detail({ id }: { id: string }) {
               {insp?.answers.inspection?.odometer !== undefined && insp?.answers.inspection?.odometer !== null ? <><dt>Odometer</dt><dd>{Number(insp.answers.inspection.odometer).toLocaleString("en-IN")} km</dd></> : null}
             </dl>
           </section>
-          <ActivityCard rows={activity.data ?? []} experts={experts.data ?? []} labels={(k) => labelOf(trees.booking, k)} typeLabel={typeLabel} />
-        </aside>
+          <ActivityCard rows={activity.data ?? []} experts={experts.data ?? []} labels={(k) => { const [p, f] = k.split("."); return f ? labelOf(pinned[p as Part], f) : labelOf(trees.booking, k); }} typeLabel={typeLabel} />
+        </aside>}
         <div className="record-main">
           {current === "booking" && trees.booking && <BookingTab booking={booking} tree={trees.booking} onSaved={reload} />}
           {current === "inspection" && <InspectionTab booking={booking} insp={insp} trees={pinned} activity={activity.data ?? []} onSaved={reload} />}
@@ -154,6 +158,12 @@ function Detail({ id }: { id: string }) {
   );
 }
 
+/** Admin only (the server sends the old file's id to nobody else): open a replaced file. */
+function openOld(id: string) {
+  const w = window.open("", "_blank");            // opened now, so the pop-up blocker allows it
+  void mediaUrl(id).then((l) => { if (l && w) w.location.href = l.url; else w?.close(); });
+}
+
 const labelOf = (tree: FormVersion | null | undefined, key: string) =>
   tree?.pages.flatMap((p) => p.sections.flatMap((s) => s.fields)).find((f) => f.key === key)?.label || key;
 
@@ -164,6 +174,8 @@ export function activityText(r: Activity, expertName: (id: unknown) => string, l
   if (r.kind === "created") return `Created by ${by}`;
   if (r.kind === "inspection_edited") return `${by} changed ${r.keys.length} answer${r.keys.length === 1 ? "" : "s"}`;
   if (r.kind === "ratings_changed") return `${by} changed the ratings`;
+  if (r.kind === "media_replaced") return `${by} replaced a file in ${r.keys.map(label).join(", ") || "the inspection"}`;
+  if (r.kind === "media_added") return `${by} added a file to ${r.keys.map(label).join(", ") || "the inspection"}`;
   if (r.kind === "late_reviewed") return `Late start reviewed by ${by}`;
   if (r.kind === "quick_reviewed") return `Quick finish reviewed by ${by}`;
   const stage = c.stage?.[1];
@@ -191,6 +203,7 @@ function ActivityCard({ rows, experts, labels, typeLabel }: { rows: Activity[]; 
         {shown.map((r, i) => (
           <li key={i} className={r.kind === "inspection_edited" || r.kind === "edited" ? "edit" : r.changes.stage ? "stage" : ""}>
             <div>{activityText(r, name, labels, typeLabel)}</div>
+            {typeof r.changes.media?.[0] === "string" && <button className="link small" onClick={() => openOld(String(r.changes.media![0]))}>Open the old file</button>}
             <div className="muted small">{fmtStamp(r.at)}</div>
           </li>))}
       </ol>
@@ -353,7 +366,8 @@ function InspectionTab({ booking, insp, trees, activity, onSaved }: { booking: B
               onEdit={canEdit ? (page, section) => { cancel(); setEditing({ part, page, section }); } : undefined}
               editing={editing?.part === part ? { sectionId: editing.section.id, node: (
                 <SectionEditor changed={mineKeys.length > 0} saving={saving} onSave={() => save()} onCancel={cancel}>
-                  <FormRenderer kind={part} tree={tree} pages={onlySection(editing.page, editing.section)} values={vals[part]} ctx={ctxFor(part)} errors={errors} bookingId={booking.id} onChange={change(part)} />
+                  <FormRenderer kind={part} tree={tree} pages={onlySection(editing.page, editing.section)} values={vals[part]} ctx={ctxFor(part)} errors={errors} bookingId={booking.id} onChange={change(part)}
+                    mediaEditor={(f, ids) => <OpsMediaEditor booking={booking} f={toMediaField(f, part, "")} ids={ids} onDone={onSaved} />} />
                 </SectionEditor>) } : null} />
           ))}
           {filter !== "all" && rows.filter((r) => filter === "defects" ? defectOf(r.f, r.v) : filter === "edited" ? edited[r.part].has(r.f.key) : isEmpty(r.v)).length === 0 && <Empty>Nothing to show with this filter.</Empty>}
@@ -364,62 +378,147 @@ function InspectionTab({ booking, insp, trees, activity, onSaved }: { booking: B
   );
 }
 
-type MediaField = { key: string; label: string; type: string; part: Part; section: string };
+type MediaField = { key: string; label: string; type: string; part: Part; section: string; max: number; opsOk: boolean; accept: string };
+const MAX_DEFAULT: Record<string, number> = { photo: 10, video: 3, file: 5, signature: 1 };
+// what the file picker offers (the server checks the same: a file field's "allowed" setting)
+const FILE_ACCEPT: Record<string, string> = { image: "image/jpeg,image/png", pdf: "application/pdf" };
+const acceptFor = (f: { type: string; config: Record<string, unknown> }) => f.type === "video" ? "video/*" : f.type === "file"
+  ? ((f.config.allowed as string[] | undefined) ?? ["image", "pdf"]).map((a) => FILE_ACCEPT[a]).join(",") : "image/*";
+
+const toMediaField = (f: FormPage["sections"][number]["fields"][number], part: Part, section: string): MediaField => ({ key: f.key, label: f.label || f.key, type: f.type, part, section,
+  max: f.type === "signature" ? 1 : Number(f.config.max_count ?? MAX_DEFAULT[f.type]), accept: acceptFor(f),
+  opsOk: ["photo", "video", "file"].includes(f.type) && f.config.ops_upload !== false });
 
 function mediaFields(trees: Trees): MediaField[] {
   const out: MediaField[] = [];
   for (const part of PART_ORDER) trees[part]?.pages.forEach((p) => p.sections.forEach((s) => s.fields.forEach((f) => {
-    if (["photo", "video", "file", "signature"].includes(f.type)) out.push({ key: f.key, label: f.label || f.key, type: f.type, part, section: s.title || p.title });
+    if (["photo", "video", "file", "signature"].includes(f.type)) out.push(toMediaField(f, part, s.title || p.title));
   })));
   return out;
 }
 
+/** A media field in the Inspection edit view: the files as plain thumbnails, then the same
+ *  Replace / Add bar as the Media tab. With several files, click one to pick what Replace swaps. */
+function OpsMediaEditor({ booking, f, ids, onDone }: { booking: Booking; f: MediaField; ids: string[]; onDone: () => void }) {
+  const [sel, setSel] = useState<string | null>(null);
+  const video = f.type === "video";
+  const current = sel && ids.includes(sel) ? sel : ids[0];
+  const pick = ids.length > 1;
+  return (
+    <div>
+      {ids.length === 0 && <p className="muted small">No {video ? "videos" : "files"} yet.</p>}
+      {ids.length > 0 && (
+        <div className="photo-grid">
+          {ids.map((id, i) => pick
+            ? <button key={id} type="button" className={`tile-btn${id === current ? " on" : ""}`} data-testid="media-item" aria-pressed={id === current}
+                aria-label={`${f.label} ${i + 1}`} onClick={() => setSel(id)}><Thumb id={id} video={video} /></button>
+            : <Thumb key={id} id={id} video={video} />)}
+        </div>)}
+      <OpsFileActions booking={booking} f={f} count={ids.length} replaceId={current} onDone={onDone} onReplaced={setSel}
+        hint={pick ? `Replace swaps the selected ${f.type}; click another to pick it.` : undefined} />
+    </div>);
+}
+
+const opsMayEdit = (booking: Booking) => booking.stage === "submitted" || booking.stage === "completed";
+
+/** Ops' add and replace for one field: saved straight away (upload, then attach), never a delete.
+ *  The server checks the same rules: after submit, photos and videos, not blocked. */
+function useOpsFiles(booking: Booking, f: MediaField, onDone: () => void, onReplaced?: (id: string) => void) {
+  const { can } = useAuth();
+  const { say, fail } = useToast();
+  const [busy, setBusy] = useState(false);
+  async function put(files: File[], replaces?: string) {
+    if (!files.length) return;
+    setBusy(true);
+    try {
+      for (const file of files) {
+        const id = await addFile({ bookingId: booking.id, fieldKey: f.key, kind: f.type as "photo", file, name: file.name, source: "gallery", replaces });
+        // only a fully sent file goes into the inspection (a half-sent one must not push out a good one)
+        try { await uploaded(id); } catch (e) { void discardFile(id); throw e; }
+        await api(`media/${id}/attach`, { body: replaces ? { replaces } : {} });
+        if (replaces) onReplaced?.(id);
+      }
+      say(replaces ? "Replaced. The old file is kept in the history." : "Added. It is checked in the background.");
+    } catch (e) { fail(e); } finally { setBusy(false); onDone(); }
+  }
+  return { allowed: can("media.manage") && opsMayEdit(booking) && f.opsOk, busy, put,
+    accept: f.accept, noun: f.type === "photo" ? "photo" : f.type };
+}
+
+/** A button that opens the file picker (a label around a hidden file input). */
+function FilePick({ className, busy, disabled, accept, multiple, label, title, onPick, children }: { className: string; busy: boolean; disabled?: boolean; accept: string; multiple?: boolean; label: string; title?: string; onPick: (files: File[]) => void; children: React.ReactNode }) {
+  const off = busy || disabled;
+  return (
+    <label className={`${className}${off ? " disabled" : ""}`} title={title} aria-disabled={off || undefined}>
+      {children}
+      <input type="file" hidden disabled={off} accept={accept} multiple={multiple} aria-label={label}
+        onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; onPick(files); }} />
+    </label>);
+}
+
+/** Replace and Add under the Media preview (or Add alone on an empty field). Add stays visible
+ *  but greyed out when the field is full, so people see why they can only replace. */
+function OpsFileActions({ booking, f, count, replaceId, onDone, onReplaced, hint }: { booking: Booking; f: MediaField; count: number; replaceId?: string; onDone: () => void; onReplaced?: (id: string) => void; hint?: string }) {
+  const ops = useOpsFiles(booking, f, onDone, onReplaced);
+  if (!ops.allowed) return null;
+  const room = f.max - count;
+  const add = (
+    <FilePick className="btn sm" busy={ops.busy} disabled={room <= 0} accept={ops.accept} multiple={room > 1} label={`Add to ${f.label}`}
+      title={room <= 0 ? `Full (${count} of ${f.max}). Replace a ${ops.noun} instead.` : undefined} onPick={(fs) => void ops.put(fs.slice(0, room))}>
+      <Plus size={14} aria-hidden /> Add {ops.noun}</FilePick>);
+  if (!replaceId) return add;
+  return (
+    <div className="ops-file-actions">
+      <div className="ops-file-btns">
+        <FilePick className="btn sm primary" busy={ops.busy} accept={ops.accept} label={`Replace this ${ops.noun}`} onPick={(fs) => void ops.put(fs.slice(0, 1), replaceId)}>
+          <RefreshCw size={14} aria-hidden /> Replace</FilePick>
+        {add}
+      </div>
+      <p className="muted small">{ops.busy ? "Uploading…" : `${count} of ${f.max} in this field${room <= 0 ? " (full)" : ""}. Saves straight away.${hint ? ` ${hint}` : ""}`}</p>
+    </div>);
+}
+
 const idsOf = (insp: Inspection, part: Part, key: string): string[] => { const v = (insp.answers[part] ?? {})[key]; return Array.isArray(v) ? (v as string[]) : v ? [String(v)] : []; };
+
+const TYPE_GROUPS = [["photo", "Photos"], ["video", "Videos"], ["file", "Documents"], ["signature", "Signatures"]] as const;
 
 function MediaTab({ booking, insp, trees, onChanged }: { booking: Booking; insp?: Inspection; trees: Trees; onChanged: () => void }) {
   const { can } = useAuth();
   const { fail, say } = useToast();
   const [zip, setZip] = useState<string>("");
-  const [confirm, setConfirm] = useState<null | { id: string }>(null);
-  const [kind, setKind] = useState<"all" | "photo" | "video">("all");
+  const [view, setView] = useState<"section" | "type">(() => { try { return localStorage.getItem("vayu:media-view") === "type" ? "type" : "section"; } catch { return "section"; } });
+  const pickView = (v: "section" | "type") => { setView(v); try { localStorage.setItem("vayu:media-view", v); } catch { /* private window: not remembered */ } };
   const [showEmpty, setShowEmpty] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
-  const [target, setTarget] = useState("");
   const fields = useMemo(() => mediaFields(trees), [trees]);
+  const onServer = useQuery({ queryKey: ["booking-media", booking.id], enabled: can("media.manage"),
+    queryFn: () => api<{ id: string; by_ops: boolean }[]>(`bookings/${booking.id}/media`) });
+  const byOps = new Set((onServer.data ?? []).filter((m) => m.by_ops).map((m) => m.id));
+  // Ops add or replace photos and videos once the expert has submitted; nobody deletes
   if (!insp) return <Empty title="No inspection yet">Photos and videos show here once the expert starts uploading.</Empty>;
-  const items = fields.flatMap((f) => idsOf(insp, f.part, f.key).map((id) => ({ id, f }))).filter((x) => kind === "all" || x.f.type === kind);
+  const all = fields.flatMap((f) => idsOf(insp, f.part, f.key).map((id) => ({ id, f })));
   const empty = fields.filter((f) => idsOf(insp, f.part, f.key).length === 0);
-  const groups = [...new Set(fields.map((f) => f.section))].map((section) => ({ section, items: items.filter((x) => x.f.section === section) })).filter((g) => g.items.length > 0);
+  // by section (form order) or by type (photos, videos, documents, signatures)
+  const groups = (view === "type"
+    ? TYPE_GROUPS.map(([type, title]) => ({ title, items: all.filter((x) => x.f.type === type) }))
+    : [...new Set(fields.map((f) => f.section))].map((title) => ({ title, items: all.filter((x) => x.f.section === title) })))
+    .filter((g) => g.items.length > 0);
+  const items = groups.flatMap((g) => g.items);          // ‹ › follow what is on screen
   const current = items.find((x) => x.id === sel) ?? items[0];
   const at = current ? items.indexOf(current) : -1;
-  async function add(f: MediaField, files: FileList | null) {
-    if (!files || !insp) return;
-    try {
-      let list = idsOf(insp, f.part, f.key);
-      for (const file of Array.from(files)) { const id = await addFile({ bookingId: booking.id, fieldKey: f.key, kind: f.type as "photo", file, name: file.name, source: "gallery" }); list = f.type === "signature" ? [id] : [...list, id]; }
-      await api(`inspections/${insp.id}`, { method: "PATCH", body: { row_version: insp.row_version, answers: { [f.part]: { [f.key]: f.type === "signature" ? list[0] : list } } } });
-      say("Added. It is checked in the background."); onChanged();
-    } catch (e) { fail(e); }
-  }
-  async function remove(id: string) {
-    try { await api(`media/${id}`, { method: "DELETE" }); setConfirm(null); setSel(null); say("Deleted."); onChanged(); } catch (e) { setConfirm(null); fail(e); }
-  }
+  const refreshed = () => { void onServer.refetch(); onChanged(); };
   async function makeZip(k: "image" | "video") {
     try { const r = await api<{ url: string }>(`bookings/${booking.id}/media-zip`, { body: { kind: k } }); setZip(`/zip/${r.url.split("/zips/")[1]}`); } catch (e) { fail(e); }
   }
-  const picked = fields.find((f) => `${f.part}.${f.key}` === target);
   return (
     <>
       <div className="bar">
-        <div className="seg" role="group" aria-label="Show">
-          {([["all", `All ${fields.reduce((n, f) => n + idsOf(insp, f.part, f.key).length, 0)}`], ["photo", "Photos"], ["video", "Videos"]] as const).map(([k, l]) => <button key={k} aria-pressed={kind === k} onClick={() => setKind(k)}>{l}</button>)}
+        <div className="seg" role="group" aria-label="Group files">
+          {([["section", "By section"], ["type", "By type"]] as const).map(([k, l]) => <button key={k} aria-pressed={view === k} onClick={() => pickView(k)}>{l}</button>)}
         </div>
+        <span className="muted small">{all.length} {all.length === 1 ? "file" : "files"}</span>
         <label className="check small"><input type="checkbox" checked={showEmpty} onChange={(e) => setShowEmpty(e.target.checked)} /> Show empty fields ({empty.length})</label>
         <span className="grow" />
-        {can("media.manage") && <>
-          <select aria-label="Add a file to" value={target} onChange={(e) => setTarget(e.target.value)} style={{ maxWidth: 220 }}><option value="">Add a file to…</option>{fields.map((f) => <option key={`${f.part}.${f.key}`} value={`${f.part}.${f.key}`}>{f.section} › {f.label}</option>)}</select>
-          {picked && <label className="btn primary">Choose file<input type="file" hidden accept={picked.type === "video" ? "video/*" : "image/*,application/pdf"} multiple={picked.type !== "signature"} aria-label={`Add to ${picked.label}`} onChange={(e) => { void add(picked, e.target.files); e.target.value = ""; setTarget(""); }} /></label>}
-        </>}
         {can("media.download") && <MoreMenu label="Download" items={[{ label: "All images (ZIP)", onClick: () => void makeZip("image") }, { label: "All videos (ZIP)", onClick: () => void makeZip("video") }]}><Download size={16} aria-hidden /> ZIP</MoreMenu>}
         {zip && <a href={zip} target="_blank" rel="noreferrer">Open the ZIP page</a>}
       </div>
@@ -427,8 +526,8 @@ function MediaTab({ booking, insp, trees, onChanged }: { booking: Booking; insp?
       <div className="gallery-wrap">
         <div className="gallery">
           {groups.map((g) => (
-            <section key={g.section} aria-label={g.section}>
-              <h3 className="gallery-h">{g.section} <span className="muted small">{g.items.length}</span></h3>
+            <section key={g.title} aria-label={g.title}>
+              <h3 className="gallery-h">{g.title} <span className="muted small">{g.items.length}</span></h3>
               <div className="tile-grid">
                 {g.items.map((x) => {
                   const sev = defectFor(insp, trees, x.f);
@@ -436,7 +535,8 @@ function MediaTab({ booking, insp, trees, onChanged }: { booking: Booking; insp?
                     <button key={x.id} className={`tile-btn${current?.id === x.id ? " on" : ""}`} data-testid="gallery-item" onClick={() => setSel(x.id)} aria-label={`${x.f.label}${sev ? `, ${sev}` : ""}`}>
                       <Thumb id={x.id} video={x.f.type === "video"} />
                       {sev && <span className="pill bad tile-tag">{sev}</span>}
-                      <span className="tile-label ellipsis">{x.f.label}</span>
+                      {byOps.has(x.id) && <span className="pill tile-tag ops-tag">Added by Ops</span>}
+                      <span className="tile-label ellipsis" title={`${x.f.section} › ${x.f.label}`}>{view === "type" ? `${x.f.section} › ${x.f.label}` : x.f.label}</span>
                     </button>);
                 })}
               </div>
@@ -444,7 +544,8 @@ function MediaTab({ booking, insp, trees, onChanged }: { booking: Booking; insp?
           {showEmpty && empty.length > 0 && (
             <section aria-label="Empty fields">
               <h3 className="gallery-h">Empty fields <span className="muted small">{empty.length}</span></h3>
-              <div className="chips">{empty.map((f) => <span key={`${f.part}.${f.key}`} className="chip">{f.section} › {f.label}</span>)}</div>
+              <div className="empty-list">{empty.map((f) => <div key={`${f.part}.${f.key}`} className="empty-row"><span className="grow">{f.section} › {f.label}</span>
+                <OpsFileActions booking={booking} f={f} count={0} onDone={refreshed} /></div>)}</div>
             </section>)}
         </div>
         {current && (
@@ -458,10 +559,10 @@ function MediaTab({ booking, insp, trees, onChanged }: { booking: Booking; insp?
             <div style={{ fontWeight: 600 }}>{current.f.label}</div>
             <div className="muted small">{current.f.section}</div>
             <AnswerNear insp={insp} trees={trees} f={current.f} />
-            {can("media.manage") && <div className="bar" style={{ marginTop: 10, marginBottom: 0 }}><button className="danger sm" onClick={() => setConfirm({ id: current.id })}>Delete…</button></div>}
+            {byOps.has(current.id) && <p className="muted small" style={{ margin: "6px 0 0" }}>Added by Ops</p>}
+            <OpsFileActions booking={booking} f={current.f} count={idsOf(insp, current.f.part, current.f.key).length} replaceId={current.id} onDone={refreshed} onReplaced={setSel} />
           </aside>)}
       </div>
-      {confirm && <Confirm title="Delete this file?" danger confirmLabel="Delete" onCancel={() => setConfirm(null)} onConfirm={() => remove(confirm.id)}><p>It is removed from the booking and from every ZIP. This cannot be undone.</p></Confirm>}
     </>
   );
 }
@@ -489,6 +590,7 @@ function AnswerNear({ insp, trees, f }: { insp: Inspection; trees: Trees; f: Med
 function PreviewMedia({ id, video }: { id: string; video: boolean }) {
   const links = useMediaUrl(id);
   if (!links) return <div className="preview-media empty" aria-label="Not ready yet" />;
+  if (isPdf(links)) return <a className="preview-media doc" href={links.url} target="_blank" rel="noreferrer"><FileText size={40} aria-hidden /><span>Open the PDF</span></a>;
   return video ? <video className="preview-media" src={links.url} controls preload="metadata" />
     : <a href={links.url} target="_blank" rel="noreferrer"><img className="preview-media" src={links.preview_url ?? links.url} alt="" /></a>;
 }

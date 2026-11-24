@@ -11,7 +11,7 @@ from apps.bookings.tests.test_submissions import assign, publish_form, start
 from apps.media import storage
 from apps.media.models import MediaAsset, MediaZip
 
-from .conftest import create, initiate_body, jpeg, png, put_parts, sha, upload
+from .conftest import create, initiate_body, jpeg, put_parts, sha, upload
 
 pytestmark = pytest.mark.django_db
 
@@ -102,8 +102,8 @@ def test_only_the_experts_own_booking_or_media_managers(job, menv, settings):
     c.force_authenticate(user=other)
     assert c.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),
                   format="json").status_code == 404
-    assert env.ops.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),
-                        format="json").status_code == 201      # media.manage
+    r = env.ops.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()), format="json")
+    assert r.json()["code"] == "NOT_SUBMITTED"        # media.manage lets them in; too early
     from apps.accounts.catalog import DEFAULTS
 
     perms = {k: v for k, v in DEFAULTS["ops"].items() if k != "media.manage"}
@@ -340,35 +340,13 @@ def test_parallel_verifications_complete_the_booking_once(menv, settings):
 
 # ---------------------------------------------------------------- ops edit media after submit
 
-def test_ops_delete_media_removes_the_file_the_reference_and_cached_zips(job, settings):
+def test_nobody_deletes_a_submitted_file(job, settings):
     env, b = job
     a = upload(env.expert, b["id"], jpeg(), settings).json()["id"]
-    b2 = upload(env.expert, b["id"], jpeg(color=(5, 5, 5)), settings).json()["id"]
-    submit_with(env, b, photo_a=[a, b2])
-    env.ops.post(f"/api/v1/bookings/{b['id']}/media-zip", {"kind": "image"}, format="json")
-    asset = MediaAsset.objects.get(pk=a)
-    r = env.ops.delete(f"/api/v1/media/{a}")
-    assert r.status_code == 204
-    assert not storage.exists(asset.key) and not MediaAsset.objects.filter(pk=a).exists()
-    from apps.bookings.models import Inspection
-
-    assert Inspection.objects.get(booking_id=b["id"]).answers["inspection"]["photo_a"] == [b2]
-    assert MediaZip.objects.count() == 0
-    assert env.expert.delete(f"/api/v1/media/{b2}").status_code == 403
-
-
-def test_deleting_the_only_photo_empties_the_answer(job, settings):
-    env, b = job
-    a = upload(env.expert, b["id"], jpeg(), settings).json()["id"]
-    s = upload(env.expert, b["id"], png(), settings, field_key="sign", kind="signature",
-               content_type="image/png").json()["id"]
-    submit_with(env, b, photo_a=[a], sign=s)
-    env.ops.delete(f"/api/v1/media/{a}")
-    env.ops.delete(f"/api/v1/media/{s}")
-    from apps.bookings.models import Inspection
-
-    answers = Inspection.objects.get(booking_id=b["id"]).answers["inspection"]
-    assert "photo_a" not in answers and "sign" not in answers
+    submit_with(env, b, photo_a=[a])
+    for client in (env.ops, env.admin, env.expert):
+        assert client.delete(f"/api/v1/media/{a}").status_code == 403
+    assert MediaAsset.objects.filter(pk=a).exists()
 
 
 def test_an_expert_can_take_back_their_own_file_before_submitting(job, settings):
@@ -384,7 +362,8 @@ def test_an_expert_cannot_take_back_someone_elses_or_a_closed_bookings_file(job,
     from apps.bookings.models import Booking
 
     env, b = job
-    theirs = upload(env.ops, b["id"], jpeg(), settings).json()["id"]        # uploaded by Ops
+    theirs = upload(env.expert, b["id"], jpeg(), settings).json()["id"]
+    MediaAsset.objects.filter(pk=theirs).update(uploaded_by=env.ops_user)   # someone else's
     assert env.expert.delete(f"/api/v1/media/{theirs}").status_code == 403
     mine = upload(env.expert, b["id"], jpeg(color=(1, 2, 3)), settings).json()["id"]
     Booking.objects.filter(pk=b["id"]).update(stage="cancelled")
@@ -396,7 +375,7 @@ def test_deleting_an_unfinished_upload_aborts_it(job, settings):
     env, b = job
     init = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),
                            format="json").json()
-    assert env.ops.delete(f"/api/v1/media/{init['id']}").status_code == 204
+    assert env.expert.delete(f"/api/v1/media/{init['id']}").status_code == 204
     assert MediaAsset.objects.count() == 0
 
 
@@ -566,8 +545,9 @@ def test_the_expert_can_list_the_files_on_the_booking_and_others_cannot(job, set
     env, b = job
     done = upload(env.expert, b["id"], jpeg(), settings).json()["id"]
     pending = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()), format="json").json()["id"]
-    ops_file = env.ops.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg(), field_key="clip", kind="video",
-                                                                    content_type="video/mp4"), format="json").json()["id"]
+    ops_file = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg(), field_key="clip", kind="video",
+                                                                       content_type="video/mp4"), format="json").json()["id"]
+    MediaAsset.objects.filter(pk=ops_file).update(uploaded_by=env.ops_user)    # someone else's file
     mine = env.expert.get(f"/api/v1/bookings/{b['id']}/media").json()
     assert [(m["id"], m["field_key"], m["status"]) for m in mine] == [
         (done, "photo_a", "verified"), (pending, "photo_a", "pending")]

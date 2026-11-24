@@ -38,10 +38,10 @@ function track(job: PendingUpload): void {
 
 /** Called when someone picks or takes a file: shrink, checksum, register, and upload in the
  *  background. Resolves with the server's media id so the answer can point at it at once. */
-export async function addFile(args: { bookingId: string; fieldKey: string; kind: PendingUpload["kind"]; file: Blob; name: string; source: "camera" | "gallery" }): Promise<string> {
+export async function addFile(args: { bookingId: string; fieldKey: string; kind: PendingUpload["kind"]; file: Blob; name: string; source: "camera" | "gallery"; replaces?: string }): Promise<string> {
   await Promise.all([...discarding]);          // a retake right after Remove must not meet the old file at the limit
   const blob = args.kind === "photo" ? await shrinkImage(args.file) : args.file;
-  const spec = { clientUuid: crypto.randomUUID(), bookingId: args.bookingId, fieldKey: args.fieldKey, kind: args.kind, contentType: blob.type || "application/octet-stream", sha256: await hashBlob(blob), source: args.source, blob };
+  const spec = { clientUuid: crypto.randomUUID(), bookingId: args.bookingId, fieldKey: args.fieldKey, kind: args.kind, contentType: blob.type || "application/octet-stream", sha256: await hashBlob(blob), source: args.source, blob, ...(args.replaces ? { replaces: args.replaces } : {}) };
   const init = await initiate(spec);
   const job: PendingUpload = { ...spec, kind: args.kind, name: args.name, assetId: init.id };
   await putJob(job).catch(() => {});          // kept until it is sent, even across a refresh
@@ -87,6 +87,19 @@ export function useUploads(bookingId?: string): UploadState[] {
   return [...states.values()].filter((s) => !bookingId || s.bookingId === bookingId);
 }
 export const uploadFor = (assetId: string) => states.get(assetId);
+
+/** Resolves once the file's bytes are on the server; rejects if sending fails or it was taken back. */
+export function uploaded(assetId: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      const s = states.get(assetId);
+      if (s?.status === "done") { listeners.delete(check); resolve(); }
+      else if (!s || s.status === "failed") { listeners.delete(check); reject(new Error(s?.error || "The upload did not finish. Try again.")); }
+    };
+    listeners.add(check);
+    check();
+  });
+}
 export function summary(list: UploadState[]): { done: number; total: number } {
   return { done: list.filter((s) => s.status === "done").length, total: list.length };
 }

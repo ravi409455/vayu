@@ -5,7 +5,8 @@ import { uploadFile } from "../../api/client";
 import { iconFor } from "../../lib/typeIcons";
 import { AccessEditor } from "../../ui/AccessEditor";
 import { ConditionBuilder, type FieldChoice } from "../../ui/ConditionBuilder";
-import { Field, Pill, Tabs, useToast } from "../../ui/kit";
+import { Check, Field, Pill, Tabs, useToast } from "../../ui/kit";
+import { InfoTip } from "../../ui/InfoTip";
 import { MoreMenu } from "../../ui/Menu";
 import { CHOICE_TYPES, FIELD_TYPES, slugKey, SYSTEM_TYPE_LABELS } from "../../lib/fieldTypes";
 
@@ -61,17 +62,15 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
             </Field>
             {!field.is_system && (
               <div className="switch-list">
-                <label className="switch-row"><span className="grow">Required<span className="muted small"> · must be answered</span></span>
+                <label className="switch-row"><span className="grow">Required <InfoTip label="About Required">It must be answered before the form can be submitted.</InfoTip></span>
                   <input type="checkbox" role="switch" className="switch" checked={d.required} onChange={(e) => set({ required: e.target.checked })} aria-label="Required" /></label>
-                <label className="switch-row"><span className="grow">Visible<span className="muted small"> · off hides it everywhere</span></span>
+                <label className="switch-row"><span className="grow">Visible <InfoTip label="About Visible">Turned off, the field is hidden everywhere, for everyone.</InfoTip></span>
                   <input type="checkbox" role="switch" className="switch" checked={d.visible} onChange={(e) => set({ visible: e.target.checked })} aria-label="Visible" /></label>
               </div>
             )}
             {["gps", "date", "time", "datetime"].includes(field.type) && (
-              <label className="check" style={{ alignItems: "flex-start" }}>
-                <input type="checkbox" disabled={locked} checked={cfg.auto === undefined ? field.type === "gps" : cfg.auto === true} onChange={(e) => setCfg({ auto: e.target.checked })} />
-                <span><strong>Fill in automatically</strong><br /><span className="muted small">{field.type === "gps" ? "The location is taken as soon as the page opens." : "The date and time are stamped when the page opens (server-corrected)."} The person cannot edit it. Leave off if they should enter it themselves.</span></span>
-              </label>
+              <Check label="Fill in automatically" disabled={locked} checked={cfg.auto === undefined ? field.type === "gps" : cfg.auto === true} onChange={(e) => setCfg({ auto: e.target.checked })}
+                tip={<>{field.type === "gps" ? "The location is taken as soon as the page opens." : "The date and time are stamped when the page opens (server-corrected)."} The person cannot edit it. Leave off if they should enter it themselves.</>} />
             )}
             {field.type === "image" && (
               <Field label="Picture" tip="A picture shown to the expert in the form, for example a QR code to scan. PNG or JPEG, up to 2 MB. It is not an answer and not part of the report.">
@@ -110,6 +109,10 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
                   <option value="both">Camera and upload</option><option value="camera">Camera only</option><option value="upload">Upload only</option></select>
               </Field>
             )}
+            {!locked && (media || field.type === "file") && (
+              <Check label="Upload by Ops allowed" checked={cfg.ops_upload !== false} onChange={(e) => setCfg({ ops_upload: e.target.checked ? undefined : false })}
+                tip={`After the expert submits, Ops and Admin can add or replace these ${field.type}s from their computer or phone. Turn off when only the expert's own upload counts.`} />
+            )}
             {!locked && ["photo", "video", "file"].includes(field.type) && (
               <div className="grid2">
                 {field.type !== "file" && <Field label="At least"><input type="number" min={0} value={String(cfg.min_count ?? 0)} onChange={(e) => setCfg({ min_count: Number(e.target.value) })} /></Field>}
@@ -117,17 +120,13 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
               </div>
             )}
             {!field.locked && field.type === "short_text" && (
-              <label className="check" style={{ alignItems: "flex-start" }}>
-                <input type="checkbox" checked={cfg.scan === true} onChange={(e) => setCfg({ scan: e.target.checked || undefined })} />
-                <span><strong>Let the expert scan this with the camera</strong><br /><span className="muted small">In the Android app, a scan button reads the text (a chassis number, a registration). The expert can still type over it.</span></span>
-              </label>
+              <Check label="Scan with the camera" checked={cfg.scan === true} onChange={(e) => setCfg({ scan: e.target.checked || undefined })}
+                tip="In the Android app, a scan button reads the text (a chassis number, a registration). The expert can still type over it." />
             )}
             {!locked && field.type === "photo" && (
               <>
-                <label className="check" style={{ alignItems: "flex-start" }}>
-                  <input type="checkbox" checked={cfg.issue_photo === true} onChange={(e) => setCfg({ issue_photo: e.target.checked || undefined })} />
-                  <span><strong>Issue photo</strong><br /><span className="muted small">Counts as a photo of a problem whenever it is taken. The report can show only these.</span></span>
-                </label>
+                <Check label="Issue photo" checked={cfg.issue_photo === true} onChange={(e) => setCfg({ issue_photo: e.target.checked || undefined })}
+                  tip="Counts as a photo of a problem whenever it is taken. The report can show only these." />
                 {siblings && (
                   <Field label="Photo of" tip="The check this photo shows. The report can caption it with that check and its answer, and counts it as an issue photo when the answer is a problem.">
                     <select aria-label="Photo of" value={String(cfg.photo_of ?? "")} onChange={(e) => setCfg({ photo_of: e.target.value || undefined })}>
@@ -158,10 +157,10 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
         {pane === "logic" && (
           field.is_system ? <p className="muted">System fields are always shown and always required: the platform relies on them.</p> : (
             <>
-              <p className="muted small">Rules make a field appear or become required only in some situations.</p>
-              <ConditionBuilder label="Required only if" value={d.required_if} onChange={(r) => set({ required_if: r })} fields={choices} />
-              <ConditionBuilder label="Show only if" value={d.show_if} onChange={(r) => set({ show_if: r })} fields={choices} />
-              <p className="muted small">A field that is hidden by a rule is never required, even if it says “required”.</p>
+              <ConditionBuilder label="Required only if" value={d.required_if} onChange={(r) => set({ required_if: r })} fields={choices}
+                tip="The field becomes required only when these conditions match. A field hidden by a rule is never required, even if it says “required”." />
+              <ConditionBuilder label="Show only if" value={d.show_if} onChange={(r) => set({ show_if: r })} fields={choices}
+                tip="The field appears only when these conditions match." />
             </>
           )
         )}

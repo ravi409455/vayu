@@ -28,7 +28,7 @@ def _jpeg(image: Image.Image, quality: int) -> bytes:
 def verify_asset(asset_id: str) -> str:
     """Check the stored file against the phone's SHA-256, then make previews. Streams the file,
     so a 300 MB video never sits in memory."""
-    from .services import check_completion
+    from .services import check_completion, expected_media, rebuild_report
 
     asset = MediaAsset.objects.get(pk=asset_id)
     if asset.status == "verified":
@@ -42,10 +42,13 @@ def verify_asset(asset_id: str) -> str:
         asset.status = "failed"
         asset.save()
         return "failed"
-    if asset.kind in ("photo", "signature") and asset.content_type != "image/heic":
+    # a file that is a picture gets a preview too, but its original is kept as sent (a document)
+    picture_file = asset.kind == "file" and asset.content_type in ("image/jpeg", "image/png")
+    picture = asset.kind in ("photo", "signature") and asset.content_type != "image/heic"
+    if picture or picture_file:
         try:
             image = Image.open(io.BytesIO(storage.read(asset.key)))
-            if max(image.size) > MAX_EDGE:  # keep the stored copy at most 2048 px on the long edge
+            if not picture_file and max(image.size) > MAX_EDGE:  # stored copy: at most 2048 px
                 storage.put(asset.key, _jpeg(_shrink(image, MAX_EDGE), 85), "image/jpeg")
                 asset.content_type = "image/jpeg"
             asset.preview_key = f"previews/{asset.id}.jpg"
@@ -57,5 +60,10 @@ def verify_asset(asset_id: str) -> str:
             return "failed"
     asset.status, asset.verified_at = "verified", timezone.now()
     asset.save()
+    booking = asset.booking
+    if booking.stage == "completed" and asset.replaced_at is None:   # Ops added it afterwards
+        insp = booking.inspections.filter(status="submitted").order_by("-submitted_at").first()
+        if insp is not None and str(asset.id) in expected_media(insp):
+            rebuild_report(booking.id)
     check_completion(asset.booking_id)
     return "verified"

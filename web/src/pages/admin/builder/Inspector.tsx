@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { Access, FormPage, FormSection } from "../../../api/types";
 import { AccessEditor } from "../../../ui/AccessEditor";
 import { ConditionBuilder, type FieldChoice } from "../../../ui/ConditionBuilder";
-import { Field, Tabs } from "../../../ui/kit";
+import { Check, Field, Tabs } from "../../../ui/kit";
 import { LibraryBox } from "./LibraryBox";
 
 type Pane = "settings" | "logic" | "access";
@@ -29,10 +29,8 @@ export function ContainerEditor({ kind, item, pages, choices, formKind, parentAc
           <>
             <Field label="Title"><input value={d.title} disabled={locked} onChange={(e) => setD({ ...d, title: e.target.value })} /></Field>
             {kind === "page" && (
-              <label className="check" style={{ alignItems: "flex-start" }}>
-                <input type="checkbox" checked={d.gate} onChange={(e) => setD({ ...d, gate: e.target.checked })} />
-                <span><strong>Must be finished before moving on</strong><br /><span className="muted small">People cannot go to the next page until every required field here is filled. Use it for steps like check-in that must be done first.</span></span>
-              </label>
+              <Check label="Must be finished before moving on" checked={d.gate} onChange={(e) => setD({ ...d, gate: e.target.checked })}
+                tip="People cannot go to the next page until every required field here is filled. Use it for steps like check-in that must be done first." />
             )}
             {section && (
               <Field label="Move to page"><select aria-label="Move to page" value={section.page} onChange={(e) => onMove(Number(e.target.value))}>
@@ -48,8 +46,7 @@ export function ContainerEditor({ kind, item, pages, choices, formKind, parentAc
         )}
         {pane === "access" && (
           <>
-            <p className="muted small">What you set here applies to everything inside, unless a field sets its own.</p>
-            <AccessEditor value={d.access} onChange={(a) => setD({ ...d, access: a })} kind={formKind} parents={{ page: parentAccess }} />
+            <AccessEditor note={`What you set here applies to everything in this ${kind}, unless a field sets its own.`} value={d.access} onChange={(a) => setD({ ...d, access: a })} kind={formKind} parents={{ page: parentAccess }} />
           </>
         )}
       </fieldset>

@@ -51,6 +51,7 @@ def request_zip(booking, kind: str, excluded: list[str] | None = None) -> MediaZ
 def build_zip(zip_id: str) -> None:
     z = MediaZip.objects.select_related("booking").get(pk=zip_id)
     assets = list(MediaAsset.objects.filter(booking=z.booking, status="verified",
+                                            replaced_at__isnull=True,
                                             kind__in=KIND_TYPES[z.kind])
                   .exclude(field_key__in=z.excluded).order_by("created_at"))
     if not assets:

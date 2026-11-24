@@ -2146,6 +2146,25 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/media/{id}/attach:
+    post:
+      operationId: media_attach_create
+      description: Ops put a file they uploaded into the submitted inspection, or
+        swap it for an old one.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - media
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/media/{id}/complete:
     post:
       operationId: media_complete_create

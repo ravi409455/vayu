@@ -20,15 +20,17 @@ const FROM: Record<LevelSource, string> = { field: "set on this field", section:
  *  so it always fits on screen. Each cell shows the result that applies (nobody has to guess); a
  *  faded cell is inherited, a solid one is set right here. Click a cell to cycle
  *  inherited → hidden → can see → can edit. */
-export function AccessEditor({ value, onChange, kind, ftype = "short_text", parents = {}, disabled }: {
+export function AccessEditor({ value, onChange, kind, ftype = "short_text", parents = {}, disabled, note }: {
   value: Access; onChange: (a: Access) => void; kind: string; ftype?: string; parents?: { section?: Access; page?: Access }; disabled?: boolean;
+  /** an extra sentence for the "i" (a page or section: it applies to everything inside) */
+  note?: string;
 }) {
   const matches = (p: (typeof PRESETS)[number]) => JSON.stringify(p.apply()) === JSON.stringify(value ?? {});
   return (
     <div className="access">
       <div className="bar" style={{ marginBottom: 8 }}>
         <strong>Quick setup</strong>
-        <InfoTip>Pick a ready-made rule, or click individual cells below. “Standard” means: experts fill it while working and can read it later; Ops can always edit.</InfoTip>
+        <InfoTip>Pick a ready-made rule, or click individual cells below. “Standard” means: experts fill it while working and can read it later; Ops can always edit.{note && <> {note}</>}</InfoTip>
       </div>
       <div className="seg" role="group" aria-label="Quick setup" style={{ marginBottom: 14, flexWrap: "wrap" }}>
         {PRESETS.map((p) => <button key={p.id} type="button" disabled={disabled} title={p.tip} aria-pressed={matches(p)} onClick={() => onChange(p.apply() ?? {})}>{p.label}</button>)}
@@ -57,9 +59,10 @@ export function AccessEditor({ value, onChange, kind, ftype = "short_text", pare
           ))}
         </tbody>
       </table>
-      <p className="muted small">Solid = set here. Faded = {kind === "booking" ? "the standard rule" : "inherited from the section, the page or the standard rule"}. Experts never see ratings or Key Checks.</p>
-      <button type="button" className="link" disabled={disabled || Object.keys(value ?? {}).length === 0} onClick={() => onChange({})}>Reset to inherited</button>
-      <span className="muted small"> · with nothing set an expert who is working gets: {WORD[defaultLevel("expert", "in_progress", kind, ftype)]}</span>
+      <div className="bar" style={{ marginTop: 8 }}>
+        <button type="button" className="link" disabled={disabled || Object.keys(value ?? {}).length === 0} onClick={() => onChange({})}>Reset to inherited</button>
+        <InfoTip label="How to read this table">Solid = set here. Faded = {kind === "booking" ? "the standard rule" : "inherited from the section, the page or the standard rule"}. Experts never see ratings or Key Checks. With nothing set, an expert who is working gets: {WORD[defaultLevel("expert", "in_progress", kind, ftype)]}.</InfoTip>
+      </div>
     </div>
   );
 }

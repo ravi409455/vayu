@@ -55,6 +55,8 @@ describe("activity lines", () => {
     expect(line({ kind: "edited", keys: ["customer_name"] })).toBe("Priya changed Customer name");
     expect(line({ kind: "inspection_edited", keys: ["inspection.a", "inspection.b"] })).toBe("Priya changed 2 answers");
     expect(line({ changes: { inspection_type: ["pdi", "ev"] } })).toBe("Type changed to EV by Priya");
+    expect(line({ kind: "media_replaced", keys: ["inspection.odometer_photo"] })).toBe("Priya replaced a file in inspection.odometer_photo");
+    expect(line({ kind: "media_added", keys: ["inspection.clip"] })).toBe("Priya added a file to inspection.clip");
   });
 });
 

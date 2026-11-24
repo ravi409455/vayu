@@ -25,6 +25,7 @@ export type RenderProps = {
   pages?: FormPage[];                 // render only these pages (the wizard shows one at a time)
   mediaUrl?: (id: string) => Promise<{ url: string; preview_url: string | null } | null>;
   onMediaRemove?: (field: FormField, id: string) => void;
+  mediaEditor?: (field: FormField, ids: string[]) => React.ReactNode;   // Ops: their own Replace / Add
 };
 
 /** Draws a form tree: only what is visible, with the right input for each type, and the
@@ -210,6 +211,7 @@ function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: 
   const [camera, setCamera] = useState(false);
   const accept = f.type === "photo" || f.type === "signature" ? "image/*" : f.type === "video" ? "video/*" : "image/*,application/pdf";
   const kind = f.type === "video" ? "video" : "photo";
+  if (p.mediaEditor) return <>{p.mediaEditor(f, ids)}</>;
 
   async function pick(files: FileList | File[] | null, source: "camera" | "gallery") {
     if (!files) return;

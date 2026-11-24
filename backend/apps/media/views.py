@@ -64,18 +64,30 @@ class Complete(APIView):
         return Response(services.progress(asset))
 
 
+class Attach(APIView):
+    """Ops put a file they uploaded into the submitted inspection, or swap it for an old one."""
+
+    permission_classes = [perm("media.manage")]
+
+    def post(self, request, pk):
+        services.attach(request, _asset(request, pk), request.data.get("replaces"))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class Url(APIView):
     permission_classes = [perm("submissions.view")]
 
     def get(self, request, pk):
         asset = _asset(request, pk, write=False)
-        if asset.field_key in services.hidden_fields(request.user, asset.booking):
+        if asset.field_key in services.hidden_fields(request.user, asset.booking) or (
+                asset.replaced_at is not None and request.user.role != "admin"):  # history: Admin
             raise err("NOT_FOUND", "Media not found.", 404)      # same answer as a missing file
         if asset.status != "verified":
             raise err("NOT_READY", "This file is not verified yet.", 409)
         return Response({"url": storage.presign_get(asset.key),
                          "preview_url": storage.presign_get(asset.preview_key)
-                         if asset.preview_key else None})
+                         if asset.preview_key else None,
+                         "content_type": asset.content_type})
 
 
 class StuckUploads(APIView):

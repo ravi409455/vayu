@@ -30,6 +30,10 @@ class MediaAsset(models.Model):
     stuck_alerted = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
     verified_at = models.DateTimeField(null=True, blank=True)
+    # Ops swapped this file for another: kept as history, out of the answers, ZIPs and limits
+    replaced_by = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name="+")
+    replaced_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["created_at"]

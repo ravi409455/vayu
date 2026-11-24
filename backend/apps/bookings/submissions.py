@@ -284,6 +284,23 @@ def _advance(actor, b: Booking, insp: Inspection) -> None:
     _changed(actor, b, changes or {"inspection": [None, str(insp.id)]})
 
 
+def _dropped_files(pinned, old: dict, new: dict, changed) -> list[str]:
+    """Photo, video, file and signature answers that lost a file id in this edit."""
+    from apps.media.models import KINDS
+
+    def ids(v):
+        return {v} if isinstance(v, str) else set(v or [])
+
+    out = []
+    for part, k in changed:
+        version = pinned.get(part)
+        if version is not None and Field.objects.filter(version=version, key=k,
+                                                        type__in=KINDS).exists() \
+                and not ids((old.get(part) or {}).get(k)) <= ids(new[part].get(k)):
+            out.append(f"{part}.{k}")
+    return out
+
+
 @transaction.atomic
 def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) -> Inspection:
     check_shape(answers)
@@ -302,6 +319,10 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
     changed = [(part, k) for part in PARTS
                for k in sorted(set(new[part]) | set(insp.answers.get(part) or {}))
                if new[part].get(k) != (insp.answers.get(part) or {}).get(k)]
+    dropped = _dropped_files(pinned, insp.answers, new, changed)
+    if dropped:          # nobody deletes a submitted file: Ops replace it on the Media tab
+        raise err("FILE_REMOVAL_NOT_ALLOWED", "Files cannot be removed. Replace them on the "
+                  "Media tab instead.", 403, keys=dropped)
     keys = sorted(k for _, k in changed)
     if keys:
         insp.answers = new

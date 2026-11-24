@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
+import { InfoTip } from "./InfoTip";
 import { fromRule, OPS, toRule, type Cond, type OpId, type Row } from "../lib/conditions";
 
 export type FieldChoice = { value: string; label: string };
 
 /** Builds a JsonLogic rule from rows ("Door is dent AND Odometer > 100"). A rule it cannot draw
  *  stays editable as raw JSON, so nothing written elsewhere is ever lost. */
-export function ConditionBuilder({ value, onChange, fields, label }: {
-  value: unknown; onChange: (rule: unknown) => void; fields: FieldChoice[]; label: string;
+export function ConditionBuilder({ value, onChange, fields, label, tip }: {
+  value: unknown; onChange: (rule: unknown) => void; fields: FieldChoice[]; label: string; tip?: string;
 }) {
   const parsedProp = fromRule(value);
   // Rows being typed are not complete rules yet, so the builder keeps them itself and only
@@ -38,7 +39,7 @@ export function ConditionBuilder({ value, onChange, fields, label }: {
   const upd = (i: number, patch: Partial<Row>) => set({ ...parsed, rows: parsed.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
   return (
     <div className="card" aria-label={label}>
-      <strong>{label}</strong>
+      <div><strong>{label}</strong>{tip && <> <InfoTip label={`About ${label}`}>{tip}</InfoTip></>}</div>
       {parsed.rows.length === 0 && <p className="muted small">Always. Add a condition to limit it.</p>}
       {parsed.rows.map((r, i) => (
         <div className="cond-row" key={i}>

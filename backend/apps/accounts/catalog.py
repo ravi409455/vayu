@@ -51,7 +51,7 @@ CATALOG: list[Perm] = [
     Perm("submissions.fill", "Inspections", "Fill in and submit inspections", scoped=True),
     Perm("submissions.edit", "Inspections", "Edit submitted inspection data", scoped=True),
     Perm("submissions.delete", "Inspections", "Delete inspection submissions"),
-    Perm("media.manage", "Inspections", "Add, replace and delete photos and videos"),
+    Perm("media.manage", "Inspections", "Add and replace photos and videos once submitted"),
     Perm("media.download", "Inspections", "Download media as ZIP"),
     Perm("payments.record", "Inspections", "Record payments on site", scoped=True),
     Perm("payments.verify", "Inspections", "Verify recorded payments"),
