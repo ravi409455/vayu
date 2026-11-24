@@ -195,7 +195,9 @@ def test_an_expert_sees_only_the_finish_time_of_their_own_submission(done):
 def other_at(b):
     from apps.bookings.models import Inspection
 
-    return Inspection.objects.filter(booking_id=b["id"]).order_by("-submitted_at").first().submitted_at
+    latest = Inspection.objects.filter(booking_id=b["id"]).order_by("-submitted_at").first()
+    assert latest is not None
+    return latest.submitted_at
 
 
 def test_a_role_without_the_view_submissions_permission_gets_no_finish_time(done):

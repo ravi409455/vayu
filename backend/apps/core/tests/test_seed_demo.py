@@ -47,9 +47,11 @@ def test_the_demo_has_the_real_team_and_a_busy_day_for_the_today_schedule():
     assert {b.stage for b in today} == {"draft", "assigned", "in_progress", "completed"}
     now = timezone.now()
     for b in today.filter(stage__in=["in_progress", "completed"]):
-        assert b.started_at <= now
+        assert b.started_at is not None and b.started_at <= now
     for i in Inspection.objects.filter(booking__in=today.filter(stage="completed"), status="submitted"):
-        assert i.booking.started_at <= i.submitted_at <= now       # it took real time, in the past
+        started, submitted = i.booking.started_at, i.submitted_at
+        assert started is not None and submitted is not None
+        assert started <= submitted <= now                         # it took real time, in the past
 
 
 def test_the_demo_seed_fills_the_problems_page_and_the_integrations_screens():
