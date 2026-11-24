@@ -71,6 +71,14 @@ def test_ops_text_wins_stays_after_edits_and_can_be_reset(kenv):
     assert not BookingActivity.objects.filter(kind="ratings_changed").exists()
 
 
+def test_key_check_text_waits_for_the_expert_to_submit(kenv):
+    from apps.bookings.models import Booking
+    b, insp = run(kenv, {})
+    Booking.objects.filter(pk=b["id"]).update(stage="in_progress")   # still being inspected
+    r = override(kenv.ops, insp, {"key_checks": {"body": "Dent"}})
+    assert r.status_code == 409 and r.json()["code"] == "NOT_SUBMITTED"
+
+
 @pytest.mark.parametrize("body", [{"key_checks": {"ghost": "x"}}, {"key_checks": {"body": 3}},
                                   {"key_checks": {"body": "x" * 501}}, {"key_checks": []}])
 def test_bad_key_check_text_is_refused(kenv, body):

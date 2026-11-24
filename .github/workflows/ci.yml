@@ -51,7 +51,7 @@ jobs:
       - name: critical areas need 100% branch coverage
         run: |
           uv run pytest -q apps/forms --cov=apps.forms.rules --cov-branch --cov-fail-under=100
-          uv run pytest -q apps/bookings apps/forms/tests/test_access_model.py --cov=apps.bookings --cov=apps.forms.access --cov-branch --cov-fail-under=100
+          uv run pytest -q apps/bookings apps/forms/tests/test_access_model.py apps/media/tests/test_ops_media.py --cov=apps.bookings --cov=apps.forms.access --cov-branch --cov-fail-under=100
           uv run pytest -q apps/media --cov=apps.media --cov-branch --cov-fail-under=100
           uv run pytest -q apps/reports --cov=apps.reports --cov-branch --cov-fail-under=100
           uv run pytest -q apps/forms/tests/test_promote.py apps/forms/tests/test_builder_support.py apps/forms/tests/test_system_forms.py apps/forms/tests/test_form_types.py apps/forms/tests/test_library_push.py --cov=apps.forms.promote --cov=apps.forms.legacy --cov-branch --cov-fail-under=100

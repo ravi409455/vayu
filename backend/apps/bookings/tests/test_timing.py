@@ -97,6 +97,7 @@ def test_late_and_quick_are_reviewed_apart(env, booking):
     assert env.ops.get("/api/v1/bookings?timing=quick&reviewed=0").json()["count"] == 1
     assert env.ops.post(url, {"flag": "quick"}, format="json").status_code == 200
     assert env.ops.get("/api/v1/bookings?timing=quick&reviewed=1").json()["count"] == 1
+    assert env.ops.get("/api/v1/bookings?timing=quick&reviewed=2").status_code == 400
     kinds = [a["kind"] for a in env.ops.get(f"/api/v1/bookings/{booking['id']}/activity").json()]
     assert "late_reviewed" in kinds and "quick_reviewed" in kinds
     assert env.ops.post(url, {"flag": "both"}, format="json").status_code == 400
