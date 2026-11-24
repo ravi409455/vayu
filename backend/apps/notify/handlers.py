@@ -1,6 +1,8 @@
 """Who hears about what. Each event becomes bell rows (and a push) for the people it concerns:
 the assigned expert for changes to their job, every Ops person for problems and progress.
 Ops can mute everything but problems (Profile → Notifications)."""
+from datetime import timedelta
+
 from apps.core import tasks as core_tasks
 
 # Ops switch that covers each kind; problems have none, so they can't be muted
@@ -15,11 +17,36 @@ PROGRESS = {"inspection.started": ("started", "{bid} started"),
             "inspection.submitted": ("submitted", "{bid} submitted"),
             "inspection.completed": ("completed", "{bid} completed")}
 WHEN = ("inspection_date", "inspection_time")
-QUIET = {"stage", "assigned_expert", *WHEN}       # told about in their own way, or not at all
+# told about in their own way, or internal (which inspection counts, a conflict mark)
+QUIET = {"stage", "assigned_expert", "inspection", "conflict", *WHEN}
+REPEAT_HOURS = 24                                   # the same problem is told once a day at most
 
 
 def _when(date, time) -> str:
-    return " ".join(str(x) for x in (date, time) if x)
+    """"Tue 24 Nov, 9:45 am" (the server can't know the phone's "today", so always a date)."""
+    from datetime import date as Date
+    from datetime import time as Time
+
+    try:
+        out = Date.fromisoformat(str(date)).strftime("%a %-d %b") if date is not None else ""
+    except ValueError:
+        return " ".join(str(x) for x in (date, time) if x)
+    try:
+        t = Time.fromisoformat(str(time))
+    except ValueError:
+        return out
+    clock = f"{t.strftime('%-I:%M')} {'am' if t.hour < 12 else 'pm'}"
+    return f"{out}, {clock}" if out else clock
+
+
+def _reason(key) -> str:
+    """A cancel reason's words, as the list shows them ("" when unknown)."""
+    from apps.forms.models import MasterListItem
+
+    if not key:
+        return ""
+    return MasterListItem.objects.filter(list__key="cancel_reason", key=key).values_list(
+        "label", flat=True).first() or str(key)
 
 
 def _label(key: str) -> str:
@@ -55,25 +82,29 @@ def on_event(name: str, payload: dict) -> None:
         from apps.integrations.apikeys import SERVICE_USERNAME
         if b.created_by and b.created_by.username == SERVICE_USERNAME:   # API / ERP only
             to_ops(b, "new_booking", f"New booking {bid}", who)
+        if b.assigned_expert_id:                       # created with an expert already chosen
+            to_user(b.assigned_expert_id, b, "assigned", f"New job: {bid}",
+                    " · ".join(x for x in (who, _when(*(b.answers.get(k) for k in WHEN))) if x))
     elif name == "booking.assigned":
         if payload.get("expert") is None:
             return
         to_user(payload["expert"], b, "assigned", f"New job: {bid}",
                 " · ".join(x for x in (who, _when(*(b.answers.get(k) for k in WHEN))) if x))
     else:
-        _updated(b, payload.get("changes") or {}, bid, who)
+        _updated(b, payload.get("changes") or {}, bid, who, payload.get("by"))
 
 
-def _updated(b, changes: dict, bid: str, who: str) -> None:
+def _updated(b, changes: dict, bid: str, who: str, by) -> None:
+    """An expert hears about changes to their job, never about their own actions."""
     old, new = changes.get("assigned_expert", [None, None])
-    if old and old != new:
+    if old and old != new and old != by:
         to_user(old, b, "unassigned", f"{bid} moved to another expert", who)
     expert = b.assigned_expert_id
-    if expert is None or b.stage not in ("assigned", "in_progress", "cancelled"):
+    if expert is None or expert == by or b.stage not in ("assigned", "in_progress", "cancelled"):
         return
     if changes.get("stage", [None, None])[1] == "cancelled":
         to_user(expert, b, "cancelled", f"{bid} cancelled",
-                " · ".join(x for x in (who, b.cancel_reason) if x))
+                " · ".join(x for x in (who, _reason(b.cancel_reason)) if x))
     elif b.stage == "cancelled":
         return
     elif any(k in changes for k in WHEN):
@@ -90,11 +121,21 @@ def to_user(user_id, booking, kind: str, title: str, body: str = "") -> None:
 
 
 def to_ops(booking, kind: str, title: str, body: str = "") -> None:
+    from django.utils import timezone
+
     from apps.accounts.models import Role, User
+
+    from .models import Notification
 
     pref = OPS_PREF.get(kind)
     users = [u.id for u in User.objects.filter(role=Role.OPS, is_active=True)
              .only("id", "notify_prefs") if pref is None or u.notify_prefs.get(pref, True)]
+    if kind == "problem":     # ten stuck photos, or a report failing on every retry: told once
+        told = set(Notification.objects.filter(
+            booking=booking, kind=kind, title=title[:200],
+            created_at__gte=timezone.now() - timedelta(hours=REPEAT_HOURS),
+        ).values_list("user_id", flat=True))
+        users = [u for u in users if u not in told]
     _send(users, booking, kind, title, body)
 
 

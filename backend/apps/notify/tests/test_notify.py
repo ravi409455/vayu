@@ -52,6 +52,9 @@ def test_reassigned_away_and_cancelled(env, booking):
         assert env.ops.post(f"/api/v1/bookings/{booking['id']}/cancel", {"reason": "x"},
                             format="json").status_code == 200
     assert [n.title for n in Notification.objects.filter(user=other)] == ["SA37926 cancelled"]
+    from apps.notify import handlers
+    assert handlers._reason(None) == "" and handlers._reason("zz") == "zz"
+    assert handlers._when("x", "y") == "x y" and handlers._when("2026-10-14", "") == "Wed 14 Oct"
 
 
 def test_rescheduled_shows_old_and_new_time(env, booking):
@@ -61,7 +64,7 @@ def test_rescheduled_shows_old_and_new_time(env, booking):
                          {"date": "2026-10-16", "time": "10:00", "reason": "x"}, format="json")
     assert r.status_code == 200, r.json()
     n = Notification.objects.get(user=env.expert_user, kind="rescheduled")
-    assert (n.title, n.body) == ("SA37926 moved", "2026-10-14 15:30 → 2026-10-16 10:00")
+    assert (n.title, n.body) == ("SA37926 moved", "Wed 14 Oct, 3:30 pm → Fri 16 Oct, 10:00 am")
 
 
 def test_ops_hear_progress_and_can_mute_all_but_problems(ienv, booking):
@@ -196,7 +199,8 @@ def test_late_start_once_per_job_using_the_settings_limit(env, booking):
     assert tasks.late_starts() == 1
     assert tasks.late_starts() == 0                   # once per job
     n = Notification.objects.get(kind="late", user=env.ops_user)
-    assert n.title == "SA37926 not started" and n.body.endswith(booked.strftime("%H:%M"))
+    assert n.title == "SA37926 not started"
+    assert n.body.endswith(booked.strftime("%-I:%M ") + ("am" if booked.hour < 12 else "pm"))
     old = Notification.objects.create(user=env.ops_user, kind="x", title="old")
     Notification.objects.filter(pk=old.pk).update(created_at=now - timedelta(days=31))
     tasks.late_starts()
@@ -262,3 +266,37 @@ def test_edge_cases_stay_quiet_or_summarise(env, booking):
     Booking.objects.filter(pk=booking["id"]).update(stage="cancelled")
     events.emit("booking.updated", booking=booking["id"], changes={"address": ["a", "b"]})
     assert Notification.objects.count() == 1          # a cancelled job's edits stay quiet
+
+
+def test_nobody_hears_about_their_own_action_or_internal_marks(ienv, booking):
+    assign(ienv, booking)
+    Notification.objects.all().delete()
+    # the expert starts a different type than Ops set: Ops hear "type change wasn't applied",
+    # the expert hears nothing about the type change they made themselves
+    assert start(ienv.expert, booking, inspection_type="pdi").status_code in (200, 201)
+    from apps.core import events
+    events.emit("booking.updated", booking=booking["id"], changes={"inspection_type": ["a", "b"]},
+                by=ienv.expert_user.id)
+    events.emit("booking.updated", booking=booking["id"],
+                changes={"inspection": [None, "x"], "conflict": ["", "TWO_EXPERTS"]})
+    assert not Notification.objects.filter(user=ienv.expert_user).exists()
+    # Ops changing the type is news to the expert
+    events.emit("booking.updated", booking=booking["id"], changes={"inspection_type": ["a", "b"]},
+                by=ienv.ops_user.id)
+    assert [n.kind for n in Notification.objects.filter(user=ienv.expert_user)] == ["changed"]
+
+
+def test_an_expert_set_at_creation_hears_new_job(env):
+    r = create(env.ops, booking_id="NEW-1", assigned_expert=env.expert_user.id)
+    assert r.status_code == 201, r.json()
+    assert titles(env.expert) == ["New job: NEW-1"]
+
+
+def test_the_same_problem_is_told_once_a_day(env, booking):
+    from apps.core import events
+    for _ in range(10):                               # ten stuck photos on one job
+        events.emit("alert.stuck_upload", booking=booking["id"], media="m", field_key="f")
+    assert titles(env.ops) == ["Photos stuck for SA37926"]
+    Notification.objects.update(created_at=timezone.now() - timedelta(hours=25))
+    events.emit("alert.stuck_upload", booking=booking["id"], media="m", field_key="f")
+    assert len(titles(env.ops)) == 2                  # still stuck a day later: told again

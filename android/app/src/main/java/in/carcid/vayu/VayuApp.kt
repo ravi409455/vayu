@@ -27,7 +27,9 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
             /** Where downloaded photos, reports and spreadsheets are kept for viewing. */
             private val cache: File? = null,
             /** An expert's jobs were saved fresh: set their reminders (WorkManager in the app). */
-            val onJobs: (Int) -> Unit = {}) {
+            val onJobs: (Int) -> Unit = {},
+            /** Signed out: take this person's notices off the phone and drop their reminders. */
+            private val clearNotices: () -> Unit = {}) {
     /** A push arrived; the open app listens and refreshes at once. */
     val pushes = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
@@ -48,6 +50,7 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
      * phone, neither Ops' saved copies nor downloaded photos, reports and spreadsheets.
      */
     fun forgetCopies(userId: Int) {
+        clearNotices()                     // the next person on this phone never sees them
         ops(userId).clear()
         cache?.listFiles()?.filter { it.name.startsWith("media-") || it.name == "reports" || it.name.endsWith(".up") }
             ?.forEach { it.deleteRecursively() }
@@ -75,7 +78,8 @@ class VayuApp : Application() {
     val graph: Graph by lazy {
         val tokens = PrefsTokenStore(this)
         Graph(Api(BuildConfig.API_URL, tokens), tokens, filesDir, { OutboxWorker.enqueue(this) }, cacheDir,
-            onJobs = { Reminders.schedule(this, graph, it) })
+            onJobs = { Reminders.schedule(this, graph, it) },
+            clearNotices = { androidx.core.app.NotificationManagerCompat.from(this).cancelAll(); Reminders.cancel(this) })
     }
 }
 

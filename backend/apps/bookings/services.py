@@ -134,7 +134,8 @@ def edit(actor, b: Booking, new_answers: dict, row_version: int) -> Booking:
     _touch(b, actor, sorted(changes))
     _save(b)
     activity.log(b, actor, "edited", changes)
-    events.emit("booking.updated", booking=str(b.id), booking_id=b.booking_id, changes=changes)
+    events.emit("booking.updated", booking=str(b.id), booking_id=b.booking_id, changes=changes,
+                by=actor.pk)
     return b
 
 
@@ -146,7 +147,8 @@ def _changed(actor, b: Booking, changes: dict) -> None:
     _touch(b, actor, sorted(changes))
     _save(b)
     activity.log(b, actor, "changed", changes)
-    events.emit("booking.updated", booking=str(b.id), booking_id=b.booking_id, changes=changes)
+    events.emit("booking.updated", booking=str(b.id), booking_id=b.booking_id, changes=changes,
+                by=actor.pk)
 
 
 @transaction.atomic

@@ -36,7 +36,7 @@ def late_starts() -> int:
     from apps.bookings import timing
     from apps.bookings.models import Booking
 
-    from .handlers import to_ops
+    from .handlers import _when, to_ops
 
     now = timezone.now()
     Notification.objects.filter(created_at__lt=now - timedelta(days=KEEP_DAYS)).delete()
@@ -53,6 +53,6 @@ def late_starts() -> int:
             continue
         mins = round((now - booked).total_seconds() / 60)
         to_ops(b, "late", f"{b.booking_id} not started",
-               f"{mins} min past {b.answers.get('inspection_time')}")
+               f"{mins} min past {_when(None, b.answers.get('inspection_time'))}")
         count += 1
     return count

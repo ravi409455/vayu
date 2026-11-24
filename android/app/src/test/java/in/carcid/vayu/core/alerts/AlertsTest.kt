@@ -101,4 +101,12 @@ class AlertsTest {
         server.on("GET app/latest", """{"version_code":null,"min_version":0}""")
         assertTrue(api.appLatest().containsKey("min_version"))
     }
+
+    @Test fun signingOutTakesTheNoticesOffThePhone() {
+        var cleared = 0
+        val root = Files.createTempDirectory("vayu").toFile()
+        val g = `in`.carcid.vayu.Graph(api, MemoryTokenStore(), root, {}, clearNotices = { cleared++ })
+        g.forgetCopies(3)
+        assertEquals(1, cleared)
+    }
 }
