@@ -74,7 +74,7 @@ class MyJobsTest {
         compose.onNodeWithText("Upcoming").performClick()
         compose.onNodeWithText("Kavya Rao").assertIsDisplayed()
         assertEquals(0, compose.onAllNodes(hasText("Arjun Mehta")).fetchSemanticsNodes().size)
-        compose.onNodeWithText("Done").performClick()
+        compose.onNodeWithText("Completed").performClick()
         compose.onNodeWithText("Dev Malhotra").assertIsDisplayed()
     }
 

@@ -42,6 +42,8 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
     var tab by rememberSaveable { mutableStateOf(OpsTab.TODAY) }
+    // a Dashboard tile opens Bookings with these filters (dates, stage, late / quick, expert)
+    var preset by remember { mutableStateOf<Map<String, String>?>(null) }
     var tick by remember { mutableStateOf(0) }
     val stack = remember { mutableStateListOf<Route>() }
     var assigning by remember { mutableStateOf<Bk?>(null) }
@@ -75,9 +77,9 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
         when (val r = stack.lastOrNull()) {
             null -> when (tab) {
                 OpsTab.TODAY -> TodayScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { push(Route.Booking(it)) }, { assigning = it }, bar)
-                OpsTab.BOOKINGS -> BookingsScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { push(Route.Booking(it)) }, { assigning = it },
+                OpsTab.BOOKINGS -> BookingsScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { push(Route.Booking(it)) }, { assigning = it }, preset = preset, onPresetUsed = { preset = null },
                     onNew = { push(Route.Form(null)) }, bar)
-                OpsTab.DASHBOARD -> DashboardScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, bar)
+                OpsTab.DASHBOARD -> DashboardScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { preset = it; tab = OpsTab.BOOKINGS }, bar)
             }
             Route.Needs -> NeedsYouScreen(env, needs, onBack = { pop() }, onOpen = { push(Route.Booking(it)) })
             is Route.Booking -> BookingScreen(env, r.id, onBack = { pop() }, onPart = { push(Route.Detail(r.id, it)) },

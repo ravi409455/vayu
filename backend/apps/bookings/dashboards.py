@@ -33,7 +33,7 @@ def period_label(d: date, group: str) -> str:
     return f"{iso.year}-W{iso.week:02d}"
 
 
-STAGE_LABELS = {"draft": "Not assigned", "assigned": "Assigned", "in_progress": "In progress",
+STAGE_LABELS = {"draft": "Unassigned", "assigned": "Assigned", "in_progress": "In progress",
                 "submitted": "Uploading", "completed": "Completed", "cancelled": "Cancelled"}
 
 

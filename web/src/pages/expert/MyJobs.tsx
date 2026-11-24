@@ -22,7 +22,7 @@ export function groupOf(b: Pick<Booking, "stage" | "answers">, now = new Date())
 export type JobFilter = "open" | "today" | "upcoming" | "started" | "done" | "all";
 export const JOB_FILTERS: { id: JobFilter; label: string }[] = [
   { id: "open", label: "To do" }, { id: "today", label: "Today" }, { id: "upcoming", label: "Upcoming" },
-  { id: "started", label: "Started" }, { id: "done", label: "Done" }, { id: "all", label: "All" },
+  { id: "started", label: "In progress" }, { id: "done", label: "Completed" }, { id: "all", label: "All" },
 ];
 
 /** Does this job belong in the quick filter? "To do" is everything not finished yet. */

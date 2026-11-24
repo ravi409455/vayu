@@ -273,7 +273,7 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
                 }
                 SoftField(query, { query = it }, "Booking ID or customer", icon = Icons.Outlined.Search)
                 Spacer(Modifier.height(12.dp))
-                Segmented(listOf(if (todayCount > 0) "Today · $todayCount" else "Today", "Upcoming", "Done"),
+                Segmented(listOf(if (todayCount > 0) "Today · $todayCount" else "Today", "Upcoming", "Completed"),
                     tab.ordinal, { tab = JobTab.entries[it] })
                 Spacer(Modifier.height(8.dp))
             }

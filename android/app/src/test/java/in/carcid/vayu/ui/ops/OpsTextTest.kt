@@ -66,4 +66,13 @@ class OpsTextTest {
         assertEquals("Minor", problemOf(f, "dent"))
         assertEquals(null, problemOf(f, "ok"))
     }
+
+    @Test fun dashboardChangesAndRanges() {
+        assertEquals(Change("↑ 25", true), change(30.0, 5.0))
+        assertEquals(Change("↑ 2", false), change(3.0, 1.0, moreIsBetter = false))
+        assertEquals(Change("same", null), change(2.0, 2.0))
+        assertEquals(Change("—", null), change(null, 2.0))
+        assertEquals("18–24 Nov", rangeLabel(java.time.LocalDate.of(2026, 11, 18), java.time.LocalDate.of(2026, 11, 24)))
+        assertEquals("28 Oct – 3 Nov", rangeLabel(java.time.LocalDate.of(2026, 10, 28), java.time.LocalDate.of(2026, 11, 3)))
+    }
 }

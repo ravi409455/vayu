@@ -172,17 +172,19 @@ private fun DayCard(all: List<Bk>) {
     }
 }
 
-/** Bookings: search, Today / Upcoming / All, one filter sheet; "Need an expert" first. */
+/** Bookings: search, Today / Upcoming / All, one filter sheet; Unassigned first. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Unit, onOpen: (String) -> Unit, onAssign: (Bk) -> Unit,
-                   onNew: () -> Unit, bottomBar: @Composable () -> Unit) {
+                   preset: Map<String, String>? = null, onPresetUsed: () -> Unit = {}, onNew: () -> Unit, bottomBar: @Composable () -> Unit) {
     val t = env.today()
     var view by rememberSaveable { mutableStateOf(0) }
     var search by rememberSaveable { mutableStateOf("") }
     var term by remember { mutableStateOf("") }
     var filters by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     var sheet by remember { mutableStateOf(false) }
+    // opened from a Dashboard tile: all dates, that tile's filters
+    LaunchedEffect(preset) { if (preset != null) { view = 2; search = ""; filters = preset; onPresetUsed() } }
     var pages by remember(view, term, filters) { mutableStateOf(1) }
     LaunchedEffect(search) { kotlinx.coroutines.delay(350); term = search.trim() }
     fun query(page: Int) = buildList {
@@ -223,10 +225,24 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
                     }
                 }
             }
+            // what the list is narrowed to (from a Dashboard tile or the filter), with a way out
+            if (filters.isNotEmpty()) item {
+                val from = filters["date_from"]?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+                val to = filters["date_to"]?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+                val words = listOfNotNull(
+                    if (from != null && to != null) rangeLabel(from, to) else null,
+                    filters["stage"]?.let { STAGE_WORDS[it] }, filters["timing"]?.let { if (it == "late") "Started late" else "Too quick" },
+                    filters["type"]?.let(env.labels::type), filters["city"]?.let(env.labels::city), filters["expert"]?.toIntOrNull()?.let(env.labels::person))
+                Row(Modifier.padding(top = 12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Showing " + words.joinToString(" · "), fontSize = 13.sp, color = Vayu.colors.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text("Clear", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.info,
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { filters = emptyMap() }.padding(8.dp))
+                }
+            }
             val need = rows.filter { it.stage == "draft" }
             val rest = rows.filter { it.stage != "draft" }
             if (need.isNotEmpty()) {
-                item { Section("Need an expert · ${need.size}") }
+                item { Section("Unassigned · ${need.size}") }
                 items(need, key = { "n" + it.id }) { b ->
                     BookingRow(b, listOf(env.labels.type(b.type), env.labels.city(b.a("city"))).filter { it.isNotBlank() }.joinToString(" · "), t, onOpen = { onOpen(b.id) }) {
                         PillButton("Assign", online && env.can("bookings.assign")) { onAssign(b) }

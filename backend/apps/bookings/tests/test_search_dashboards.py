@@ -158,7 +158,7 @@ def test_key_labels_for_every_split(many):
 
     ops = User.objects.order_by("pk").first()
     assert ops is not None
-    assert key_labels("stage", {"draft", "odd", ""}) == {"draft": "Not assigned", "odd": "odd"}
+    assert key_labels("stage", {"draft", "odd", ""}) == {"draft": "Unassigned", "odd": "odd"}
     assert key_labels("type", {"ev", "gone"}) == {"ev": "EV", "gone": "gone"}
     assert key_labels("city", {"delhi", "atlantis"}) == {"delhi": "Delhi", "atlantis": "atlantis"}
     assert key_labels("expert", {str(ops.pk), "abc", "99999"}) == {

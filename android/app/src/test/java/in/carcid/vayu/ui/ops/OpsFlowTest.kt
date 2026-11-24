@@ -126,10 +126,10 @@ class OpsFlowTest {
         assertEquals(4, Json.parseToJsonElement(server.bodiesOf("POST bookings/$B4/assign").single()).jsonObject["expert"]!!.jsonPrimitive.int)
     }
 
-    @Test fun bookingsListsWhoNeedsAnExpertFirst() {
+    @Test fun bookingsListsUnassignedFirst() {
         show()
         compose.onNodeWithText("Bookings").performClick()
-        waitFor("NEED AN EXPERT · 1")
+        waitFor("UNASSIGNED · 1")
         compose.onNodeWithText("SCHEDULED · 4").assertIsDisplayed()
         shot("ops_bookings")
     }
@@ -225,12 +225,19 @@ class OpsFlowTest {
     }
 
     @Test fun theDashboardShowsThePeriodAndTheSplit() {
+        server.on("GET dashboards/summary", """{"date_from":"2026-11-18","date_to":"2026-11-24",
+            "period":{"bookings":30,"completed":18,"cancelled":2,"completion_rate":64.3,"avg_minutes":42,"on_time":81,"late":3,"late_pct":19,"quick":1,"quick_pct":6},
+            "previous":{"bookings":5,"completed":6,"cancelled":2,"completion_rate":58.0,"avg_minutes":45,"on_time":85,"late":1,"late_pct":5,"quick":0,"quick_pct":0},
+            "by_expert":[{"expert":3,"bookings":6,"completed":4,"cancelled":0,"completion_rate":66.7,"avg_minutes":40,"on_time":50,"late":2,"late_pct":50,"quick":1,"quick_pct":25}]}""")
         show()
         compose.onNodeWithText("Dashboard").performClick()
-        waitFor("8 more than before")
-        compose.onNodeWithText("18").assertExists()
-        compose.onNodeWithText("↑ 8 more than before").assertIsDisplayed()
+        waitFor("Started late")
+        compose.onNodeWithText("↑ 25").assertIsDisplayed()          // 30 bookings against 5
+        compose.onNodeWithText("2 late").assertExists()
         shot("ops_dashboard")
+        // a tile opens the bookings behind its number
+        compose.onNodeWithText("Started late").performClick()
+        waitFor("Showing")
     }
 
     @Test fun aNewBookingIsCreatedFromTheBookingForm() {
