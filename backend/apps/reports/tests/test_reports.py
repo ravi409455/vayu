@@ -181,6 +181,14 @@ def table(rows=None, **kw):
                                           "rows": [{"label": "", "cells": [{"text": "{{ q }}"}]}]}}),
     one_page({"type": "photos", "caption": "custom", "caption_text": "{{ q }}",
               "source": {"kind": "issues"}}),
+    one_page(table(style_rules=[{"when": "sometimes"}])),
+    one_page({"type": "html", "html": '<p style="font-family:{{ inspection.colour }}">x</p>'}),
+    one_page({"type": "html", "html": "<p>{{ inspection.x | upper }}</p>"}),
+    *[one_page({"type": "html", "html": "<p>x</p>", "css": css}) for css in (
+        "p { background: url(data:x) }", "@import 'x.css';", "p { color: \\72 ed }",
+        "p { background: u\\rl(http://x) }", "p { background: image-set('http://x' 1x) }",
+        "p { background: image(http://x) }",
+        "p { } </style>", "p { color: red", "} body { color: red } p {")],
 ])
 def test_bad_definitions_are_rejected(bad):
     with pytest.raises(ValueError):
@@ -352,7 +360,7 @@ def test_rows_hide_when_empty_or_hidden_and_keep_their_fallback(renv, settings):
     assert set(rows) == {"Door", "fuel"}
     assert rows["Door"]["text"] == "Ok" and rows["Door"]["tone"] == "ok"
     assert rows["fuel"] == {"label": "fuel", "text": "Not mentioned", "tone": None,
-                            "problem": False, "empty": True}
+                            "problem": False, "empty": True, "flags": ["empty"]}
     assert parts[1]["rows"] == []
 
 
@@ -362,7 +370,8 @@ def test_values_tones_and_problems(renv, settings):
     by = {p.get("title"): p for p in context.build(src, DEFN)[1]["parts"]}
     ext = {r["label"]: r for r in by["Exterior Body"]["rows"]}
     assert ext["Driver Front Door"] == {"label": "Driver Front Door", "text": "Dent", "tone": "bad",
-                                        "problem": True, "empty": False}
+                                        "problem": True, "empty": False,
+                                        "flags": ["problem", "bad", "major"]}
     assert ext["Odometer Reading"]["text"] == "45 km" and ext["Key Check"]["text"] == "Found"
     assert ext["Key Check"]["tone"] == "bad"
     assert "Dent Details" in by                                      # show_if true
@@ -396,10 +405,11 @@ def test_section_defects_and_grid_sources(renv, settings):
                                                      "dents"]
     assert parts[1]["source"]["kind"] == "defects"                   # empty section part dropped
     assert parts[1]["rows"] == [{"section": "Section 1", "label": "door", "text": "Scratch",
-                                 "tone": "warn", "problem": True, "empty": False}]
+                                 "tone": "warn", "problem": True, "empty": False,
+                                 "flags": ["problem", "warn", "minor"]}]
     assert parts[2]["rows"] == [{"label": "SA37926", "cells": [
-        {"text": "Scratch", "tone": "warn", "problem": True},
-        {"text": "-", "tone": None, "problem": False}]}]
+        {"text": "Scratch", "tone": "warn", "problem": True, "flags": ["problem", "warn", "minor"]},
+        {"text": "-", "tone": None, "problem": False, "flags": ["empty"]}]}]
 
 
 def test_photo_grids_pick_issue_photos_and_captions(renv, settings):
@@ -573,6 +583,8 @@ def test_photos_are_shrunk_once_for_print_and_previews_use_the_small_copy(renv, 
 
 def test_the_renderer_loads_nothing_from_outside():
     html = ('<html><body><img src="file:///etc/passwd"><img src="http://example.com/x.png">'
+            '<img src="http://169.254.169.254/latest/meta-data/">'
+            '<div style="background-image:url(http://127.0.0.1:8000/x.png);height:20mm"></div>'
             '<link rel="stylesheet" href="https://example.com/x.css">'
             '<style>@import url("file:///etc/hosts");</style><p>ok</p></body></html>')
     pdf = render.render_pdf(html)
@@ -918,3 +930,91 @@ def test_the_designer_checks_lists_problems_and_fields_left_out(renv):
     assert saved.status_code == 200 and saved.json()["issues"] == []
     bad = renv.admin.post(url, {"definition": []}, format="json")
     assert bad.status_code == 400
+
+
+# ---------------------------------------------------------------- phase 4
+
+@pytest.mark.parametrize("style", [
+    "background-color:url(http://x/y.png)", "color:u\\rl(http://x/y.png)",
+    "background-color:image-set('http://x/y.png' 1x)", "color:image(http://x/y.png)",
+    "color:&#117;rl(http://x/y.png)", "background:url(http://x/y.png)", "content:url(x)"])
+def test_custom_html_styles_never_load_anything(style):
+    """Each one is refused, or nh3 drops the whole value: either way nothing is fetched."""
+    d = one_page({"type": "html", "html": f'<div style="{style}">x</div>'})
+    try:
+        out = definition.validate_definition(d)["pages"][0]["parts"][0]["html"]
+    except ValueError:
+        return
+    assert out == '<div style="">x</div>'
+
+
+def test_custom_html_is_cleaned_filled_in_and_its_css_kept_inside_it(renv, settings):
+    b = complete_job(renv, door="dent", photos=1, settings=settings, fuel="petrol")
+    src = source(b)
+    d = definition.validate_definition(one_page(
+        {"type": "html", "css": "p { color: var(--brand) } .big { font-size: 20pt }",
+         "html": '<div class="box" style="border:1px solid red" onclick="x()"><p>{{ '
+                 'inspection.door }} {{ sys.booking_id }}</p><script>x()</script>'
+                 '<img src="data:image/png;base64,AA"><a href="https://x.test">l</a>'
+                 '<table><tr><td colspan="2">c</td></tr></table></div>'},
+        {"type": "html", "html": "<p>no css</p>"}, {"type": "html", "html": "  "}))
+    part = d["pages"][0]["parts"][0]
+    assert "script" not in part["html"] and "img" not in part["html"] and "href" not in part["html"]
+    out = definition.validate_definition(one_page({"type": "html", "html":
+        '<p style="background-image:url(http://x);list-style-image:url(x);color:red">x</p>'}))
+    assert out["pages"][0]["parts"][0]["html"] == '<p style="color:red">x</p>'   # pictures gone
+    assert 'class="box"' in part["html"] and 'colspan="2"' in part["html"] and "onclick" not in part["html"]
+    assert ("inspection", "door") in definition.referenced_fields(d)
+    pages = context.build(src, d)
+    assert len(pages[0]["parts"]) == 2                                   # the blank one hides
+    html = render.render_html(pages, d, src.values())
+    assert '<div class="custom custom-0">' in html and '<div class="custom custom-1">' in html
+    assert ".custom-0 { p { color: var(--brand) } .big { font-size: 20pt } }" in html
+    assert "<p>Dent SA37926</p>" in html
+    render.render_pdf(html)
+
+
+def test_style_rules_colour_and_bold_the_rows_they_match(renv, settings):
+    b = complete_job(renv, door="dent", photos=1, settings=settings)
+    src = source(b)
+    rules = [{"when": "problem", "value": "warn"},
+             {"when": "major", "label": "bad", "bold": True, "background": "bad"},
+             {"when": "empty", "value": "muted", "background": "none"},
+             {"when": "ok", "bold": False}]
+    d = definition.validate_definition(one_page(
+        table([{"field": "inspection.door"}, {"field": "inspection.fuel", "fallback": "-"},
+               {"field": "inspection.odometer"}], style_rules=rules),
+        table([{"field": "inspection.door"}], per_row=2, style_rules=rules),
+        {"type": "table", "style_rules": rules, "source": {"kind": "defects"}},
+        {"type": "table", "style_rules": rules, "source": {
+            "kind": "grid", "columns": [{"label": "A"}, {"label": "B"}],
+            "rows": [{"label": "x", "cells": [{"field": "inspection.door"},
+                                              {"field": "inspection.ghost", "fallback": "-"}]}]}}))
+    pages = context.build(src, d)
+    rows = pages[0]["parts"][0]["rows"]
+    assert rows[0]["flags"] == ["problem", "bad", "major"] and rows[1]["flags"] == ["empty"]
+    html = render.render_html(pages, d, src.values())
+    styled = '<td class="rb" style="background:var(--bad-tint)">'
+    assert "<th class='l tone-bad rb' style=\"background:var(--bad-tint)\">door</th>" in html
+    assert html.count(styled) >= 3
+    assert '<span class="chip tone-warn">Dent</span>' in html             # problem -> warn
+    assert '<span class="tone-muted">-</span>' in html                    # empty -> muted
+    unsure = source(b)
+    unsure.answers["inspection"]["door"] = "not_checked"
+    assert "not_checked" in context.flags(unsure, "inspection.door", unsure.cell("inspection.door"))
+    unsure.answers["inspection"]["door"] = ["scratch", "dent"]
+    assert context.flags(unsure, "inspection.door", unsure.cell("inspection.door"))[-1] == "major"
+
+
+def test_the_pdf_has_a_bookmark_for_each_page_and_part_title(renv, settings):
+    b = complete_job(renv, door="dent", photos=1, settings=settings, fuel="petrol")
+    src = source(b)
+    d = {"schema": 2, "pages": [
+        {"title": "Vehicle & owner", "parts": [table([{"field": "inspection.door"}], title="Body"),
+                                               {"type": "text", "html": "<h2>Not a bookmark</h2>"}]},
+        {"title": "", "parts": [table([{"field": "inspection.door"}])]}]}
+    pdf = render.render_pdf(render.render_html(context.build(src, d), d, src.values()))
+    reader = pypdf.PdfReader(io.BytesIO(pdf))
+    outline: list = reader.outline
+    assert outline[0].title == "Vehicle & owner" and [o.title for o in outline[1]] == ["Body"]
+    assert len(outline) == 2 and (reader.metadata and reader.metadata.title or "").startswith("SA37926")

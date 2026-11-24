@@ -1,9 +1,9 @@
 import { ArrowDown, ArrowUp, Copy, Trash2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { ConditionBuilder } from "../../../ui/ConditionBuilder";
 import { Field } from "../../../ui/kit";
-import { fillGrid, PART_LABEL, type Box, type Cell, type Look, type Part, type ReportPage, type Row, type Source } from "./model";
-import { RichText } from "./RichText";
+import { fillGrid, PART_LABEL, type Box, type Cell, type Look, type Part, type ReportPage, type Row, type Source, type StyleRule } from "./model";
+import { RichText, ValuePicker } from "./RichText";
 
 export type SectionChoice = { value: string; label: string; fields: { key: string; label: string; type: string }[] };
 export type Ctx = { sections: SectionChoice[]; fields: { value: string; label: string; type: string }[]; readOnly: boolean };
@@ -54,7 +54,7 @@ export function PartSettings({ part, onChange, onDelete, onDuplicate, onMove, ct
   const box = ("box" in part ? part.box : undefined) ?? {};
   const setBox = (b: Partial<Box>) => set({ box: { ...box, ...b } });
   const t = part.type;
-  const titled = t === "table" || t === "photos" || t === "contents";
+  const titled = t === "table" || t === "photos" || t === "contents" || t === "html";
   return (
     <div className="rd-settings-body">
       <div className="bar" style={{ margin: 0 }}>
@@ -90,6 +90,7 @@ export function PartSettings({ part, onChange, onDelete, onDuplicate, onMove, ct
             <Field label="Line up"><Seg label="Line up" value={part.align ?? "top"} options={[["top", "Top"], ["middle", "Middle"]]} onChange={(align) => set({ align })} /></Field>
           </>
         )}
+        {t === "html" && <HtmlSettings part={part} set={set} ctx={ctx} />}
         {t === "verify" && <Field label="Code size (mm)"><input type="number" min={15} max={120} value={part.size ?? 40} onChange={(e) => set({ size: Number(e.target.value) })} /></Field>}
         {t === "contents" && <Field label="Columns"><Seg label="Contents columns" value={part.columns ?? 1} options={[[1, "1"], [2, "2"]]} onChange={(columns) => set({ columns })} /></Field>}
         {t === "spacer" && <Field label="Height (mm)"><input type="number" min={1} max={200} value={part.height ?? 10} onChange={(e) => set({ height: Number(e.target.value) })} /></Field>}
@@ -177,6 +178,9 @@ function TableSettings({ part, set, ctx }: { part: Extract<Part, { type: "table"
         {src.kind !== "grid" && src.kind !== "defects" && <Field label={`Label column ${look.label_width ?? 55}%`}><input type="range" min={15} max={85} value={look.label_width ?? 55} onChange={(e) => setLook({ label_width: Number(e.target.value) })} /></Field>}
         <Toggle label="Muted labels, bold answers" checked={!!look.kv} onChange={(v) => setLook({ kv: v })} />
         {src.kind === "grid" && <Toggle label="Big numbers (ratings, totals)" checked={!!look.emphasis} onChange={(v) => setLook({ emphasis: v })} />}
+      </More>
+      <More title="Style rules" summary={part.style_rules?.length ? `${part.style_rules.length} rule${part.style_rules.length > 1 ? "s" : ""}` : "none"}>
+        <StyleRules rules={part.style_rules ?? []} onChange={(r) => set({ style_rules: r.length ? r : undefined })} grid={src.kind === "grid"} />
       </More>
     </>
   );
@@ -271,6 +275,63 @@ function PhotoSettings({ part, set, ctx }: { part: Extract<Part, { type: "photos
         </div>
         <Toggle label="Round corners" checked={frame.round ?? true} onChange={(v) => set({ frame: { ...frame, round: v } })} />
       </More>
+    </>
+  );
+}
+
+const WHEN: [StyleRule["when"], string][] = [["problem", "the answer is a problem"], ["critical", "severity is critical"], ["major", "severity is major"],
+  ["minor", "severity is minor"], ["bad", "the answer is red"], ["warn", "the answer is amber"], ["ok", "the answer is green"],
+  ["not_checked", "it was not able to be checked"], ["empty", "there is no answer"]];
+
+/** "When the answer is a problem: red label" — later rules win over earlier ones. */
+function StyleRules({ rules, onChange, grid }: { rules: StyleRule[]; onChange: (r: StyleRule[]) => void; grid: boolean }) {
+  const setRule = (i: number, p: Partial<StyleRule>) => onChange(rules.map((r, j) => (j === i ? clean({ ...r, ...p }) : r)));
+  const tone = (label: string, v: string | undefined, onPick: (v: string | undefined) => void, tints = false) => (
+    <Field label={label}><select value={v ?? ""} onChange={(e) => onPick(e.target.value || undefined)}>
+      <option value="">{tints ? "None" : "Unchanged"}</option>
+      {TONES.filter(([k]) => !tints || k !== "text").map(([k, l]) => <option key={k} value={k}>{tints ? `${l} tint` : l}</option>)}</select></Field>);
+  return (
+    <div className="rd-rules">
+      {rules.map((r, i) => (
+        <div key={i} className="rd-rule">
+          <div className="bar" style={{ margin: 0 }}>
+            <label className="grow">When <select aria-label={`Rule ${i + 1} when`} value={r.when} onChange={(e) => setRule(i, { when: e.target.value as StyleRule["when"] })}>
+              {WHEN.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+            <button type="button" className="link" aria-label={`Remove rule ${i + 1}`} onClick={() => onChange(rules.filter((_, j) => j !== i))}>✕</button>
+          </div>
+          <div className="grid2">
+            {!grid && tone("Label colour", r.label, (label) => setRule(i, { label }))}
+            {tone("Answer colour", r.value, (value) => setRule(i, { value }))}
+            {tone(grid ? "Cell tint" : "Row tint", r.background, (background) => setRule(i, { background }), true)}
+          </div>
+          <Toggle label="Bold" checked={!!r.bold} onChange={(bold) => setRule(i, { bold: bold || undefined })} />
+        </div>))}
+      <button type="button" className="link" onClick={() => onChange([...rules, { when: "problem", value: "bad" }])}>+ Add rule</button>
+      <p className="muted small">Severity comes from the answer options in the form builder. When two rules match, the lower one wins.</p>
+    </div>
+  );
+}
+
+function clean(r: StyleRule): StyleRule {
+  return Object.fromEntries(Object.entries(r).filter(([, v]) => v !== undefined)) as StyleRule;
+}
+
+function HtmlSettings({ part, set, ctx }: { part: Extract<Part, { type: "html" }>; set: (p: Record<string, unknown>) => void; ctx: Ctx }) {
+  const area = useRef<HTMLTextAreaElement>(null);
+  const insert = (text: string) => {                   // at the cursor, or at the end
+    const el = area.current, at = el?.selectionStart ?? part.html.length, to = el?.selectionEnd ?? at;
+    set({ html: part.html.slice(0, at) + text + part.html.slice(to) });
+  };
+  return (
+    <>
+      <p className="muted small">For what the other parts cannot do. Plain HTML and CSS with values like {"{{ inspection.colour }}"}. No scripts, links or pictures; the CSS only styles this part. Colours: var(--brand), var(--ok), var(--bad)…</p>
+      <Field label="HTML">
+        <div className="bar" style={{ margin: "0 0 4px" }}><ValuePicker choices={ctx.fields.filter((f) => !MEDIA.includes(f.type))} onPick={insert} /></div>
+        <textarea ref={area} aria-label="HTML" className="mono" rows={10} spellCheck={false} value={part.html} onChange={(e) => set({ html: e.target.value })} />
+      </Field>
+      <Field label="CSS" help="e.g. .note { color: var(--brand) }">
+        <textarea aria-label="CSS" className="mono" rows={6} spellCheck={false} value={part.css ?? ""} onChange={(e) => set({ css: e.target.value || undefined })} />
+      </Field>
     </>
   );
 }

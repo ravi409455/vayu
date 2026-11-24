@@ -67,7 +67,9 @@ describe("report template model", () => {
     expect(newPart("table")).toMatchObject({ source: { kind: "fields", rows: [] } });
     expect(newPart("photos")).toMatchObject({ source: { kind: "issues" } });
     expect(newPart("photos", "inspection.front")).toMatchObject({ source: { kind: "section" } });
-    for (const t of ["text", "columns", "verify", "contents", "spacer", "page_break"] as const) expect(newPart(t).type).toBe(t);
+    for (const t of ["text", "columns", "verify", "contents", "spacer", "page_break", "html"] as const) expect(newPart(t).type).toBe(t);
+    expect(newPart("html")).toMatchObject({ css: expect.stringContaining(".note") });
+    expect(partName(newPart("html"))).toBe("Custom HTML");
   });
   it("makes a ready page from a form page: heading, a table each, then issue photos", () => {
     const fp = { id: 1, title: "Exterior <Body>", sections: [
@@ -134,5 +136,43 @@ describe("the part settings panel", () => {
     expect(onChange).toHaveBeenLastCalledWith({ caption: "check" });
     await u.click(screen.getByRole("checkbox", { name: "Start on a new page" }));
     expect(onChange).toHaveBeenLastCalledWith({ new_page: true });
+  });
+  it("adds style rules: when a problem, red answer; when critical, bold on a red tint", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { PartSettings } = await import("./pages/admin/report/PartSettings");
+    const onChange = vi.fn();
+    const u = userEvent.setup();
+    const part: Part = { id: "t", type: "table", source: { kind: "defects" }, style_rules: [{ when: "problem", value: "bad" }] };
+    render(<PartSettings part={part} ctx={ctx} onChange={onChange} onDelete={() => {}} onDuplicate={() => {}} onMove={() => {}} />);
+    await u.click(screen.getByText("Style rules"));
+    await u.selectOptions(screen.getByLabelText("Rule 1 when"), "critical");
+    expect(onChange).toHaveBeenLastCalledWith({ style_rules: [{ when: "critical", value: "bad" }] });
+    await u.selectOptions(screen.getByLabelText("Answer colour"), "");               // back to unchanged
+    expect(onChange).toHaveBeenLastCalledWith({ style_rules: [{ when: "problem" }] });
+    await u.selectOptions(screen.getByLabelText("Row tint"), "bad");
+    expect(onChange).toHaveBeenLastCalledWith({ style_rules: [{ when: "problem", value: "bad", background: "bad" }] });
+    await u.click(screen.getByRole("checkbox", { name: "Bold" }));
+    expect(onChange).toHaveBeenLastCalledWith({ style_rules: [{ when: "problem", value: "bad", bold: true }] });
+    await u.click(screen.getByRole("button", { name: "+ Add rule" }));
+    expect(onChange).toHaveBeenLastCalledWith({ style_rules: [{ when: "problem", value: "bad" }, { when: "problem", value: "bad" }] });
+    await u.click(screen.getByRole("button", { name: "Remove rule 1" }));
+    expect(onChange).toHaveBeenLastCalledWith({ style_rules: undefined });
+  });
+  it("edits custom HTML and CSS and puts a value where the cursor is", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { PartSettings } = await import("./pages/admin/report/PartSettings");
+    const onChange = vi.fn();
+    const u = userEvent.setup();
+    const part: Part = { id: "h", type: "html", html: "<p>AB</p>" };
+    render(<PartSettings part={part} ctx={ctx} onChange={onChange} onDelete={() => {}} onDuplicate={() => {}} onMove={() => {}} />);
+    const area = screen.getByRole("textbox", { name: "HTML" }) as HTMLTextAreaElement;
+    area.setSelectionRange(4, 4);
+    await u.selectOptions(screen.getByLabelText("Insert a value"), "inspection.bonnet");
+    expect(onChange).toHaveBeenLastCalledWith({ html: "<p>A{{ inspection.bonnet }}B</p>" });
+    await u.type(screen.getByRole("textbox", { name: "CSS" }), "p");
+    expect(onChange).toHaveBeenLastCalledWith({ css: "p" });
+    expect(screen.queryByRole("option", { name: "Bonnet photo" })).toBeNull();
   });
 });

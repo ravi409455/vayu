@@ -202,6 +202,27 @@ class Source:
 
 # ---------------------------------------------------------------- parts
 
+SEVERITY = ("minor", "major", "critical")
+
+
+def flags(src: Source, ref: str, c: Cell) -> list[str]:
+    """What style rules can match on one answer: problem, its colour, the worst severity
+    chosen, 'not_checked', 'empty'."""
+    out = [x for x in ("problem" if c.problem else "", c.tone or "",
+                       "" if c.text else "empty") if x]
+    f = src.get_field(ref)
+    if f is not None and f.type in ("single_choice", "multi_choice"):
+        form, key = field_ref(ref)
+        raw = src.answers.get(form, {}).get(key)
+        keys = raw if isinstance(raw, list) else [raw]
+        opts = {o["key"]: o for o in f.config.get("options", [])}
+        worst = [SEVERITY.index(opts[k]["severity"]) for k in keys
+                 if opts.get(k, {}).get("severity") in SEVERITY]
+        out += [SEVERITY[max(worst)]] if worst else []
+        out += ["not_checked"] if "not_checked" in keys else []
+    return out
+
+
 def _row(src: Source, ref: str, label: str | None, fallback: str | None) -> dict | None:
     f = src.get_field(ref)
     if f is None or not src.shown(ref):
@@ -210,7 +231,7 @@ def _row(src: Source, ref: str, label: str | None, fallback: str | None) -> dict
     if not c.text and fallback is None:
         return None
     return {"label": label or f.label, "text": c.text or fallback, "tone": c.tone,
-            "problem": c.problem, "empty": not c.text}
+            "problem": c.problem, "empty": not c.text, "flags": flags(src, ref, c)}
 
 
 def table_rows(src: Source, part: dict, data: dict) -> list[dict]:
@@ -231,7 +252,8 @@ def table_rows(src: Source, part: dict, data: dict) -> list[dict]:
             if f.key in src.defects:
                 c = src.cell(f"inspection.{f.key}")
                 out.append({"section": f.section.title, "label": f.label, "text": c.text,
-                            "tone": c.tone, "problem": True, "empty": False})
+                            "tone": c.tone, "problem": True, "empty": False,
+                            "flags": flags(src, f"inspection.{f.key}", c)})
         return out
     values = src.values()                                            # grid
     for r in s["rows"]:
@@ -242,10 +264,10 @@ def table_rows(src: Source, part: dict, data: dict) -> list[dict]:
             if "field" in cell:
                 c = src.cell(cell["field"])
                 cells.append({"text": c.text or cell.get("fallback", ""), "tone": c.tone,
-                              "problem": c.problem})
+                              "problem": c.problem, "flags": flags(src, cell["field"], c)})
             else:
                 cells.append({"text": placeholders.render(cell["text"], values, html=False),
-                              "tone": None, "problem": False})
+                              "tone": None, "problem": False, "flags": []})
         if any(c["text"] for c in cells):
             out.append({"label": placeholders.render(r["label"], values, html=False),
                         "cells": cells})
@@ -301,7 +323,7 @@ def _resolve(src: Source, parts: list[dict], data: dict, values: dict) -> list[d
         elif t == "photos":
             item["items"] = photo_items(src, part)
             empty = not item["items"]
-        elif t == "text":
+        elif t in ("text", "html"):
             item["html_out"] = placeholders.render(part["html"], values)
             empty = not part["html"].strip()
         elif t == "columns":

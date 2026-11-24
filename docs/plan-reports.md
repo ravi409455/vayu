@@ -274,6 +274,23 @@ each part sits; `POST .../checks` lists problems and fields left out.
 
 Browser tests can run beside a local stack: `E2E_WEB_PORT=5176 E2E_API_PORT=8003 npx playwright test`.
 
+### Phase 4 status (2026-11-24)
+
+Done:
+- **Style rules** on tables (Look → Style rules): "when [the answer is a problem / severity is
+  critical, major or minor / the answer is red, amber or green / not able to check / no answer]"
+  → label colour, answer colour, row tint, bold. Lower rules win. Severity comes from the answer
+  options in the form builder. The PDI template uses two: problems list "critical → bold on a red
+  tint", section tables "not able to check → grey answer".
+- **Custom HTML** part ("+ Add to this page" → Custom HTML): HTML and CSS with values like
+  `{{ sys.booking_id }}`. Cleaned on save: no scripts, links, pictures or `url(...)`; the CSS is
+  nested under the part, so it only styles that part.
+- **PDF bookmarks**: each page is a bookmark, its part titles under it (e.g. Exterior → Front,
+  Driver side, Rear…). Headings inside text are not bookmarks, so nothing is listed twice.
+
+Not separate settings (on purpose): style rules on photo captions (captions already take the
+answer's colour); turning bookmarks off per page.
+
 ## 12. Questions for you
 
 1. Battery state and Generator state: keep them in the PDI form? They are not in the sample

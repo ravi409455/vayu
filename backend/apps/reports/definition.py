@@ -48,7 +48,7 @@ def texts(d: dict) -> Iterator[tuple[str, str]]:
                     if "text" in item:
                         yield f"bands.{style}.{band}.{side}[{k}]", item["text"]
     for where, p in parts(d):
-        if p["type"] == "text":
+        if p["type"] in ("text", "html"):
             yield f"{where}.html", p["html"]
         if p["type"] == "photos" and "caption_text" in p:
             yield f"{where}.caption_text", p["caption_text"]
@@ -77,9 +77,12 @@ def validate_definition(d: Any) -> dict:
     error = best_match(_validator.iter_errors(d))
     if error is not None:
         raise ValueError(f"{_where(error.absolute_path)}: {error.message}")
-    for _, p in parts(d):
+    for where, p in parts(d):
         if p["type"] == "text":
             p["html"] = placeholders.clean_html(p["html"])
+        if p["type"] == "html":
+            p["html"] = placeholders.clean_custom(p["html"])
+            placeholders.check_css(p.get("css", ""), f"{where}.css")
     for bandset in d.get("bands", {}).values():
         for band in bandset.values():
             for side in ("left", "center", "right"):

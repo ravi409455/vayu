@@ -11,17 +11,19 @@ export type Source =
   | { kind: "grid"; columns: { label: string; width?: number }[]; rows: { label: string; show_if?: unknown; cells: Cell[] }[] };
 export type PhotoSource = { kind: "fields"; fields: string[] } | { kind: "section"; section: string } | { kind: "issues" };
 export type Box = { space_above?: number; space_below?: number; padding?: number; border?: "none" | "all" | "bottom" | "left"; border_width?: number; border_color?: string; background?: string; round?: boolean };
+export type StyleRule = { when: "problem" | "ok" | "warn" | "bad" | "muted" | "minor" | "major" | "critical" | "not_checked" | "empty"; label?: string; value?: string; bold?: boolean; background?: string };
 export type Look = { lines?: "all" | "rows" | "none"; height?: "compact" | "normal" | "roomy"; stripes?: boolean; label_width?: number; header?: boolean; headers?: string[]; emphasis?: boolean; kv?: boolean };
 type Common = { id?: string; show_if?: unknown; hide_when_empty?: boolean; new_page?: boolean; keep_together?: boolean; keep_title?: boolean; box?: Box };
 export type Part = Common & (
-  | { type: "table"; title?: string; source: Source; per_row?: 1 | 2 | 3 | 4; look?: Look }
+  | { type: "table"; title?: string; source: Source; per_row?: 1 | 2 | 3 | 4; look?: Look; style_rules?: StyleRule[] }
   | { type: "photos"; title?: string; source: PhotoSource; which?: "all" | "issues" | "first"; per_row?: 1 | 2 | 3 | 4; shape?: "4:3" | "16:9" | "1:1" | "original"; fit?: "fill" | "whole" | "top"; caption?: "label" | "check" | "custom" | "none"; caption_text?: string; frame?: { border?: "none" | "grey" | "brand"; round?: boolean; gap?: number } }
   | { type: "text"; html: string; columns?: 1 | 2; size?: "small" | "normal" | "large" | "title"; align?: "left" | "center" | "right" | "justify" }
   | { type: "columns"; columns: { width?: number; parts: Part[] }[]; gap?: number; align?: "top" | "middle" }
   | { type: "verify"; size?: number }
   | { type: "contents"; title?: string; columns?: 1 | 2 }
   | { type: "page_break" }
-  | { type: "spacer"; height?: number });
+  | { type: "spacer"; height?: number }
+  | { type: "html"; title?: string; html: string; css?: string });
 export type PartType = Part["type"];
 export type ReportPage = { id?: string; title: string; style?: "normal" | "cover" | "full"; show_if?: unknown; parts: Part[] };
 export type SlotItem = { text: string } | { image: string; height?: number; tile?: boolean };
@@ -136,7 +138,7 @@ export function movePage(d: Definition, id: string, overId: string): Definition 
 
 export const PART_LABEL: Record<PartType, string> = {
   table: "Table of checks", photos: "Photos", text: "Text", columns: "Side by side", verify: "Verify code",
-  contents: "Contents list", page_break: "Page break", spacer: "Space",
+  contents: "Contents list", page_break: "Page break", spacer: "Space", html: "Custom HTML",
 };
 
 /** What the pages list calls a part: its title, its text, or what it is. */
@@ -163,6 +165,7 @@ export function newPart(type: PartType, firstSection?: string): Part {
     case "verify": return { id, type, size: 50 };
     case "contents": return { id, type, columns: 2 };
     case "spacer": return { id, type, height: 10 };
+    case "html": return { id, type, html: '<div class="note">\n  <p>Booking {{ sys.booking_id }}</p>\n</div>', css: ".note { border-left: 1mm solid var(--brand); padding-left: 3mm }" };
     default: return { id, type: "page_break" };
   }
 }

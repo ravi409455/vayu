@@ -128,8 +128,28 @@ def _value(r: dict, emphasis: bool = False) -> str:
         else f"<span>{e(r['text'])}</span>"
 
 
+def _styled(r: dict, rules: list[dict]) -> tuple[dict, str, str, str]:
+    """A row with the style rules that match it: (row, label class, bold class, background
+    style). Later rules win, e.g. 'problem: red answer' then 'critical: red background'."""
+    label, bold, bg = "", False, ""
+    for rule in rules:
+        if rule["when"] not in r.get("flags", ()):
+            continue
+        r = {**r, "tone": rule.get("value", r["tone"])}
+        label = rule.get("label", label)
+        bold = bold or rule.get("bold", False)
+        bg = rule.get("background", bg)
+    return (r, f" tone-{label}" if label else "", " rb" if bold else "",
+            f' style="background:var(--{bg}-tint)"' if bg and bg != "none" else "")
+
+
+def _td(rb: str, st: str) -> str:
+    return (f' class="{rb[1:]}"' if rb else "") + st
+
+
 def _table(part: dict) -> str:
     look = part.get("look", {})
+    rules = part.get("style_rules", [])
     kind = part["source"]["kind"]
     cls = (f"t lines-{look.get('lines', 'rows')}" + (" stripes" if look.get("stripes", True) else "")
            + (" emphasis" if look.get("emphasis") else "") + (" kv" if look.get("kv") else ""))
@@ -144,15 +164,26 @@ def _table(part: dict) -> str:
         head = ("<th></th>" if labels else "") + "".join(
             f"<th{wd}>{e(c['label'])}</th>" for c, wd in zip(cols, widths, strict=True))
         thead = f"<thead><tr>{head}</tr></thead>" if look.get("header", True) else ""
-        body = "".join("<tr>" + (f"<th class='l'>{e(r['label'])}</th>" if labels else "") + "".join(
-            f"<td>{_value(c, big)}</td>" for c in r["cells"]) + "</tr>" for r in rows)
+        body = ""
+        for r in rows:
+            cells = ""
+            for c in r["cells"]:
+                c, _, rb, st = _styled(c, rules)
+                cells += f"<td{_td(rb, st)}>{_value(c, big)}</td>"
+            label = f"<th class='l'>{e(r['label'])}</th>" if labels else ""
+            body += f"<tr>{label}{cells}</tr>"
         return f'<table class="{cls} grid"{style}>{thead}<tbody>{body}</tbody></table>'
     headers = look.get("headers") or (["Section", "Check", "Result"] if kind == "defects"
                                       else ["Check", "Result"])
     if kind == "defects":
         head = "".join(f"<th>{e(h)}</th>" for h in headers[:3])
-        body = "".join(f"<tr><td>{e(r['section'])}</td><td>{e(r['label'])}</td>"
-                       f"<td>{_value(r)}</td></tr>" for r in rows)
+        body = ""
+        for r in rows:
+            r, lt, rb, st = _styled(r, rules)
+            td = _td(rb, st)
+            label = f'<span class="{lt[1:]}">{e(r["label"])}</span>' if lt else e(r["label"])
+            body += (f"<tr><td{td}>{e(r['section'])}</td><td{td}>{label}</td>"
+                     f"<td{td}>{_value(r)}</td></tr>")
         thead = f"<thead><tr>{head}</tr></thead>" if look.get("header", True) else ""
         return f'<table class="{cls}"{style}>{thead}<tbody>{body}</tbody></table>'
     n = part.get("per_row", 1)
@@ -162,7 +193,10 @@ def _table(part: dict) -> str:
     body = ""
     for i in range(0, len(rows), n):
         chunk = rows[i:i + n]
-        cells = "".join(f"<th class='l'>{e(r['label'])}</th><td>{_value(r)}</td>" for r in chunk)
+        cells = ""
+        for r in chunk:
+            r, lt, rb, st = _styled(r, rules)
+            cells += f"<th class='l{lt}{rb}'{st}>{e(r['label'])}</th><td{_td(rb, st)}>{_value(r)}</td>"
         cells += "<td></td><td></td>" * (n - len(chunk))
         body += f"<tr>{cells}</tr>"
     head = ""
@@ -233,6 +267,10 @@ def part_html(part: dict, width_mm: float, ctx: dict) -> str:
             cells.append(f'<td style="width:{pct:.2f}%;{pad}vertical-align:'
                          f'{part.get("align", "top")}">{body}</td>')
         inner = f'<table class="cols"><tr>{"".join(cells)}</tr></table>'
+    elif t == "html":
+        scope = f"custom-{len(ctx['css'])}"
+        ctx["css"].append(f".{scope} {{ {part.get('css', '')} }}")    # nested: stays in this part
+        inner = f'<div class="custom {scope}">{part["html_out"]}</div>'
     elif t == "contents":
         items = "".join(f'<li><a href="#{pid}">{e(name)}</a></li>' for pid, name in ctx["toc"])
         inner = f'<ol class="toc cols{part.get("columns", 1)}">{items}</ol>'
@@ -334,6 +372,9 @@ html {{ color: var(--text); font-family: {body_font};
 body {{ margin: 0 }}
 .pg-normal {{ page: normal }} .pg-cover {{ page: cover }} .pg-full {{ page: full }}
 .pg + .pg {{ break-before: page }}
+h1, h2, h3, h4, h5, h6 {{ bookmark-level: none }}
+.pg[data-title] {{ bookmark-level: 1; bookmark-label: attr(data-title) }}
+.rb, .rb * {{ font-weight: 700 }}
 .pb {{ break-after: page }}
 #h_normal {{ position: running(h_normal) }} #h_cover {{ position: running(h_cover) }}
 #f_normal {{ position: running(f_normal) }} #f_cover {{ position: running(f_cover) }}
@@ -390,7 +431,7 @@ table.t.emphasis thead th {{ border-bottom: .2mm solid var(--line); color: var(-
 .text.size-title {{ font-family: var(--head); font-size: 3.4em; font-weight: 700; color: var(--brand); line-height: 1 }}
 .text p {{ margin: 0 0 1.4mm }} .text ul, .text ol {{ margin: 0 0 1.4mm; padding-left: 5mm }}
 .text h2 {{ font-family: var(--head); font-size: 1.55em; font-weight: 700; margin: 0 0 1.5mm;
-  bookmark-level: 1; break-after: avoid }}
+  break-after: avoid }}
 .text h2::before {{ content: ""; display: inline-block; width: 2.6mm; height: 2.6mm; margin-right: 1.6mm;
   border: .7mm solid var(--brand); border-radius: 50%; vertical-align: .1mm; box-sizing: border-box }}
 .text h2 .small {{ font-size: .55em; font-weight: 500; color: var(--muted); margin-left: 2mm }}
@@ -425,17 +466,21 @@ def render_html(pages: list[dict], d: dict, values: dict, *, edge: int = PRINT_E
                 f"@page cover {{ background: url({uri}) no-repeat center / {size}% auto }}")
     width = w - margins["left"] - margins["right"]
     body = []
+    custom: list[str] = []
     for n, page in enumerate(pages):
         style = page.get("style", "normal")
         # the contents list names the pages after this one that are not full-page designs
         toc = [(f"pg-{k}", p["title"]) for k, p in enumerate(pages)
                if k > n and p.get("style", "normal") != "full"]
-        ctx = {"edge": edge, "verify_url": values["sys"]["verify_url"], "toc": toc}
+        ctx = {"edge": edge, "verify_url": values["sys"]["verify_url"], "toc": toc, "css": custom}
         inner = "".join(part_html(p, w if style == "full" else width, ctx) for p in page["parts"])
-        body.append(f'<div id="pg-{n}" class="pg pg-{style}">{inner}</div>')
+        # each page is a bookmark in the PDF reader, its part titles under it
+        mark_pg = f' data-title="{e(page["title"])}"' if page.get("title") else ""
+        body.append(f'<div id="pg-{n}" class="pg pg-{style}"{mark_pg}>{inner}</div>')
     title = e(f"{values['sys']['booking_id']} {values['sys']['inspection_type']} report")
     return (f'<html><head><meta charset="utf-8"><title>{title}</title>'
-            f'<style>{css(d, colors, margins, bands)}{mark}</style></head>'
+            f'<meta name="generator" content="Vayu">'
+            f'<style>{css(d, colors, margins, bands)}{mark}{"".join(custom)}</style></head>'
             f'<body>{running}{"".join(body)}</body></html>')
 
 

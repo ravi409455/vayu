@@ -3,6 +3,7 @@
 Rendered by Jinja2's sandbox with autoescape, after a check that the text holds only plain
 variable lookups: no tags, filters, calls or arithmetic, so a template cannot do anything but
 show values. Rich text is cleaned to a small set of tags when it is saved."""
+import re
 from typing import Any
 
 import nh3
@@ -58,3 +59,54 @@ def clean_html(html: str) -> str:
     return nh3.clean(html, tags=TAGS, attributes={"a": {"href"}, "span": {"class"}, "p": {"class"}},
                      url_schemes={"https", "mailto", "tel"}, attribute_filter=_class_ok,
                      link_rel="noopener noreferrer")
+
+
+CUSTOM_TAGS = {"div", "span", "p", "br", "hr", "strong", "b", "em", "i", "u", "s", "small", "sup",
+               "sub", "h1", "h2", "h3", "h4", "ul", "ol", "li", "blockquote", "table", "thead",
+               "tbody", "tfoot", "tr", "th", "td", "colgroup", "col", "caption", "section",
+               "figure", "figcaption"}
+# anything in CSS that could load a file: url(), image(), image-set(), @import; backslash
+# escapes (u\rl) and '<' are refused too, so none of these can be spelled another way
+NO_FETCH = re.compile(r"url\s*\(|image(-set)?\s*\(|@import|expression|\\|<", re.I)
+# inline style keeps only layout and typography: nothing that takes a picture
+STYLE_PROPS = {
+    "color", "background-color", "opacity", "font", "font-family", "font-size", "font-style",
+    "font-weight", "font-variant", "text-align", "text-decoration", "text-transform",
+    "text-indent", "line-height", "letter-spacing", "word-spacing", "white-space",
+    "vertical-align", "display", "width", "height", "min-width", "max-width", "min-height",
+    "max-height", "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
+    "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
+    "border", "border-top", "border-right", "border-bottom", "border-left", "border-color",
+    "border-width", "border-style", "border-radius", "border-collapse", "border-spacing",
+    "page-break-before", "page-break-after", "page-break-inside", "break-before",
+    "break-after", "break-inside", "columns", "column-count", "column-gap", "table-layout",
+    "box-sizing", "float", "clear", "gap", "flex", "flex-direction", "flex-wrap",
+    "justify-content", "align-items", "list-style-type"}
+STYLE_ATTR = re.compile(r'style="([^"]*)"')
+
+
+def clean_custom(html: str) -> str:
+    """Custom HTML: layout tags with class and style, nothing that runs, links or loads."""
+    html = nh3.clean(html, tags=CUSTOM_TAGS, url_schemes=set(), filter_style_properties=STYLE_PROPS,
+                     attributes={"*": {"class", "style"}, "td": {"colspan", "rowspan"},
+                                 "th": {"colspan", "rowspan"}, "col": {"span"}})
+    for style in STYLE_ATTR.findall(html):
+        if NO_FETCH.search(style):
+            raise ValueError("Custom HTML cannot load pictures or files (no url(...) or escapes).")
+        if "{" in style:            # a value filled in later could carry url(...): not in style
+            raise ValueError("Custom HTML cannot put values like {{ ... }} inside style=\"\".")
+    return html
+
+
+def check_css(css: str, where: str) -> None:
+    """Custom CSS stays inside its part: no loading, no escapes, braces that close."""
+    if NO_FETCH.search(css):
+        raise ValueError(f"{where}: CSS cannot use url(...), image(...), @import, backslashes "
+                         "or '<'.")
+    depth = 0
+    for ch in css:
+        depth += {"{": 1, "}": -1}.get(ch, 0)
+        if depth < 0:
+            break
+    if depth:
+        raise ValueError(f"{where}: the {{ and }} in the CSS do not match.")

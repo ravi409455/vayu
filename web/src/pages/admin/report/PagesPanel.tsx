@@ -1,7 +1,7 @@
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Columns2, FileText, GripVertical, Image, LayoutList, ListOrdered, MoveVertical, QrCode, Scissors, Table2 } from "lucide-react";
+import { Code, Columns2, FileText, GripVertical, Image, LayoutList, ListOrdered, MoveVertical, QrCode, Scissors, Table2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import type { FormPage } from "../../../api/types";
 import { addPart, blankPage, movePage, movePart, newPart, pageFromForm, partName, updatePart, type Definition, type Part, type PartType, type ReportPage } from "./model";
@@ -9,7 +9,7 @@ import { addPart, blankPage, movePage, movePart, newPart, pageFromForm, partName
 export type Sel = { kind: "page" | "part"; id: string } | null;
 
 const ICON: Record<PartType, typeof Table2> = {
-  table: Table2, photos: Image, text: FileText, columns: Columns2, verify: QrCode, contents: ListOrdered, page_break: Scissors, spacer: MoveVertical,
+  table: Table2, photos: Image, text: FileText, columns: Columns2, verify: QrCode, contents: ListOrdered, page_break: Scissors, spacer: MoveVertical, html: Code,
 };
 const ADD: { type: PartType; label: string; hint: string }[] = [
   { type: "table", label: "Table of checks", hint: "rows of check and answer" },
@@ -20,6 +20,7 @@ const ADD: { type: PartType; label: string; hint: string }[] = [
   { type: "contents", label: "Contents list", hint: "pages and page numbers" },
   { type: "spacer", label: "Space", hint: "empty space" },
   { type: "page_break", label: "Page break", hint: "next part on a new page" },
+  { type: "html", label: "Custom HTML", hint: "your own HTML and CSS, for experts" },
 ];
 
 function Sortable({ id, children, disabled }: { id: string; children: (handle: ReactNode) => ReactNode; disabled: boolean }) {

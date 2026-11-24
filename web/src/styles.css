@@ -632,6 +632,9 @@ button.link.danger-link, .link.danger-link { color: var(--bad); }
 .rd-rows { display: grid; gap: 6px; }
 .rd-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .rd-row select { grid-column: 1 / -1; }
+.rd-rules { display: grid; gap: 8px; }
+.rd-rule { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+.rd-rule label.grow select { width: auto; margin-left: 4px; }
 .rd-row input { font-size: 13px; }
 .rd-grid .tbl-wrap { overflow-x: auto; }
 .rd-grid-t { border: 0; font-size: 12px; }

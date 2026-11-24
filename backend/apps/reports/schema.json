@@ -636,6 +636,13 @@
        "type": "boolean"
       }
      }
+    },
+    "style_rules": {
+     "type": "array",
+     "maxItems": 20,
+     "items": {
+      "$ref": "#/$defs/stylerule"
+     }
     }
    }
   },
@@ -895,6 +902,9 @@
     },
     {
      "$ref": "#/$defs/contents"
+    },
+    {
+     "$ref": "#/$defs/custom"
     }
    ]
   },
@@ -1005,6 +1015,79 @@
       1,
       2
      ]
+    }
+   }
+  },
+  "stylerule": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "when"
+   ],
+   "properties": {
+    "when": {
+     "enum": [
+      "problem",
+      "ok",
+      "warn",
+      "bad",
+      "muted",
+      "minor",
+      "major",
+      "critical",
+      "not_checked",
+      "empty"
+     ]
+    },
+    "label": {
+     "$ref": "#/$defs/tone"
+    },
+    "value": {
+     "$ref": "#/$defs/tone"
+    },
+    "bold": {
+     "type": "boolean"
+    },
+    "background": {
+     "enum": [
+      "none",
+      "brand",
+      "ok",
+      "warn",
+      "bad",
+      "muted"
+     ]
+    }
+   }
+  },
+  "custom": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "html"
+   ],
+   "properties": {
+    "id": true,
+    "show_if": true,
+    "hide_when_empty": true,
+    "new_page": true,
+    "keep_together": true,
+    "keep_title": true,
+    "box": true,
+    "type": {
+     "const": "html"
+    },
+    "title": {
+     "type": "string",
+     "maxLength": 200
+    },
+    "html": {
+     "$ref": "#/$defs/text"
+    },
+    "css": {
+     "type": "string",
+     "maxLength": 20000
     }
    }
   }

@@ -52,20 +52,27 @@ export function RichText({ value, onChange, choices, label }: { value: string; o
         <select aria-label="Colour" value="" onMouseDown={(e) => e.stopPropagation()} onChange={(e) => { if (e.target.value) wrap(e.target.value); }}>
           <option value="">Colour…</option><option value="tone-brand">Brand red</option><option value="tone-ok">Green</option>
           <option value="tone-warn">Amber</option><option value="tone-bad">Red</option><option value="tone-muted">Grey</option></select>
-        <select aria-label="Insert a value" value="" onChange={(e) => { if (e.target.value) run("insertText", `{{ ${e.target.value} }}`); }}>
-          <option value="">Insert a value…</option>
-          <optgroup label="Report">
-            {[["sys.booking_id", "Booking ID"], ["sys.car", "Car"], ["sys.inspection_type", "Inspection type"], ["sys.expert", "Expert"],
-              ["sys.inspected_on", "Inspected on"], ["sys.overall", "Expert rating"], ["sys.issues", "Number of issues"],
-              ["sys.not_checked_list", "Not able to check (list)"], ["sys.generated_at", "Generated at"], ["sys.verify_url", "Verify link"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </optgroup>
-          <optgroup label="Answers">{choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</optgroup>
-        </select>
+        <ValuePicker choices={choices} onPick={(v) => run("insertText", v)} />
         <button type="button" className="link" onClick={() => setSource(!source)}>{source ? "Done" : "HTML"}</button>
       </div>
       {source
         ? <textarea aria-label={`${label} (HTML)`} className="mono" rows={8} value={value} onChange={(e) => onChange(e.target.value)} />
         : <div ref={el} className="rd-rich-area" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-label={label} onInput={emit} onBlur={emit} />}
     </div>
+  );
+}
+
+const SYS: [string, string][] = [["sys.booking_id", "Booking ID"], ["sys.car", "Car"], ["sys.inspection_type", "Inspection type"], ["sys.expert", "Expert"],
+  ["sys.inspected_on", "Inspected on"], ["sys.overall", "Expert rating"], ["sys.issues", "Number of issues"],
+  ["sys.not_checked_list", "Not able to check (list)"], ["sys.generated_at", "Generated at"], ["sys.verify_url", "Verify link"]];
+
+/** "Insert a value…": gives back the placeholder text, e.g. {{ inspection.colour }}. */
+export function ValuePicker({ choices, onPick }: { choices: Choice[]; onPick: (placeholder: string) => void }) {
+  return (
+    <select aria-label="Insert a value" value="" onChange={(e) => { if (e.target.value) onPick(`{{ ${e.target.value} }}`); }}>
+      <option value="">Insert a value…</option>
+      <optgroup label="Report">{SYS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</optgroup>
+      <optgroup label="Answers">{choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</optgroup>
+    </select>
   );
 }

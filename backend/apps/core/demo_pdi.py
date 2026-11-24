@@ -1139,6 +1139,7 @@ def _sec(key: str, title: str = "", header: bool = True, **kw) -> dict:
         "title": title,
         "look": {"header": header},
         "source": {"kind": "section", "section": f"inspection.{key}"},
+        "style_rules": [{"when": "not_checked", "value": "muted"}],
         **kw,
     }
 
@@ -1325,7 +1326,12 @@ def pdf_definition(logo: str | None, watermark: str | None, disclaimer: str) -> 
             "Summary",
             [
                 _heading("Issues found", "from all sections"),
-                {"type": "table", "source": {"kind": "defects"}},
+                {
+                    "type": "table",
+                    "source": {"kind": "defects"},
+                    # a critical problem stands out: bold on a red tint
+                    "style_rules": [{"when": "critical", "bold": True, "background": "bad"}],
+                },
                 {"type": "photos", "per_row": 3, "caption": "check", "source": {"kind": "issues"}},
                 {
                     "type": "text",
