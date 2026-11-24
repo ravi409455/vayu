@@ -196,3 +196,14 @@ def other_at(b):
     from apps.bookings.models import Inspection
 
     return Inspection.objects.filter(booking_id=b["id"]).order_by("-submitted_at").first().submitted_at
+
+
+def test_a_role_without_the_view_submissions_permission_gets_no_finish_time(done):
+    from apps.accounts.catalog import DEFAULTS
+
+    env, b = done
+    assert _finished_at(env.ops, b)
+    perms = {k: v for k, v in DEFAULTS["ops"].items() if k != "submissions.view"}
+    assert env.admin.put("/api/v1/roles/ops/permissions", {"permissions": perms},
+                         format="json").status_code == 200
+    assert _finished_at(env.ops, b) is None

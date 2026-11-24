@@ -2,7 +2,7 @@ import re
 import uuid
 from datetime import date
 
-from django.db.models import OuterRef, Q, Subquery
+from django.db.models import DateTimeField, OuterRef, Q, Subquery, Value
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -55,7 +55,11 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         # only submissions this user may see, the same rule as the `inspections` action
         done = Inspection.objects.filter(booking=OuterRef("pk"), status="submitted").exclude(
             form_version__form_id__in=hidden_inspection_forms(self.request.user))
-        if scope_for(self.request.user, "submissions.view", self.request) == "own":
+        scope = scope_for(self.request.user, "submissions.view", self.request)
+        if scope is None:                           # may not see submissions at all: no time
+            return self._filtered(qs).annotate(
+                finished_at=Value(None, output_field=DateTimeField()))
+        if scope == "own":
             done = done.filter(expert_id=self.request.user.pk)
         return self._filtered(qs).annotate(finished_at=Subquery(
             done.order_by("-submitted_at").values("submitted_at")[:1]))
