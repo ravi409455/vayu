@@ -18,7 +18,7 @@ export type SharedRef = { key: string; revision: number };
 export type Part = Common & (
   | { type: "table"; title?: string; source: Source; per_row?: 1 | 2 | 3 | 4; look?: Look; style_rules?: StyleRule[] }
   | { type: "photos"; title?: string; source: PhotoSource; which?: "all" | "issues" | "first"; per_row?: 1 | 2 | 3 | 4; shape?: "4:3" | "16:9" | "1:1" | "original"; fit?: "fill" | "whole" | "top"; caption?: "label" | "check" | "custom" | "none"; caption_text?: string; frame?: { border?: "none" | "grey" | "brand"; round?: boolean; gap?: number } }
-  | { type: "text"; html: string; columns?: 1 | 2; size?: "small" | "normal" | "large" | "title"; align?: "left" | "center" | "right" | "justify" }
+  | { type: "text"; html: string; columns?: 1 | 2; size?: "fine" | "small" | "normal" | "large" | "title"; align?: "left" | "center" | "right" | "justify" }
   | { type: "columns"; columns: { width?: number; parts: Part[] }[]; gap?: number; align?: "top" | "middle" }
   | { type: "verify"; size?: number }
   | { type: "contents"; title?: string; columns?: 1 | 2 }

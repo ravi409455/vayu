@@ -818,6 +818,7 @@
     },
     "size": {
      "enum": [
+      "fine",
       "small",
       "normal",
       "large",

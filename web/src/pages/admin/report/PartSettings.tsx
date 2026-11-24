@@ -74,7 +74,7 @@ export function PartSettings({ part, onChange, onDelete, onDuplicate, onMove, ct
           <>
             <RichText label="Text" value={part.html} onChange={(html) => set({ html })} choices={ctx.fields.filter((f) => !MEDIA.includes(f.type))} />
             <Field label="Columns"><Seg label="Text columns" value={part.columns ?? 1} options={[[1, "1"], [2, "2"]]} onChange={(columns) => set({ columns })} /></Field>
-            <Field label="Size"><Seg label="Text size" value={part.size ?? "normal"} options={[["small", "Small"], ["normal", "Normal"], ["large", "Large"], ["title", "Title"]]} onChange={(size) => set({ size })} /></Field>
+            <Field label="Size"><Seg label="Text size" value={part.size ?? "normal"} options={[["fine", "Fine print"], ["small", "Small"], ["normal", "Normal"], ["large", "Large"], ["title", "Title"]]} onChange={(size) => set({ size })} /></Field>
             <Field label="Align"><Seg label="Align" value={part.align ?? "left"} options={[["left", "Left"], ["center", "Centre"], ["right", "Right"], ["justify", "Justify"]]} onChange={(align) => set({ align })} /></Field>
           </>
         )}

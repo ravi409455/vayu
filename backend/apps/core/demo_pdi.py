@@ -1313,12 +1313,6 @@ def pdf_definition(logo: str | None, watermark: str | None, disclaimer: str) -> 
                 tiles,
                 _heading("Documents"),
                 _sec("documents", per_row=2, header=False),
-                {
-                    "type": "text",
-                    "size": "small",
-                    "html": "<p>*Please refer to the last pages for the verify code, terms, "
-                    "conditions and disclaimer.</p>",
-                },
             ],
             style="cover",
         ),
@@ -1565,11 +1559,11 @@ def pdf_definition(logo: str | None, watermark: str | None, disclaimer: str) -> 
                 _centre(verify_rows, width=60),
             ],
         ),
-        _page("Disclaimer", [{"type": "text", "columns": 2, "size": "small", "html": disclaimer}]),
+        _page("Disclaimer", [{"type": "text", "columns": 2, "size": "fine", "html": disclaimer}]),
     ]
-    tile = [{"image": logo, "height": 10, "tile": True}] if logo else []
+    logo_item = [{"image": logo, "height": 12}] if logo else []  # the shield on the red
     header = {
-        "left": tile + [{"text": "<strong>CAR C.I.D.</strong>"}],
+        "left": logo_item + [{"text": "<strong>CAR C.I.D.</strong>"}],
         "right": [
             {"text": "<strong>PDI REPORT</strong>"},
             {"text": "{{ sys.booking_id }} · {{ sys.car }}"},
@@ -1578,7 +1572,7 @@ def pdf_definition(logo: str | None, watermark: str | None, disclaimer: str) -> 
         "height": 15,
     }
     cover_header = {
-        "left": ([{"image": logo, "height": 17, "tile": True}] if logo else [])
+        "left": ([{"image": logo, "height": 19}] if logo else [])
         + [
             {"text": '<span class="large">CAR C.I.D.</span>'},
             {"text": '<span class="small">CAR INSPECTION</span>'},
@@ -1598,6 +1592,7 @@ def pdf_definition(logo: str | None, watermark: str | None, disclaimer: str) -> 
         "theme": {
             "colors": {"brand": "#a62830"},
             "fonts": {"body": "Inter", "headings": "Barlow Semi Condensed"},
+            "size": 10.5,  # read mostly on phones: 1 pt above the default
         },
         "bands": {
             "cover": {

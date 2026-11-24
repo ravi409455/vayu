@@ -23,7 +23,7 @@ from . import placeholders
 PAPER = {"A4": (210, 297), "Letter": (216, 279)}
 MARGINS = {"top": 26, "right": 12, "bottom": 16, "left": 12}
 COLORS = {"brand": "#a62830", "text": "#1b1f27", "ok": "#15703f", "warn": "#b25e09",
-          "bad": "#b3261e", "muted": "#8a93a3"}
+          "bad": "#b3261e", "muted": "#5c6370"}    # muted: readable on a phone (6:1 on white)
 PRINT_EDGE = 1000            # print photos: the largest size, for a photo across the page
 SMALL_EDGE = 600             # a photo in a box up to 65 mm wide: about 250 dpi, sharp in print
 SMALL_BOX_MM = 65
@@ -321,13 +321,14 @@ def _slot(items: list[dict], values: dict) -> str:
 def _band(name: str, band: dict, values: dict, margins: dict, page_w: float) -> str:
     brand = band.get("background", "none") == "brand"
     cls = "band brand" if brand else "band"
-    cells = "".join(f'<td class="{side}">{_slot(band.get(side, []), values)}</td>'
-                    for side in ("left", "center", "right"))
+    h = band.get("height", 16)
+    # the row gets the band's height, so the middle of the row is the middle of the band
+    cells = "".join(f'<td class="{side}" style="height:{h}mm">{_slot(band.get(side, []), values)}'
+                    f'</td>' for side in ("left", "center", "right"))
     # the band runs edge to edge: the full page width, pulled out over the side margins
     return (f'<div id="{name}" class="{cls}" style="width:{page_w}mm;'
             f'margin-left:-{margins["left"]}mm;padding:0 {margins["right"]}mm 0 '
-            f'{margins["left"]}mm;height:{band.get("height", 16)}mm">'
-            f'<table><tr>{cells}</tr></table></div>')
+            f'{margins["left"]}mm;height:{h}mm"><table><tr>{cells}</tr></table></div>')
 
 
 @cache
@@ -391,8 +392,8 @@ h1, h2, h3, h4, h5, h6 {{ bookmark-level: none }}
 .band td {{ vertical-align: middle; padding: 0 }} .band .center {{ text-align: center }}
 .band .right {{ text-align: right }}
 .band.brand {{ background: var(--brand); color: #fff }}
-.slot {{ display: inline-flex; align-items: center; gap: 2.6mm; vertical-align: middle }}
-.right .slot {{ justify-content: flex-end }}
+.slot {{ display: flex; align-items: center; gap: 2.6mm }}
+.center .slot {{ justify-content: center }} .right .slot {{ justify-content: flex-end }}
 .stack {{ display: inline-block; line-height: 1.15 }} .stack .line {{ display: block }}
 .band strong {{ font-family: var(--head); font-weight: 700; letter-spacing: .06em; font-size: 1.35em }}
 .band .large {{ font-family: var(--head); font-weight: 700; letter-spacing: .08em; font-size: 2.1em }}
@@ -435,7 +436,7 @@ table.t.emphasis thead th {{ border-bottom: .2mm solid var(--line); color: var(-
   color: var(--text); margin-top: .8mm }}
 .noimg {{ background: #eef0f3; color: var(--muted); display: flex; align-items: center; justify-content: center; font-size: .8em }}
 .text.cols2 {{ columns: 2; column-gap: 6mm }}
-.text.size-small {{ font-size: .85em }} .text.size-large {{ font-size: 1.25em }}
+.text.size-fine {{ font-size: .78em }} .text.size-small {{ font-size: .85em }} .text.size-large {{ font-size: 1.25em }}
 .text.size-title {{ font-family: var(--head); font-size: 3.4em; font-weight: 700; color: var(--brand); line-height: 1 }}
 .text p {{ margin: 0 0 1.4mm }} .text ul, .text ol {{ margin: 0 0 1.4mm; padding-left: 5mm }}
 .text h2 {{ font-family: var(--head); font-size: 1.55em; font-weight: 700; margin: 0 0 1.5mm;

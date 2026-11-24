@@ -6,7 +6,7 @@ import { PictureLibrary, PicturePicker, ShareForm, useSharedContent, type Shared
 type Tab = "theme" | "paper" | "bands" | "look" | "images" | "pictures" | "file";
 const SIDES = ["left", "center", "right"] as const;
 const COLOR_NAMES = [["brand", "Brand"], ["text", "Text"], ["ok", "Good (green)"], ["warn", "Not checked (amber)"], ["bad", "Problem (red)"], ["muted", "Not available (grey)"]] as const;
-const DEFAULT_COLORS: Record<string, string> = { brand: "#a62830", text: "#1b1f27", ok: "#15703f", warn: "#b25e09", bad: "#b3261e", muted: "#8a93a3" };
+const DEFAULT_COLORS: Record<string, string> = { brand: "#a62830", text: "#1b1f27", ok: "#15703f", warn: "#b25e09", bad: "#b3261e", muted: "#5c6370" };
 const FONTS = ["Inter", "Barlow Semi Condensed", "Helvetica"];
 
 /** Things that apply to the whole report, out of the way until needed. */
