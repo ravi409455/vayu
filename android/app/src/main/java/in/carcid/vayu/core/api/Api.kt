@@ -95,21 +95,32 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         call("POST", "devices/heartbeat", buildJsonObject { put("drafts", drafts); put("files", files) })
             .getValue("min_app_version").jsonPrimitive.intOrNull ?: 0
 
-    /** Everything an expert needs offline (B2). [have]: form versions already on the phone; [since]: last server_time. */
-    suspend fun syncJobs(have: Set<Int>, since: String?): JsonObject {
+    /**
+     * Everything an expert needs offline (B2). [have]: form versions already on the phone; [since]:
+     * last server_time; [drafts]: versions the phone's drafts are pinned to (sent even when no listed job uses them).
+     */
+    suspend fun syncJobs(have: Set<Int>, since: String?, drafts: Set<Int> = emptySet()): JsonObject {
         val q = buildList {
             if (have.isNotEmpty()) add("have=" + have.sorted().joinToString(","))
+            if (drafts.isNotEmpty()) add("drafts=" + drafts.sorted().joinToString(","))
             if (since != null) add("since=" + java.net.URLEncoder.encode(since, "UTF-8"))
         }
         return call("GET", "sync/jobs" + if (q.isEmpty()) "" else "?" + q.joinToString("&"))
     }
 
-    /** Start a job with its check-in (B: submissions.start). Same [clientUuid] = same start (safe to retry). */
+    /**
+     * Start a job with its check-in (B: submissions.start). Same [clientUuid] = same start (safe to
+     * retry). [versions]: the form versions the phone pinned and filled (start, inspection, end);
+     * the server keeps them if they were the latest published at [startedAt].
+     */
     suspend fun start(bookingId: String, clientUuid: String, startedAt: String?, inspectionType: String,
-                      startAnswers: JsonObject, appVersion: Int): JsonObject =
+                      startAnswers: JsonObject, appVersion: Int, versions: Map<String, Int?> = emptyMap()): JsonObject =
         call("POST", "bookings/$bookingId/start", buildJsonObject {
             put("client_uuid", clientUuid); put("inspection_type", inspectionType)
             if (startedAt != null) put("client_started_at", startedAt)
+            versions["inspection"]?.let { put("form_version", it) }
+            versions["start"]?.let { put("start_version", it) }
+            versions["end"]?.let { put("end_version", it) }
             put("start_answers", startAnswers)
         }, headers = mapOf("X-App-Version" to appVersion.toString()))
 

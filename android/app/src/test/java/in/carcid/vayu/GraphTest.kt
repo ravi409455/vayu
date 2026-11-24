@@ -33,4 +33,15 @@ class GraphTest {
         assertEquals(setOf(7), graph.jobs(3).haveVersions())
         assertTrue(graph.jobs(3).jobs().isEmpty())
     }
+
+    @Test fun theSyncAsksForTheFormsOfDrafts() {
+        server.on("GET sync/jobs", `in`.carcid.vayu.core.sync.payload("").toString())
+        graph.drafts(3).save(Draft(BOOKING, "DEMO-2", "Arjun", mapOf("start" to 1, "inspection" to 7), "pdi"))
+        val m = `in`.carcid.vayu.ui.expert.JobsModel(graph.api, graph::jobs, kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined),
+            System::currentTimeMillis, {}, {}, pinned = graph::pinned)
+        m.open(3, offline = false)
+        val start = System.currentTimeMillis()
+        while (server.queries.none { it.contains("drafts=") } && System.currentTimeMillis() - start < 5_000) Thread.sleep(20)
+        assertTrue(server.queries.any { it.contains("drafts=1,7") })
+    }
 }

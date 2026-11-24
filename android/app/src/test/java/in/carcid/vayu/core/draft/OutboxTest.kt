@@ -239,4 +239,25 @@ class OutboxTest {
         assertTrue(drafts.get(BOOKING)!!.submitSent)                           // the good one went
         assertNotNull(drafts.get(other)!!.problem)                              // the bad one says so
     }
+
+    @Test fun theStartSendsTheFormVersionsThePhonePinned() = runBlocking {
+        ready()
+        outbox.run()
+        val start = Json.parseToJsonElement(server.bodiesOf("POST bookings/$BOOKING/start").single()).jsonObject
+        assertEquals(7, start["form_version"]!!.jsonPrimitive.content.toInt())
+        assertEquals(1, start["start_version"]!!.jsonPrimitive.content.toInt())
+        assertEquals(9, start["end_version"]!!.jsonPrimitive.content.toInt())
+    }
+
+    @Test fun aVersionTooOldIsExplainedAndNotRetried() = runBlocking {
+        ready()
+        server.on("POST bookings/$BOOKING/start", """{"code":"FORM_VERSION_OLD","detail":"This form was replaced before the job started. Ops have been told."}""", 409)
+        outbox.run()
+        val d = drafts.get(BOOKING)!!
+        assertEquals(JOB_CLOSED, d.problemCode)
+        assertEquals("This form was replaced before the job started. Ops have been told.", d.problem)
+        val tries = server.bodiesOf("POST bookings/$BOOKING/start").size
+        outbox.run()
+        assertEquals(tries, server.bodiesOf("POST bookings/$BOOKING/start").size)
+    }
 }

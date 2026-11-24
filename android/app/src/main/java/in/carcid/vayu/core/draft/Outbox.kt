@@ -62,12 +62,15 @@ class Outbox(
     }
 
     private fun note(id: String, e: ApiError?) = drafts.update(id) { d ->
-        if (e != null && closed(e)) d.copy(problem = CLOSED_TEXT, problemCode = JOB_CLOSED)
+        if (e != null && closed(e)) d.copy(problem = if (e.code in VERSION_REFUSED) e.message else CLOSED_TEXT, problemCode = JOB_CLOSED)
         else d.copy(problem = e?.message, problemCode = e?.code)
     }
 
-    /** The server no longer takes this job's work (closed more than a week ago, or not theirs). */
-    private fun closed(e: ApiError) = e.code == "NOT_FOUND" || e.code == "BOOKING_CLOSED"
+    /**
+     * The server no longer takes this job's work (closed more than a week ago, or not theirs), or
+     * refuses the form version it was filled on (Ops are told): the expert discards it.
+     */
+    private fun closed(e: ApiError) = e.code == "NOT_FOUND" || e.code == "BOOKING_CLOSED" || e.code in VERSION_REFUSED
 
     private fun draft(id: String): Draft = drafts.get(id) ?: throw ApiError("GONE", "Discarded.", 0)
 
@@ -206,7 +209,7 @@ class Outbox(
         val filled = filledOf(d) ?: return
         val start = outgoing(d, filled, "start") ?: return          // a check-in file not registered yet
         try {
-            api.start(id, d.startUuid, d.startedAt, d.inspectionType, start, appVersion)
+            api.start(id, d.startUuid, d.startedAt, d.inspectionType, start, appVersion, d.versions)
             drafts.update(id) { it.copy(startSent = true, problem = null, problemCode = null) }
         } catch (e: ApiError) {
             if (transient(e)) throw e
@@ -262,6 +265,9 @@ class Outbox(
     private fun mark(id: String, fileId: String, change: (LocalFile) -> LocalFile) =
         drafts.update(id) { d -> d.copy(files = d.files.map { if (it.id == fileId) change(it) else it }) }
 }
+
+/** The start was refused for the form version the phone filled (replaced before the start, or not a published one). */
+private val VERSION_REFUSED = setOf("FORM_VERSION_OLD", "INVALID_VERSION")
 
 /** A server file id (a UUID): checked before it goes into a request path. */
 private val SERVER_ID = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")

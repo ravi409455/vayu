@@ -50,8 +50,8 @@ class JobsModel(
         _state.value = _state.value.copy(syncing = true)
         syncing = scope.launch {
             try {
-                val payload = api.syncJobs(s.haveVersions(), s.since())
                 val keep = userId?.let(pinned).orEmpty()
+                val payload = api.syncJobs(s.haveVersions(), s.since(), keep)
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { s.apply(payload, clock(), keep, elapsed()) }
                 userId?.let(afterSync)
                 show(offline = false)

@@ -97,8 +97,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         if (graph.tokens.me()?.get("role") != "expert") return Result.success()
         return try {
             val store = graph.jobs(user)
-            store.apply(graph.api.syncJobs(store.haveVersions(), store.since()), System.currentTimeMillis(),
-                keep = graph.pinned(user), elapsed = android.os.SystemClock.elapsedRealtime())
+            val keep = graph.pinned(user)
+            store.apply(graph.api.syncJobs(store.haveVersions(), store.since(), keep), System.currentTimeMillis(),
+                keep = keep, elapsed = android.os.SystemClock.elapsedRealtime())
             Reminders.schedule(applicationContext, graph, user)
             Result.success()
         } catch (e: ApiError) {
