@@ -160,8 +160,8 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
             Tiles(listOf(
                 TileData("Avg time", num(now, "avg_minutes")?.let { fmtMinutes(it.toInt()) } ?: "—",
                     change(num(now, "avg_minutes"), num(before, "avg_minutes"), " min").copy(good = null)) { onOpenList(dates + ("stage" to "completed")) },
-                TileData("On time", num(now, "on_time")?.let { "${it.toInt()}%" } ?: "—", change(num(now, "on_time"), num(before, "on_time"), " pts")) { onOpenList(dates) },
             ) + if (!timing) emptyList() else listOf(
+                TileData("On time", num(now, "on_time")?.let { "${it.toInt()}%" } ?: "—", change(num(now, "on_time"), num(before, "on_time"), " pts")) { onOpenList(dates) },
                 TileData("Started late", "${now?.s("late")}", change(num(now, "late"), num(before, "late"), moreIsBetter = false),
                     bad = (num(now, "late") ?: 0.0) > 0) { onOpenList(dates + ("timing" to "late")) },
                 TileData("Too quick", "${now?.s("quick")}", change(num(now, "quick"), num(before, "quick"), moreIsBetter = false),

@@ -146,7 +146,8 @@ def _stats(bookings: list[Booking], cfg: dict) -> dict:
             "quick": quick, "quick_pct": _pct(quick, len(minutes))}
 
 
-TIMING_KEYS = ("late", "late_pct", "quick", "quick_pct")
+# on_time is 100 - late_pct, so it is timing data too
+TIMING_KEYS = ("on_time", "late", "late_pct", "quick", "quick_pct")
 
 
 def summary(start: date, end: date) -> dict:
@@ -176,9 +177,10 @@ class DashboardSummary(APIView):
 
     def get(self, request):
         out = summary(*_bounds(request.query_params))
-        # started late / too quick only for those who may see timing flags (as the web shows them)
+        # timing (on time, started late, too quick) only for those who may see timing flags;
+        # blanked, not removed, so every screen keeps its shape and shows a dash
         if scope_for(request.user, "bookings.review_timing", request) is None:
             for stats in [out["period"], out["previous"], *out["by_expert"]]:
                 for k in TIMING_KEYS:
-                    stats.pop(k, None)
+                    stats[k] = None
         return Response(out)
