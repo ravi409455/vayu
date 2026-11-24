@@ -460,7 +460,7 @@ fun SubmittedScreen(draft: Draft, onClose: () -> Unit) {
             Column(Modifier.fillMaxWidth().padding(top = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 StepLine(1, if (draft.submitSent) "Answers sent and locked" else "Answers locked; sending when there is signal", draft.submitSent)
                 if (total > 0) StepLine(2, if (sent == total) "Files arrived" else "Files arriving · ${total - sent} left", sent == total)
-                StepLine(if (total > 0) 3 else 2, "Completed, report made for Ops", false)
+                StepLine(if (total > 0) 3 else 2, "Completed", false)
             }
             if (draft.problem != null) Text(problemText(draft), color = Vayu.colors.bad, modifier = Modifier.padding(top = 16.dp))
         }

@@ -477,6 +477,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/Booking'
           description: ''
+  /api/v1/bookings/{id}/finish:
+    post:
+      operationId: bookings_finish_create
+      description: 'Ops: finish a job without the expert''s missing optional files
+        (every required one is in).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/bookings/{id}/force-release:
     post:
       operationId: bookings_force_release_create
@@ -574,6 +593,25 @@ paths:
   /api/v1/bookings/{id}/media-zip:
     post:
       operationId: bookings_media_zip_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/bookings/{id}/missing-files:
+    get:
+      operationId: bookings_missing_files_retrieve
+      description: 'Ops: which files a job waiting for its files still lacks, and
+        whether it can be finished.'
       parameters:
       - in: path
         name: id
@@ -933,8 +971,9 @@ paths:
     post:
       operationId: devices_push_token_create
       description: |-
-        The phone's Firebase token, kept on this signed-in device. Only the caller's own rows are
-        touched: their older devices with the same token lose it.
+        The phone's Firebase token, saved on this signed-in device only (never anyone else's row).
+        If an earlier person's device on the same phone still holds it, pushes go only to the device
+        that sent it last (see tasks.push), so their notices never reach whoever uses the phone now.
       tags:
       - devices
       security:

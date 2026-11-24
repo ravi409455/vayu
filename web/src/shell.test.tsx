@@ -156,6 +156,21 @@ describe("field editor", () => {
     expect(screen.queryByRole("button", { name: "Save field" })).toBeNull();
     expect(screen.getByLabelText("Label")).toBeDisabled();
   });
+  it("a photo field chooses which camera the Android app opens (Back by default)", async () => {
+    const onSave = vi.fn();
+    const u = userEvent.setup();
+    const photo: FormField = { ...FIELD, key: "selfie2", type: "photo", config: { max_count: 1 } };
+    render(<FieldEditor field={photo} choices={[]} lists={[]} categories={[]} onSave={onSave} onDelete={noop} readOnly={false} />);
+    expect(screen.getByLabelText("Camera")).toHaveValue("back");
+    await u.selectOptions(screen.getByLabelText("Camera"), "front");
+    await u.click(screen.getByRole("button", { name: "Save field" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ config: expect.objectContaining({ camera: "front" }) }));
+  });
+  it("an upload-only photo field has no camera choice", () => {
+    const photo: FormField = { ...FIELD, key: "doc2", type: "photo", config: { capture: "upload" } };
+    render(<FieldEditor field={photo} choices={[]} lists={[]} categories={[]} onSave={noop} onDelete={noop} readOnly={false} />);
+    expect(screen.queryByLabelText("Camera")).toBeNull();
+  });
   it("system fields cannot be deleted or made optional", () => {
     render(<FieldEditor field={{ ...FIELD, is_system: true }} choices={[]} lists={[]} categories={[]} onSave={noop} onDelete={noop} readOnly={false} />);
     expect(screen.queryByRole("button", { name: "Delete field" })).toBeNull();

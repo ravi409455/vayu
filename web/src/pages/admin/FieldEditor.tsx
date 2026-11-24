@@ -118,6 +118,12 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
                   <option value="both">Camera and upload</option><option value="camera">Camera only</option><option value="upload">Upload only</option></select>
               </Field>
             )}
+            {!locked && media && cfg.capture !== "upload" && (
+              <Field label="Camera" tip="Which camera the Android app opens first. The expert can still switch with the flip button.">
+                <select aria-label="Camera" value={String(cfg.camera ?? "back")} onChange={(e) => setCfg({ camera: e.target.value === "back" ? undefined : e.target.value })}>
+                  <option value="back">Back</option><option value="front">Front (selfie)</option></select>
+              </Field>
+            )}
             {!locked && (media || field.type === "file") && (
               <Check label="Upload by Ops allowed" checked={cfg.ops_upload !== false} onChange={(e) => setCfg({ ops_upload: e.target.checked ? undefined : false })}
                 tip={`After the expert submits, Ops and Admin can add or replace these ${field.type}s from their computer or phone. Turn off when only the expert's own upload counts.`} />

@@ -35,7 +35,7 @@ SYSTEM_FIELDS: dict[str, list[dict]] = {
          "config": {"auto": True}},
         {"section": "Check-in",
          "key": "selfie", "label": "Selfie at the car", "type": "photo", "required": True,
-         "config": {"max_count": 1, "capture": "camera"}},
+         "config": {"max_count": 1, "capture": "camera", "camera": "front"}},
     ],
     # the wrap-up (payment) after it
     "end": [

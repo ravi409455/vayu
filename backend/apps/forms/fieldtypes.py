@@ -25,6 +25,7 @@ ROLES = ("expert", "ops", "admin")
 REGEX_TIMEOUT_S = 0.1
 DEFAULT_MAX_LENGTH = {"short_text": 200, "long_text": 5000}
 CAPTURE_MODES = ("both", "camera", "upload")   # how an expert may add a photo or video
+CAMERAS = ("back", "front")                     # which camera the Android app opens first
 TONES = ("ok", "warn", "bad", "muted")           # print colour of a choice: green, amber, red, grey
 DEFAULT_MAX_COUNT = {"photo": 10, "video": 3, "file": 5}
 
@@ -43,8 +44,10 @@ ALLOWED_KEYS: dict[str, set[str]] = {
     "number": {"unit", "min", "max", "decimals"},
     # issue_photo: always an issue photo when filled; photo_of: the check this photo shows
     # ops_upload: Ops and Admin may add or replace this field's files on the web (default yes)
-    "photo": {"min_count", "max_count", "capture", "issue_photo", "photo_of", "ops_upload"},
-    "video": {"min_count", "max_count", "capture", "ops_upload"},
+    # camera: which camera the Android app opens first (default back); the expert can still flip
+    "photo": {"min_count", "max_count", "capture", "issue_photo", "photo_of", "ops_upload",
+              "camera"},
+    "video": {"min_count", "max_count", "capture", "ops_upload", "camera"},
     "file": {"max_count", "allowed", "ops_upload"},
     "derived": {"rule", "true_label", "false_label"},
     "rating": {"category"},
@@ -146,6 +149,8 @@ def validate_config(type: str, config: Any) -> None:
     elif type in ("photo", "video"):
         if config.get("capture", "both") not in CAPTURE_MODES:
             raise ConfigError(f"capture must be one of {', '.join(CAPTURE_MODES)}.")
+        if config.get("camera", "back") not in CAMERAS:
+            raise ConfigError(f"camera must be one of {', '.join(CAMERAS)}.")
         if not isinstance(config.get("ops_upload", True), bool):
             raise ConfigError("ops_upload must be true or false.")
         if not isinstance(config.get("issue_photo", False), bool):

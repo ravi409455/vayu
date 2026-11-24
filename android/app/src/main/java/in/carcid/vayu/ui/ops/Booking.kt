@@ -81,6 +81,7 @@ import `in`.carcid.vayu.ui.theme.Vayu
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.net.URLEncoder
@@ -178,6 +179,21 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
                 Attention("Two experts inspected this car", subs.joinToString(". ") { "${env.labels.person(it.int("expert"))} submitted ${whenStamp(it.s("submitted_at"), env.today()).replaceFirstChar { c -> c.lowercase() }}" } +
                     ". Choose which one counts.", "Compare and choose", online && env.can("bookings.edit")) { compare = true }
             }
+            // the expert's files won't come (a lost phone): Ops upload the required ones, then finish
+            if (b.stage == "submitted" && env.can("media.manage")) {
+                val miss = (rememberLoad(env, "bookings/$id/missing-files").value?.data as? JsonObject)?.get("missing")
+                val rows = (miss as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+                if (rows.isNotEmpty()) {
+                    val total = rows.sumOf { it.int("count") ?: 1 }
+                    val need = rows.filter { (it["required"] as? JsonPrimitive)?.booleanOrNull == true }
+                    Attention("Waiting for $total file${if (total == 1) "" else "s"} from the expert",
+                        rows.joinToString(", ") { r -> r.s("label") + (if ((r.int("count") ?: 1) > 1) " (${r.int("count")})" else "") + (if (r in need) " · required" else "") } +
+                            (if (need.isNotEmpty()) ". If they won't come, upload the required ones in Photos and videos, then finish without the rest."
+                            else ". If they won't come, finish without them; files that arrive later are still added."),
+                        if (need.isNotEmpty()) "Open photos and videos" else "Finish without the missing files",
+                        online, tone = Tone.WARN) { if (need.isNotEmpty()) onPart(Part.MEDIA) else action = "finish:$total" }
+                }
+            }
             b.flags.sortedBy { it.reviewedAt.isNotBlank() }.forEach { f ->   // open ones first
                 if (f.reviewedAt.isNotBlank()) Attention("${f.words} · Reviewed by ${env.labels.byUsername(f.reviewedBy)}, ${whenStamp(f.reviewedAt, t).replaceFirstChar { it.lowercase() }}",
                     "", null, false, tone = Tone.NEUTRAL) {}
@@ -257,6 +273,12 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
             scope.launch {
                 try { env.data.act("DELETE", "bookings/$id"); env.say("Deleted."); env.refresh(); onBack() } catch (e: ApiError) { env.say(e.message) }
             }
+        }
+    }
+    action?.takeIf { it.startsWith("finish:") }?.removePrefix("finish:")?.let { n ->
+        Confirm("Finish without the missing files?", "The job is marked Completed and the report is made without $n file${if (n == "1") "" else "s"}. " +
+            "If the expert's phone sends them later, they are added and the report is made again.", "Finish", { action = null }) {
+            run("POST", "bookings/$id/finish", JsonObject(emptyMap()), "Finished. The report is being made.")
         }
     }
     if (compare) CompareSheet(env, insps.filter { it.s("status") == "submitted" }, onClose = { compare = false }) { keep ->

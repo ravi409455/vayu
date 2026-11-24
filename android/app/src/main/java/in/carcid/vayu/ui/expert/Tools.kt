@@ -133,6 +133,17 @@ fun rememberPermissions(vararg permissions: String, onResult: (Boolean) -> Unit 
  * and shrunk; videos are 720p, at most 60 s. The front camera is one tap away.
  */
 @SuppressLint("MissingPermission")
+/**
+ * Which camera a photo or video field opens first: Back unless the form builder chose Front. The
+ * check-in selfie is Front even in a form saved on the phone before the setting existed (phones
+ * keep the forms they have and do not download them again).
+ */
+fun firstCameraIsBack(field: Field): Boolean = when (field.config["camera"]) {
+    "front" -> false
+    null -> field.key != "selfie"
+    else -> true
+}
+
 @Composable
 fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () -> Instant, verified: Boolean,
                  dir: File, onTaken: (File, String) -> Unit, onDone: () -> Unit) {
@@ -149,7 +160,8 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
     var seconds by remember { mutableStateOf(0) }
     var place by remember { mutableStateOf(Locator.last) }
     var clock by remember { mutableStateOf(now()) }
-    var back by remember { mutableStateOf(true) }
+    // the field says which camera opens first (form builder: Back / Front); the expert can flip
+    var back by remember { mutableStateOf(firstCameraIsBack(field)) }
     var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     // the shot waiting for Use or Retake
     var pending by remember { mutableStateOf<Pair<File, String>?>(null) }
@@ -164,7 +176,9 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
         val p = provider ?: return@LaunchedEffect
         p.unbindAll()
         runCatching {
-            p.bindToLifecycle(owner, if (back) CameraSelector.DEFAULT_BACK_CAMERA else CameraSelector.DEFAULT_FRONT_CAMERA,
+            // a phone without a front camera opens the back one instead
+            val front = !back && runCatching { p.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) }.getOrDefault(false)
+            p.bindToLifecycle(owner, if (front) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA,
                 preview, if (video) videoCapture else capture)
         }
     }

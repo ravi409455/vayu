@@ -78,6 +78,27 @@ class Attach(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class MissingFiles(APIView):
+    """Ops: which files a job waiting for its files still lacks, and whether it can be finished."""
+
+    permission_classes = [perm("media.manage")]
+
+    def get(self, request, pk):
+        rows = services.missing_files(services.writable_booking(request, pk))
+        return Response({"missing": rows,
+                         "can_finish": bool(rows) and not any(r["required"] for r in rows)})
+
+
+class Finish(APIView):
+    """Ops: finish a job without the expert's missing optional files (every required one is in)."""
+
+    permission_classes = [perm("media.manage")]
+
+    def post(self, request, pk):
+        b = services.finish_without_missing(request.user, services.writable_booking(request, pk))
+        return Response({"stage": b.stage})
+
+
 class Url(APIView):
     permission_classes = [perm("submissions.view")]
 

@@ -836,6 +836,12 @@ fun activityText(r: JsonObject, env: OpsEnv, kcLabel: (String) -> String = { it 
             fun at(i: Int) = ((ab as? kotlinx.serialization.json.JsonArray)?.getOrNull(i) as? JsonPrimitive)?.let { if (it is kotlinx.serialization.json.JsonNull) null else it.content }?.ifBlank { null } ?: "empty"
             "$label: ${at(0)} → ${at(1)}"
         }.let { if (it.isEmpty()) "$by changed Key Checks" else "$by changed ${it.joinToString("; ")}" }
+        r.s("kind") == "finished_without_files" -> {
+            val n = c.s("missing").toIntOrNull() ?: 0
+            val which = r.a("keys").mapNotNull { (it as? JsonPrimitive)?.content }.filter { it != "stage" }
+                .map { it.substringAfter('.').replace('_', ' ').replaceFirstChar { ch -> ch.uppercase() } }
+            "Finished by $by without $n file${if (n == 1) "" else "s"}" + (if (which.isEmpty()) "" else ": " + which.joinToString(", "))
+        }
         r.s("kind") == "late_reviewed" -> "Late start reviewed by $by"
         r.s("kind") == "quick_reviewed" -> "Quick finish reviewed by $by"
         new("stage") == "completed" -> "Completed: every file uploaded"

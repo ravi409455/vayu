@@ -84,6 +84,9 @@ class OpsTextTest {
         assertEquals("Priya Ops downloaded the report", activityText(row("report_downloaded", """{"revision":2}"""), env))
         assertEquals("Priya Ops shared the report PDF", activityText(row("report_shared", """{"revision":2,"how":"pdf"}"""), env))
         assertEquals("Priya Ops copied the report's check link", activityText(row("report_shared", """{"revision":2,"how":"check_link"}"""), env))
+        val done = Json.parseToJsonElement("""{"kind":"finished_without_files","by":{"name":"Priya Ops"},
+            "changes":{"stage":["submitted","completed"],"missing":2},"keys":["inspection.front_photos","stage"]}""").jsonObject
+        assertEquals("Finished by Priya Ops without 2 files: Front photos", activityText(done, env))
         assertEquals("Priya Ops changed Fuel: Petrol → CNG; Seal: empty → Intact",
             activityText(row("key_checks_changed", """{"check.fuel":["Petrol","CNG"],"check.seal":[null,"Intact"]}"""), env) { if (it == "fuel") "Fuel" else "Seal" })
     }

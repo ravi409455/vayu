@@ -72,6 +72,34 @@ def test_photo_and_video_fields_choose_how_files_are_added(admin, staging, type_
         assert r.json()["code"] == "INVALID_CONFIG"
 
 
+@pytest.mark.parametrize("type_,camera,ok", [("photo", "back", True), ("photo", "front", True),
+                                             ("video", "front", True), ("photo", "selfie", False),
+                                             ("file", "front", False)])
+def test_photo_and_video_fields_choose_which_camera_opens_first(admin, staging, type_, camera, ok):
+    _, d = draft_of(admin, staging)
+    sec = tree(admin, d)["pages"][0]["sections"][0]["id"]
+    r = admin.post(f"/api/v1/sections/{sec}/fields", {
+        "key": f"c_{type_}_{camera}", "label": "x", "type": type_,
+        "config": {"max_count": 2, "camera": camera}}, format="json")
+    assert (r.status_code == 201) is ok
+
+
+def test_the_check_in_selfie_opens_the_front_camera():
+    from apps.forms.system_fields import SYSTEM_FIELDS
+    selfie = next(f for f in SYSTEM_FIELDS["start"] if f["key"] == "selfie")
+    assert selfie["config"]["camera"] == "front"
+
+
+def test_existing_selfies_are_set_to_front_by_the_data_fix(admin, staging):
+    import importlib
+
+    from django.apps import apps as live
+    fix = importlib.import_module("apps.forms.migrations.0018_selfie_front_camera")
+    Field.objects.filter(key="selfie").update(config={"max_count": 1, "capture": "camera"})
+    fix.front(live, None)
+    assert all(f.config.get("camera") == "front" for f in Field.objects.filter(key="selfie", is_system=True))
+
+
 # ---------------------------------------------------------------- drag reordering
 
 def test_reordering_pages_sections_and_fields_in_one_step(admin, staging):

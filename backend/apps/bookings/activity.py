@@ -5,8 +5,9 @@ from .models import BookingActivity
 
 # values worth keeping for the timeline (still shown only to people who may see the field)
 SAFE_KEYS = {"stage", "assigned_expert", "inspection_date", "inspection_time", "inspection_type",
-             "conflict", "media", "revision", "how"}
-COLUMNS = {"stage", "conflict", "revision", "how"}   # not form answers: always visible
+             "conflict", "media", "revision", "how", "missing"}
+# not form answers: always visible ("missing": how many files a job was finished without)
+COLUMNS = {"stage", "conflict", "revision", "how", "missing"}
 TIMING_KINDS = ("late_reviewed", "quick_reviewed")   # Admin / Ops only, never Experts
 REPORT_KINDS = ("report_downloaded", "report_shared")   # who passed the report on: not Experts
 

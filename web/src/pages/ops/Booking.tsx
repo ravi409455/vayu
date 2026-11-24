@@ -123,6 +123,7 @@ function Detail({ id }: { id: string }) {
           {!f.reviewedAt && can("bookings.review_timing") && <button className="sm" onClick={async () => { try { await api(`bookings/${booking.id}/timing-review`, { body: { flag: f.flag } }); say("Marked reviewed."); void reload(); void refresh("problems"); } catch (e) { fail(e); } }}>Mark reviewed</button>}
         </div>))}
       {booking.conflict && <ConflictBanner booking={booking} insps={insps.data ?? []} experts={experts.data ?? []} onResolved={reload} />}
+      {booking.stage === "submitted" && can("media.manage") && <WaitingFiles booking={booking} onFinished={reload} onMedia={() => setTab("media")} />}
       <Tabs value={current} onChange={setTab} tabs={[{ id: "booking", label: "Booking" }, { id: "inspection", label: "Inspection" }, { id: "media", label: mediaCount ? `Media ${mediaCount}` : "Media" }, { id: "review", label: "Review" }, { id: "report", label: "Report" }]} />
       <button className="sm rail-toggle" aria-expanded={rail} onClick={toggleRail}>
         {rail ? <PanelLeftClose size={14} aria-hidden /> : <PanelLeftOpen size={14} aria-hidden />}{rail ? "Hide customer, car and activity" : "Show customer, car and activity"}</button>
@@ -184,6 +185,8 @@ export function activityText(r: Activity, expertName: (id: unknown) => string, l
   }
   if (r.kind === "media_replaced") return `${by} replaced a file in ${r.keys.map(label).join(", ") || "the inspection"}`;
   if (r.kind === "media_added") return `${by} added a file to ${r.keys.map(label).join(", ") || "the inspection"}`;
+  if (r.kind === "finished_without_files") { const n = Number(c?.missing?.[1] ?? c?.missing ?? 0);
+    return `Finished by ${by} without ${n} file${n === 1 ? "" : "s"}${r.keys.filter((k) => k !== "stage").length ? `: ${r.keys.filter((k) => k !== "stage").map(label).join(", ")}` : ""}`; }
   if (r.kind === "late_reviewed") return `Late start reviewed by ${by}`;
   if (r.kind === "quick_reviewed") return `Quick finish reviewed by ${by}`;
   const stage = c.stage?.[1];
@@ -234,6 +237,41 @@ function ConflictBanner({ booking, insps, experts, onResolved }: { booking: Book
           <select aria-label="Inspection to keep" value={keep} onChange={(e) => setKeep(e.target.value)} style={{ maxWidth: 320 }}><option value="">Choose…</option>{submitted.map((i) => <option key={i.id} value={i.id}>{who(i.expert)} · {fmtStamp(i.submitted_at)}</option>)}</select>
           <button className="primary" disabled={!keep} onClick={async () => { try { await api(`bookings/${booking.id}/resolve-conflict`, { body: { inspection: keep } }); say("Resolved."); onResolved(); } catch (e) { fail(e); } }}>Keep this one</button>
         </div>)}
+    </div>
+  );
+}
+
+type Missing = { part: string; key: string; label: string; count: number; required: boolean };
+
+/** A job waiting for the expert's files. When they will not come (a lost phone), Ops upload the
+ *  required ones in Media, then finish it without the rest (the report is made then). */
+export function WaitingFiles({ booking, onFinished, onMedia }: { booking: Booking; onFinished: () => void; onMedia: () => void }) {
+  const { fail, say } = useToast();
+  const [asking, setAsking] = useState(false);
+  const q = useQuery({ queryKey: ["missing-files", booking.id, booking.row_version],
+    queryFn: () => api<{ missing: Missing[]; can_finish: boolean }>(`bookings/${booking.id}/missing-files`) });
+  const missing = q.data?.missing ?? [];
+  if (!missing.length) return null;
+  const total = missing.reduce((n, m) => n + m.count, 0);
+  const need = missing.filter((m) => m.required);
+  const finish = async () => {
+    setAsking(false);
+    try { await api(`bookings/${booking.id}/finish`, { method: "POST" }); say("Finished. The report is being made."); onFinished(); }
+    catch (e) { fail(e); }
+  };
+  return (
+    <div className="banner warn" role="status" aria-label="Waiting for files">
+      <strong>Waiting for {total} file{total === 1 ? "" : "s"} from the expert:</strong>{" "}
+      {missing.map((m) => `${m.label}${m.count > 1 ? ` (${m.count})` : ""}${m.required ? " · required" : ""}`).join(", ")}.
+      <div className="muted small">If they will not come (a lost or broken phone): upload {need.length ? "the required ones" : "any you have"} in Media, then finish without the rest. Files that arrive later are still added to the report.</div>
+      <div className="bar" style={{ marginTop: 8, marginBottom: 0 }}>
+        {need.length > 0 && <button onClick={onMedia}>Open Media</button>}
+        <button className="primary" disabled={!q.data?.can_finish} title={need.length ? `Upload first: ${need.map((m) => m.label).join(", ")}` : undefined}
+          onClick={() => setAsking(true)}>Finish without the missing files</button>
+      </div>
+      {asking && <Confirm title="Finish without the missing files?" confirmLabel="Finish" onConfirm={finish} onCancel={() => setAsking(false)}>
+        The job is marked Completed and the report is made without {total} file{total === 1 ? "" : "s"}. If the expert's phone sends them later, they are added and the report is made again.
+      </Confirm>}
     </div>
   );
 }

@@ -99,6 +99,15 @@ class MyJobsTest {
         compose.onNodeWithText("Discard draft").assertIsDisplayed()
     }
 
+    @Test fun aFieldOpensTheCameraTheFormBuilderChose() {
+        fun f(cfg: Map<String, Any?>) = `in`.carcid.vayu.core.forms.Field("p", "P", "photo", "", false, null, null, true, "edit", cfg)
+        assertEquals(true, firstCameraIsBack(f(emptyMap())))                 // Back by default
+        assertEquals(false, firstCameraIsBack(f(mapOf("camera" to "front"))))
+        assertEquals(true, firstCameraIsBack(f(mapOf("camera" to "back"))))
+        val oldSelfie = `in`.carcid.vayu.core.forms.Field("selfie", "Selfie at the car", "photo", "", true, null, null, true, "edit", emptyMap())
+        assertEquals(false, firstCameraIsBack(oldSelfie))                    // saved before the setting: Front
+    }
+
     @Test fun offlineShowsTheStripWithTheSavedTime() {
         show(JobsState(jobs, offline = true, syncedAt = "10:42"))
         compose.onNodeWithText("Offline · as of 10:42").assertIsDisplayed()

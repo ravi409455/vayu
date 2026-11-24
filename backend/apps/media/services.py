@@ -468,3 +468,58 @@ def stuck_uploads(hours: int | None = None):
     cutoff = timezone.now() - timedelta(hours=hours or settings.STUCK_UPLOAD_HOURS)
     return MediaAsset.objects.exclude(status__in=("verified", "purged")) \
         .filter(created_at__lt=cutoff)
+
+
+def missing_files(booking: Booking) -> list[dict]:
+    """What holds a submitted job back: per field of the counted inspection, the files it names
+    that have not arrived, and whether the field is required (Ops upload those before finishing)."""
+    from apps.forms.rules import evaluate_form, spec_from_version
+
+    insp = booking.inspections.filter(status="submitted").order_by("-submitted_at").first()
+    if booking.stage != "submitted" or insp is None:
+        return []
+    arrived = set(map(str, MediaAsset.objects.filter(booking=booking, status="verified")
+                      .values_list("id", flat=True)))
+    today = timezone.localdate().isoformat()
+    rows = []
+    for part, version in insp.pinned().items():
+        if version is None:
+            continue
+        answers = insp.answers.get(part) or {}
+        required = evaluate_form(spec_from_version(version), insp.answers, today).required
+        for f in Field.objects.filter(version=version, type__in=KINDS).order_by("order", "id"):
+            value = answers.get(f.key)
+            gone = [i for i in ([value] if isinstance(value, str) else value or [])
+                    if str(i) not in arrived]
+            if gone:
+                rows.append({"part": part, "key": f.key, "label": f.label, "count": len(gone),
+                             "required": bool(required.get(f.key))})
+    return rows
+
+
+def finish_without_missing(actor, booking: Booking) -> Booking:
+    """Ops finish a job whose expert's files will not come (a lost phone): only once every
+    required field has its file. Missing optional files are left out of the report; if they
+    arrive later they are added and the report is made again (verify_asset)."""
+    with transaction.atomic():
+        b = Booking.objects.select_for_update().get(pk=booking.pk)
+        if b.stage != "submitted":
+            raise err("INVALID_STAGE", "Only a job waiting for its files can be finished.", 409)
+        rows = missing_files(b)
+        need = [r for r in rows if r["required"]]
+        if need:
+            raise err("REQUIRED_FILES_MISSING", "Upload the required files first: "
+                      + ", ".join(r["label"] for r in need) + ".", 409,
+                      keys=[f"{r['part']}.{r['key']}" for r in need])
+        insp = b.inspections.filter(status="submitted").order_by("-submitted_at").first()
+        b.stage = "completed"
+        b.row_version += 1
+        b.last_change = {"by": actor.username, "at": timezone.now().isoformat(), "keys": ["stage"]}
+        b.save()
+        left = sum(r["count"] for r in rows)
+        activity.log(b, actor, "finished_without_files",
+                     {"stage": ["submitted", "completed"], "missing": left},
+                     keys=["stage", *(f"{r['part']}.{r['key']}" for r in rows)], inspection=insp)
+    events.emit("inspection.completed", booking=str(b.id), booking_id=b.booking_id,
+                inspection=str(insp.id))
+    return b
