@@ -1,7 +1,7 @@
 // How a booking is drawn on Today's "Schedule by expert": where its box starts and ends, whether
 // it was late, and what the hover says. All times are hours into the day (10.5 = 10:30).
 import type { Booking } from "../api/types";
-import { fmtTime, isoDay } from "./format";
+import { fmtTime, ist, today } from "./format";
 
 export const PLANNED_HOURS = 1;            // a job that has not started: booked time, one hour
 export const LATE_GRACE_MINUTES = 15;     // default; Admin sets the real one on the Settings page
@@ -22,14 +22,14 @@ export const hoursOf = (t: unknown): number | null => {
 function clock(iso: string | null | undefined, day: string): number | null {
   const d = iso ? new Date(iso) : null;
   if (!d || Number.isNaN(d.getTime())) return null;
-  const k = isoDay(d);
-  return k < day ? 0 : k > day ? 24 : d.getHours() + d.getMinutes() / 60;
+  const at = ist(d);
+  return at.day < day ? 0 : at.day > day ? 24 : at.hours;
 }
 
 type Job = Pick<Booking, "stage" | "answers" | "started_at"> & { finished_at?: string | null };
 
 export function jobSpan(b: Job, now: Date, graceMinutes = LATE_GRACE_MINUTES): Span {
-  const day = isoDay(now);
+  const day = today(now);
   const booked = hoursOf(b.answers.inspection_time);
   const started = clock(b.started_at, day);
   const running = b.stage === "in_progress", done = b.stage === "submitted" || b.stage === "completed";
@@ -38,7 +38,7 @@ export function jobSpan(b: Job, now: Date, graceMinutes = LATE_GRACE_MINUTES): S
     return { start: s, end: s + PLANNED_HOURS, kind: "planned", late: 0 };
   }
   const late = booked !== null && started - booked > graceMinutes / 60 ? Math.round((started - booked) * 60) : 0;
-  if (running) return { start: started, end: Math.max(now.getHours() + now.getMinutes() / 60, started + MIN_HOURS), kind: "running", late };
+  if (running) return { start: started, end: Math.max(ist(now).hours, started + MIN_HOURS), kind: "running", late };
   const finished = clock(b.finished_at, day) ?? started + PLANNED_HOURS;
   return { start: started, end: Math.max(finished, started + MIN_HOURS), kind: "finished", late };
 }

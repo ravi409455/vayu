@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { usePageTitle } from "../ui/kit";
 import { useAuth } from "../auth";
 import { homeFor } from "../guards";
 import { PasswordForm } from "../ui/PasswordForm";
@@ -6,6 +7,7 @@ import { Logo } from "../ui/Logo";
 
 /** The forced "choose your own password" screen (first sign-in, or after an Admin reset). */
 export function ChangePassword() {
+  usePageTitle("Change password");
   const { me, refresh, logout } = useAuth();
   const nav = useNavigate();
   return (

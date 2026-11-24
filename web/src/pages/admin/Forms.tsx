@@ -5,7 +5,7 @@ import { api } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { FormSummary, FormType } from "../../api/types";
 import { useAuth } from "../../auth";
-import { Empty, Field, Modal, Pill, useToast, PageHeader } from "../../ui/kit";
+import { Empty, Field, LoadError, Modal, PageHeader, Pill, useToast } from "../../ui/kit";
 import { slugKey } from "../../lib/fieldTypes";
 import { ImportDialog } from "./ImportForm";
 
@@ -42,6 +42,7 @@ export function Forms() {
       <PageHeader title="Forms">
         {can("forms.promote") && <button onClick={() => file.current?.click()}>Import</button>}
         {can("forms.edit") && <button className="primary" onClick={() => setOpen(true)}>New custom form</button>}</PageHeader>
+      {forms.isError && <LoadError error={forms.error} what="forms" onRetry={forms.refetch} />}
       <input ref={file} type="file" accept="application/json,.json" aria-label="Form file to import" hidden onChange={async (e) => {
         const f = e.target.files?.[0];
         e.target.value = "";

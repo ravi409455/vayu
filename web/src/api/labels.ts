@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./client";
-import { asList } from "./hooks";
+import { fetchAll } from "./hooks";
 import type { MasterListItem } from "./types";
 
 export type InspectionType = { key: string; label: string; available: boolean };
@@ -19,7 +19,7 @@ export function useTypeLabels(): (key: unknown) => string {
 
 /** key -> label for a master list (cities, car models, inspection types...). */
 export function useLabels(list: string): (key: unknown) => string {
-  const q = useQuery({ queryKey: ["list-items", list], staleTime: 300_000, queryFn: async () => asList<MasterListItem>(await api(`master-lists/${list}/items`)) });
+  const q = useQuery({ queryKey: ["list-items", list], staleTime: 300_000, queryFn: () => fetchAll<MasterListItem>(`master-lists/${list}/items`) });
   const map = new Map((q.data ?? []).map((i) => [i.key, i.label]));
   return (key) => (key === undefined || key === null || key === "" ? "" : map.get(String(key)) ?? String(key));
 }

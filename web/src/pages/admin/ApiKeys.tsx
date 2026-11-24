@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { ApiKeyRow, FormSummary } from "../../api/types";
-import { Empty, Field, Modal, Pill, useToast, when, PageHeader } from "../../ui/kit";
+import { Confirm, Empty, Field, LoadError, Modal, PageHeader, Pill, useToast, when } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
 
 /** "a, b" -> ["a", "b"]; "*" -> ["*"] (every field, only when typed on purpose);
@@ -22,6 +22,7 @@ export function ApiKeys() {
   const eligible = (forms.data ?? []).filter((f) => f.type === "booking" || f.type === "custom");
   const [edit, setEdit] = useState<{ id?: string; name: string; allow_delete: boolean; scope: Record<string, string> } | null>(null);
   const [shown, setShown] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<ApiKeyRow | null>(null);
   const save = useMutation({
     mutationFn: (e: NonNullable<typeof edit>) => {
       const forms: Record<string, string[]> = {};
@@ -40,8 +41,9 @@ export function ApiKeys() {
     <>
       <PageHeader title="API keys" subtitle={<>Let another system read and write bookings. API docs: <a href="/api/v1/docs" target="_blank" rel="noreferrer">/api/v1/docs</a></>}>
         <button className="primary" onClick={() => setEdit({ name: "", allow_delete: false, scope: {} })}>New key</button></PageHeader>
+      {keys.isError && <LoadError error={keys.error} what="API keys" onRetry={keys.refetch} />}
       {keys.data && keys.data.length === 0 ? <Empty title="No API keys yet" action={<button className="primary" onClick={() => setEdit({ name: "", allow_delete: false, scope: {} })}>New key</button>}>A key lets another system read and write bookings.</Empty> :
-      <table><thead><tr><th>Name</th><th>Key starts with</th><th>Can access</th><th>Last used</th><th /></tr></thead>
+      <table><thead><tr><th>Name</th><th>Key starts with</th><th>Can access</th><th>Last used</th><th><span className="sr-only">Actions</span></th></tr></thead>
         <tbody>{(keys.data ?? []).map((k) => (
           <tr key={k.id}><td>{k.name} {k.revoked_at && <Pill tone="bad">Revoked</Pill>} {k.allow_delete && <Pill tone="warn">Can delete</Pill>}</td>
             <td className="mono">vk_{k.prefix}_…</td>
@@ -49,11 +51,13 @@ export function ApiKeys() {
             <td>{when(k.last_used_at) || "never"}</td>
             <td style={{ textAlign: "right" }}>{!k.revoked_at && <MoreMenu label={`Actions for ${k.name}`} items={[
               { label: "Edit", onClick: () => setEdit({ id: k.id, name: k.name, allow_delete: k.allow_delete, scope: Object.fromEntries(Object.entries(k.scope.forms).map(([f, v]) => [f, v.join(", ")])) }) },
-              { label: "Revoke…", danger: true, onClick: () => { if (confirm(`Revoke ${k.name}? It stops working immediately.`)) revoke.mutate(k); } },
+              { label: "Revoke…", danger: true, onClick: () => setRevoking(k) },
             ]} />}</td></tr>))}</tbody></table>}
+      {revoking && <Confirm title={`Revoke ${revoking.name}?`} danger confirmLabel="Revoke key" busy={revoke.isPending} onCancel={() => setRevoking(null)}
+        onConfirm={() => revoke.mutate(revoking, { onSettled: () => setRevoking(null) })}><p>It stops working immediately. This cannot be undone.</p></Confirm>}
       {edit && (
         <Modal title={edit.id ? "Edit API key" : "New API key"} onClose={() => setEdit(null)}
-          actions={<><button onClick={() => setEdit(null)}>Cancel</button><button className="primary" disabled={!edit.name || Object.values(edit.scope).every((v) => parseFields(v).length === 0)} onClick={() => save.mutate(edit)}>Save</button></>}>
+          actions={<><button onClick={() => setEdit(null)}>Cancel</button><button className="primary" onClick={() => save.mutate(edit)} disabled={save.isPending || !edit.name || Object.values(edit.scope).every((v) => parseFields(v).length === 0)}>Save</button></>}>
           <Field label="Name"><input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Field>
           <h3>Forms and fields</h3>
           <p className="muted small">Type <code>*</code> for every field, or field keys separated by commas. Leave empty for no access.</p>

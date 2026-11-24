@@ -22,13 +22,19 @@ export function photoOfDefault(fields: { key: string; type: string }[]): string 
   return [...fields].reverse().find((f) => ![...MEDIA_TYPES, "image", "short_text", "long_text"].includes(f.type))?.key;
 }
 
+/** How many files a media field takes. Without its own maximum: 1, the same on the server, the phone
+ *  and every web screen (agreed 2026-11-25, F-010). A signature is always one. */
+export function maxFiles(f: { type: string; config: Record<string, unknown> }): number {
+  return f.type === "signature" ? 1 : Number(f.config.max_count ?? 1);
+}
+
 /** A sensible starting config for a new field of this type. */
 export function defaultConfig(type: string): Record<string, unknown> {
   switch (type) {
     case "single_choice": case "multi_choice": return { options: [{ key: "ok", label: "OK" }, { key: "not_ok", label: "Not OK", is_defect: true, severity: "minor" }] };
     case "master_list": return { list: "" };
     case "user_picker": return { role: "expert" };
-    case "photo": case "video": case "file": return { max_count: type === "video" ? 1 : 5 };
+    case "photo": case "video": case "file": return { max_count: 1 };
     case "image": return {};
     case "derived": return { rule: { "!!": [{ var: "inspection.chassis_no" }] }, true_label: "Yes", false_label: "No" };
     case "rating": return { category: "" };

@@ -76,3 +76,13 @@ describe("a phone that lost its draft picks the server's files up again", () => 
     expect(r.add.map((x) => x.id)).toEqual(["y"]);                 // selfie is full; front had room for one more
   });
 });
+
+describe("default number of files (F-010)", () => {
+  it("a media field without its own maximum takes one file, a signature always one", async () => {
+    const { maxFiles } = await import("./fieldTypes");
+    expect(maxFiles({ type: "photo", config: {} })).toBe(1);
+    expect(maxFiles({ type: "video", config: {} })).toBe(1);
+    expect(maxFiles({ type: "file", config: { max_count: 4 } })).toBe(4);
+    expect(maxFiles({ type: "signature", config: { max_count: 9 } })).toBe(1);
+  });
+});

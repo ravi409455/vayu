@@ -8,6 +8,7 @@ export default defineConfig({
   build: { sourcemap: true },
   test: {
     environment: "jsdom",
+    env: { TZ: "Asia/Kolkata" },        // tests that build local dates mean India time, as the app does
     setupFiles: ["./src/test-setup.ts"],
     exclude: ["e2e/**", "e2e-local/**", "node_modules/**"],
   },

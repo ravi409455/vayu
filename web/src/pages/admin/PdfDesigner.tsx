@@ -7,7 +7,7 @@ import type { Booking, FormSummary, FormVersion } from "../../api/types";
 import { useAuth } from "../../auth";
 import { fmtDay } from "../../lib/format";
 import { useRefChoices } from "../../lib/useChoices";
-import { Confirm, Empty, PageHeader, Pill, useToast } from "../../ui/kit";
+import { Confirm, Empty, LoadError, PageHeader, Pill, useToast } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
 import { findPart, locate, partName, removePart, replaceRef, sharedPart, shiftPart, unlinkShared, updatePage, updatePart, withIds, type Definition, type Part } from "./report/model";
 import { PagesPanel, type Sel } from "./report/PagesPanel";
@@ -42,6 +42,7 @@ export function PdfDesigner() {
           <select aria-label="Create a template for" value="" onChange={(e) => e.target.value && make.mutate(Number(e.target.value))} style={{ maxWidth: 240 }}>
             <option value="">+ New template for…</option>{withoutTemplate.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select>)}
       </PageHeader>
+      {templates.isError && <LoadError error={templates.error} what="PDF templates" onRetry={templates.refetch} />}
       <div className="tabs" role="tablist" aria-label="Templates">{(templates.data ?? []).map((x) => (
         <button key={x.id} role="tab" aria-selected={(t?.id ?? null) === x.id} className={t?.id === x.id ? "on" : ""} onClick={() => setTid(x.id)}>{formName(x)}</button>))}
         <button role="tab" aria-selected={library} className={`rd-libtab${library ? " on" : ""}`} onClick={() => setTid("library")}>Shared library</button></div>
@@ -135,6 +136,17 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
     return saveChain.current;
   };
   useEffect(() => { if (ok && dirty && saved) { setDirty(false); void save(saved); } }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps
+  // leaving (another template, the library, another page) with an edit not sent yet: send it now (F-015)
+  const pending = useRef<Definition | null>(null);
+  pending.current = ok && dirty ? def : null;
+  const flush = useRef(save);
+  flush.current = save;
+  useEffect(() => () => { if (pending.current) void flush.current(pending.current); }, []);
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => { if (pending.current) e.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
 
   // live preview and checks, a moment after each change (unsaved edits included)
   const shown = useDebounced(def, 500);
@@ -211,7 +223,7 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
     <>
       <div className="bar rd-top">
         {draftMeta ? <Pill tone="warn">Draft v{draftMeta.number}, not live yet</Pill> : <Pill tone="ok">Live v{latest?.number}</Pill>}
-        <span className="muted small">{!draft ? "Start a draft to change it." : saving === "saving" ? "Saving…" : saving === "error" ? "Not saved" : "All changes saved"}</span>
+        <span className="muted small">{!draft ? "Start a draft to change it." : saving === "saving" ? "Saving…" : saving === "error" ? "Not saved" : dirty ? "Unsaved changes…" : "All changes saved"}</span>
         <span className="grow" />
         <label className="bar small muted" style={{ margin: 0 }}>Show with
           <select aria-label="Booking for the preview" value={chosen} onChange={(e) => setBookingId(e.target.value)} style={{ maxWidth: 280 }}>

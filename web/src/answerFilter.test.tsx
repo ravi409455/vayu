@@ -53,3 +53,17 @@ describe("filter bookings by an answer (generic: payments are ordinary fields)",
     expect(calls.some((c) => c.includes("answer-fields"))).toBe(false);
   });
 });
+
+describe("typing in the Bookings filter (F-085)", () => {
+  it("asks the server once typing pauses, not once per letter", async () => {
+    const calls = serve({ "bookings.view": "all" });
+    const u = userEvent.setup();
+    show();
+    const box = await screen.findByLabelText("Filter bookings");
+    await waitFor(() => expect(calls.some((c) => c.includes("/bookings?"))).toBe(true));
+    await u.type(box, "Sharma");
+    await waitFor(() => expect(calls.some((c) => c.includes("search=Sharma"))).toBe(true));
+    const partial = calls.filter((c) => /search=S(h|ha|har|harm)?(&|$)/.test(c));
+    expect(partial).toEqual([]);                                  // no request for "S", "Sh", … "Sharm"
+  });
+});

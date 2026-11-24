@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { api } from "../api/client";
-import { asList } from "../api/hooks";
+import { fetchAll } from "../api/hooks";
 import { useLabels, useTypeLabels } from "../api/labels";
 import type { FormField, FormPage, FormSection, FormVersion, Option, User } from "../api/types";
 import { evaluateTree, type Answers, type Ctx, type Kind } from "../lib/formSpec";
@@ -35,7 +35,7 @@ function ListLabel({ list, value }: { list: string; value: unknown }) {
 }
 
 function UserName({ role, id }: { role: string; id: unknown }) {
-  const q = useQuery({ queryKey: ["users-by-role", role], retry: false, staleTime: 300_000, queryFn: async () => asList<User>(await api("users", { query: { role } })) });
+  const q = useQuery({ queryKey: ["users-by-role", role], retry: false, staleTime: 300_000, queryFn: () => fetchAll<User>("users", { role }) });
   const u = q.data?.find((x) => x.id === id);
   return <>{u ? u.name || u.username : `#${String(id)}`}</>;
 }

@@ -6,7 +6,7 @@ import { asList, useList, useRefresh } from "../../../api/hooks";
 import type { Booking, FormSummary, Integration } from "../../../api/types";
 import { bodyText, cleanPairs, EVENT_LABEL, eventsFor, hasBody, METHODS, parseBody, pickerHint, STARTER_BODY, type CatalogueEntry } from "../../../lib/integrationDef";
 import { useCrumb } from "../../../ui/crumb";
-import { Field, PageHeader, useToast } from "../../../ui/kit";
+import { Field, LoadError, PageHeader, useToast } from "../../../ui/kit";
 import { JsonEditor } from "./JsonEditor";
 import { FieldChecklist, PairRows } from "./Rows";
 import { PickerHint, ValueInput } from "./ValueInput";
@@ -60,6 +60,7 @@ export function IntegrationEditor() {
     onSuccess: () => { say("Saved."); void refresh("integrations", "integration"); nav("/integrations"); },
     onError: (e) => setError(e instanceof ApiError ? e.message : "Could not save."),
   });
+  if (loaded.isError) return <LoadError error={loaded.error} what="integration" onRetry={loaded.refetch} />;
   if (!d) return <p className="muted pad">Loading…</p>;
   const set = (p: Partial<Draft>) => { setError(""); setD({ ...d, ...p }); };
   const cat = catalogue.data ?? [];
@@ -84,12 +85,12 @@ export function IntegrationEditor() {
             <Field label="Method"><select aria-label="Method" value={d.method} onChange={(e) => set({ method: e.target.value })}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select></Field>
             <Field label="URL" help="Values can go in the path after the address, e.g. https://crm.example.com/leads/ + Booking ID."><ValueInput label="URL" value={d.url} catalogue={cat} placeholder="https://" onChange={(v) => set({ url: v })} /></Field>
           </div>
-          <h3>Query parameters</h3>
+          <h2 className="sub">Query parameters</h2>
           <PairRows what="Parameter" namePlaceholder="name" rows={d.query} catalogue={cat} onChange={(query) => set({ query })} />
-          <h3>Headers</h3>
+          <h2 className="sub">Headers</h2>
           <PairRows what="Header" namePlaceholder="e.g. Authorization" rows={d.headers} catalogue={cat} onChange={(headers) => set({ headers })} />
           <p className="muted small">There is no signature: put the token the other system expects in a header, and use https.</p>
-          <h3>Body</h3>
+          <h2 className="sub">Body</h2>
           {!hasBody(d.method) ? <p className="muted">No body is sent with {d.method}.</p> : (
             <>
               <div className="seg" role="group" aria-label="Body type">
@@ -146,7 +147,7 @@ function Preview({ d, onError }: { d: Draft; onError: (m: string) => void }) {
   }
   return (
     <div className="card request-preview" aria-label="Request preview">
-      <h3>Preview</h3>
+      <h2 className="sub">Preview</h2>
       <div className="bar">
         <input aria-label="Preview with booking" placeholder="Booking ID (default: latest)" value={ref} onChange={(e) => setRef(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void find(); }} />
         <button type="button" onClick={() => void find()}>Use</button>

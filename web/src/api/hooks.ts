@@ -8,8 +8,24 @@ export function asList<T>(x: unknown): T[] {
   return [];
 }
 
-export function useList<T>(key: string, path: string, query?: Record<string, string | number | undefined>) {
-  return useQuery({ queryKey: [key, query], queryFn: async () => asList<T>(await api(path, { query })) });
+type Query = Record<string, string | number | undefined>;
+const MAX_PAGES = 40;          // ponytail: 2000 rows at 50 a page; lists that can grow past that need paging on screen
+
+/** Every row of a list endpoint: follows the server's pages to the end. */
+export async function fetchAll<T>(path: string, query?: Query): Promise<T[]> {
+  const out: T[] = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const r = await api(path, { query: page === 1 ? query : { ...query, page } });
+    if (Array.isArray(r)) return r as T[];
+    if (!r || typeof r !== "object" || !Array.isArray((r as Page<T>).results)) return out;
+    out.push(...(r as Page<T>).results);
+    if (!(r as Page<T>).next) return out;
+  }
+  return out;
+}
+
+export function useList<T>(key: string, path: string, query?: Query) {
+  return useQuery({ queryKey: [key, query], queryFn: () => fetchAll<T>(path, query) });
 }
 
 export function useRefresh() {

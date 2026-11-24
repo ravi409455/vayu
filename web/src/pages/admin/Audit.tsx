@@ -5,7 +5,7 @@ import { api, type Page } from "../../api/client";
 import { useList } from "../../api/hooks";
 import type { User } from "../../api/types";
 import { fmtStamp } from "../../lib/format";
-import { Empty, PageHeader } from "../../ui/kit";
+import { Empty, LoadError, PageHeader } from "../../ui/kit";
 
 type Row = { id: number; actor_username: string | null; actor_name: string | null; action: string; target_type: string; target_id: string; summary: string; created_at: string };
 
@@ -40,6 +40,7 @@ export function Audit() {
   return (
     <>
       <PageHeader title="Audit log" count={q.data?.count} />
+      {q.isError && <LoadError error={q.error} what="the audit log" onRetry={q.refetch} />}
       <div className="filters">
         <select aria-label="Area" className={f.action ? "set" : ""} value={f.action} onChange={(e) => set({ action: e.target.value })}>{AREAS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
         <select aria-label="Who" className={f.actor ? "set" : ""} value={f.actor} onChange={(e) => set({ actor: e.target.value })}><option value="">Anyone</option>{(users.data ?? []).map((u) => <option key={u.id} value={u.id}>{u.name || u.username}</option>)}</select>

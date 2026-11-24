@@ -1,18 +1,20 @@
 import { Download, FileText, ImageOff, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, ZoomIn, ZoomOut } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { maxFiles } from "../../lib/fieldTypes";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError, explain } from "../../api/client";
-import { asList, useList, useRefresh } from "../../api/hooks";
+import { fetchAll, useList, useRefresh } from "../../api/hooks";
 import { STAGE_LABEL, STAGE_TONE, useInspectionTypes, useLabels, useTypeLabels } from "../../api/labels";
 import type { Booking, FormPage, FormSection, FormVersion, Inspection, KeyCheckValue, MasterListItem, User } from "../../api/types";
 import { useAuth } from "../../auth";
+import { allowedActions } from "../../lib/actions";
 import { saveDirty } from "../../lib/saveDirty";
 import { usePinnedTrees, useTrees } from "../../lib/useTrees";
 import { InfoTip } from "../../ui/InfoTip";
 import { addFile, discardFile, uploaded } from "../../lib/uploadManager";
 import { FormRenderer } from "../../ui/FormRenderer";
-import { Confirm, Empty, Field, Modal, Pill, Tabs, useToast } from "../../ui/kit";
+import { Confirm, Empty, Field, LoadError, Modal, Pill, Tabs, useToast } from "../../ui/kit";
 import { AnswerSheet, AnswerValue, defectOf, readableFields, type SheetFilter } from "../../ui/AnswerSheet";
 import { Avatar } from "../../ui/Avatar";
 import { isPdf, mediaUrl, REMOVED_NOTE, useMediaUrl, Thumb } from "../../ui/MediaThumb";
@@ -67,10 +69,11 @@ function Detail({ id }: { id: string }) {
   const refresh = useRefresh();
   const b = useQuery({ queryKey: ["booking", id], queryFn: () => api<Booking>(`bookings/${id}`) });
   useCrumb(b.data?.booking_id);
-  const insps = useQuery({ queryKey: ["inspections", id], queryFn: async () => asList<Inspection>(await api(`bookings/${id}/inspections`)) });
+  const insps = useQuery({ queryKey: ["inspections", id], queryFn: () => fetchAll<Inspection>(`bookings/${id}/inspections`) });
   const activity = useQuery({ queryKey: ["activity", id], queryFn: () => api<Activity[]>(`bookings/${id}/activity`) });
   const [tab, setTab] = useState<Tab | null>(null);
   const [action, setAction] = useState<null | ActionKind>(null);
+  const [reviewing, setReviewing] = useState("");
   const [rail, setRail] = useState(() => { try { return localStorage.getItem("vayu:booking-rail") !== "hidden"; } catch { return true; } });
   const toggleRail = () => { setRail(!rail); try { localStorage.setItem("vayu:booking-rail", rail ? "hidden" : "shown"); } catch { /* private window: it just will not be remembered */ } };
   const booking = b.data;
@@ -82,11 +85,11 @@ function Detail({ id }: { id: string }) {
   const reload = () => Promise.all([refresh("booking"), refresh("inspections"), refresh("board"), refresh("report"), refresh("activity"), refresh("bookings-page")]);
   const insp = (insps.data ?? []).filter((i) => i.status === "submitted").sort((a, c) => (c.submitted_at ?? "").localeCompare(a.submitted_at ?? ""))[0] ?? (insps.data ?? [])[0];
   const pinned = usePinnedTrees(insp);                   // the exact versions this inspection was started on
+  if (b.isError) return <LoadError error={b.error} what="booking" onRetry={b.refetch} />;
   if (!booking) return <p className="muted pad">Loading…</p>;
   const current: Tab = tab ?? (insp?.status === "submitted" ? "inspection" : "booking");
   const expert = experts.data?.find((u) => u.id === booking.assigned_expert);
-  const open = booking.stage === "draft" || booking.stage === "assigned";
-  const live = booking.stage !== "cancelled" && booking.stage !== "completed";
+  const allowed = allowedActions(booking, can);
   const a = booking.answers;
   const mediaCount = insp ? mediaFields(pinned).reduce((n, f) => n + idsOf(insp, f.part, f.key).length, 0) : 0;
   return (
@@ -98,20 +101,20 @@ function Detail({ id }: { id: string }) {
           <div className="chips">
             <Pill tone={STAGE_TONE[booking.stage]}>{STAGE_LABEL[booking.stage] ?? booking.stage}</Pill>
             {booking.conflict && <Pill tone="bad">Conflict: two experts</Pill>}
-            {timingFlags(booking.timing).map((f) => <Pill key={f.flag} tone="bad">{f.words}</Pill>)}
+            {timingFlags(booking.timing).map((f) => <Pill key={f.flag} tone="warn">{f.words}</Pill>)}
             {fmtSlot(a.inspection_date, a.inspection_time) && <span className="chip">{fmtSlot(a.inspection_date, a.inspection_time)}</span>}
             {a.city ? <span className="chip">{city(a.city)}</span> : null}
             {expert ? <span className="chip who-avatar"><Avatar who={expert} size={18} />Expert: {expert.name || expert.username}</span> : null}
           </div>
         </div>
         <div className="page-actions">
-          {can("bookings.reschedule") && live && <button onClick={() => setAction("reschedule")}>Reschedule</button>}
-          {can("bookings.assign") && booking.stage !== "cancelled" && <button className={booking.assigned_expert ? "" : "primary"} onClick={() => setAction("assign")}>{booking.assigned_expert ? "Reassign" : "Assign"}</button>}
-          <MoreMenu label="More actions" items={[
-            { label: "Change type", onClick: () => setAction("type"), hidden: !(can("bookings.edit") && open) },
-            { label: "Force release", onClick: () => setAction("release"), hidden: !(can("bookings.force_release") && booking.stage === "in_progress") },
-            { label: "Cancel booking", danger: true, onClick: () => setAction("cancel"), hidden: !(can("bookings.cancel") && live) },
-          ]} />
+          {allowed.has("reschedule") && <button onClick={() => setAction("reschedule")}>Reschedule</button>}
+          {allowed.has("assign") && <button className={booking.assigned_expert ? "" : "primary"} onClick={() => setAction("assign")}>{booking.assigned_expert ? "Reassign" : "Assign"}</button>}
+          {(allowed.has("type") || allowed.has("release") || allowed.has("cancel")) && <MoreMenu label="More actions" items={[
+            { label: "Change type", onClick: () => setAction("type"), hidden: !allowed.has("type") },
+            { label: "Force release", onClick: () => setAction("release"), hidden: !allowed.has("release") },
+            { label: "Cancel booking", danger: true, onClick: () => setAction("cancel"), hidden: !allowed.has("cancel") },
+          ]} />}
         </div>
       </header>
       {booking.alerts?.map((x, i) => <div key={i} className="banner warn" role="alert">{x.detail} <span className="muted small">{fmtStamp(x.at)}</span></div>)}
@@ -120,7 +123,7 @@ function Detail({ id }: { id: string }) {
           <span className="grow">{f.words}.{" "}
             {f.reviewedAt ? <span className="muted small">Reviewed by {f.reviewedBy} · {fmtStamp(f.reviewedAt)}</span>
               : <span className="muted small">{f.flag === "late" ? `Limit: start within ${booking.timing?.grace_minutes} min of the booked time.` : `Limit: take at least ${booking.timing?.min_minutes} min.`}</span>}</span>
-          {!f.reviewedAt && can("bookings.review_timing") && <button className="sm" onClick={async () => { try { await api(`bookings/${booking.id}/timing-review`, { body: { flag: f.flag } }); say("Marked reviewed."); void reload(); void refresh("problems"); } catch (e) { fail(e); } }}>Mark reviewed</button>}
+          {!f.reviewedAt && can("bookings.review_timing") && <button className="sm" disabled={reviewing === f.flag} onClick={async () => { setReviewing(f.flag); try { await api(`bookings/${booking.id}/timing-review`, { body: { flag: f.flag } }); say("Marked reviewed."); void reload(); void refresh("problems"); } catch (e) { fail(e); } finally { setReviewing(""); } }}>Mark reviewed</button>}
         </div>))}
       {booking.conflict && <ConflictBanner booking={booking} insps={insps.data ?? []} experts={experts.data ?? []} onResolved={reload} />}
       {booking.stage === "submitted" && can("media.manage") && <WaitingFiles booking={booking} onFinished={reload} onMedia={() => setTab("media")} />}
@@ -163,6 +166,7 @@ function Detail({ id }: { id: string }) {
 /** Admin only (the server sends the old file's id to nobody else): open a replaced file. */
 function openOld(id: string) {
   const w = window.open("", "_blank");            // opened now, so the pop-up blocker allows it
+  if (w) w.opener = null;                          // the storage page gets no handle on this one
   void mediaUrl(id).then((l) => { if (l?.url && w) w.location.href = l.url; else w?.close(); });
 }
 
@@ -227,6 +231,7 @@ function ConflictBanner({ booking, insps, experts, onResolved }: { booking: Book
   const { can } = useAuth();
   const { fail, say } = useToast();
   const [keep, setKeep] = useState("");
+  const [sending, setSending] = useState(false);
   const who = (id: number) => experts.find((u) => u.id === id)?.name ?? `#${id}`;
   const submitted = insps.filter((i) => i.status === "submitted");
   return (
@@ -235,7 +240,7 @@ function ConflictBanner({ booking, insps, experts, onResolved }: { booking: Book
       {can("bookings.edit") && submitted.length > 1 && (
         <div className="bar" style={{ marginTop: 8, marginBottom: 0 }}>
           <select aria-label="Inspection to keep" value={keep} onChange={(e) => setKeep(e.target.value)} style={{ maxWidth: 320 }}><option value="">Choose…</option>{submitted.map((i) => <option key={i.id} value={i.id}>{who(i.expert)} · {fmtStamp(i.submitted_at)}</option>)}</select>
-          <button className="primary" disabled={!keep} onClick={async () => { try { await api(`bookings/${booking.id}/resolve-conflict`, { body: { inspection: keep } }); say("Resolved."); onResolved(); } catch (e) { fail(e); } }}>Keep this one</button>
+          <button className="primary" disabled={!keep || sending} onClick={async () => { setSending(true); try { await api(`bookings/${booking.id}/resolve-conflict`, { body: { inspection: keep } }); say("Resolved."); onResolved(); } catch (e) { fail(e); } finally { setSending(false); } }}>Keep this one</button>
         </div>)}
     </div>
   );
@@ -424,14 +429,13 @@ function InspectionTab({ booking, insp, trees, activity, onSaved }: { booking: B
 }
 
 type MediaField = { key: string; label: string; type: string; part: Part; section: string; max: number; opsOk: boolean; accept: string };
-const MAX_DEFAULT: Record<string, number> = { photo: 10, video: 3, file: 5, signature: 1 };
 // what the file picker offers (the server checks the same: a file field's "allowed" setting)
 const FILE_ACCEPT: Record<string, string> = { image: "image/jpeg,image/png", pdf: "application/pdf" };
 const acceptFor = (f: { type: string; config: Record<string, unknown> }) => f.type === "video" ? "video/*" : f.type === "file"
   ? ((f.config.allowed as string[] | undefined) ?? ["image", "pdf"]).map((a) => FILE_ACCEPT[a]).join(",") : "image/*";
 
 const toMediaField = (f: FormPage["sections"][number]["fields"][number], part: Part, section: string): MediaField => ({ key: f.key, label: f.label || f.key, type: f.type, part, section,
-  max: f.type === "signature" ? 1 : Number(f.config.max_count ?? MAX_DEFAULT[f.type]), accept: acceptFor(f),
+  max: maxFiles(f), accept: acceptFor(f),
   opsOk: ["photo", "video", "file"].includes(f.type) && f.config.ops_upload !== false });
 
 function mediaFields(trees: Trees): MediaField[] {
@@ -634,7 +638,7 @@ function AnswerNear({ insp, trees, f }: { insp: Inspection; trees: Trees; f: Med
 
 function PreviewMedia({ id, video }: { id: string; video: boolean }) {
   const links = useMediaUrl(id);
-  if (!links) return <div className="preview-media empty" aria-label="Not ready yet" />;
+  if (!links) return <div className="preview-media empty" role="img" aria-label="Not ready yet" />;
   if (links.removed) return <div className="preview-media doc" role="note"><ImageOff size={40} aria-hidden /><span>{REMOVED_NOTE}.</span></div>;
   if (isPdf(links)) return <a className="preview-media doc" href={links.url} target="_blank" rel="noreferrer"><FileText size={40} aria-hidden /><span>Open the PDF</span></a>;
   return video ? <video className="preview-media" src={links.url} controls preload="metadata" />
@@ -654,16 +658,29 @@ function Seg<T extends string | number>({ label, value, suggested, options, onPi
 }
 
 /** Ops review a booking: Key Checks (their own text wins), the overall word and category ratings. */
-function ReviewTab({ booking, insp, trees, onSaved }: { booking: Booking; insp?: Inspection; trees: Trees; onSaved: () => void }) {
+export function ReviewTab({ booking, insp, trees, onSaved }: { booking: Booking; insp?: Inspection; trees: Trees; onSaved: () => void }) {
   const { can } = useAuth();
   const { say, fail } = useToast();
+  // Quick clicks: each save waits for the one before and sends the row version it got back, so
+  // Ops never get "changed by someone" against themselves (F-114).
+  const rv = useRef(insp?.row_version ?? 0);
+  if (insp && insp.row_version > rv.current) rv.current = insp.row_version;
+  const chain = useRef<Promise<void>>(Promise.resolve());
   if (!insp) return <Empty title="No inspection yet">Key Checks and ratings are worked out once the expert submits.</Empty>;
   const kcs = trees.inspection?.key_checks ?? [];
   const kcOpen = booking.stage === "submitted" || booking.stage === "completed";
   const s = insp.scores;
   const cats = trees.inspection?.rating_config?.categories ?? [];
-  async function send(body: Record<string, unknown>): Promise<void> {
-    try { await api(`inspections/${insp!.id}/overrides`, { method: "PATCH", body: { row_version: insp!.row_version, ...body } }); say("Saved."); onSaved(); } catch (e) { fail(e); }
+  function send(body: Record<string, unknown>): Promise<void> {
+    const next = chain.current.then(async () => {
+      try {
+        const r = await api<Inspection>(`inspections/${insp!.id}/overrides`, { method: "PATCH", body: { row_version: rv.current, ...body } });
+        rv.current = r.row_version;
+        say("Saved."); onSaved();
+      } catch (e) { fail(e); }
+    });
+    chain.current = next;
+    return next;
   }
   const edit = can("ratings.override");
   const nums = [1, 2, 3, 4, 5].map((n) => ({ v: n, label: String(n) }));
@@ -772,9 +789,10 @@ function ReportTab({ booking, activity }: { booking: Booking; activity: Activity
   const r = q.data;
   const passedOn = activity.filter((a) => a.kind === "report_downloaded" || a.kind === "report_shared");
   async function copyCheckLink() {
-    try {
+    try { if (!navigator.clipboard) throw new Error("no clipboard"); await navigator.clipboard.writeText(r!.verify_url!); }
+    catch { say("Could not copy here. Select the link and copy it yourself.", true); return; }
+    try {                                           // logged only once it really was copied
       await api(`bookings/${booking.id}/report/shared`, { body: { how: "check_link" } });
-      await navigator.clipboard?.writeText(r!.verify_url!);
       say("Check link copied."); void refresh("activity");
     } catch (e) { fail(e); }
   }
@@ -806,16 +824,22 @@ export function Actions({ kind, booking, experts, onClose, onDone, fail }: { kin
   const [time, setTime] = useState(String(booking.answers.inspection_time ?? ""));
   const [reason, setReason] = useState("");
   const [type, setType] = useState(booking.inspection_type);
-  const reasons = useQuery({ queryKey: ["list-items", kind === "cancel" ? "cancel_reason" : "reschedule_reason"], enabled: kind === "cancel" || kind === "reschedule", queryFn: async () => asList<MasterListItem>(await api(`master-lists/${kind === "cancel" ? "cancel_reason" : "reschedule_reason"}/items`)) });
+  const reasons = useQuery({ queryKey: ["list-items", kind === "cancel" ? "cancel_reason" : "reschedule_reason"], enabled: kind === "cancel" || kind === "reschedule", queryFn: () => fetchAll<MasterListItem>(`master-lists/${kind === "cancel" ? "cancel_reason" : "reschedule_reason"}/items`) });
   const types = useInspectionTypes();
   const typeLabel = useTypeLabels();
-  const go = async (path: string, body: unknown) => { try { await api(`bookings/${booking.id}/${path}`, { body }); onDone(); } catch (e) { fail(e); } };
+  const [busy, setBusy] = useState(false);
+  const sending = useRef(false);                   // a double click sends once (F-112)
+  const go = async (path: string, body: unknown) => {
+    if (sending.current) return;
+    sending.current = true; setBusy(true);
+    try { await api(`bookings/${booking.id}/${path}`, { body }); onDone(); } catch (e) { fail(e); } finally { sending.current = false; setBusy(false); }
+  };
   if (kind === "release") return <Confirm title="Force release this booking?" danger confirmLabel="Force release" onCancel={onClose} onConfirm={() => go("force-release", {})}><p>The expert is taken off the booking. If they still have a draft on their phone and submit it later, Ops will see a conflict to resolve.</p></Confirm>;
   const title = { assign: "Assign an expert", reschedule: "Reschedule", cancel: "Cancel this booking", type: "Change inspection type" }[kind];
   const ok = kind === "assign" ? !!expert : kind === "reschedule" ? !!date && !!time && !!reason : kind === "cancel" ? !!reason : !!type && type !== booking.inspection_type;
   const submit = () => kind === "assign" ? go("assign", { expert: Number(expert) }) : kind === "reschedule" ? go("reschedule", { date, time, reason }) : kind === "cancel" ? go("cancel", { reason }) : go("change-type", { inspection_type: type });
   return (
-    <Modal title={title} onClose={onClose} actions={<><button onClick={onClose}>Back</button><button className={kind === "cancel" ? "danger" : "primary"} disabled={!ok} onClick={submit}>{title}</button></>}>
+    <Modal title={title} onClose={onClose} actions={<><button onClick={onClose}>Back</button><button className={kind === "cancel" ? "danger" : "primary"} disabled={!ok || busy} onClick={submit}>{title}</button></>}>
       {kind === "assign" && <Field label="Expert"><select aria-label="Expert" value={expert} onChange={(e) => setExpert(e.target.value)}><option value="">Choose…</option>{experts.filter((u) => u.is_active).map((u) => <option key={u.id} value={u.id}>{u.name || u.username}</option>)}</select></Field>}
       {kind === "reschedule" && <><Field label="New date"><input aria-label="New date" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field><Field label="New time"><input aria-label="New time" type="time" value={time} onChange={(e) => setTime(e.target.value)} /></Field></>}
       {(kind === "reschedule" || kind === "cancel") && <Field label="Reason"><select aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)}><option value="">Choose…</option>{(reasons.data ?? []).filter((r) => !r.archived).map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}</select></Field>}

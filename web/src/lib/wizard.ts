@@ -2,6 +2,7 @@
 // custom form's pages, then the end form's pages, then the review. A form with nothing visible is
 // skipped. Pure, so the order and the skipping can be tested without a browser.
 import type { FormPage, FormVersion } from "../api/types";
+import { maxFiles } from "./fieldTypes";
 import { visiblePages, type Answers, type Ctx } from "./formSpec";
 
 export type Part = "start" | "inspection" | "end";
@@ -47,7 +48,7 @@ export function reconcileMedia(trees: Trees, answers: Record<Part, Answers>, ser
   const fields = new Map<string, { part: Part; type: string; max: number }>();
   for (const part of ["start", "inspection", "end"] as const)
     for (const p of trees[part]?.pages ?? []) for (const s of p.sections) for (const f of s.fields)
-      if (MEDIA_TYPES.includes(f.type)) fields.set(f.key, { part, type: f.type, max: f.type === "signature" ? 1 : Number(f.config.max_count ?? (f.type === "video" ? 3 : 10)) });
+      if (MEDIA_TYPES.includes(f.type)) fields.set(f.key, { part, type: f.type, max: maxFiles(f) });
   const used = new Set<string>();
   for (const part of ["start", "inspection", "end"] as const)
     for (const v of Object.values(answers[part] ?? {})) for (const id of Array.isArray(v) ? v : [v]) if (typeof id === "string") used.add(id);

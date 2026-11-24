@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
 import { Layout } from "./Layout";
@@ -6,31 +6,32 @@ import { homeFor, RequireAuth } from "./guards";
 import { Login } from "./pages/Login";
 import { ChangePassword } from "./pages/ChangePassword";
 import { Profile } from "./pages/Profile";
+import { ErrorBoundary, lazyPage } from "./ui/ErrorBoundary";
 
-const Users = lazy(() => import("./pages/admin/Users").then((m) => ({ default: m.Users })));
-const Roles = lazy(() => import("./pages/admin/Roles").then((m) => ({ default: m.Roles })));
-const MasterLists = lazy(() => import("./pages/admin/MasterLists").then((m) => ({ default: m.MasterLists })));
-const Settings = lazy(() => import("./pages/admin/Settings").then((m) => ({ default: m.Settings })));
-const Audit = lazy(() => import("./pages/admin/Audit").then((m) => ({ default: m.Audit })));
-const Forms = lazy(() => import("./pages/admin/Forms").then((m) => ({ default: m.Forms })));
-const Library = lazy(() => import("./pages/admin/Library").then((m) => ({ default: m.Library })));
-const LibraryEditor = lazy(() => import("./pages/admin/LibraryEditor").then((m) => ({ default: m.LibraryEditor })));
-const PdfDesigner = lazy(() => import("./pages/admin/PdfDesigner").then((m) => ({ default: m.PdfDesigner })));
-const Integrations = lazy(() => import("./pages/admin/Integrations").then((m) => ({ default: m.Integrations })));
-const IntegrationEditor = lazy(() => import("./pages/admin/integrations/IntegrationEditor").then((m) => ({ default: m.IntegrationEditor })));
-const ApiKeys = lazy(() => import("./pages/admin/ApiKeys").then((m) => ({ default: m.ApiKeys })));
-const Promote = lazy(() => import("./pages/admin/Promote").then((m) => ({ default: m.Promote })));
-const MyJobs = lazy(() => import("./pages/expert/MyJobs").then((m) => ({ default: m.MyJobs })));
-const Job = lazy(() => import("./pages/expert/Job").then((m) => ({ default: m.Job })));
-const Today = lazy(() => import("./pages/ops/Today").then((m) => ({ default: m.Today })));
-const BookingPage = lazy(() => import("./pages/ops/Booking").then((m) => ({ default: m.BookingPage })));
-const Problems = lazy(() => import("./pages/ops/Problems").then((m) => ({ default: m.Problems })));
-const Bookings = lazy(() => import("./pages/ops/Bookings").then((m) => ({ default: m.Bookings })));
-const Dashboards = lazy(() => import("./pages/ops/Dashboards").then((m) => ({ default: m.Dashboards })));
-const VerifyPage = lazy(() => import("./pages/Public").then((m) => ({ default: m.VerifyPage })));
-const ReportMediaPage = lazy(() => import("./pages/Public").then((m) => ({ default: m.ReportMediaPage })));
-const ZipPage = lazy(() => import("./pages/Public").then((m) => ({ default: m.ZipPage })));
-const FormBuilder = lazy(() => import("./pages/admin/FormBuilder").then((m) => ({ default: m.FormBuilder })));
+const Users = lazyPage(() => import("./pages/admin/Users").then((m) => ({ default: m.Users })));
+const Roles = lazyPage(() => import("./pages/admin/Roles").then((m) => ({ default: m.Roles })));
+const MasterLists = lazyPage(() => import("./pages/admin/MasterLists").then((m) => ({ default: m.MasterLists })));
+const Settings = lazyPage(() => import("./pages/admin/Settings").then((m) => ({ default: m.Settings })));
+const Audit = lazyPage(() => import("./pages/admin/Audit").then((m) => ({ default: m.Audit })));
+const Forms = lazyPage(() => import("./pages/admin/Forms").then((m) => ({ default: m.Forms })));
+const Library = lazyPage(() => import("./pages/admin/Library").then((m) => ({ default: m.Library })));
+const LibraryEditor = lazyPage(() => import("./pages/admin/LibraryEditor").then((m) => ({ default: m.LibraryEditor })));
+const PdfDesigner = lazyPage(() => import("./pages/admin/PdfDesigner").then((m) => ({ default: m.PdfDesigner })));
+const Integrations = lazyPage(() => import("./pages/admin/Integrations").then((m) => ({ default: m.Integrations })));
+const IntegrationEditor = lazyPage(() => import("./pages/admin/integrations/IntegrationEditor").then((m) => ({ default: m.IntegrationEditor })));
+const ApiKeys = lazyPage(() => import("./pages/admin/ApiKeys").then((m) => ({ default: m.ApiKeys })));
+const Promote = lazyPage(() => import("./pages/admin/Promote").then((m) => ({ default: m.Promote })));
+const MyJobs = lazyPage(() => import("./pages/expert/MyJobs").then((m) => ({ default: m.MyJobs })));
+const Job = lazyPage(() => import("./pages/expert/Job").then((m) => ({ default: m.Job })));
+const Today = lazyPage(() => import("./pages/ops/Today").then((m) => ({ default: m.Today })));
+const BookingPage = lazyPage(() => import("./pages/ops/Booking").then((m) => ({ default: m.BookingPage })));
+const Problems = lazyPage(() => import("./pages/ops/Problems").then((m) => ({ default: m.Problems })));
+const Bookings = lazyPage(() => import("./pages/ops/Bookings").then((m) => ({ default: m.Bookings })));
+const Dashboards = lazyPage(() => import("./pages/ops/Dashboards").then((m) => ({ default: m.Dashboards })));
+const VerifyPage = lazyPage(() => import("./pages/Public").then((m) => ({ default: m.VerifyPage })));
+const ReportMediaPage = lazyPage(() => import("./pages/Public").then((m) => ({ default: m.ReportMediaPage })));
+const ZipPage = lazyPage(() => import("./pages/Public").then((m) => ({ default: m.ZipPage })));
+const FormBuilder = lazyPage(() => import("./pages/admin/FormBuilder").then((m) => ({ default: m.FormBuilder })));
 
 function Home() {
   const { me, loading } = useAuth();
@@ -40,6 +41,7 @@ function Home() {
 
 export function App() {
   return (
+    <ErrorBoundary>
     <Suspense fallback={<p className="muted pad">Loading…</p>}>
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -76,5 +78,6 @@ export function App() {
         <Route path="*" element={<Home />} />
       </Routes>
     </Suspense>
+    </ErrorBoundary>
   );
 }

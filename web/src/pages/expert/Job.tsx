@@ -193,8 +193,10 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
     go(step + 1);
   }
 
-  const gaps = (["start", "inspection", "end"] as const).flatMap((part) =>
-    trees[part] ? missingFields(part, trees[part]!, draft[part], ctx).map((g) => ({ ...g, kind: part })) : []);
+  // worked out once per change of the answers, not on every upload progress tick (F-086)
+  const gaps = useMemo(() => (["start", "inspection", "end"] as const).flatMap((part) =>
+    trees[part] ? missingFields(part, trees[part]!, draft[part], ctx).map((g) => ({ ...g, kind: part })) : []),
+  [trees, draft.inspection, draft.start, draft.end, booking.answers]); // eslint-disable-line react-hooks/exhaustive-deps
   const stepOf = (g: (typeof gaps)[number]) => steps.findIndex((s) => s.kind === g.kind && s.page && trees[g.kind]!.pages[g.page]?.id === s.page.id);
 
   const waiting = localIds(draft).length;
@@ -213,7 +215,10 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
     } catch (e) {
       if (e instanceof ApiError && e.code === "INVALID_ANSWERS") {
         const errs = (e.body.errors ?? {}) as Record<string, string>;
-        setErrors({ inspection: errs, start: errs, end: errs });
+        // each error goes on the part whose form has that question, not on every part
+        const keysOf = (t: Tree | null) => new Set(t?.pages.flatMap((pg) => pg.sections.flatMap((sec) => sec.fields.map((f) => f.key))) ?? []);
+        const byPart = (t: Tree | null) => { const k = keysOf(t); return Object.fromEntries(Object.entries(errs).filter(([key]) => k.has(key))); };
+        setErrors({ inspection: byPart(trees.inspection), start: byPart(trees.start), end: byPart(trees.end) });
         const label = (k: string) => Object.values(trees).flatMap((t) => t?.pages.flatMap((pg) => pg.sections.flatMap((sec) => sec.fields)) ?? []).find((f) => f.key === k)?.label || k;
         setMsg("Some answers need another look: " + Object.keys(errs).map(label).join(", "));
       } else setMsg(explain(e));
@@ -222,7 +227,9 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
 
   const { done, total } = summary(ups);
   const progress = Math.round((step / (steps.length - 1)) * 100);
-  const missingOn = (s: (typeof steps)[number]) => (s.kind !== "review" && s.page ? pageGaps(s.kind, trees[s.kind]!, s.page, draft[s.kind], ctx).length : 0);
+  const missCount = useMemo(() => new Map(steps.map((s) => [s, s.kind !== "review" && s.page ? pageGaps(s.kind, trees[s.kind]!, s.page, draft[s.kind], ctx).length : 0])),
+    [steps, trees, draft.inspection, draft.start, draft.end, booking.answers]); // eslint-disable-line react-hooks/exhaustive-deps
+  const missingOn = (s: (typeof steps)[number]) => missCount.get(s) ?? 0;
   const lock = lockedFrom(steps, missingOn);
   const gateTitle = steps[lock - 1]?.title ?? "";
   const notOpened = unvisited(steps, draft.visited ?? []);
@@ -254,7 +261,7 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
       </nav>
       <div className="wizard-main">
       <h1>{String(booking.answers.customer_name ?? "")} <span className="muted small">{booking.booking_id}</span></h1>
-      <div className="progress" aria-label={`Step ${step + 1} of ${steps.length}`}><div style={{ width: `${progress}%` }} /></div>
+      <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-label={`Step ${step + 1} of ${steps.length}`}><div style={{ width: `${progress}%` }} /></div>
       {otherTab && <div className="banner warn" role="status"><strong>This lead is also open in another tab.</strong> Its answers were loaded here. Work in one tab only, so nothing is lost.</div>}
       {unstarted && (
         <div className="banner" role="status">

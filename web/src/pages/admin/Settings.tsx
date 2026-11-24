@@ -37,14 +37,14 @@ export function Settings() {
         {edit && <button className="primary" disabled={save.isPending || JSON.stringify(v) === JSON.stringify(saved)} onClick={() => save.mutate()}>Save</button>}
       </PageHeader>
       <section className="card stack" aria-label="Time limits">
-        <h3>Time limits</h3>
+        <h2 className="sub">Time limits</h2>
         <Field label="Late-start grace (minutes)" help="A booking that starts more than this after its booked date and time shows as “Started late”. Example: booked 10:00, grace 15 → a start after 10:15 is late.">
           {num(v.late_grace_minutes, (n) => setV({ ...v, late_grace_minutes: n }), "Late-start grace (minutes)")}
         </Field>
         <Field label="Minimum inspection time (minutes)" help="A booking finished faster than this (Start to Submit) shows as “Too quick”. Used for any type without its own number below.">
           {num(v.min_minutes_default, (n) => setV({ ...v, min_minutes_default: n }), "Minimum inspection time (minutes)")}
         </Field>
-        <table className="rows"><thead><tr><th>Inspection type</th><th>Minimum minutes</th><th></th></tr></thead>
+        <table className="rows"><thead><tr><th>Inspection type</th><th>Minimum minutes</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>{types.map((t) => {
             const own = v.min_minutes_by_type[t.key];
             return (
@@ -85,7 +85,7 @@ function MediaRetention({ edit }: { edit: boolean }) {
   const bad = (n: number) => n !== 0 && (n < 30 || n > 3650);
   return (
     <section className="card stack" aria-label="Photo and video storage">
-      <div className="bar"><h3 className="grow">Photo and video storage</h3>
+      <div className="bar"><h2 className="sub grow">Photo and video storage</h2>
         {edit && <button className="primary" disabled={save.isPending || bad(v.photo_days) || bad(v.video_days) || JSON.stringify(v) === JSON.stringify(q.data)} onClick={() => save.mutate()}>Save</button>}</div>
       {row("photo_days", "Keep photos for (days)")}
       {row("video_days", "Keep videos for (days)")}

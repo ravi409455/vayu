@@ -26,8 +26,12 @@ export function useProblems() {
   const quick = useQuery(flagged("quick"));
   const lists = { stuck: stuck.data ?? [], pdf: pdf.data ?? [], conflicts: conflicts.data?.results ?? [], types: types.data?.results ?? [],
     late: late.data?.results ?? [], quick: quick.data?.results ?? [] };
-  return { ...lists, total: lists.stuck.length + lists.pdf.length + lists.conflicts.length + lists.types.length + lists.late.length + lists.quick.length,
-    loading: stuck.isLoading || pdf.isLoading || conflicts.isLoading || types.isLoading };
+  // a page shows the first 50; the number is the server's count
+  const beyond = [conflicts, types, late, quick].reduce((n, q) => n + Math.max(0, (q.data?.count ?? 0) - (q.data?.results.length ?? 0)), 0);
+  return { ...lists, beyond, total: lists.stuck.length + lists.pdf.length + lists.conflicts.length + lists.types.length + lists.late.length + lists.quick.length + beyond,
+    loading: stuck.isLoading || pdf.isLoading || conflicts.isLoading || types.isLoading,
+    error: [stuck, pdf, conflicts, types, late, quick].find((q) => q.isError)?.error ?? null,
+    refetch: () => Promise.all([stuck, pdf, conflicts, types, late, quick].map((q) => q.refetch())) };
 }
 
 export type Need = { key: string; kind: "unassigned" | "upload" | "conflict" | "report" | "type" | "late" | "quick"; tone: "warn" | "bad"; title: string; meta: string; to: string; action: string; at?: string };
@@ -35,10 +39,10 @@ export const NEED_KIND: Record<Need["kind"], string> = { unassigned: "Unassigned
 
 /** Everything that needs a person, as one list, most urgent first: today's jobs with no expert,
  *  conflicts, stuck uploads, failed or out-of-date reports, rejected type changes. */
-export function useNeeds(): { needs: Need[]; loading: boolean } {
+export function useNeeds(): { needs: Need[]; total: number; loading: boolean; error: unknown; refetch: () => Promise<unknown> } {
   const p = useProblems();
   const { me, can } = useAuth();
-  const t = new Date(); const day = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  const day = today();
   const open = useQuery({ enabled: !!me && me.role !== "expert" && can("bookings.view"), staleTime: 30_000, refetchInterval: 60_000,
     queryKey: ["bookings-page", "unassigned-today", day], queryFn: () => api<Page<Booking>>("bookings", { query: { stage: "draft", date_from: day, date_to: day, order: "schedule" } }) });
   const needs: Need[] = [
@@ -52,5 +56,7 @@ export function useNeeds(): { needs: Need[]; loading: boolean } {
       meta: `${fmtSlot(b.answers.inspection_date, b.answers.inspection_time)} · ${String(b.answers.customer_name ?? "")}`, to: `/booking/${b.id}`, action: "Review" }))),
     ...p.types.map((b) => ({ key: `t${b.id}`, kind: "type" as const, tone: "warn" as const, title: `${b.booking_id}: type change rejected`, meta: b.alerts?.find((a) => a.code === "TYPE_CHANGE_REJECTED")?.detail ?? "The expert started another type", to: `/booking/${b.id}`, action: "Open" })),
   ];
-  return { needs, loading: p.loading || open.isLoading };
+  const extra = p.beyond + Math.max(0, (open.data?.count ?? 0) - (open.data?.results.length ?? 0));
+  return { needs, total: needs.length + extra, loading: p.loading || open.isLoading, error: p.error ?? (open.isError ? open.error : null),
+    refetch: () => Promise.all([p.refetch(), open.refetch()]) };
 }

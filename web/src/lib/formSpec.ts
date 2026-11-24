@@ -2,13 +2,14 @@
 // questions screens ask: what is visible, what is still missing, which page holds it.
 import type { FormPage, FormVersion } from "../api/types";
 import { evaluateForm, isEmpty, type FieldSpec, type FormSpec, type Result } from "../rules/rules";
+import { today } from "./format";
 
 /** The name a form's answers go by in rules: the custom form is "inspection". */
 export type Kind = "booking" | "start" | "end" | "inspection";
 export type Answers = Record<string, unknown>;
 export type Ctx = { booking?: Answers; start?: Answers; end?: Answers; inspection?: Answers };
 
-const today = () => new Date().toISOString().slice(0, 10);
+// `_today` is India's today (format.ts), as on the server; not UTC, which is yesterday before 05:30 IST
 
 export function specFromTree(kind: Kind, tree: Pick<FormVersion, "pages" | "checks">): FormSpec {
   const containers: FormSpec["containers"] = [];

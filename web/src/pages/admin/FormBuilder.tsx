@@ -9,7 +9,7 @@ import { useAuth } from "../../auth";
 import { photoOfDefault } from "../../lib/fieldTypes";
 import { applyDrag, isEmptyBody, reorderBody, type Ref } from "../../lib/tree";
 import { type FieldChoice } from "../../ui/ConditionBuilder";
-import { Confirm, Field, InfoTip, Modal, NameDialog, PageHeader, Pill, Tabs, useToast } from "../../ui/kit";
+import { Confirm, Field, InfoTip, LoadError, Modal, NameDialog, PageHeader, Pill, Tabs, useToast } from "../../ui/kit";
 import { AddFieldDialog, AddSectionDialog } from "./builder/AddDialogs";
 import { Canvas, type Sel } from "./builder/Canvas";
 import { Ratings } from "./builder/FormExtras";
@@ -81,6 +81,7 @@ export function FormBuilder() {
     onError: (e) => { setDiscard(false); fail(e); },
   });
 
+  if (form.isError) return <LoadError error={form.error} what="form" onRetry={form.refetch} />;
   if (!f) return <p className="muted pad">Loading…</p>;
 
   function onSelect(r: Ref) {

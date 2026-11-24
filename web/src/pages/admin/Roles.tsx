@@ -16,6 +16,12 @@ export function nextGrant(scoped: boolean, now: "own" | "all" | undefined): "own
 }
 
 const ROLES = ["ops", "expert"] as const;
+/** Permissions nothing on the web shows Ops (their pages are Today, Bookings, Needs you, Dashboards,
+ *  Settings; the rest are Admin pages), so the screen does not offer them to Ops (F-224). The
+ *  server makes the Admin-only ones (keys, integrations, templates, lists) not grantable. A grant Ops
+ *  already hold is still shown, so the Admin can see it and take it away. */
+export const OPS_NOT_ON_WEB = new Set(["users.sign_out_devices", "audit.view", "master_lists.manage", "integrations.manage", "api_keys.manage",
+  "forms.edit", "forms.publish", "forms.promote", "library.view", "pdf_templates.view", "pdf_templates.edit"]);
 type R = (typeof ROLES)[number];
 
 export function Roles() {
@@ -51,7 +57,7 @@ export function Roles() {
                 <tr key={p.key}>
                   <td>{p.label}</td>
                   {ROLES.map((r) => (
-                    <td key={r}>{p.grantable ? (
+                    <td key={r}>{r === "ops" && OPS_NOT_ON_WEB.has(p.key) && !draft.ops[p.key] ? <span className="muted small">Not for Ops</span> : p.grantable ? (
                       <div className="seg" role="radiogroup" aria-label={`${p.label} (${r === "ops" ? "Ops" : "Expert"})`}>
                         {(["off", ...(p.scoped ? ["own"] : []), "all"] as ("off" | "own" | "all")[]).map((o) => {
                           const v = draft[r][p.key] ?? "off";
