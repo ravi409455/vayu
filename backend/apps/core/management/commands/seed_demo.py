@@ -252,6 +252,41 @@ class Command(BaseCommand):
             answers[key] = [self._photo(booking, expert, key, labels[key])]
         return answers
 
+    # the same values for the Used car and EV forms; anything not listed gets a sensible default
+    _VALUES: dict[str, Any] = {
+        "registration_no": "MH12AB1234", "colour": "Pearl white", "make_year": 2022, "keys": 2,
+        "owner_count": 1, "owners": 1, "city_used": "Pune", "paint_thickness": 120,
+        "soh": 91, "range_claim": 380, "ac_temp": 8, "fuel": "petrol", "transmission": "manual",
+        "service_book": True, "rc_book": True, "insurance": True, "puc": True,
+        "fast_charge_ok": True, "door_fl": "minor",
+        "remarks": "Clean car, one minor dent on the front left door. Ready to buy."}
+
+    def _form_answers(self, booking, expert, key: str, km: int, **overrides) -> dict:
+        """Answers for a Used car or EV form: every visible field filled, a picture for every
+        photo that is always shown (the view photos) and for every required one."""
+        from apps.forms.rules import truthy
+
+        version = Form.objects.get(key=key).versions.get(status="published")
+        values = {**self._VALUES, "odometer": km, **overrides}
+        answers: dict = {"chassis_no": f"MA3{key.upper()[:3]}0000{booking.booking_id[-2:]}"}
+        fields = (Field.objects.filter(version=version).select_related("section")
+                  .order_by("section__page__order", "section__order", "order"))
+        for f in fields:
+            data = {"inspection": answers}
+            if not truthy(f.show_if, data) or not truthy(f.section.show_if, data):
+                continue
+            if f.key in values:
+                answers[f.key] = values[f.key]
+            elif f.type == "single_choice":
+                answers[f.key] = f.config["options"][0]["key"]
+            elif f.type == "number":
+                answers[f.key] = max(f.config.get("min", 0), 6)
+            elif f.type == "yes_no":
+                answers[f.key] = False
+            elif f.type == "photo" and f.key.startswith("photo_"):
+                answers[f.key] = [self._photo(booking, expert, f.key, f.label)]
+        return answers
+
     def _more_bookings(self):
         """Bookings in every stage, plus the situations that fill the Problems page."""
         ops = User.objects.get(username="ops")
@@ -259,7 +294,7 @@ class Command(BaseCommand):
         base = {"inspection_time": "10:30"}
         phones = iter(["9876501001", "9876501002", "9876501003", "9876501004", "9876501005",
                        "9876501006", "9876501007", "9876501008", "9876501009", "9876501010",
-                       "9876501011", "9876501012", "9876501013"])
+                       "9876501011", "9876501012", "9876501013", "9876501014", "9876501015"])
 
         def make(ref, name, city, car, day, itype="pdi", at="10:30"):
             return services.create(ops, {**base, "inspection_time": at, "booking_id": ref,
@@ -321,6 +356,18 @@ class Command(BaseCommand):
             services.assign(ops, b, expert.id)
             start(b, expert)
             submit(b, expert, chassis, km)
+            check_completion(b.id)
+        # completed Used car and EV inspections, so every type has a finished one with a PDF
+        for ref, name, city, car, itype, km in (
+                ("DEMO-16", "Sanjay Verma", "delhi", "hyundai_creta", "used_car", 48200),
+                ("DEMO-17", "Tanvi Shah", "mumbai", "tata_nexon", "ev", 14500)):
+            b = make(ref, name, city, car, "2026-11-19", itype)
+            services.assign(ops, b, e1.id)
+            start(b, e1, itype)
+            selfie = self._selfie(b, e1)
+            submissions.submit(e1, b, uuid.uuid4(), {
+                "inspection": self._form_answers(b, e1, itype, km),
+                "start": {"selfie": [selfie]}, "end": {"taking_payment": False}})
             check_completion(b.id)
         # cancelled
         b = make("DEMO-13", "Lata Joshi", "delhi", "hyundai_creta", "2026-11-25")

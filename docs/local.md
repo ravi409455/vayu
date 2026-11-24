@@ -25,7 +25,7 @@ Logs are in `.local/` (`api.log`, `worker.log`, `beat.log`, `web.log`).
 | `expert2` | Expert | a second expert, to try reassigning and conflicts |
 | `newuser` | Ops | must choose a new password at first sign in |
 
-Demo data: **DEMO-1** not assigned, **DEMO-2** assigned to `expert`, **DEMO-3** completed with a PDF.
+Demo data: **DEMO-1** not assigned, **DEMO-2** assigned to `expert`, **DEMO-3** completed with a PDF (PDI). **DEMO-16** (Used car) and **DEMO-17** (EV) are completed too, so every type has a finished inspection and PDF.
 The **PDI** form is a small stand-in. Your real inspection forms (PDI, Used car, EV) are meant to be
 built by you in the form builder (Admin → Forms): that is the test of the builder itself.
 

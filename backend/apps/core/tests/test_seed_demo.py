@@ -21,8 +21,12 @@ def test_the_demo_seed_builds_users_forms_and_bookings_in_every_state():
         "DEMO-5": "draft", "DEMO-6": "assigned", "DEMO-7": "assigned", "DEMO-8": "in_progress",
         "DEMO-9": "in_progress", "DEMO-10": "submitted", "DEMO-11": "completed",
         "DEMO-12": "completed", "DEMO-13": "cancelled", "DEMO-14": "completed",
-        "DEMO-15": "in_progress"}
+        "DEMO-15": "in_progress", "DEMO-16": "completed", "DEMO-17": "completed"}
     assert Report.objects.get(booking__booking_id="DEMO-3").status == "ready"
+    for ref in ("DEMO-16", "DEMO-17"):                  # a finished Used car and EV, with their PDFs
+        assert Report.objects.get(booking__booking_id=ref).status == "ready", ref
+    assert Booking.objects.filter(stage="completed").values_list("inspection_type", flat=True) \
+        .distinct().count() == 3
     with pytest.raises(CommandError, match="already exists"):
         call_command("seed_demo")
 
