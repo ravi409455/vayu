@@ -119,7 +119,7 @@ object BookingFilters {
 
 private fun expertOptions(labels: Labels) = labels.experts.map { it.s("id") to it.s("name").ifBlank { it.s("username") } }
 
-/** One quick filter: dark when on, its value in words, "…" if it must shrink. */
+/** One quick filter: dark when on, its value in words on the left, the arrow on the right; a steady size whatever is chosen. */
 @Composable
 private fun QuickChip(text: String, on: Boolean, description: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Row(modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
@@ -129,7 +129,7 @@ private fun QuickChip(text: String, on: Boolean, description: String, modifier: 
         .semantics { contentDescription = description },
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(text, fontSize = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1, softWrap = false,
-            overflow = TextOverflow.Ellipsis, color = if (on) Vayu.colors.onPrimary else Vayu.colors.ink, modifier = Modifier.weight(1f, fill = false))
+            overflow = TextOverflow.Ellipsis, color = if (on) Vayu.colors.onPrimary else Vayu.colors.ink, modifier = Modifier.weight(1f))
         Icon(Icons.Outlined.ExpandMore, null, tint = if (on) Vayu.colors.onPrimary else Vayu.colors.muted, modifier = Modifier.size(16.dp))
     }
 }
@@ -142,9 +142,9 @@ fun QuickFilters(f: Map<String, String>, labels: Labels, onChange: (Map<String, 
     val stage = f["stage"]
     val chosen = BookingFilters.experts(f)
     Row(Modifier.padding(top = 12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        // Status keeps its few words whole; only Experts gives way on a narrow screen
-        Box {
-            QuickChip(stage?.let { STAGE_WORDS[it] } ?: "Status", stage != null, "Status: ${stage?.let { STAGE_WORDS[it] } ?: "any"}") { menu = true }
+        // Status and Experts share the row's width (Status a little more: "In progress"), the Filter button keeps its own
+        Box(Modifier.weight(1.2f)) {
+            QuickChip(stage?.let { STAGE_WORDS[it] } ?: "Status", stage != null, "Status: ${stage?.let { STAGE_WORDS[it] } ?: "any"}", Modifier.fillMaxWidth()) { menu = true }
             DropdownMenu(menu, { menu = false }, containerColor = Vayu.colors.bg) {
                 (listOf<String?>(null) + STAGE_WORDS.keys).forEach { k ->
                     DropdownMenuItem(text = { Text(k?.let { STAGE_WORDS[it] } ?: "Any status", color = Vayu.colors.ink,
@@ -155,12 +155,13 @@ fun QuickFilters(f: Map<String, String>, labels: Labels, onChange: (Map<String, 
             }
         }
         QuickChip(if (chosen.isEmpty()) "Experts" else BookingFilters.expertsWord(chosen.size), chosen.isNotEmpty(),
-            "Experts: ${if (chosen.isEmpty()) "any" else "${chosen.size} chosen"}", Modifier.weight(1f, fill = false)) { experts = true }
+            "Experts: ${if (chosen.isEmpty()) "any" else "${chosen.size} chosen"}", Modifier.weight(1f)) { experts = true }
         val n = BookingFilters.count(f)
-        Row(Modifier.heightIn(min = 44.dp).widthIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
+        // one width with or without the count, so nothing moves when a filter goes on
+        Row(Modifier.heightIn(min = 44.dp).widthIn(min = 60.dp).clip(RoundedCornerShape(12.dp))
             .background(if (n == 0) Vayu.colors.bg else Vayu.colors.primary)
             .border(1.dp, if (n == 0) Vayu.colors.line2 else Vayu.colors.primary, RoundedCornerShape(12.dp))
-            .clickable(role = Role.Button, onClick = onAll).padding(horizontal = 8.dp)
+            .clickable(role = Role.Button, onClick = onAll).padding(horizontal = 6.dp)
             .semantics { contentDescription = if (n == 0) "All filters" else "All filters, $n on" },
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
             Icon(Icons.Outlined.FilterList, null, tint = if (n == 0) Vayu.colors.ink else Vayu.colors.onPrimary, modifier = Modifier.size(18.dp))
