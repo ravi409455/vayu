@@ -2282,6 +2282,101 @@ paths:
               schema:
                 $ref: '#/components/schemas/_FromLibraryBody'
           description: ''
+  /api/v1/pdf-pictures:
+    get:
+      operationId: pdf_pictures_retrieve
+      description: 'The picture library: logos, watermarks and backgrounds, uploaded
+        once, used anywhere.'
+      tags:
+      - pdf-pictures
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: pdf_pictures_create
+      description: 'The picture library: logos, watermarks and backgrounds, uploaded
+        once, used anywhere.'
+      tags:
+      - pdf-pictures
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/pdf-pictures/{id}:
+    patch:
+      operationId: pdf_pictures_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - pdf-pictures
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: pdf_pictures_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - pdf-pictures
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/pdf-shared:
+    get:
+      operationId: pdf_shared_retrieve
+      description: Shared themes and parts. POST saves a new version and moves every
+        template using it.
+      tags:
+      - pdf-shared
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: pdf_shared_create
+      description: Shared themes and parts. POST saves a new version and moves every
+        template using it.
+      tags:
+      - pdf-shared
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/pdf-shared/{id}:
+    get:
+      operationId: pdf_shared_retrieve_2
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pdf-shared
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/pdf-template-versions/{id}:
     get:
       operationId: pdf_template_versions_retrieve
@@ -2334,6 +2429,22 @@ paths:
       description: |-
         What the designer warns about: fields or sections the form lacks (publishing is blocked)
         and fields of the form the layout never shows.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pdf-template-versions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/pdf-template-versions/{id}/export:
+    get:
+      operationId: pdf_template_versions_export_retrieve
       parameters:
       - in: path
         name: id
@@ -2400,9 +2511,45 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/pdf-templates/{id}/copy:
+    post:
+      operationId: pdf_templates_copy_create
+      description: A new template for another form, starting from this template's
+        newest layout.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pdf-templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/pdf-templates/{id}/drafts:
     post:
       operationId: pdf_templates_drafts_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pdf-templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/pdf-templates/{id}/import:
+    post:
+      operationId: pdf_templates_import_create
+      description: The file replaces the draft; what the form lacks comes back as
+        issues to fix.
       parameters:
       - in: path
         name: id

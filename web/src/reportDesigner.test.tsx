@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { FormPage } from "./api/types";
 import {
   addPart, blankPage, fillGrid, findPart, locate, movePage, movePart, newPart, pageFromForm, pageOf, partName,
-  removePart, shiftPart, updatePage, updatePart, withIds, type Definition, type Part,
+  removePart, replaceRef, sharedPart, shiftPart, themeOf, unlinkShared, updatePage, updatePart, withIds, withoutTheme,
+  type Definition, type Part,
 } from "./pages/admin/report/model";
+import { keyOf, snippetContent } from "./pages/admin/report/sharing";
 
 const T = (id: string, title = id): Part => ({ id, type: "table", title, source: { kind: "fields", rows: [] } });
 const def = (): Definition => ({ schema: 2, pages: [
@@ -174,5 +176,49 @@ describe("the part settings panel", () => {
     await u.type(screen.getByRole("textbox", { name: "CSS" }), "p");
     expect(onChange).toHaveBeenLastCalledWith({ css: "p" });
     expect(screen.queryByRole("option", { name: "Bonnet photo" })).toBeNull();
+  });
+  it("shows a shared part's version and offers the newest and a copy to edit here", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { PartSettings } = await import("./pages/admin/report/PartSettings");
+    const onChange = vi.fn(), onUnlink = vi.fn();
+    const u = userEvent.setup();
+    const snippets = [{ id: 1, kind: "snippet" as const, key: "terms", name: "Disclaimer", revision: 3, used_by: [{ template: 1, form: "PDI" }, { template: 2, form: "EV" }] }];
+    const part: Part = { id: "s", type: "snippet", ref: { key: "terms", revision: 2 } };
+    const { rerender } = render(<PartSettings part={part} ctx={{ ...ctx, snippets }} onChange={onChange} onDelete={() => {}} onDuplicate={() => {}} onMove={() => {}} onUnlink={onUnlink} />);
+    expect(screen.getByText(/Used by: PDI, EV/)).toBeTruthy();
+    await u.click(screen.getByRole("button", { name: "Use the newest version" }));
+    expect(onChange).toHaveBeenLastCalledWith({ ref: { key: "terms", revision: 3 } });
+    await u.click(screen.getByRole("button", { name: /Stop sharing/ }));
+    expect(onUnlink).toHaveBeenCalled();
+    expect(screen.queryByText("Share with other reports")).toBeNull();          // already shared
+    rerender(<PartSettings part={{ ...part, ref: { key: "gone", revision: 1 } }} ctx={{ ...ctx, snippets }} onChange={onChange} onDelete={() => {}} onDuplicate={() => {}} onMove={() => {}} />);
+    expect(screen.getByText(/not on this server/)).toBeTruthy();
+  });
+});
+
+describe("sharing helpers", () => {
+  it("swaps a field the form lacks for the suggested one everywhere in a part", () => {
+    const p: Part = { id: "t", type: "table", title: "{{ inspection.odo }} km", source: { kind: "fields", rows: [{ field: "inspection.odo" }, { field: "inspection.odometer_x" }] } };
+    expect(replaceRef(p, "inspection.odo", "inspection.odometer")).toEqual({ id: "t", type: "table", title: "{{ inspection.odometer }} km",
+      source: { kind: "fields", rows: [{ field: "inspection.odometer" }, { field: "inspection.odometer_x" }] } });
+    const sec: Part = { id: "s", type: "table", source: { kind: "section", section: "inspection.frnt", exclude: ["frnt", "x"] } };
+    expect(replaceRef(sec, "inspection.frnt", "inspection.front")).toMatchObject({ source: { section: "inspection.front", exclude: ["front", "x"] } });
+    expect(replaceRef({ id: "b", type: "table", source: { kind: "section", section: "inspection.a", exclude: ["k"] } }, "booking.k", "booking.j"))
+      .toMatchObject({ source: { exclude: ["k"] } });                                       // exclusions are inspection fields
+  });
+  it("puts a shared part's own parts in its place, and splits a theme off a template", () => {
+    const d: Definition = { schema: 2, theme: { size: 10 }, bands: {}, filename: "x.pdf", pages: [{ id: "p", title: "P", parts: [T("a"), sharedPart({ key: "k", revision: 1 }), T("b")] }] };
+    const sid = d.pages[0]!.parts[1]!.id!;
+    const out = unlinkShared(d, sid, [{ id: "old", type: "text", html: "<p>Terms</p>" }, { type: "spacer" }]);
+    expect(out.pages[0]!.parts.map((p) => p.type)).toEqual(["table", "text", "spacer", "table"]);
+    expect(out.pages[0]!.parts[1]!.id).not.toBe("old");
+    expect(unlinkShared(d, "nope", [])).toBe(d);
+    expect(themeOf(d)).toEqual({ theme: { size: 10 }, bands: {} });
+    expect(withoutTheme(d)).toEqual({ schema: 2, filename: "x.pdf", pages: d.pages });
+    expect(partName(d.pages[0]!.parts[1]!, {}, { k: "Disclaimer" })).toBe("Disclaimer");
+    expect(partName(d.pages[0]!.parts[1]!)).toBe("k");
+    expect(snippetContent({ id: "z", type: "spacer", height: 4 })).toEqual({ parts: [{ type: "spacer", height: 4 }] });
+    expect([keyOf("Car C.I.D. theme"), keyOf("2024 look"), keyOf("  ")]).toEqual(["car_c_i_d_theme", "x_2024_look", "x_"]);
   });
 });

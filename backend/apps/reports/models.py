@@ -29,6 +29,34 @@ class PdfTemplateVersion(models.Model):
         ]
 
 
+class SharedItem(models.Model):
+    """A theme (colours, fonts, header and footer, watermark) or a shared part (e.g. the
+    disclaimer) that many templates use. Each save is a new revision; templates name the
+    revision they use, so a report always shows what it was made with."""
+
+    kind = models.CharField(max_length=10)                        # theme | snippet
+    key = models.CharField(max_length=63)
+    name = models.CharField(max_length=100)
+    revision = models.PositiveIntegerField(default=0)             # the newest
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["kind", "key"], name="shared_kind_key")]
+
+
+class SharedRevision(models.Model):
+    item = models.ForeignKey(SharedItem, on_delete=models.CASCADE, related_name="revisions")
+    revision = models.PositiveIntegerField()
+    content = models.JSONField()
+    created_by = models.ForeignKey("accounts.User", null=True, on_delete=models.SET_NULL,
+                                   related_name="+")
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["item", "revision"],
+                                               name="shared_revision_number")]
+
+
 def new_token() -> str:
     return secrets.token_urlsafe(24)      # 192 bits: unguessable, stable across revisions
 

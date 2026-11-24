@@ -15,6 +15,7 @@ from . import placeholders
 
 SCHEMA = json.loads((Path(__file__).parent / "schema.json").read_text())
 _validator = Draft202012Validator(SCHEMA)
+KEY_RE = re.compile(r"[a-z][a-z0-9_]{0,62}")
 OLD = ("This template was made for the old report designer; build it again with the new "
        "one.")
 
@@ -37,8 +38,21 @@ def parts(d: dict) -> Iterator[tuple[str, dict]]:
         yield from _walk(page.get("parts", []), f"pages[{i}].parts")
 
 
-def texts(d: dict) -> Iterator[tuple[str, str]]:
-    """(where, text) of everything that may hold placeholders."""
+def _part_texts(where: str, p: dict) -> Iterator[tuple[str, str]]:
+    if p["type"] in ("text", "html"):
+        yield f"{where}.html", p["html"]
+    if p["type"] == "photos" and "caption_text" in p:
+        yield f"{where}.caption_text", p["caption_text"]
+    if p["type"] == "table" and p["source"]["kind"] == "grid":
+        for r, row in enumerate(p["source"]["rows"]):
+            yield f"{where}.source.rows[{r}].label", row["label"]
+            for c, cell in enumerate(row["cells"]):
+                if "text" in cell:
+                    yield f"{where}.source.rows[{r}].cells[{c}]", cell["text"]
+
+
+def outer_texts(d: dict) -> Iterator[tuple[str, str]]:
+    """Texts outside the pages: the file name and the header and footer."""
     if "filename" in d:
         yield "filename", d["filename"]
     for style, bandset in d.get("bands", {}).items():
@@ -47,17 +61,41 @@ def texts(d: dict) -> Iterator[tuple[str, str]]:
                 for k, item in enumerate(slots.get(side, [])):
                     if "text" in item:
                         yield f"bands.{style}.{band}.{side}[{k}]", item["text"]
+
+
+def texts(d: dict) -> Iterator[tuple[str, str]]:
+    """(where, text) of everything that may hold placeholders."""
+    yield from outer_texts(d)
     for where, p in parts(d):
-        if p["type"] in ("text", "html"):
-            yield f"{where}.html", p["html"]
-        if p["type"] == "photos" and "caption_text" in p:
-            yield f"{where}.caption_text", p["caption_text"]
-        if p["type"] == "table" and p["source"]["kind"] == "grid":
-            for r, row in enumerate(p["source"]["rows"]):
-                yield f"{where}.source.rows[{r}].label", row["label"]
-                for c, cell in enumerate(row["cells"]):
-                    if "text" in cell:
-                        yield f"{where}.source.rows[{r}].cells[{c}]", cell["text"]
+        yield from _part_texts(where, p)
+
+
+def part_refs(p: dict) -> tuple[set[tuple[str, str]], set[str]]:
+    """((form, key) fields, section keys) one part shows; a resolved shared part, all of its
+    parts' (the parts inside columns are parts of their own)."""
+    if p["type"] == "snippet":
+        fields: set[tuple[str, str]] = set()
+        sections: set[str] = set()
+        for _, inner in _walk(p.get("parts", []), ""):
+            f, s = part_refs(inner)
+            fields, sections = fields | f, sections | s
+        return fields, sections
+    fields = set()
+    for _, text in _part_texts("", p):
+        fields |= placeholders.refs(text)
+    src = p.get("source", {})
+    for row in src.get("rows", []):
+        if "field" in row:
+            fields.add(field_ref(row["field"]))
+        for cell in row.get("cells", []):
+            if "field" in cell:
+                fields.add(field_ref(cell["field"]))
+    for f in src.get("fields", []):
+        fields.add(field_ref(f))
+    for k in src.get("exclude", []):
+        fields.add(("inspection", k))
+    sections = {src["section"].split(".", 1)[1]} if src.get("kind") == "section" else set()
+    return fields, sections
 
 
 def rules(d: dict) -> Iterator[tuple[str, Any]]:
@@ -107,28 +145,21 @@ def field_ref(ref: str) -> tuple[str, str]:
 
 
 def referenced_fields(d: dict) -> set[tuple[str, str]]:
-    """Every (form, key) the template names directly (a whole section is in referenced_sections)."""
+    """Every (form, key) the template names directly (a whole section is in referenced_sections).
+    Pass a resolved definition (shared.resolve) to count what shared items show too."""
     refs: set[tuple[str, str]] = set()
-    for _, text in texts(d):
+    for _, text in outer_texts(d):
         refs |= placeholders.refs(text)
     for _, p in parts(d):
-        src = p.get("source", {})
-        for row in src.get("rows", []):
-            if "field" in row:
-                refs.add(field_ref(row["field"]))
-            for cell in row.get("cells", []):
-                if "field" in cell:
-                    refs.add(field_ref(cell["field"]))
-        for f in src.get("fields", []):
-            refs.add(field_ref(f))
-        for k in src.get("exclude", []):
-            refs.add(("inspection", k))
+        refs |= part_refs(p)[0]
     return refs
 
 
 def referenced_sections(d: dict) -> set[str]:
-    return {p["source"]["section"].split(".", 1)[1] for _, p in parts(d)
-            if p.get("source", {}).get("kind") == "section"}
+    out: set[str] = set()
+    for _, p in parts(d):
+        out |= part_refs(p)[1]
+    return out
 
 
 def filename_for(d: dict, values: dict) -> str:

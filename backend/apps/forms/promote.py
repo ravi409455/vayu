@@ -60,6 +60,7 @@ def _lists_in(definition: dict) -> set[str]:
 
 
 def export_bundle(version: FormVersion) -> dict:
+    from apps.reports import transfer
     from apps.reports.models import PdfTemplate
 
     pages, items, lists = [], {}, set()
@@ -106,7 +107,8 @@ def export_bundle(version: FormVersion) -> dict:
                                 "order": c.order}
                                for c in VersionCheck.objects.filter(version=version)]},
         "library": library, "master_lists": master_lists,
-        "pdf_template": {"definition": last.definition} if last else None,
+        # the layout with its shared theme and parts and its pictures (logo, watermark)
+        "pdf_template": transfer.export_payload(last.definition) if last else None,
         "assets": _export_assets(pages, library),
     }
 
@@ -393,10 +395,17 @@ def import_bundle(actor, b: Any, as_new: dict | None = None) -> dict:
             VersionCheck.objects.create(version=version, rule=c["rule"], message=c["message"],
                                         fields=c["fields"], order=c["order"])
         if b.get("pdf_template") and form.type == FormType.CUSTOM:
+            from apps.reports import transfer
+
+            try:
+                definition, template_notes = transfer.load_payload(actor, b["pdf_template"])
+            except ValueError as e:
+                raise bad("INVALID_BUNDLE", f"The bundle's PDF template is not valid: {e}") from e
+            notes += template_notes
             t, _ = PdfTemplate.objects.get_or_create(form=form)
             last = t.versions.order_by("-number").first()
             PdfTemplateVersion.objects.create(template=t, number=(last.number + 1) if last else 1,
-                                              definition=b["pdf_template"]["definition"])
+                                              definition=definition)
         audit.record(actor, "form.promote_import", "form", form.id,
                      f"Imported {form.key} as draft v{number}")
     return {"form": form.id, "draft_version": version.id,

@@ -14,6 +14,7 @@ export type Box = { space_above?: number; space_below?: number; padding?: number
 export type StyleRule = { when: "problem" | "ok" | "warn" | "bad" | "muted" | "minor" | "major" | "critical" | "not_checked" | "empty"; label?: string; value?: string; bold?: boolean; background?: string };
 export type Look = { lines?: "all" | "rows" | "none"; height?: "compact" | "normal" | "roomy"; stripes?: boolean; label_width?: number; header?: boolean; headers?: string[]; emphasis?: boolean; kv?: boolean };
 type Common = { id?: string; show_if?: unknown; hide_when_empty?: boolean; new_page?: boolean; keep_together?: boolean; keep_title?: boolean; box?: Box };
+export type SharedRef = { key: string; revision: number };
 export type Part = Common & (
   | { type: "table"; title?: string; source: Source; per_row?: 1 | 2 | 3 | 4; look?: Look; style_rules?: StyleRule[] }
   | { type: "photos"; title?: string; source: PhotoSource; which?: "all" | "issues" | "first"; per_row?: 1 | 2 | 3 | 4; shape?: "4:3" | "16:9" | "1:1" | "original"; fit?: "fill" | "whole" | "top"; caption?: "label" | "check" | "custom" | "none"; caption_text?: string; frame?: { border?: "none" | "grey" | "brand"; round?: boolean; gap?: number } }
@@ -23,13 +24,14 @@ export type Part = Common & (
   | { type: "contents"; title?: string; columns?: 1 | 2 }
   | { type: "page_break" }
   | { type: "spacer"; height?: number }
-  | { type: "html"; title?: string; html: string; css?: string });
+  | { type: "html"; title?: string; html: string; css?: string }
+  | { type: "snippet"; ref: SharedRef });
 export type PartType = Part["type"];
 export type ReportPage = { id?: string; title: string; style?: "normal" | "cover" | "full"; show_if?: unknown; parts: Part[] };
 export type SlotItem = { text: string } | { image: string; height?: number; tile?: boolean };
 export type Band = { left?: SlotItem[]; center?: SlotItem[]; right?: SlotItem[]; background?: "none" | "brand"; height?: number };
 export type Definition = {
-  schema: 2; filename?: string; pages: ReportPage[];
+  schema: 2; filename?: string; pages: ReportPage[]; theme_ref?: SharedRef;
   paper?: { size?: "A4" | "Letter"; orientation?: "portrait" | "landscape"; margins?: { top?: number; right?: number; bottom?: number; left?: number } };
   theme?: { colors?: Partial<Record<"brand" | "text" | "ok" | "warn" | "bad" | "muted", string>>; size?: number; fonts?: { body?: string; headings?: string } };
   bands?: Partial<Record<"normal" | "cover", { header?: Band; footer?: Band }>>;
@@ -138,12 +140,13 @@ export function movePage(d: Definition, id: string, overId: string): Definition 
 
 export const PART_LABEL: Record<PartType, string> = {
   table: "Table of checks", photos: "Photos", text: "Text", columns: "Side by side", verify: "Verify code",
-  contents: "Contents list", page_break: "Page break", spacer: "Space", html: "Custom HTML",
+  contents: "Contents list", page_break: "Page break", spacer: "Space", html: "Custom HTML", snippet: "Shared part",
 };
 
 /** What the pages list calls a part: its title, its text, or what it is. */
-export function partName(p: Part, sections: Record<string, string> = {}): string {
+export function partName(p: Part, sections: Record<string, string> = {}, shared: Record<string, string> = {}): string {
   if ("title" in p && p.title) return p.title;
+  if (p.type === "snippet") return shared[p.ref.key] ?? p.ref.key;
   if (p.type === "text") return p.html.replace(/<[^>]+>/g, " ").replace(/\{\{\s*([\w.]+)\s*\}\}/g, "$1").replace(/\s+/g, " ").trim().slice(0, 40) || "Text";
   if ((p.type === "table" || p.type === "photos") && p.source.kind === "section") {
     const name = sections[p.source.section] ?? p.source.section.split(".")[1]!;
@@ -206,6 +209,42 @@ export function fillGrid(source: Extract<Source, { kind: "grid" }>, prefix: stri
     const key = [prefix, slug(r.label), slug(c.label)].filter(Boolean).join("_");
     return known.has(key) ? { field: `inspection.${key}` } : (r.cells[i] ?? { text: "" });
   }) })) };
+}
+
+/** A shared part (e.g. the disclaimer) placed in a page. */
+export function sharedPart(ref: SharedRef): Part {
+  return { id: uid(), type: "snippet", ref };
+}
+
+/** Swap one field or section for another in a part, e.g. a suggestion for a field the form
+ *  lacks: "inspection.odo" -> "inspection.odometer", in rows, cells, placeholders and exclusions. */
+export function replaceRef(p: Part, from: string, to: string): Part {
+  const [, fromKey] = from.split("."), [, toKey] = to.split(".");
+  const placeholder = new RegExp(`\\{\\{\\s*${from.replace(/\./g, "\\.")}\\s*\\}\\}`, "g");
+  return JSON.parse(JSON.stringify(p, (k, v: unknown) => {
+    if (k === "exclude" && Array.isArray(v) && from.startsWith("inspection.")) return v.map((x) => (x === fromKey ? toKey : x));
+    if (typeof v !== "string") return v;
+    return v === from ? to : v.replace(placeholder, `{{ ${to} }}`);
+  })) as Part;
+}
+
+/** Put a shared part's own parts in its place (fresh ids), to change them in this template only. */
+export function unlinkShared(d: Definition, id: string, parts: Part[]): Definition {
+  const w = locate(d, id);
+  if (!w) return d;
+  const fresh = withIds({ schema: 2, pages: [{ title: "", parts: JSON.parse(JSON.stringify(parts, (k, v: unknown) => (k === "id" ? undefined : v))) as Part[] }] }).pages[0]!.parts;
+  return w.set([...w.list.slice(0, w.index), ...fresh, ...w.list.slice(w.index + 1)]);
+}
+
+/** The theme settings a shared theme holds. */
+export const THEME_KEYS = ["theme", "bands", "watermark"] as const;
+export function themeOf(d: Definition): Pick<Definition, (typeof THEME_KEYS)[number]> {
+  return Object.fromEntries(THEME_KEYS.filter((k) => d[k] !== undefined).map((k) => [k, d[k]]));
+}
+export function withoutTheme(d: Definition): Definition {
+  const out = { ...d };
+  for (const k of THEME_KEYS) delete out[k];
+  return out;
 }
 
 function escape(t: string): string {

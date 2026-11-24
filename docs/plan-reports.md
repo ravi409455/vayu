@@ -291,6 +291,38 @@ Done:
 Not separate settings (on purpose): style rules on photo captions (captions already take the
 answer's colour); turning bookmarks off per page.
 
+### Phase 5 status (2026-11-24)
+
+Done:
+- **Picture library** (Report settings → Pictures): logos, watermarks and backgrounds with a name,
+  uploaded once, picked from a list in the header, footer and watermark settings. The same
+  picture uploaded twice is kept once. A picture still in use cannot be removed.
+- **Shared theme** (Report settings → Theme): colours, fonts, header, footer and watermark in one
+  theme, e.g. "Car C.I.D." for PDI, Used car and EV. "Save this report's look as a shared theme",
+  "Use a shared theme", "Stop sharing (copy it into this report)". While a report uses a theme,
+  those tabs show the theme's settings, read only.
+- **Shared parts**: any part can be shared ("Share with other reports"), e.g. the disclaimer;
+  "+ Add to this page" and "+ Add page" list the shared parts. To change one: "Stop sharing" in
+  one report, change it, then share it again replacing the old one.
+- **Versions**: each save of a theme or shared part is a new version. Every template using it
+  moves to the new version at once: its draft changes and its live layout is republished (refused,
+  with nothing changed, if a template's form lacks a field the new version shows). Each template
+  version names the exact theme and part versions it uses, so a report always shows what it was
+  made with.
+- **Copy a template** (⋯ → Copy to another form): a new draft for another inspection form.
+- **Export and import** (⋯ → Export / Import): one JSON file with the layout, settings, shared
+  theme and parts, and pictures. Import replaces the draft. A shared item already here with other
+  content is kept (noted). Anything the form lacks is marked "fix" in the pages list and listed in
+  warnings with the closest match ("Use inspection.odometer"); publishing stays blocked until fixed.
+- **Staging to production**: form bundles (`apps/forms/promote.py`) now carry the template's
+  pictures and shared items, matched by key on the other server.
+- Local demo: the PDI template uses the shared theme "Car C.I.D." and the shared part
+  "PDI disclaimer"; the logo and watermark are in the picture library.
+
+Not done (on purpose): uploading your own fonts (the three bundled fonts cover the ₹ sign;
+upload needs a licence check); answer-option conflicts on import (templates name fields and
+sections, not answer options).
+
 ## 12. Questions for you
 
 1. Battery state and Generator state: keep them in the PDI form? They are not in the sample

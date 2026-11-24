@@ -9,15 +9,16 @@ import { fmtDay } from "../../lib/format";
 import { useRefChoices } from "../../lib/useChoices";
 import { Confirm, Empty, PageHeader, Pill, useToast } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
-import { findPart, locate, partName, removePart, shiftPart, updatePage, updatePart, withIds, type Definition, type Part } from "./report/model";
+import { findPart, locate, partName, removePart, replaceRef, sharedPart, shiftPart, unlinkShared, updatePage, updatePart, withIds, type Definition, type Part } from "./report/model";
 import { PagesPanel, type Sel } from "./report/PagesPanel";
 import { PageSettings, PartSettings, type SectionChoice } from "./report/PartSettings";
 import { Preview, type LayoutPage } from "./report/Preview";
 import { ReportSettings } from "./report/ReportSettings";
+import { useShared, type SharedItem } from "./report/sharing";
 
 type Template = { id: number; form: number; form_key: string; versions: { id: number; number: number; status: string }[] };
 type TVersion = { id: number; template: number; number: number; status: string; definition: Definition; row_version: number };
-type Issue = { code: string; message: string };
+type Issue = { code: string; message: string; part?: string | null; ref?: string; suggestion?: string | null };
 type Unused = { key: string; label: string; section: string };
 
 export function PdfDesigner() {
@@ -41,16 +42,17 @@ export function PdfDesigner() {
       </PageHeader>
       <div className="tabs" role="tablist" aria-label="Templates">{(templates.data ?? []).map((x) => (
         <button key={x.id} role="tab" aria-selected={(t?.id ?? null) === x.id} className={t?.id === x.id ? "on" : ""} onClick={() => setTid(x.id)}>{formName(x)}</button>))}</div>
-      {t ? <Designer key={t.id} template={t} form={(forms.data ?? []).find((f) => f.id === t.form)} editable={editable} refresh={() => refresh("pdf-templates")} />
+      {t ? <Designer key={t.id} template={t} form={(forms.data ?? []).find((f) => f.id === t.form)} editable={editable} refresh={() => refresh("pdf-templates")}
+        copyTargets={withoutTemplate} onOpen={setTid} />
         : <Empty title="No PDF templates yet">Create one for an inspection form with “New template for…”.</Empty>}
     </>
   );
 }
 
 /** Every part of the definition with its name (for the preview's outlines). */
-function names(d: Definition, sections: Record<string, string>): Record<string, string> {
+function names(d: Definition, sections: Record<string, string>, shared: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
-  const walk = (parts: Part[]) => parts.forEach((p) => { out[p.id!] = partName(p, sections); if (p.type === "columns") p.columns.forEach((c) => walk(c.parts)); });
+  const walk = (parts: Part[]) => parts.forEach((p) => { out[p.id!] = partName(p, sections, shared); if (p.type === "columns") p.columns.forEach((c) => walk(c.parts)); });
   d.pages.forEach((pg) => walk(pg.parts));
   return out;
 }
@@ -61,8 +63,17 @@ function useDebounced<T>(value: T, ms: number): T {
   return v;
 }
 
-function Designer({ template, form, editable, refresh }: { template: Template; form?: FormSummary; editable: boolean; refresh: () => unknown }) {
+function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
+  template: Template; form?: FormSummary; editable: boolean; refresh: () => unknown; copyTargets: FormSummary[]; onOpen: (id: number) => void;
+}) {
   const { say, fail } = useToast();
+  const sharedItems = useShared();
+  const themes = (sharedItems.data ?? []).filter((i) => i.kind === "theme");
+  const snippets = (sharedItems.data ?? []).filter((i) => i.kind === "snippet");
+  const sharedNames = Object.fromEntries(snippets.map((i) => [i.key, i.name]));
+  const importInput = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState<unknown>(null);
+  const [copying, setCopying] = useState(false);
   const reload = useRefresh();
   const draftMeta = template.versions.find((v) => v.status === "draft");
   const latest = template.versions[template.versions.length - 1];
@@ -146,6 +157,37 @@ function Designer({ template, form, editable, refresh }: { template: Template; f
     try { await api(`pdf-template-versions/${v!.id}`, { method: "DELETE" }); setDiscard(false); say("Draft discarded. The live layout is unchanged."); await reload("pdf-version"); await refresh(); }
     catch (e) { setDiscard(false); fail(e); }
   }
+  async function exportFile() {
+    if (!v) return;
+    try {
+      if (ok && def) await save(def);
+      const file = await api<unknown>(`pdf-template-versions/${v.id}/export`);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(file, null, 1)], { type: "application/json" }));
+      a.download = `${template.form_key}-report-v${v.number}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) { fail(e); }
+  }
+  async function importFile() {
+    const file = importing;
+    setImporting(null);
+    try {
+      const r = await api<TVersion & { issues: Issue[]; notes: string[] }>(`pdf-templates/${template.id}/import`, { body: file });
+      await refresh(); await reload("pdf-version", "pdf-shared", "pdf-pictures");
+      say([`Imported into draft v${r.number}.`, ...r.notes, r.issues.length ? `${r.issues.length} thing${r.issues.length === 1 ? "" : "s"} to fix: see warnings.` : ""].filter(Boolean).join(" "));
+      if (r.issues.length) setShowWarnings(true);
+    } catch (e) { fail(e); }
+  }
+  async function unlink(p: Extract<Part, { type: "snippet" }>) {
+    const item = snippets.find((x) => x.key === p.ref.key);
+    if (!item || !def) return;
+    try {
+      const r = await api<SharedItem>(`pdf-shared/${item.id}`, { query: { revision: String(p.ref.revision) } });
+      edit(unlinkShared(def, p.id!, (r.content as { parts: Part[] }).parts));
+      setSel(null);
+    } catch (e) { fail(e); }
+  }
   function openPdf() {
     if (!preview) return;
     const blob = new Blob([Uint8Array.from(atob(preview.pdf), (c) => c.charCodeAt(0))], { type: "application/pdf" });
@@ -155,7 +197,8 @@ function Designer({ template, form, editable, refresh }: { template: Template; f
   if (!def || !v) return <p className="muted">Loading…</p>;
   const part = sel?.kind === "part" ? findPart(def, sel.id) : null;
   const page = sel?.kind === "page" ? def.pages.find((p) => p.id === sel.id) : null;
-  const nameMap = names(def, sectionNames);
+  const nameMap = names(def, sectionNames, sharedNames);
+  const bad = new Set(checks.issues.map((i) => i.part).filter((x): x is string => !!x));
   const warnCount = checks.issues.length + checks.unused.length;
   return (
     <>
@@ -173,7 +216,14 @@ function Designer({ template, form, editable, refresh }: { template: Template; f
             <AlertTriangle size={14} aria-hidden /> {warnCount ? `${warnCount} warning${warnCount === 1 ? "" : "s"}` : "No warnings"}</button>
           {showWarnings && (
             <div className="menu rd-warn" role="dialog" aria-label="Warnings">
-              {checks.issues.map((i, k) => <div key={k} className="rd-warn-row bad"><strong>Must fix</strong> {i.message}</div>)}
+              {checks.issues.map((i, k) => (
+                <div key={k} className="rd-warn-row bad"><strong>Must fix</strong> {i.message}
+                  <div className="bar" style={{ margin: "4px 0 0" }}>
+                    {i.part && <button type="button" className="link small" onClick={() => { setSel({ kind: "part", id: i.part! }); setShowWarnings(false); }}>Show the part</button>}
+                    {ok && i.part && i.ref && i.suggestion && (
+                      <button type="button" className="sm" onClick={() => { const p = findPart(def, i.part!); if (p) edit(updatePart(def, i.part!, replaceRef(p, i.ref!, i.suggestion!))); }}>Use {i.suggestion}</button>)}
+                  </div>
+                </div>))}
               {checks.unused.length > 0 && <div className="rd-warn-row"><strong>{checks.unused.length} form field{checks.unused.length === 1 ? " is" : "s are"} not in this report</strong>
                 <ul>{checks.unused.slice(0, 12).map((u) => <li key={u.key}>{u.section} → {u.label}</li>)}{checks.unused.length > 12 && <li>…and {checks.unused.length - 12} more</li>}</ul></div>}
               {warnCount === 0 && <p className="muted small" style={{ padding: 8 }}>Every field of the form is in the report and nothing points at a missing field.</p>}
@@ -182,17 +232,35 @@ function Designer({ template, form, editable, refresh }: { template: Template; f
         <button type="button" onClick={() => setSettings(true)}><Settings2 size={14} aria-hidden /> Report settings</button>
         <MoreMenu label="More template actions" items={[
           { label: "Open the PDF", onClick: openPdf, hidden: !preview },
+          { label: "Export (backup file)", onClick: () => void exportFile() },
+          { label: "Import a template file…", onClick: () => importInput.current?.click(), hidden: !editable },
+          { label: "Copy to another form…", onClick: () => setCopying(true), hidden: !editable || copyTargets.length === 0 },
           { label: "Discard draft", danger: true, onClick: () => setDiscard(true), hidden: !ok || !template.versions.some((x) => x.status === "published") },
         ]} />
         {editable && !draftMeta && <button className="primary" onClick={async () => { try { await api(`pdf-templates/${template.id}/drafts`, { body: {} }); await refresh(); } catch (e) { fail(e); } }}>Start a new draft</button>}
         {ok && <button className="primary" onClick={publish}>Publish</button>}
       </div>
       {discard && <Confirm title="Discard this draft?" danger confirmLabel="Discard draft" onCancel={() => setDiscard(false)} onConfirm={discardDraft}><p>Your unpublished changes to this layout are thrown away. The live layout is not affected.</p></Confirm>}
-      {settings && <ReportSettings def={def} onChange={edit} onClose={() => setSettings(false)} readOnly={!ok} />}
+      {settings && <ReportSettings def={def} onChange={edit} onClose={() => setSettings(false)} readOnly={!ok} themes={themes} />}
+      <input ref={importInput} type="file" accept="application/json,.json" hidden aria-label="Template file" onChange={async (e) => {
+        const f = e.target.files?.[0];
+        e.target.value = "";
+        if (!f) return;
+        try { setImporting(JSON.parse(await f.text())); } catch { say("That file is not a template file (JSON)."); }
+      }} />
+      {importing !== null && (
+        <Confirm title="Import this template file?" confirmLabel="Import" onCancel={() => setImporting(null)} onConfirm={() => void importFile()}>
+          <p>Everything in the file replaces this template's draft: pages, parts, settings, pictures and shared items. The live layout does not change until you publish.</p>
+          <p className="muted small">Anything the file uses that this form does not have is listed under warnings and marked “fix” in the pages list, with the closest match to use instead.</p>
+        </Confirm>)}
+      {copying && <CopyDialog targets={copyTargets} onCancel={() => setCopying(false)} onCopy={async (formId) => {
+        try { const r = await api<{ id: number }>(`pdf-templates/${template.id}/copy`, { body: { form: formId } }); setCopying(false); await refresh(); onOpen(r.id); say("Copied. The new template is a draft; check its warnings."); }
+        catch (e) { fail(e); }
+      }} />}
       <div className="rd-layout">
         <aside className="card rd-left" aria-label="Pages">
           <div className="rd-h">Pages</div>
-          <PagesPanel def={def} sel={sel} onSelect={setSel} onChange={edit} formPages={tree.data?.pages ?? []} sections={sectionNames} readOnly={!ok} />
+          <PagesPanel def={def} sel={sel} onSelect={setSel} onChange={edit} formPages={tree.data?.pages ?? []} sections={sectionNames} readOnly={!ok} snippets={snippets} bad={bad} />
         </aside>
         <section className="rd-mid" aria-label="Preview">
           <div className="rd-status muted small">{rendering ? "Updating…" : chosen ? "This is the real PDF. Click a part to change it." : "Complete one booking inspected with this form to see the report with real answers."}</div>
@@ -201,7 +269,14 @@ function Designer({ template, form, editable, refresh }: { template: Template; f
         </section>
         <aside className="card rd-right" aria-label="Settings">
           {part && sel?.kind === "part" ? (
-            <PartSettings key={sel.id} part={part} ctx={{ sections, fields: fieldChoices, readOnly: !ok }}
+            <PartSettings key={sel.id} part={part} ctx={{ sections, fields: fieldChoices, readOnly: !ok, snippets }}
+              onShared={ok ? (item) => {
+                const w = locate(def, sel.id); if (!w) return;
+                const linked = { ...sharedPart({ key: item.key, revision: item.revision }), id: sel.id };
+                edit(w.set(w.list.map((x, i) => (i === w.index ? linked : x))));
+                say(item.updated.length ? `Shared. Also updated: ${item.updated.join(", ")}.` : "Shared. Add it to other reports from “+ Add to this page”.");
+              } : undefined}
+              onUnlink={ok && part.type === "snippet" ? () => void unlink(part) : undefined}
               onChange={(p) => edit(updatePart(def, sel.id, p))}
               onDelete={() => { edit(removePart(def, sel.id)); setSel(null); }}
               onMove={(by) => edit(shiftPart(def, sel.id, by))}
@@ -222,3 +297,14 @@ function Designer({ template, form, editable, refresh }: { template: Template; f
   );
 }
 
+
+function CopyDialog({ targets, onCancel, onCopy }: { targets: FormSummary[]; onCancel: () => void; onCopy: (form: number) => void }) {
+  const [form, setForm] = useState(targets[0]?.id ?? 0);
+  return (
+    <Confirm title="Copy this template" confirmLabel="Copy" onCancel={onCancel} onConfirm={() => onCopy(form)}>
+      <p>Start another form's report from this layout. The copy is a draft; anything its form does not have shows as a warning to fix.</p>
+      <label className="small">For the form <select aria-label="Copy for the form" value={form} onChange={(e) => setForm(Number(e.target.value))}>
+        {targets.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
+    </Confirm>
+  );
+}

@@ -658,6 +658,15 @@ button.link.danger-link, .link.danger-link { color: var(--bad); }
 .rd-warn-row ul { margin: 4px 0 0; padding-left: 18px; }
 .rd-thumb { max-width: 180px; max-height: 120px; display: block; border: 1px solid var(--line); border-radius: 8px; }
 .rd-thumb.sm { max-width: 60px; max-height: 32px; }
+.rd-pics { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin: 8px 0; }
+.rd-pic { margin: 0; display: grid; gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; }
+.rd-pic img { width: 100%; height: 80px; object-fit: contain; background: repeating-conic-gradient(var(--hover) 0 25%, transparent 0 50%) 0 0 / 12px 12px; border-radius: 6px; }
+.rd-pic input { font-size: 12px; }
+.rd-note { background: var(--hover); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin: 8px 0; }
+.rd-share { display: grid; gap: 6px; }
+.rd-part.bad .rd-part-name { color: var(--bad); }
+.rd-badge.bad { color: #fff; background: var(--bad); }
+label.btn.disabled { opacity: .5; pointer-events: none; }
 .rd-slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 @media (max-width: 700px) { .rd-slots { grid-template-columns: minmax(0, 1fr); } }
 .rd-slot { border: 1px dashed var(--line-strong); border-radius: 8px; padding: 8px; display: grid; gap: 6px; align-content: start; min-width: 0; }

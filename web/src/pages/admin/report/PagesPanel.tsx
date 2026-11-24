@@ -1,15 +1,16 @@
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Code, Columns2, FileText, GripVertical, Image, LayoutList, ListOrdered, MoveVertical, QrCode, Scissors, Table2 } from "lucide-react";
+import { Code, Columns2, FileText, Link2, GripVertical, Image, LayoutList, ListOrdered, MoveVertical, QrCode, Scissors, Table2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import type { FormPage } from "../../../api/types";
-import { addPart, blankPage, movePage, movePart, newPart, pageFromForm, partName, updatePart, type Definition, type Part, type PartType, type ReportPage } from "./model";
+import { addPart, blankPage, movePage, movePart, newPart, pageFromForm, partName, sharedPart, uid, updatePart, type Definition, type Part, type PartType, type ReportPage, type SharedRef } from "./model";
+import type { SharedItem } from "./sharing";
 
 export type Sel = { kind: "page" | "part"; id: string } | null;
 
 const ICON: Record<PartType, typeof Table2> = {
-  table: Table2, photos: Image, text: FileText, columns: Columns2, verify: QrCode, contents: ListOrdered, page_break: Scissors, spacer: MoveVertical, html: Code,
+  table: Table2, photos: Image, text: FileText, columns: Columns2, verify: QrCode, contents: ListOrdered, page_break: Scissors, spacer: MoveVertical, html: Code, snippet: Link2,
 };
 const ADD: { type: PartType; label: string; hint: string }[] = [
   { type: "table", label: "Table of checks", hint: "rows of check and answer" },
@@ -29,7 +30,7 @@ function Sortable({ id, children, disabled }: { id: string; children: (handle: R
   return <div ref={s.setNodeRef} style={{ transform: CSS.Transform.toString(s.transform), transition: s.transition, opacity: s.isDragging ? 0.5 : 1 }}>{children(handle)}</div>;
 }
 
-function AddMenu({ onPick, label = "+ Add to this page", small }: { onPick: (t: PartType) => void; label?: string; small?: boolean }) {
+function AddMenu({ onPick, label = "+ Add to this page", small, snippets = [] }: { onPick: (t: PartType, ref?: SharedRef) => void; label?: string; small?: boolean; snippets?: SharedItem[] }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="rd-add">
@@ -40,15 +41,22 @@ function AddMenu({ onPick, label = "+ Add to this page", small }: { onPick: (t: 
             <button key={a.type} type="button" role="menuitem" onClick={() => { setOpen(false); onPick(a.type); }}>
               <I size={16} aria-hidden /><span><strong>{a.label}</strong><span className="muted small">{a.hint}</span></span>
             </button>); })}
+          {snippets.length > 0 && <div className="rd-add-h">Shared parts</div>}
+          {snippets.map((sn) => (
+            <button key={sn.id} type="button" role="menuitem" onClick={() => { setOpen(false); onPick("snippet", { key: sn.key, revision: sn.revision }); }}>
+              <Link2 size={16} aria-hidden /><span><strong>{sn.name}</strong><span className="muted small">shared: change it once for every report</span></span>
+            </button>))}
         </div>)}
     </div>
   );
 }
 
-export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, readOnly }: {
+export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, readOnly, snippets = [], bad = new Set() }: {
   def: Definition; sel: Sel; onSelect: (s: Sel) => void; onChange: (d: Definition) => void;
-  formPages: FormPage[]; sections: Record<string, string>; readOnly: boolean;
+  formPages: FormPage[]; sections: Record<string, string>; readOnly: boolean; snippets?: SharedItem[]; bad?: Set<string>;
 }) {
+  const sharedNames = Object.fromEntries(snippets.map((x) => [x.key, x.name]));
+  const make = (type: PartType, ref?: SharedRef) => (ref ? sharedPart(ref) : newPart(type, firstSection));
   const [adding, setAdding] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const firstSection = Object.keys(sections)[0];
@@ -58,14 +66,14 @@ export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, 
     if (a.startsWith("pg:") && o.startsWith("pg:")) onChange(movePage(def, a.slice(3), o.slice(3)));
     else if (a.startsWith("pt:") && o.startsWith("pt:")) onChange(movePart(def, a.slice(3), o.slice(3)));
   };
-  const add = (page: ReportPage, type: PartType) => {
-    const part = newPart(type, firstSection);
+  const add = (page: ReportPage, type: PartType, ref?: SharedRef) => {
+    const part = make(type, ref);
     const after = sel?.kind === "part" && JSON.stringify(page.parts).includes(`"id":"${sel.id}"`) ? sel.id : null;
     onChange(addPart(def, page.id!, part, after));
     onSelect({ kind: "part", id: part.id! });
   };
-  const addInto = (cols: Extract<Part, { type: "columns" }>, k: number, type: PartType) => {
-    const part = newPart(type, firstSection);
+  const addInto = (cols: Extract<Part, { type: "columns" }>, k: number, type: PartType, ref?: SharedRef) => {
+    const part = make(type, ref);
     onChange(updatePart(def, cols.id!, { columns: cols.columns.map((c, i) => (i === k ? { ...c, parts: [...c.parts, part] } : c)) }));
     onSelect({ kind: "part", id: part.id! });
   };
@@ -76,18 +84,20 @@ export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, 
       {list.map((p) => { const I = ICON[p.type]; return (
         <Sortable key={p.id} id={`pt:${p.id}`} disabled={readOnly}>{(handle) => (
           <>
-            <div className={`rd-part${sel?.kind === "part" && sel.id === p.id ? " on" : ""}`} style={{ marginLeft: depth * 14 }}>
+            <div className={`rd-part${sel?.kind === "part" && sel.id === p.id ? " on" : ""}${bad.has(p.id!) ? " bad" : ""}`} style={{ marginLeft: depth * 14 }}>
               {handle}
               <button type="button" className="rd-part-name" onClick={() => onSelect({ kind: "part", id: p.id! })}>
-                <I size={14} aria-hidden /><span className="ellipsis">{partName(p, sections)}</span>
+                <I size={14} aria-hidden /><span className="ellipsis">{partName(p, sections, sharedNames)}</span>
               </button>
+              {bad.has(p.id!) ? <span className="rd-badge bad" title="Uses a field or section the form does not have">fix</span> : null}
+              {p.type === "snippet" ? <span className="rd-badge" title="Shared with other reports">shared</span> : null}
               {p.show_if ? <span className="rd-badge" title="Only shown sometimes">if</span> : null}
             </div>
             {p.type === "columns" && p.columns.map((c, k) => (
               <div key={k} className="rd-col" style={{ marginLeft: (depth + 1) * 14 }}>
                 <span className="rd-col-h">Column {k + 1}{c.width ? ` · ${c.width}%` : ""}</span>
                 {parts(c.parts, depth + 1)}
-                {!readOnly && <AddMenu small label="+ Add" onPick={(t) => addInto(p, k, t)} />}
+                {!readOnly && <AddMenu small label="+ Add" snippets={snippets} onPick={(t, r) => addInto(p, k, t, r)} />}
               </div>))}
           </>)}
         </Sortable>); })}
@@ -111,7 +121,7 @@ export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, 
                   {pg.show_if ? <span className="rd-badge" title="Only shown sometimes">if</span> : null}
                 </div>
                 {parts(pg.parts, 0)}
-                {!readOnly && <AddMenu onPick={(t) => add(pg, t)} />}
+                {!readOnly && <AddMenu snippets={snippets} onPick={(t, r) => add(pg, t, r)} />}
               </section>)}
             </Sortable>))}
         </SortableContext>
@@ -131,6 +141,9 @@ export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, 
               <button type="button" role="menuitem" onClick={() => newPage(blankPage("blank"))}><FileText size={16} aria-hidden /><span><strong>Blank page</strong></span></button>
               <button type="button" role="menuitem" onClick={() => newPage(blankPage("divider"))}><ListOrdered size={16} aria-hidden /><span><strong>Divider</strong><span className="muted small">big title and the contents list</span></span></button>
               <button type="button" role="menuitem" onClick={() => newPage(blankPage("verify"))}><QrCode size={16} aria-hidden /><span><strong>Verify page</strong><span className="muted small">QR code and link</span></span></button>
+              {snippets.map((sn) => (
+                <button key={sn.id} type="button" role="menuitem" onClick={() => newPage({ id: uid(), title: sn.name, style: "normal", parts: [sharedPart({ key: sn.key, revision: sn.revision })] })}>
+                  <Link2 size={16} aria-hidden /><span><strong>{sn.name}</strong><span className="muted small">a page with this shared part</span></span></button>))}
             </div>)}
         </div>)}
     </div>

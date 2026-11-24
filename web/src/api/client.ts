@@ -86,9 +86,10 @@ export function staleInfo(e: unknown): { by: string; at: string; keys: string[];
 }
 
 /** Upload one file as multipart form data (the builder's pictures). */
-export async function uploadFile<T>(path: string, file: File, method: "POST" | "PUT" = "POST"): Promise<T> {
+export async function uploadFile<T>(path: string, file: File, method: "POST" | "PUT" = "POST", fields: Record<string, string> = {}): Promise<T> {
   const body = new FormData();
   body.append("file", file);
+  for (const [k, v] of Object.entries(fields)) body.append(k, v);
   const res = await fetch(`/api/v1/${path.replace(/^\//, "")}`, { method, body, credentials: "same-origin", headers: { "X-CSRFToken": csrfToken(), Accept: "application/json" } });
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {

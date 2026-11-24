@@ -1,30 +1,39 @@
 import { useState } from "react";
-import { uploadFile } from "../../../api/client";
 import { Field, Modal, Tabs, useToast } from "../../../ui/kit";
-import type { Band, Definition, SlotItem } from "./model";
+import { themeOf, withoutTheme, type Band, type Definition, type SlotItem } from "./model";
+import { PictureLibrary, PicturePicker, ShareForm, useSharedContent, type SharedItem, type ThemeContent } from "./sharing";
 
-type Tab = "paper" | "bands" | "look" | "images" | "file";
+type Tab = "theme" | "paper" | "bands" | "look" | "images" | "pictures" | "file";
 const SIDES = ["left", "center", "right"] as const;
 const COLOR_NAMES = [["brand", "Brand"], ["text", "Text"], ["ok", "Good (green)"], ["warn", "Not checked (amber)"], ["bad", "Problem (red)"], ["muted", "Not available (grey)"]] as const;
 const DEFAULT_COLORS: Record<string, string> = { brand: "#a62830", text: "#1b1f27", ok: "#15703f", warn: "#b25e09", bad: "#b3261e", muted: "#8a93a3" };
 const FONTS = ["Inter", "Barlow Semi Condensed", "Helvetica"];
 
 /** Things that apply to the whole report, out of the way until needed. */
-export function ReportSettings({ def, onChange, onClose, readOnly }: { def: Definition; onChange: (d: Definition) => void; onClose: () => void; readOnly: boolean }) {
+export function ReportSettings({ def: own, onChange, onClose, readOnly, themes }: { def: Definition; onChange: (d: Definition) => void; onClose: () => void; readOnly: boolean; themes: SharedItem[] }) {
   const [tab, setTab] = useState<Tab>("bands");
-  const paper = def.paper ?? {};
+  const ref = own.theme_ref;
+  const linked = themes.find((t) => t.key === ref?.key);
+  const content = useSharedContent<ThemeContent>(linked, ref?.revision);
+  // with a shared theme, its colours, fonts, header, footer and watermark show (read only here)
+  const def: Definition = ref ? { ...withoutTheme(own), ...(content.data ?? {}) } : own;
+  const themed = !!ref && (tab === "bands" || tab === "look" || tab === "images");
+  const paper = own.paper ?? {};      // paper and file name are always this report's own
   const theme = def.theme ?? {};
   return (
     <Modal title="Report settings" wide onClose={onClose} actions={<button className="primary" onClick={onClose}>Done</button>}>
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: "bands", label: "Header and footer" }, { id: "look", label: "Colours and fonts" }, { id: "images", label: "Watermark" }, { id: "paper", label: "Paper" }, { id: "file", label: "File name" }]} />
-      <fieldset disabled={readOnly} className="rd-fieldset">
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: "theme", label: "Theme" }, { id: "bands", label: "Header and footer" }, { id: "look", label: "Colours and fonts" }, { id: "images", label: "Watermark" }, { id: "pictures", label: "Pictures" }, { id: "paper", label: "Paper" }, { id: "file", label: "File name" }]} />
+      {themed && <p className="rd-note">These come from the shared theme “{linked?.name ?? ref!.key}”. To change them, stop sharing it in the Theme tab, or change the theme and save a new version of it.</p>}
+      {tab === "theme" && <ThemeTab def={own} onChange={onChange} themes={themes} readOnly={readOnly} content={content.data} />}
+      {tab === "pictures" && <PictureLibrary readOnly={readOnly} />}
+      <fieldset disabled={readOnly || themed} className="rd-fieldset">
         {tab === "paper" && (
           <div className="grid2">
-            <Field label="Size"><select value={paper.size ?? "A4"} onChange={(e) => onChange({ ...def, paper: { ...paper, size: e.target.value as "A4" } })}><option>A4</option><option>Letter</option></select></Field>
-            <Field label="Orientation"><select value={paper.orientation ?? "portrait"} onChange={(e) => onChange({ ...def, paper: { ...paper, orientation: e.target.value as "portrait" } })}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></Field>
+            <Field label="Size"><select value={paper.size ?? "A4"} onChange={(e) => onChange({ ...own, paper: { ...paper, size: e.target.value as "A4" } })}><option>A4</option><option>Letter</option></select></Field>
+            <Field label="Orientation"><select value={paper.orientation ?? "portrait"} onChange={(e) => onChange({ ...own, paper: { ...paper, orientation: e.target.value as "portrait" } })}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></Field>
             {(["top", "right", "bottom", "left"] as const).map((k) => (
               <Field key={k} label={`Margin ${k} (mm)`} help={k === "top" || k === "bottom" ? "Used when a page has no header or footer." : undefined}>
-                <input type="number" min={0} max={60} value={paper.margins?.[k] ?? { top: 26, right: 12, bottom: 16, left: 12 }[k]} onChange={(e) => onChange({ ...def, paper: { ...paper, margins: { ...paper.margins, [k]: Number(e.target.value) } } })} /></Field>))}
+                <input type="number" min={0} max={60} value={paper.margins?.[k] ?? { top: 26, right: 12, bottom: 16, left: 12 }[k]} onChange={(e) => onChange({ ...own, paper: { ...paper, margins: { ...paper.margins, [k]: Number(e.target.value) } } })} /></Field>))}
           </div>)}
         {tab === "look" && (
           <>
@@ -41,7 +50,7 @@ export function ReportSettings({ def, onChange, onClose, readOnly }: { def: Defi
         {tab === "images" && <WatermarkEditor def={def} onChange={onChange} />}
         {tab === "file" && (
           <Field label="File name" help="Values like {{ sys.booking_id }} are filled in for each report. Must end in .pdf.">
-            <input value={def.filename ?? "{{ sys.booking_id }}.pdf"} onChange={(e) => onChange({ ...def, filename: e.target.value })} /></Field>)}
+            <input value={def.filename ?? "{{ sys.booking_id }}.pdf"} onChange={(e) => onChange({ ...own, filename: e.target.value })} /></Field>)}
         {tab === "bands" && <BandsEditor def={def} onChange={onChange} />}
       </fieldset>
     </Modal>
@@ -49,19 +58,15 @@ export function ReportSettings({ def, onChange, onClose, readOnly }: { def: Defi
 }
 
 function WatermarkEditor({ def, onChange }: { def: Definition; onChange: (d: Definition) => void }) {
-  const { fail } = useToast();
   const wm = def.watermark;
   return (
     <>
       <p className="muted small">A faint picture behind every page (not full-page designs). Tables show it through their rows.</p>
       {wm && <img src={`/api/v1/form-assets/${wm.image}`} alt="The watermark" className="rd-thumb" />}
       <div className="bar">
-        <label className="btn sm">{wm ? "Replace picture" : "Upload a picture"}
-          <input type="file" accept="image/png,image/jpeg" hidden aria-label="Watermark picture" onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            try { const r = await uploadFile<{ id: string }>("form-assets", file); onChange({ ...def, watermark: { opacity: 0.3, width: 60, ...wm, image: r.id } }); } catch (err) { fail(err); }
-          }} /></label>
+        <label className="small">{wm ? "Replace picture:" : "Picture:"}
+          <PicturePicker label="Watermark picture" onPick={(image) => onChange({ ...def, watermark: { opacity: 0.3, width: 60, ...wm, image } })} />
+        </label>
         {wm && <button type="button" className="sm danger" onClick={() => { const { watermark: _, ...rest } = def; onChange(rest as Definition); }}>Remove</button>}
       </div>
       {wm && (
@@ -113,7 +118,6 @@ function BandsEditor({ def, onChange }: { def: Definition; onChange: (d: Definit
 }
 
 function SlotEditor({ side, items, onChange }: { side: string; items: SlotItem[]; onChange: (i: SlotItem[]) => void }) {
-  const { fail } = useToast();
   const set = (i: number, it: SlotItem) => onChange(items.map((x, j) => (j === i ? it : x)));
   return (
     <div className="rd-slot">
@@ -131,13 +135,38 @@ function SlotEditor({ side, items, onChange }: { side: string; items: SlotItem[]
         </div>))}
       <div className="bar" style={{ margin: 0 }}>
         <button type="button" className="link small" onClick={() => onChange([...items, { text: "" }])}>+ Text</button>
-        <label className="link small" style={{ cursor: "pointer" }}>+ Picture
-          <input type="file" accept="image/png,image/jpeg" hidden aria-label={`${side} picture`} onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            try { const r = await uploadFile<{ id: string }>("form-assets", file); onChange([...items, { image: r.id, height: 10, tile: true }]); } catch (err) { fail(err); }
-          }} /></label>
+        <PicturePicker label={`${side} picture`} onPick={(image) => onChange([...items, { image, height: 10, tile: true }])} />
       </div>
     </div>
   );
+}
+
+/** One theme for many templates: use one, stop sharing it, or save these settings as one. */
+function ThemeTab({ def, onChange, themes, readOnly, content }: { def: Definition; onChange: (d: Definition) => void; themes: SharedItem[]; readOnly: boolean; content?: ThemeContent }) {
+  const { say } = useToast();
+  const ref = def.theme_ref;
+  const linked = themes.find((t) => t.key === ref?.key);
+  if (ref) return (
+    <div className="rd-settings-body">
+      <p>This report uses the shared theme <strong>{linked?.name ?? ref.key}</strong>, version {ref.revision}{linked && linked.revision > ref.revision ? ` (newest: ${linked.revision})` : ""}.</p>
+      {linked && <p className="muted small">Used by: {linked.used_by.map((u) => u.form).join(", ")}.</p>}
+      {!readOnly && (
+        <div className="bar">
+          {linked && linked.revision > ref.revision && <button type="button" className="sm" onClick={() => onChange({ ...def, theme_ref: { ...ref, revision: linked.revision } })}>Use the newest version</button>}
+          <button type="button" className="sm" disabled={!content} onClick={() => { const { theme_ref: _, ...rest } = def; onChange({ ...rest, ...content }); }}>Stop sharing (copy it into this report)</button>
+        </div>)}
+    </div>);
+  return (
+    <div className="rd-settings-body">
+      <p className="muted small">A shared theme holds the colours, fonts, header, footer and watermark. Change it once and every report using it changes.</p>
+      <fieldset disabled={readOnly} className="rd-fieldset">
+        <Field label="Use a shared theme">
+          <select value="" onChange={(e) => { const t = themes.find((x) => x.key === e.target.value); if (t) onChange({ ...withoutTheme(def), theme_ref: { key: t.key, revision: t.revision } }); }}>
+            <option value="">{themes.length ? "Pick a theme…" : "No shared themes yet"}</option>
+            {themes.map((t) => <option key={t.id} value={t.key}>{t.name} (version {t.revision})</option>)}</select>
+        </Field>
+        <ShareForm kind="theme" label="Save this report's look as a shared theme" items={themes} content={themeOf(def)}
+          onSaved={(t) => { onChange({ ...withoutTheme(def), theme_ref: { key: t.key, revision: t.revision } }); say(t.updated.length ? `Saved. Also updated: ${t.updated.join(", ")}.` : "Saved as a shared theme."); }} />
+      </fieldset>
+    </div>);
 }

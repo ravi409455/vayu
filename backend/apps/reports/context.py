@@ -326,6 +326,9 @@ def _resolve(src: Source, parts: list[dict], data: dict, values: dict) -> list[d
         elif t in ("text", "html"):
             item["html_out"] = placeholders.render(part["html"], values)
             empty = not part["html"].strip()
+        elif t == "snippet":                   # a shared part, filled in by shared.resolve
+            item["parts"] = _resolve(src, part.get("parts", []), data, values)
+            empty = not item["parts"]
         elif t == "columns":
             item["columns"] = [{**c, "parts": _resolve(src, c["parts"], data, values)}
                                for c in part["columns"]]

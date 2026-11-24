@@ -1,6 +1,7 @@
 """Pictures uploaded in the builder for 'image' fields (e.g. a payment QR code)."""
 import base64
 import binascii
+import hashlib
 import io
 
 from PIL import Image, UnidentifiedImageError
@@ -30,9 +31,20 @@ def _check(data: bytes) -> str:
     return FORMATS[fmt]
 
 
-def create_asset(actor, data: bytes) -> FormAsset:
+def create_asset(actor, data: bytes, name: str = "") -> FormAsset:
+    """A new picture; with a name it is in the picture library. The same picture uploaded again
+    to the library is the one already there (named if it was not)."""
     content_type = _check(data)
-    asset = FormAsset(content_type=content_type, size=len(data), created_by=actor)
+    digest = hashlib.sha256(data).hexdigest()
+    if name:
+        same = FormAsset.objects.filter(sha256=digest).order_by("created_at").first()
+        if same is not None:
+            if not same.name:
+                same.name = name
+                same.save(update_fields=["name"])
+            return same
+    asset = FormAsset(content_type=content_type, size=len(data), created_by=actor, name=name,
+                      sha256=digest)
     asset.key = f"form-assets/{asset.id}"
     storage.put(asset.key, data, content_type)
     asset.save()
@@ -45,13 +57,15 @@ def url(asset: FormAsset) -> str:
 
 
 def export(asset: FormAsset) -> dict:
-    return {"content_type": asset.content_type,
+    return {"content_type": asset.content_type, "name": asset.name,
             "data": base64.b64encode(storage.read(asset.key)).decode()}
 
 
-def import_from_bundle(actor, payload) -> FormAsset:
+def import_from_bundle(actor, payload, library: bool = False) -> FormAsset:
+    """library: a report template's picture, kept in the picture library (once)."""
     try:
         data = base64.b64decode(payload["data"], validate=True)
-    except (KeyError, TypeError, binascii.Error) as e:
+        name = str(payload.get("name") or "Imported picture")[:100] if library else ""
+    except (KeyError, TypeError, AttributeError, binascii.Error) as e:
         raise CodedError("INVALID_BUNDLE", "A picture in the bundle is damaged.", 400) from e
-    return create_asset(actor, data)
+    return create_asset(actor, data, name)

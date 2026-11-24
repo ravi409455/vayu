@@ -14,7 +14,7 @@ from apps.bookings.models import Booking
 from apps.core import events
 from apps.media import storage
 
-from . import context, definition, render
+from . import context, definition, render, shared
 from .models import PdfTemplateVersion, Report
 
 MAX_RETRIES = 2
@@ -31,15 +31,17 @@ def published_template(booking: Booking, insp) -> PdfTemplateVersion | None:
 def build_pdf(booking: Booking, insp, tv: PdfTemplateVersion, token: str, revision: int,
               edge: int = render.PRINT_EDGE):
     """(pdf bytes, filename). Used by the real render and by template previews (small photos)."""
+    d = shared.resolve(tv.definition)                  # the theme and shared parts it names
     src = context.Source(booking, insp, revision=revision, token=token)
-    pages = context.build(src, tv.definition)
+    pages = context.build(src, d)
     values = src.values()
-    html_text = render.render_html(pages, tv.definition, values, edge=edge)
-    return render.render_pdf(html_text), definition.filename_for(tv.definition, values)
+    html_text = render.render_html(pages, d, values, edge=edge)
+    return render.render_pdf(html_text), definition.filename_for(d, values)
 
 
 def preview(booking: Booking, insp, definition_: dict, edge: int = 480):
     """(pdf bytes, filename, layout) of any definition for one booking: nothing is stored."""
+    definition_ = shared.resolve(definition_)
     src = context.Source(booking, insp, revision=0, token="preview")
     pages = context.build(src, definition_)
     values = src.values()

@@ -120,4 +120,33 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   await expect(page.locator("canvas[aria-label=\"Page 1\"]")).toBeVisible();
   await page.getByRole("button", { name: "Select Condition" }).click();       // click the table in the PDF
   await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Condition");
+
+  // sharing: the table becomes a shared part, the look a shared theme
+  await page.getByRole("button", { name: "Start a new draft" }).click();
+  await page.getByRole("button", { name: "Condition", exact: true }).click();
+  await page.getByText("Share with other reports").click();
+  await page.getByLabel("Save this part as a shared part: name").fill("Condition block");
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  await expect(page.getByText(/^Shared\./)).toBeVisible();
+  await expect(page.getByTitle("Shared with other reports")).toBeVisible();
+  await page.getByRole("button", { name: "Report settings" }).click();
+  await page.getByRole("tab", { name: "Theme" }).click();
+  await page.getByLabel("Save this report's look as a shared theme: name").fill("House look");
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  await expect(page.getByText(/uses the shared theme/)).toContainText("House look");
+  await page.getByRole("tab", { name: "Header and footer" }).click();
+  await expect(page.getByText(/These come from the shared theme “House look”/)).toBeVisible();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByText("All changes saved")).toBeVisible({ timeout: 10_000 });
+
+  // backup and restore: export the file, then import it back over the draft
+  await page.getByRole("button", { name: "More template actions" }).click();
+  const download = page.waitForEvent("download");
+  await page.getByRole("menuitem", { name: "Export (backup file)" }).click();
+  const file = JSON.parse(await (await (await download).createReadStream()).toArray().then((c) => Buffer.concat(c).toString()));
+  expect(file.kind).toBe("vayu-report-template");
+  expect(file.shared.map((i: { name: string }) => i.name).sort()).toEqual(["Condition block", "House look"]);
+  await page.getByLabel("Template file").setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(file)) });
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(page.getByText(/Imported into draft v2/)).toBeVisible();
 });

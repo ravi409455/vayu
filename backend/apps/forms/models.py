@@ -382,9 +382,12 @@ class VersionCheck(DraftOnly):
 
 
 class FormAsset(models.Model):
-    """A picture uploaded in the builder for an 'image' field (e.g. a payment QR code)."""
+    """A picture uploaded in the builder: for an 'image' field (e.g. a payment QR code), or, with
+    a name, in the picture library that report templates use (logos, watermarks)."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     key = models.CharField(max_length=200)
+    name = models.CharField(max_length=100, blank=True)          # set: in the picture library
+    sha256 = models.CharField(max_length=64, blank=True, db_index=True)   # same picture, once
     content_type = models.CharField(max_length=50)
     size = models.PositiveIntegerField()
     created_by = models.ForeignKey("accounts.User", null=True, on_delete=models.SET_NULL,

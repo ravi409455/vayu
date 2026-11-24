@@ -134,6 +134,9 @@
    "items": {
     "$ref": "#/$defs/page"
    }
+  },
+  "theme_ref": {
+   "$ref": "#/$defs/sharedref"
   }
  },
  "$defs": {
@@ -905,6 +908,9 @@
     },
     {
      "$ref": "#/$defs/custom"
+    },
+    {
+     "$ref": "#/$defs/snippet"
     }
    ]
   },
@@ -1088,6 +1094,47 @@
     "css": {
      "type": "string",
      "maxLength": 20000
+    }
+   }
+  },
+  "sharedref": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "key",
+    "revision"
+   ],
+   "properties": {
+    "key": {
+     "type": "string",
+     "pattern": "^[a-z][a-z0-9_]{0,62}$"
+    },
+    "revision": {
+     "type": "integer",
+     "minimum": 1
+    }
+   }
+  },
+  "snippet": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "ref"
+   ],
+   "properties": {
+    "id": true,
+    "show_if": true,
+    "hide_when_empty": true,
+    "new_page": true,
+    "keep_together": true,
+    "keep_title": true,
+    "box": true,
+    "type": {
+     "const": "snippet"
+    },
+    "ref": {
+     "$ref": "#/$defs/sharedref"
     }
    }
   }

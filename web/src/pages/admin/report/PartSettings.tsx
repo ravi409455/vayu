@@ -4,9 +4,10 @@ import { ConditionBuilder } from "../../../ui/ConditionBuilder";
 import { Field } from "../../../ui/kit";
 import { fillGrid, PART_LABEL, type Box, type Cell, type Look, type Part, type ReportPage, type Row, type Source, type StyleRule } from "./model";
 import { RichText, ValuePicker } from "./RichText";
+import { ShareForm, snippetContent, type SharedItem } from "./sharing";
 
 export type SectionChoice = { value: string; label: string; fields: { key: string; label: string; type: string }[] };
-export type Ctx = { sections: SectionChoice[]; fields: { value: string; label: string; type: string }[]; readOnly: boolean };
+export type Ctx = { sections: SectionChoice[]; fields: { value: string; label: string; type: string }[]; readOnly: boolean; snippets?: SharedItem[] };
 
 const MEDIA = ["photo", "video", "file", "signature", "image"];
 
@@ -47,8 +48,9 @@ export function PageSettings({ page, onChange, onDelete, fields }: { page: Repor
   );
 }
 
-export function PartSettings({ part, onChange, onDelete, onDuplicate, onMove, ctx }: {
+export function PartSettings({ part, onChange, onDelete, onDuplicate, onMove, ctx, onShared, onUnlink }: {
   part: Part; onChange: (p: Partial<Part>) => void; onDelete: () => void; onDuplicate: () => void; onMove: (by: -1 | 1) => void; ctx: Ctx;
+  onShared?: (item: SharedItem & { updated: string[] }) => void; onUnlink?: () => void;
 }) {
   const set = onChange as (p: Record<string, unknown>) => void;
   const box = ("box" in part ? part.box : undefined) ?? {};
@@ -91,6 +93,7 @@ export function PartSettings({ part, onChange, onDelete, onDuplicate, onMove, ct
           </>
         )}
         {t === "html" && <HtmlSettings part={part} set={set} ctx={ctx} />}
+        {t === "snippet" && <SnippetSettings part={part} set={set} items={ctx.snippets ?? []} onUnlink={onUnlink} />}
         {t === "verify" && <Field label="Code size (mm)"><input type="number" min={15} max={120} value={part.size ?? 40} onChange={(e) => set({ size: Number(e.target.value) })} /></Field>}
         {t === "contents" && <Field label="Columns"><Seg label="Contents columns" value={part.columns ?? 1} options={[[1, "1"], [2, "2"]]} onChange={(columns) => set({ columns })} /></Field>}
         {t === "spacer" && <Field label="Height (mm)"><input type="number" min={1} max={200} value={part.height ?? 10} onChange={(e) => set({ height: Number(e.target.value) })} /></Field>}
@@ -115,6 +118,10 @@ export function PartSettings({ part, onChange, onDelete, onDuplicate, onMove, ct
               <Field label="Background"><select value={box.background ?? "none"} onChange={(e) => setBox({ background: e.target.value })}><option value="none">None</option>{TONES.filter(([v]) => v !== "text").map(([v, l]) => <option key={v} value={v}>{l} tint</option>)}</select></Field>
             </div>
             <Toggle label="Round corners" checked={!!box.round} onChange={(v) => setBox({ round: v })} />
+          </More>)}
+        {t !== "page_break" && t !== "snippet" && onShared && (
+          <More title="Share with other reports" summary="e.g. a disclaimer used by every report">
+            <ShareForm kind="snippet" label="Save this part as a shared part" items={ctx.snippets ?? []} content={snippetContent(part)} onSaved={onShared} />
           </More>)}
       </fieldset>
     </div>
@@ -332,6 +339,21 @@ function HtmlSettings({ part, set, ctx }: { part: Extract<Part, { type: "html" }
       <Field label="CSS" help="e.g. .note { color: var(--brand) }">
         <textarea aria-label="CSS" className="mono" rows={6} spellCheck={false} value={part.css ?? ""} onChange={(e) => set({ css: e.target.value || undefined })} />
       </Field>
+    </>
+  );
+}
+
+function SnippetSettings({ part, set, items, onUnlink }: { part: Extract<Part, { type: "snippet" }>; set: (p: Record<string, unknown>) => void; items: SharedItem[]; onUnlink?: () => void }) {
+  const item = items.find((i) => i.key === part.ref.key);
+  return (
+    <>
+      {item ? <p>Shared part <strong>{item.name}</strong>, version {part.ref.revision}{item.revision > part.ref.revision ? ` (newest: ${item.revision})` : ""}.</p>
+        : <p className="tone-bad">The shared part “{part.ref.key}” is not on this server.</p>}
+      {item && <p className="muted small">Used by: {item.used_by.map((u) => u.form).join(", ")}. To change it for every report, change a copy here and save it back with “Share with other reports”, replacing “{item.name}”.</p>}
+      <div className="bar">
+        {item && item.revision > part.ref.revision && <button type="button" className="sm" onClick={() => set({ ref: { ...part.ref, revision: item.revision } })}>Use the newest version</button>}
+        {item && onUnlink && <button type="button" className="sm" onClick={onUnlink}>Stop sharing (copy it into this report)</button>}
+      </div>
     </>
   );
 }

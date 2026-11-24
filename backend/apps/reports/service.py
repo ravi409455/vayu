@@ -1,4 +1,6 @@
 """Template workflow (draft -> publish) and report lookups."""
+import difflib
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -7,7 +9,15 @@ from apps.bookings.services import err
 from apps.core.errors import CodedError
 from apps.forms.models import Field, Form, FormType, FormVersion
 
-from .definition import referenced_fields, referenced_sections, validate_definition
+from . import placeholders, shared
+from .definition import (
+    outer_texts,
+    part_refs,
+    parts,
+    referenced_fields,
+    referenced_sections,
+    validate_definition,
+)
 from .models import PdfTemplate, PdfTemplateVersion
 
 DEFAULT_DEFINITION = {"schema": 2, "filename": "{{ sys.booking_id }}.pdf", "pages": []}
@@ -82,21 +92,46 @@ def _section_keys(template: PdfTemplate) -> set[str]:
     return set(Section.objects.filter(version=latest).values_list("key", flat=True))
 
 
+def _close(key: str, choices: set[str]) -> str | None:
+    found = difflib.get_close_matches(key, sorted(choices), n=1, cutoff=0.6)
+    return found[0] if found else None
+
+
 def definition_issues(template: PdfTemplate, definition: dict) -> list[dict]:
-    """Parts of a layout that point at fields or sections the form (as it is now, draft or
-    live) lacks."""
+    """Parts of a layout (its shared theme and parts included) that point at fields or sections
+    the form (as it is now, draft or live) lacks, or at shared items this server does not have.
+    Each names its part, and the closest field or section the form does have."""
     known = _known_keys(template)
     sections = _section_keys(template)
-    missing = [{"path": "definition", "code": "UNKNOWN_SECTION",
-                "message": f"Section '{key}' is not a section of the form."}
-               for key in sorted(referenced_sections(definition) - sections)]
-    return missing + [{"path": "definition", "code": "UNKNOWN_FIELD",
-             "message": (f"'{form}.{key}' needs the {form} form, which this form does not "
-                         "include (see its form settings)."
-                         if form in ("start", "end") and not known.get(form)
-                         else f"'{form}.{key}' is not a field of the {form} form.")}
-            for form, key in sorted(referenced_fields(definition))
-            if key not in known.get(form, set())]
+    out = shared.missing(definition)
+    resolved = shared.resolve(definition)
+    outer: set[tuple[str, str]] = set()
+    for _, text in outer_texts(resolved):
+        outer |= placeholders.refs(text)
+    found: list[tuple[str, str | None, set[tuple[str, str]], set[str]]] = [
+        ("definition", None, outer, set())] + [
+        (where, p.get("id"), *part_refs(p)) for where, p in parts(resolved)]
+    for where, pid, fields, secs in found:
+        for key in sorted(secs - sections):
+            out.append({"path": where, "part": pid, "code": "UNKNOWN_SECTION",
+                        "ref": f"inspection.{key}", "suggestion": _suggest("inspection",
+                                                                           _close(key, sections)),
+                        "message": f"Section '{key}' is not a section of the form."})
+        for form, key in sorted(fields):
+            if key in known.get(form, set()):
+                continue
+            out.append({"path": where, "part": pid, "code": "UNKNOWN_FIELD",
+                        "ref": f"{form}.{key}",
+                        "suggestion": _suggest(form, _close(key, known.get(form, set()))),
+                        "message": (f"'{form}.{key}' needs the {form} form, which this form does "
+                                    "not include (see its form settings)."
+                                    if form in ("start", "end") and not known.get(form)
+                                    else f"'{form}.{key}' is not a field of the {form} form.")})
+    return out
+
+
+def _suggest(form: str, key: str | None) -> str | None:
+    return f"{form}.{key}" if key else None
 
 
 def latest_layout_issues(form: Form) -> list[dict]:
@@ -132,8 +167,9 @@ def warnings(version: FormVersion) -> list[dict]:
     last = t.versions.order_by("-number").first() if t else None
     if last is None:
         return []
-    used = {key for form, key in referenced_fields(last.definition) if form == "inspection"}
-    whole = referenced_sections(last.definition)
+    resolved = shared.resolve(last.definition)
+    used = {key for form, key in referenced_fields(resolved) if form == "inspection"}
+    whole = referenced_sections(resolved)
     return [{"code": "FIELD_NOT_IN_PDF", "key": k,
              "message": f"Field '{k}' is not shown in the PDF template."}
             for k, section in Field.objects.filter(version=version).order_by("id")
@@ -159,8 +195,9 @@ def discard_draft(actor, v: PdfTemplateVersion) -> None:
 def unused_fields(template: PdfTemplate, definition: dict) -> list[dict]:
     """Fields of the form (as it is now) that this layout never shows."""
     latest = FormVersion.objects.filter(form=template.form).order_by("-number").first()
-    used = {key for form, key in referenced_fields(definition) if form == "inspection"}
-    whole = referenced_sections(definition)
+    resolved = shared.resolve(definition)
+    used = {key for form, key in referenced_fields(resolved) if form == "inspection"}
+    whole = referenced_sections(resolved)
     return [{"key": k, "label": label, "section": title}
             for k, label, sec, title in Field.objects.filter(version=latest)
             .exclude(type__in=("image", "form_choice")).order_by("section__page__order",

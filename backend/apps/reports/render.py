@@ -271,6 +271,8 @@ def part_html(part: dict, width_mm: float, ctx: dict) -> str:
         scope = f"custom-{len(ctx['css'])}"
         ctx["css"].append(f".{scope} {{ {part.get('css', '')} }}")    # nested: stays in this part
         inner = f'<div class="custom {scope}">{part["html_out"]}</div>'
+    elif t == "snippet":                       # a shared part: its parts, one after another
+        inner = "".join(part_html(p, width_mm, ctx) for p in part["parts"])
     elif t == "contents":
         items = "".join(f'<li><a href="#{pid}">{e(name)}</a></li>' for pid, name in ctx["toc"])
         inner = f'<ol class="toc cols{part.get("columns", 1)}">{items}</ol>'

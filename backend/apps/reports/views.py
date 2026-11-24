@@ -20,9 +20,9 @@ from apps.forms.access import may_see_submissions
 from apps.forms.models import Form, MasterListItem
 from apps.media import storage
 
-from . import context, service, tasks
+from . import context, service, shared, tasks, transfer
 from .definition import validate_definition
-from .models import PdfTemplate, PdfTemplateVersion, Report
+from .models import PdfTemplate, PdfTemplateVersion, Report, SharedItem
 
 
 def _template_body(t: PdfTemplate) -> dict:
@@ -214,6 +214,148 @@ class Verify(APIView):
                          "date": b.inspection_date, "overall_rating": word,
                          "revision": r.revision, "generated_at": r.generated_at,
                          "current": not r.stale})
+
+
+# ---------------------------------------------------------------- sharing (docs/plan-reports.md §9)
+
+def _picture(a) -> dict:
+    return {"id": str(a.id), "name": a.name, "size": a.size, "content_type": a.content_type,
+            "url": f"/api/v1/form-assets/{a.id}"}
+
+
+def _in_use(asset_id: str) -> bool:
+    import json
+
+    from .models import SharedRevision
+
+    return any(asset_id in json.dumps(d) for d in [
+        *PdfTemplateVersion.objects.values_list("definition", flat=True),
+        *SharedRevision.objects.values_list("content", flat=True)])
+
+
+class Pictures(generics.GenericAPIView):
+    """The picture library: logos, watermarks and backgrounds, uploaded once, used anywhere."""
+
+    permission_classes = [perm("pdf_templates.view", "pdf_templates.edit")]
+
+    def get(self, request):
+        from apps.forms.models import FormAsset
+
+        return Response([_picture(a) for a in
+                         FormAsset.objects.exclude(name="").order_by("name", "created_at")])
+
+    def post(self, request):
+        from apps.forms import assets
+
+        file, name = request.FILES.get("file"), str(request.data.get("name", "")).strip()
+        if file is None or not name:
+            raise ValidationError({"detail": "Choose a picture and give it a name."})
+        a = assets.create_asset(request.user, file.read(assets.MAX_BYTES + 1), name[:100])
+        return Response(_picture(a), status=status.HTTP_201_CREATED)
+
+
+class Picture(APIView):
+    permission_classes = [perm("pdf_templates.edit")]
+
+    def _get(self, pk):
+        from apps.forms.models import FormAsset
+
+        return get_object_or_404(FormAsset.objects.exclude(name=""), pk=pk)
+
+    def patch(self, request, pk):
+        a = self._get(pk)
+        name = str(request.data.get("name", "")).strip()
+        if not name:
+            raise ValidationError({"name": "Give the picture a name."})
+        a.name = name[:100]
+        a.save(update_fields=["name"])
+        return Response(_picture(a))
+
+    def delete(self, request, pk):
+        a = self._get(pk)
+        if _in_use(str(a.id)):
+            raise err("PICTURE_IN_USE", "A template or shared theme still uses this picture.", 409)
+        a.name = ""                       # out of the library; the stored file stays harmless
+        a.save(update_fields=["name"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _shared_body(item: SharedItem, content: bool = False) -> dict:
+    body = {"id": item.id, "kind": item.kind, "key": item.key, "name": item.name,
+            "revision": item.revision, "used_by": shared.usage(item)}
+    if content:
+        body["content"] = item.revisions.get(revision=item.revision).content
+    return body
+
+
+class SharedItems(APIView):
+    """Shared themes and parts. POST saves a new version and moves every template using it."""
+
+    permission_classes = [perm("pdf_templates.view", "pdf_templates.edit")]
+
+    def get(self, request):
+        qs = SharedItem.objects.order_by("kind", "name")
+        if kind := request.query_params.get("kind"):
+            qs = qs.filter(kind=kind)
+        return Response([_shared_body(i) for i in qs])
+
+    def post(self, request):
+        d = request.data
+        item, updated = shared.save(request.user, d.get("kind"), d.get("key"), d.get("name"),
+                                    d.get("content"))
+        return Response({**_shared_body(item, content=True), "updated": updated},
+                        status=status.HTTP_201_CREATED)
+
+
+class SharedItemDetail(APIView):
+    permission_classes = [perm("pdf_templates.view", "pdf_templates.edit")]
+
+    def get(self, request, pk):
+        item = get_object_or_404(SharedItem, pk=pk)
+        body = _shared_body(item, content=True)
+        if rev := request.query_params.get("revision"):
+            r = item.revisions.filter(revision=int(rev) if rev.isdigit() else 0).first()
+            if r is None:
+                raise err("NOT_FOUND", "No such version.", 404)
+            body["content"], body["revision"] = r.content, r.revision
+        return Response(body)
+
+
+class CopyTemplate(APIView):
+    """A new template for another form, starting from this template's newest layout."""
+
+    permission_classes = [perm("pdf_templates.edit")]
+
+    def post(self, request, pk):
+        t = get_object_or_404(PdfTemplate, pk=pk)
+        form = get_object_or_404(Form, pk=request.data.get("form"))
+        last = t.versions.order_by("-number").first()
+        assert last is not None
+        return Response(_template_body(transfer.copy_template(request.user, last, form)),
+                        status=status.HTTP_201_CREATED)
+
+
+class ExportTemplate(APIView):
+    permission_classes = [perm("pdf_templates.view", "pdf_templates.edit")]
+
+    def get(self, request, pk):
+        v = get_object_or_404(PdfTemplateVersion.objects.select_related("template__form"), pk=pk)
+        response = Response(transfer.export_file(v))
+        response["Content-Disposition"] = (f'attachment; filename="{v.template.form.key}'
+                                           f'-report-v{v.number}.json"')
+        return response
+
+
+class ImportTemplate(APIView):
+    """The file replaces the draft; what the form lacks comes back as issues to fix."""
+
+    permission_classes = [perm("pdf_templates.edit")]
+
+    def post(self, request, pk):
+        out = transfer.import_file(request.user, get_object_or_404(PdfTemplate, pk=pk),
+                                   request.data)
+        return Response({**_version_body(out["version"]), "issues": out["issues"],
+                         "notes": out["notes"]})
 
 
 __all__ = ["generics"]

@@ -149,6 +149,7 @@ class Command(BaseCommand):
         disclaimer = (Path(demo_pdi.__file__).parent / "seed_assets" / "pdi-disclaimer.html")
         definition = demo_pdi.pdf_definition(str(logo.id), str(mark.id),
                                              disclaimer.read_text())
+        definition = self._shared(admin, definition)
         saved = reports.save_definition(admin, draft, definition, draft.row_version)
         reports.publish(admin, saved, saved.row_version)
         for key, name, itype, pages, code, title in (
@@ -161,6 +162,21 @@ class Command(BaseCommand):
             definition = d.pdf_definition(code, title, form)
             saved = reports.save_definition(admin, draft, definition, draft.row_version)
             reports.publish(admin, saved, saved.row_version)
+
+    def _shared(self, admin, definition: dict) -> dict:
+        """The Car C.I.D. look and the disclaimer as shared items (themes and shared parts are
+        edited once for every template that uses them)."""
+        from apps.reports import shared
+
+        theme = {k: definition.pop(k) for k in shared.THEME_KEYS if k in definition}
+        item, _ = shared.save(admin, "theme", "carcid", "Car C.I.D.", theme)
+        definition["theme_ref"] = {"key": "carcid", "revision": item.revision}
+        page = next(p for p in definition["pages"] if p["title"] == "Disclaimer")
+        item, _ = shared.save(admin, "snippet", "pdi_disclaimer", "PDI disclaimer",
+                              {"parts": page["parts"]})
+        page["parts"] = [{"type": "snippet", "ref": {"key": "pdi_disclaimer",
+                                                     "revision": item.revision}}]
+        return definition
 
     def _brand_assets(self, admin):
         """The Car C.I.D. logo and the faint shield watermark, as uploaded pictures."""
@@ -177,7 +193,8 @@ class Command(BaseCommand):
             img.thumbnail((edge, edge))
             buf = io.BytesIO()
             img.save(buf, "PNG", optimize=True)
-            out.append(assets.create_asset(admin, buf.getvalue()))
+            label = "Car C.I.D. logo" if "logo" in name else "Car C.I.D. watermark"
+            out.append(assets.create_asset(admin, buf.getvalue(), label))
         return out
 
     def _selfie(self, booking, expert) -> str:
