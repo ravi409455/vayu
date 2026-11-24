@@ -171,7 +171,7 @@ class OpsFlowTest {
         show()
         waitFor("Rohit Sharma")
         server.stop()
-        compose.onNodeWithText("Refresh").performClick()
+        compose.onNode(androidx.compose.ui.test.hasContentDescription("Refresh", substring = true)).performClick()
         waitFor("Offline · as of")
         compose.onNodeWithText("Rohit Sharma").assertIsDisplayed()
         shot("ops_today_offline")

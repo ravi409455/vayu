@@ -67,6 +67,7 @@ import `in`.carcid.vayu.ui.components.StatusDot
 import `in`.carcid.vayu.ui.components.Tone
 import `in`.carcid.vayu.ui.components.VayuTopBar
 import `in`.carcid.vayu.ui.theme.Vayu
+import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -158,34 +159,70 @@ fun ExpertHome(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     var inspectId by rememberSaveable { mutableStateOf<String?>(null) }
     var uploads by rememberSaveable { mutableStateOf(false) }
+    var bell by rememberSaveable { mutableStateOf(false) }
+    val snack = remember { androidx.compose.material3.SnackbarHostState() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val say: (String) -> Unit = { m -> scope.launch { snack.currentSnackbarData?.dismiss(); snack.showSnackbar(m) } }
+    // Refresh says what happened once it is done (it is often too quick to see the spin)
+    var asked by remember { mutableStateOf(false) }
+    val refresh = { asked = true; onRefresh() }
+    androidx.compose.runtime.LaunchedEffect(state.syncing) {
+        if (!state.syncing && asked) {
+            asked = false
+            say(when { state.offline -> "No signal. Showing the jobs saved" + (state.syncedAt?.let { " at $it" } ?: "") + "."
+                state.error != null -> state.error; else -> "Jobs up to date." })
+        }
+    }
     val inspecting = state.jobs.firstOrNull { it.id == inspectId }
     val open = state.jobs.firstOrNull { it.id == openId }
-    when {
-        inspecting != null && extras.inspection != null -> InspectionScreen(remember(inspecting.id) { extras.inspection.invoke(inspecting) },
-            onClose = { inspectId = null })
-        open != null -> {
-            BackHandler { openId = null }
-            val d = extras.drafts[open.id]
-            JobDetailScreen(open, ready = open.id in state.ready, today = today, onBack = { openId = null },
-                draft = d, blocked = cannotStart(open, d, open.id in state.ready, extras),
-                notices = extras.notices.filter { it.first == open.id }.map { it.second },
-                onStart = { inspectId = open.id }, onDiscard = { extras.onDiscard(open.id) })
+    Box(Modifier.fillMaxSize()) {
+        when {
+            inspecting != null && extras.inspection != null -> InspectionScreen(remember(inspecting.id) { extras.inspection.invoke(inspecting) },
+                onClose = { inspectId = null })
+            bell -> {
+                BackHandler { bell = false }
+                NotificationsScreen(onBack = { bell = false })
+            }
+            open != null -> {
+                BackHandler { openId = null }
+                val d = extras.drafts[open.id]
+                JobDetailScreen(open, ready = open.id in state.ready, today = today, onBack = { openId = null },
+                    draft = d, blocked = cannotStart(open, d, open.id in state.ready, extras),
+                    notices = extras.notices.filter { it.first == open.id }.map { it.second },
+                    onStart = { inspectId = open.id }, onDiscard = { extras.onDiscard(open.id); say("Draft discarded.") })
+            }
+            uploads -> {
+                BackHandler { uploads = false }
+                UploadsScreen(me, extras, onProfile, onJobs = { uploads = false }, onRefresh = refresh,
+                    onBell = { bell = true }, refreshing = state.syncing, say = say)
+            }
+            else -> MyJobsScreen(me, state, today, onProfile, refresh, extras, onOpen = { j ->
+                val d = extras.drafts[j.id]
+                if (d != null && d.locked) inspectId = j.id else openId = j.id
+            }, onUploads = { uploads = true }, onDiscard = { extras.onDiscard(it); say("Draft discarded.") },
+                onSubmitAnyway = { inspectId = it.id }, onBell = { bell = true })
         }
-        uploads -> {
-            BackHandler { uploads = false }
-            UploadsScreen(me, extras, onProfile, onJobs = { uploads = false }, onRefresh = onRefresh)
+        androidx.compose.material3.SnackbarHost(snack, Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp))
+    }
+}
+
+/** The expert's bell. Notifications (new jobs, moved times, stuck uploads) arrive with push, Phase 17. */
+@Composable
+fun NotificationsScreen(onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
+        IconButton(onClick = onBack, modifier = Modifier.padding(start = 6.dp, top = 10.dp)) {
+            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Vayu.colors.ink)
         }
-        else -> MyJobsScreen(me, state, today, onProfile, onRefresh, extras, onOpen = { j ->
-            val d = extras.drafts[j.id]
-            if (d != null && d.locked) inspectId = j.id else openId = j.id
-        }, onUploads = { uploads = true }, onDiscard = extras.onDiscard, onSubmitAnyway = { inspectId = it.id })
+        Text("Notifications", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink, modifier = Modifier.padding(horizontal = 20.dp))
+        Text("Nothing yet. New jobs, changed times and photos that are stuck will show here.",
+            color = Vayu.colors.muted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp))
     }
 }
 
 @Composable
 fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit, onRefresh: () -> Unit,
                  extras: ExpertExtras = ExpertExtras(), onOpen: (Job) -> Unit, onUploads: () -> Unit = {},
-                 onDiscard: (String) -> Unit = {}, onSubmitAnyway: (Job) -> Unit = {}) {
+                 onDiscard: (String) -> Unit = {}, onSubmitAnyway: (Job) -> Unit = {}, onBell: () -> Unit = {}) {
     var closed by rememberSaveable { mutableStateOf(setOf<String>()) }
     var tab by rememberSaveable { mutableStateOf(JobTab.TODAY) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -195,7 +232,7 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
         .let { if (tab == JobTab.DONE) it.reversed() else it }
     val todayCount = state.jobs.count { tabOf(it, today) == JobTab.TODAY }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
-        VayuTopBar("My jobs", me.initials, bellCount = 0, onBell = {}, onProfile = onProfile)
+        VayuTopBar("My jobs", me.initials, bellCount = 0, onBell = onBell, onProfile = onProfile)
         // a thin bar while jobs download (Refresh, reopening); fixed height so nothing jumps
         Box(Modifier.fillMaxWidth().height(3.dp).padding(horizontal = 20.dp)) {
             if (state.syncing) LinearProgressIndicator(Modifier.fillMaxSize().semantics { contentDescription = "Updating jobs" },
@@ -247,7 +284,7 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
             }
         }
         ExpertBottomBar(ExpertTab.JOBS, uploads = extras.drafts.values.sumOf { d -> d.files.count { !it.sent } },
-            onTab = { if (it == ExpertTab.UPLOADS) onUploads() }, onRefresh = onRefresh)
+            onTab = { if (it == ExpertTab.UPLOADS) onUploads() }, onRefresh = onRefresh, refreshing = state.syncing)
     }
 }
 

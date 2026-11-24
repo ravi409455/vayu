@@ -28,6 +28,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.FlashOff
+import androidx.compose.material.icons.outlined.FlashOn
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Icon
@@ -276,29 +279,43 @@ fun SignatureScreen(field: Field, dir: File, onSigned: (File) -> Unit, onClose: 
     }
 }
 
-/** The longest run of letters and digits in recognised text (a chassis number is 17). */
-fun bestToken(text: String): String? = Regex("[A-Z0-9]{6,}").findAll(text.uppercase().replace(" ", ""))
-    .map { it.value }.maxByOrNull { it.length }
+/** What a scan found: runs of letters and digits (a chassis number is 17), longest first, at most 5. */
+fun scanCandidates(lines: List<String>): List<String> = lines
+    // a label before a colon ("VIN: ...") is not part of the number; spaces inside it are dropped
+    .map { it.uppercase().substringAfterLast(':') }
+    .flatMap { l -> listOf(l.replace(Regex("[^A-Z0-9]"), "")) + Regex("[A-Z0-9]{5,}").findAll(l).map { it.value } }
+    .filter { it.length >= 5 }.distinct().sortedByDescending { it.length }.take(5)
 
-/** Scan a short text with the camera, on the phone (no signal needed). The result stays editable. */
-@SuppressLint("UnsafeOptInUsageError")
+/**
+ * Scan a short text with the camera, on the phone (no signal needed). It reads only when the
+ * expert taps Read, and only the text inside the box; they pick the right result and can still
+ * type over it. Tap the picture to focus; the torch helps under a bonnet.
+ */
+@SuppressLint("UnsafeOptInUsageError", "ClickableViewAccessibility")
 @Composable
 fun ScanScreen(field: Field, current: String?, onUse: (String) -> Unit, onClose: () -> Unit) {
     BackHandler(onBack = onClose)
-    val ctx = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val ok = rememberPermissions(Manifest.permission.CAMERA)
-    var found by remember { mutableStateOf<String?>(null) }
     var text by remember { mutableStateOf(current ?: "") }
+    var found by remember { mutableStateOf<List<String>?>(null) }
+    var reading by remember { mutableStateOf(false) }
+    var torch by remember { mutableStateOf(false) }
+    var camera by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
+    val armed = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     val recognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
     DisposableEffect(Unit) { onDispose { recognizer.close() } }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             CloseButton("Close", onClose)
-            Text("Scan ${field.label.lowercase()}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Vayu.colors.ink)
+            Text("Scan ${field.label.lowercase()}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Vayu.colors.ink, modifier = Modifier.weight(1f))
+            androidx.compose.material3.IconButton(onClick = { torch = !torch; camera?.cameraControl?.enableTorch(torch) }) {
+                Icon(if (torch) androidx.compose.material.icons.Icons.Outlined.FlashOn else androidx.compose.material.icons.Icons.Outlined.FlashOff,
+                    contentDescription = if (torch) "Turn the torch off" else "Turn the torch on", tint = Vayu.colors.ink)
+            }
         }
-        Box(Modifier.fillMaxWidth().height(260.dp).padding(horizontal = 16.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black)) {
-            if (ok && found == null) AndroidView(factory = { c ->
+        Box(Modifier.fillMaxWidth().height(300.dp).padding(horizontal = 16.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black)) {
+            if (ok) AndroidView(factory = { c ->
                 PreviewView(c).also { view ->
                     val future = ProcessCameraProvider.getInstance(c)
                     future.addListener({
@@ -307,27 +324,59 @@ fun ScanScreen(field: Field, current: String?, onUse: (String) -> Unit, onClose:
                         val analysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
                         analysis.setAnalyzer(ContextCompat.getMainExecutor(c)) { proxy ->
                             val media = proxy.image
-                            if (media == null || found != null) { proxy.close(); return@setAnalyzer }
+                            // nothing is read until the expert taps Read: no racing text
+                            if (media == null || !armed.getAndSet(false)) { proxy.close(); return@setAnalyzer }
+                            val turned = proxy.imageInfo.rotationDegrees % 180 != 0
+                            val w = if (turned) proxy.height else proxy.width
+                            val h = if (turned) proxy.width else proxy.height
                             recognizer.process(InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees))
-                                .addOnSuccessListener { r -> bestToken(r.text)?.takeIf { it.length >= 8 }?.let { found = it; text = it } }
-                                .addOnCompleteListener { proxy.close() }
+                                .addOnSuccessListener { r ->
+                                    // only lines whose middle is inside the box (the middle third of the picture)
+                                    val inBox = r.textBlocks.flatMap { it.lines }.filter { l ->
+                                        val b = l.boundingBox ?: return@filter false
+                                        b.centerY() in (h / 3)..(h * 2 / 3) && b.centerX() in (w / 10)..(w * 9 / 10)
+                                    }.map { it.text }
+                                    found = scanCandidates(inBox)
+                                    found?.firstOrNull()?.let { if (text.isBlank()) text = it }
+                                }
+                                .addOnCompleteListener { reading = false; proxy.close() }
                         }
                         provider.unbindAll()
-                        provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+                        camera = provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
                     }, ContextCompat.getMainExecutor(c))
+                    // tap to focus on the number
+                    view.setOnTouchListener { v, e ->
+                        if (e.action == android.view.MotionEvent.ACTION_UP) camera?.cameraControl?.startFocusAndMetering(
+                            androidx.camera.core.FocusMeteringAction.Builder(view.meteringPointFactory.createPoint(e.x, e.y)).build())
+                        v.performClick(); true
+                    }
                 }
             }, modifier = Modifier.fillMaxSize())
-            Text(found ?: "Fit the number inside the box", color = Color.White, fontFamily = FontFamily.Monospace,
-                fontSize = if (found != null) 20.sp else 14.sp, modifier = Modifier.align(Alignment.Center))
+            // the box: put the number inside it
+            Box(Modifier.align(Alignment.Center).fillMaxWidth(0.84f).height(86.dp).border(2.dp, Color.White, RoundedCornerShape(10.dp)))
+            Text(if (reading) "Reading…" else "Put the number inside the box, tap to focus, then Read", color = Color.White,
+                fontSize = 13.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(10.dp))
         }
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            found?.let { Text("Found ${it.length} characters", color = Vayu.colors.ok, fontWeight = FontWeight.SemiBold) }
-            Text("Check it against the car, then use it", color = Vayu.colors.muted, fontSize = 13.sp)
-            SoftField(text, { text = it.uppercase() }, field.label)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                SoftButton("Scan again", { found = null }, Modifier.weight(1f))
-                PrimaryButton("Use this number", { onUse(text.trim()) }, Modifier.weight(1f), enabled = text.isNotBlank())
+        Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            PrimaryButton(if (reading) "Reading…" else if (found == null) "Read" else "Read again", {
+                if (!reading) { reading = true; armed.set(true) }
+            }, enabled = ok && !reading)
+            when {
+                found == null -> {}
+                found!!.isEmpty() -> Text("Nothing readable in the box. Move closer, tap to focus, and read again.", color = Vayu.colors.warn, fontSize = 14.sp)
+                else -> {
+                    Text("Tap the right one", color = Vayu.colors.muted, fontSize = 13.sp)
+                    found!!.forEach { c ->
+                        Text(c, fontFamily = FontFamily.Monospace, fontSize = 17.sp, color = if (c == text) Vayu.colors.onPrimary else Vayu.colors.ink,
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                                .background(if (c == text) Vayu.colors.primary else Vayu.colors.soft)
+                                .clickable(role = Role.RadioButton) { text = c }.padding(horizontal = 14.dp, vertical = 12.dp))
+                    }
+                }
             }
+            Text("Check it against the car; you can type over it", color = Vayu.colors.muted, fontSize = 13.sp)
+            SoftField(text, { text = it.uppercase() }, field.label)
+            PrimaryButton("Use this", { onUse(text.trim()) }, enabled = text.isNotBlank())
         }
     }
 }

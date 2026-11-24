@@ -283,26 +283,29 @@ fun SoftField(value: String, onValueChange: (String) -> Unit, placeholder: Strin
 
 /** Shared bottom bar shell; each item is icon over label, the active one in brand red. */
 @Composable
-fun BottomBar(items: List<Triple<String, ImageVector, Int?>>, active: Int, onSelect: (Int) -> Unit) {
+fun BottomBar(items: List<Triple<String, ImageVector, Int?>>, active: Int, spinning: Int = -1, onSelect: (Int) -> Unit) {
     Column {
         HorizontalDivider(color = Vayu.colors.line)
         Row(Modifier.fillMaxWidth().background(Vayu.colors.bg).padding(top = 6.dp, bottom = 14.dp)) {
             items.forEachIndexed { i, (label, icon, badge) ->
                 val on = i == active
                 Column(Modifier.weight(1f).heightIn(min = 52.dp)
-                    .selectable(selected = on, role = Role.Tab, onClick = { onSelect(i) }),
+                    .selectable(selected = on, role = Role.Tab, onClick = { onSelect(i) })
+                    // one steady name for screen readers and tests, even while it says "Updating…"
+                    .semantics(mergeDescendants = true) { contentDescription = if (i == spinning) "$label, updating" else label },
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     Box {
-                        Icon(icon, contentDescription = null, tint = if (on) Vayu.colors.brand else Vayu.colors.muted)
+                        Icon(icon, contentDescription = null, tint = if (on || i == spinning) Vayu.colors.brand else Vayu.colors.muted)
                         if (badge != null && badge > 0) Box(Modifier.align(Alignment.TopEnd).offset(10.dp, (-6).dp)
                             .clip(RoundedCornerShape(9.dp)).background(Vayu.colors.info).padding(horizontal = 5.dp)) {
                             Text(badge.toString(), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                     Spacer(Modifier.height(3.dp))
-                    Text(label, fontSize = 12.sp, textAlign = TextAlign.Center,
-                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
-                        color = if (on) Vayu.colors.brand else Vayu.colors.muted)
+                    // while it works the button says so (no endless animation: lighter, and nothing to wait on)
+                    Text(if (i == spinning) "Updating…" else label, fontSize = 12.sp, textAlign = TextAlign.Center,
+                        fontWeight = if (on || i == spinning) FontWeight.SemiBold else FontWeight.Medium,
+                        color = if (on || i == spinning) Vayu.colors.brand else Vayu.colors.muted)
                 }
             }
         }

@@ -91,19 +91,23 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         }
     }
 
-    private suspend fun enter(me: Me) {
+    private suspend fun enter(server: Me) {
+        val local = tokens.me()?.takeIf { it["theme_pending"] == "true" && it["id"] == server.id.toString() }?.get("theme")
+        val me = if (local != null) server.copy(theme = local) else server
         tokens.saveMe(mapOf("id" to me.id.toString(), "username" to me.username, "name" to me.name,
             "role" to me.role, "theme" to me.theme, "must_change" to me.mustChangePassword.toString()))
         if (me.mustChangePassword) { _screen.value = Screen.ChangePassword(); return }
         _screen.value = Screen.Home(me)
         if (me.role == "expert") jobs.open(me.id, offline = false)
         heartbeat(me.id)
+        if (local != null) pushTheme()
         graph.kick()                                  // anything left from before goes out now
     }
 
     /** Tell the server what this phone still holds (it refuses another phone while work is here). */
     private fun heartbeat(userId: Int) {
         viewModelScope.launch {
+            pushTheme()                                  // a look chosen without signal
             val (drafts, files) = graph.drafts(userId).unsentCounts()
             try {
                 minAppVersion = api.heartbeat(drafts = drafts, files = files)
@@ -129,16 +133,23 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
     fun openProfile() { (screen.value as? Screen.Home)?.let { _screen.value = Screen.Profile(it.me) } }
     fun closeProfile() { (screen.value as? Screen.Profile)?.let { _screen.value = Screen.Home(it.me) } }
 
+    /** The look changes at once and is kept on the phone; the server learns it when it can. */
     fun setTheme(theme: String) {
         val p = screen.value as? Screen.Profile ?: return
-        _screen.value = p.copy(me = p.me.copy(theme = theme))           // show it at once
-        viewModelScope.launch {
-            try {
-                val me = api.setTheme(theme)
-                tokens.saveMe(mapOf("theme" to me.theme))
-            } catch (e: ApiError) {
-                _screen.value = p.copy(error = e.message)
-            }
+        _screen.value = p.copy(me = p.me.copy(theme = theme), error = null)
+        tokens.saveMe(mapOf("theme" to theme, "theme_pending" to "true"))
+        viewModelScope.launch { pushTheme() }
+    }
+
+    /** Send a look chosen without signal (no message if it still can't: it tries again later). */
+    private suspend fun pushTheme() {
+        val saved = tokens.me() ?: return
+        if (saved["theme_pending"] != "true") return
+        try {
+            api.setTheme(saved["theme"] ?: return)
+            tokens.saveMe(mapOf("theme_pending" to "false"))
+        } catch (e: ApiError) {
+            if (e.code != ApiError.NETWORK && e.status < 500) tokens.saveMe(mapOf("theme_pending" to "false"))
         }
     }
 

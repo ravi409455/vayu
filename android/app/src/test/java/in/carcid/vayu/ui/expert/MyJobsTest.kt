@@ -24,6 +24,7 @@ import `in`.carcid.vayu.ui.theme.VayuTheme
 import `in`.carcid.vayu.core.api.FakeServer
 import `in`.carcid.vayu.core.api.testGraph
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -100,6 +101,40 @@ class MyJobsTest {
         compose.onNodeWithText("Today · 4").assertIsDisplayed()
     }
 
+    @Test fun aScanOffersTheLongestRunsFirst() {
+        assertEquals(listOf("MA3YPKCSKTJ273129", "MA3YPK"), scanCandidates(listOf("VIN: MA3YPKCSKTJ273129", "MA3YPK")).take(2))
+        assertEquals(emptyList<String>(), scanCandidates(listOf("AB 12", "--")))
+    }
+
+    @Test fun aThemeChosenWithoutSignalIsKeptAndSentLater() {
+        val server = FakeServer()
+        val tokens = MemoryTokenStore()
+        server.on("POST auth/login", """{"access":"A","refresh":"R"}""")
+        server.on("GET auth/me", """{"id":3,"username":"ravi","name":"Ravi","role":"expert","must_change_password":false,"theme":"light"}""")
+        server.on("POST devices/heartbeat", """{"min_app_version":1}""")
+        server.on("GET sync/jobs", payload(job("2")).toString())
+        val vm = AppViewModel(testGraph(server, tokens), "Test phone")
+        // the app's logic alone (no screen): run the main thread until [done] or 5 s
+        fun until(done: () -> Boolean) {
+            val end = System.currentTimeMillis() + 5_000
+            while (!done() && System.currentTimeMillis() < end) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(20) }
+            assertTrue("timed out; requests: ${server.requests.map { it.first }} me=${tokens.me()}", done())
+        }
+        until { vm.screen.value is `in`.carcid.vayu.ui.Screen.SignIn }
+        vm.signIn("ravi", "pw")
+        until { vm.screen.value is `in`.carcid.vayu.ui.Screen.Home && vm.jobs.state.value.jobs.isNotEmpty() && !vm.jobs.state.value.syncing }
+        server.on("PATCH auth/me/profile", """{"detail":"down"}""", 503)                 // no signal
+        vm.openProfile(); vm.setTheme("dark")
+        until { server.bodiesOf("PATCH auth/me/profile").isNotEmpty() }
+        assertEquals("dark", (vm.screen.value as `in`.carcid.vayu.ui.Screen.Profile).me.theme)   // the look changed at once
+        assertEquals("true", tokens.me()!!["theme_pending"])
+        server.on("PATCH auth/me/profile", """{"id":3,"username":"ravi","name":"Ravi","role":"expert","theme":"dark"}""")
+        vm.closeProfile(); vm.jobs.sync()                                                  // signal back: sent with the next sync
+        until { tokens.me()!!["theme_pending"] == "false" }
+        assertTrue(server.bodiesOf("PATCH auth/me/profile").last().contains("dark"))
+        server.stop()
+    }
+
     @Test fun labelsAndTabs() {
         assertEquals("+91 98765 00000", phoneLabel("+919876500000")); assertEquals("0201234", phoneLabel("0201234"))
         assertEquals("3:30 pm", time12("15:30")); assertEquals("12:05 pm", time12("12:05")); assertEquals("12:00 am", time12("00:00"))
@@ -128,12 +163,12 @@ class MyJobsTest {
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Arjun Mehta")).fetchSemanticsNodes().isNotEmpty() }
         if (revoke) {
             server.on("GET sync/jobs", """{"code":"DEVICE_REVOKED","detail":"Signed out."}""", 401)
-            compose.onNodeWithText("Refresh").performClick()
+            compose.onNode(androidx.compose.ui.test.hasContentDescription("Refresh", substring = true)).performClick()
             compose.waitUntil(5_000) { compose.onAllNodes(hasText("Welcome back", substring = true)).fetchSemanticsNodes().isNotEmpty() }
             assertEquals(false, file.exists())                          // nothing of theirs stays on the phone
         } else {
             server.on("GET sync/jobs", """{"detail":"Server error"}""", 502)   // server down: same as no signal
-            compose.onNodeWithText("Refresh").performClick()
+            compose.onNode(androidx.compose.ui.test.hasContentDescription("Refresh", substring = true)).performClick()
             compose.waitUntil(5_000) { compose.onAllNodes(hasText("Offline", substring = true)).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Arjun Mehta").assertIsDisplayed()
         }

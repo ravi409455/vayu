@@ -48,12 +48,25 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     var assigning by remember { mutableStateOf<Bk?>(null) }
     val labels by produceState(Labels(), tick) { value = Labels.load(data) }
     val env = OpsEnv(me, data, labels, today, tick, refresh = { tick++ }, say = { scope.launch { snack.showSnackbar(it) } })
-    val needs by produceState(emptyList<Need>(), tick, labels) { value = loadNeeds(env) }
+    var needs by remember { mutableStateOf(emptyList<Need>()) }
+    var refreshing by remember { mutableStateOf(false) }
+    var asked by remember { mutableStateOf(false) }
+    LaunchedEffect(tick, labels) {
+        refreshing = true
+        needs = loadNeeds(env)
+        // Refresh says what happened (a fresh answer, or the saved copy without signal)
+        if (asked) {
+            asked = false
+            val online = runCatching { data.api.get("problems/reports") }.isSuccess
+            env.say(if (online) "Updated." else "No signal. Showing what was saved; changes need signal.")
+        }
+        refreshing = false
+    }
     // fresh again whenever the app comes back to the front (and on Refresh, and after every change)
     androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { tick++; onPauseOrDispose {} }
     val push = { r: Route -> stack.add(r) }
     val pop = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
-    val bar = @Composable { OpsBottomBar(tab, { tab = it; stack.clear() }, { tick++ }) }
+    val bar = @Composable { OpsBottomBar(tab, { tab = it; stack.clear() }, { asked = true; tick++ }, refreshing) }   // every tap counts (it restarts a load already running)
     if (stack.isNotEmpty()) BackHandler { pop() }
 
     Box(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {

@@ -19,6 +19,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,11 +45,13 @@ private fun size(bytes: Long): String = when {
 
 /** Files still to send, by job, and the phone's space (sent copies can be cleared, unsent never). */
 @Composable
-fun UploadsScreen(me: Me, extras: ExpertExtras, onProfile: () -> Unit, onJobs: () -> Unit, onRefresh: () -> Unit) {
+fun UploadsScreen(me: Me, extras: ExpertExtras, onProfile: () -> Unit, onJobs: () -> Unit, onRefresh: () -> Unit,
+                  onBell: () -> Unit = {}, refreshing: Boolean = false, say: (String) -> Unit = {}) {
+    var confirm by remember { mutableStateOf(false) }
     val pending = extras.drafts.values.map { d -> d to d.files.filter { !it.sent } }.filter { it.second.isNotEmpty() }
     val count = pending.sumOf { it.second.size }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
-        VayuTopBar("Uploads", me.initials, bellCount = 0, onBell = {}, onProfile = onProfile)
+        VayuTopBar("Uploads", me.initials, bellCount = 0, onBell = onBell, onProfile = onProfile)
         LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp)) {
             item {
                 Text(if (count == 0) "Everything is sent." else "Sending $count file${if (count == 1) "" else "s"}",
@@ -68,16 +74,22 @@ fun UploadsScreen(me: Me, extras: ExpertExtras, onProfile: () -> Unit, onJobs: (
                 HorizontalDivider(color = Vayu.colors.line)
                 Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Photos already sent", color = Vayu.colors.ink)
-                        Text("${size(extras.sentBytes)} · files not sent are never cleared", fontSize = 13.sp, color = Vayu.colors.muted)
+                        Text("Free up space", color = Vayu.colors.ink)
+                        Text(if (extras.sentBytes > 0) "Removes ${size(extras.sentBytes)} of photos already sent. Photos still waiting stay."
+                            else "Nothing to remove: only photos already sent can go.", fontSize = 13.sp, color = Vayu.colors.muted)
                     }
-                    if (extras.sentBytes > 0) SoftButton("Clear", extras.onClearSent)
+                    if (extras.sentBytes > 0) SoftButton("Free up", { confirm = true })
                 }
                 Spacer(Modifier.height(24.dp))
             }
         }
-        ExpertBottomBar(ExpertTab.UPLOADS, uploads = count, onTab = { if (it == ExpertTab.JOBS) onJobs() }, onRefresh = onRefresh)
+        ExpertBottomBar(ExpertTab.UPLOADS, uploads = count, onTab = { if (it == ExpertTab.JOBS) onJobs() }, onRefresh = onRefresh, refreshing = refreshing)
     }
+    if (confirm) androidx.compose.material3.AlertDialog(onDismissRequest = { confirm = false },
+        title = { Text("Free up ${size(extras.sentBytes)}?") },
+        text = { Text("Photos and videos the server already has are removed from this phone. They stay safe on the server; nothing waiting to send is touched.") },
+        confirmButton = { androidx.compose.material3.TextButton({ confirm = false; val n = extras.sentBytes; extras.onClearSent(); say("Freed ${size(n)}.") }) { Text("Free up") } },
+        dismissButton = { androidx.compose.material3.TextButton({ confirm = false }) { Text("Keep them") } })
 }
 
 @Composable

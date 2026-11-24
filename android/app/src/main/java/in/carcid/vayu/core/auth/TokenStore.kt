@@ -23,7 +23,7 @@ class PrefsTokenStore(context: Context) : TokenStore {
     }
     override fun clear() { prefs.edit().clear().apply() }
     override fun me(): Map<String, String>? = prefs.getString("me.username", null)?.let {
-        listOf("id", "username", "name", "role", "theme", "must_change").associateWith { k -> prefs.getString("me.$k", "")!! }
+        listOf("id", "username", "name", "role", "theme", "must_change", "theme_pending").associateWith { k -> prefs.getString("me.$k", "")!! }
     }
     override fun saveMe(fields: Map<String, String>) {
         prefs.edit().apply { fields.forEach { (k, v) -> putString("me.$k", v) } }.apply()
@@ -33,7 +33,7 @@ class PrefsTokenStore(context: Context) : TokenStore {
 class MemoryTokenStore : TokenStore {
     private var m: Map<String, String>? = null
     override fun me() = m
-    override fun saveMe(fields: Map<String, String>) { m = fields }
+    override fun saveMe(fields: Map<String, String>) { m = m.orEmpty() + fields }
     private var a: String? = null
     private var r: String? = null
     override fun access() = a
