@@ -61,10 +61,11 @@ export function StackedBars({ series: s0, cols: c0, unit = "bookings" }: { serie
     <div className="stacked-bars">
       {series.length > 1 && (
         <div className="legend-row" aria-hidden="true">
-          {series.map((s, i) => <span key={s.key} className="legend-key"><span style={{ background: color(i) }} />{s.name}</span>)}
+          {series.map((s, i) => <span key={s.key} className="legend-key"><span style={{ background: color(i) }} />{s.name}
+            <b>{cols.reduce((n, c) => n + (c.values[s.key] ?? 0), 0).toLocaleString("en-IN")}</b></span>)}
         </div>)}
       <div ref={wrap} className="sb-plot" onMouseLeave={() => setHover(null)}>
-        <svg width={w} height={H} role="list" aria-label={`${unit} per period; the table below lists every value`}>
+        <svg width={w} height={H} role="list" aria-label={`${unit} per period; the Table view lists every value`}>
           {ticks.map((t) => (
             <g key={t}>
               <line x1={PAD_L} x2={w} y1={y(t)} y2={y(t)} className={t === 0 ? "sb-base" : "sb-grid"} />

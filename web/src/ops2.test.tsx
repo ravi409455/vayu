@@ -86,6 +86,25 @@ describe("dashboard", () => {
     expect(daysBetween("2026-11-29", "2026-12-02")).toEqual(["2026-11-29", "2026-11-30", "2026-12-01", "2026-12-02"]);
     expect(delta(null, 5, "count").text).toBe("");
   });
+  it("compares with as many days straight before, and keeps minutes short", async () => {
+    const { previousRange, minsParts } = await import("./pages/ops/Dashboards");
+    expect(previousRange("2026-10-26", "2026-11-24")).toEqual(["2026-09-26", "2026-10-25"]);   // 30 days before 30 days
+    expect(previousRange("2026-11-24", "2026-11-24")).toEqual(["2026-11-23", "2026-11-23"]);
+    expect(minsParts(40)).toEqual(["40", "min"]);
+    expect(minsParts(100)).toEqual(["1 h 40 m", ""]);
+    expect(minsParts(null)).toEqual(["—", ""]);
+  });
+  it("names a range briefly and refuses a custom range it can't use", async () => {
+    const { rangeText, rangeProblem, shortDay } = await import("./pages/ops/Dashboards");
+    expect(rangeText("2026-10-26", "2026-11-23", NOW)).toBe("26 Oct – 23 Nov");
+    expect(rangeText("2026-11-23", "2026-11-23", NOW)).toBe("Today");
+    expect(shortDay("2025-12-30", NOW)).toBe("30 Dec 2025");
+    expect(rangeProblem("2026-11-01", "2026-11-20", NOW)).toBeNull();
+    expect(rangeProblem("", "2026-11-20", NOW)).toBe("Pick both dates.");
+    expect(rangeProblem("2026-11-21", "2026-11-20", NOW)).toMatch(/after the end/);
+    expect(rangeProblem("2026-11-21", "2026-11-24", NOW)).toMatch(/future/);
+    expect(rangeProblem("2025-01-01", "2026-11-20", NOW)).toMatch(/at most a year/);
+  });
 });
 
 describe("my jobs", () => {

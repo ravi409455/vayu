@@ -220,6 +220,7 @@ table.access-grid.vertical { width: 100%; min-width: 0; }
   .shell .side a, .shell .side .nav-btn { justify-content: center; padding: 10px 0; }
   .shell .side .group { text-align: center; padding: 10px 0 2px; font-size: 0; } .shell .side .group::after { content: "·"; font-size: 11px; }
   .shell .side-top { justify-content: center; }
+  .shell .side { position: sticky; height: 100vh; flex-direction: column; flex-wrap: nowrap; }   /* the 64px rail at every narrow width: logo on top */
 }
 /* ---------- answer choices: green when fine, red only for a defect ---------- */
 button.choice[aria-checked="true"] { background: var(--ok-tint); color: var(--ok); border-color: var(--ok-line); font-weight: 600; }
@@ -718,3 +719,56 @@ label.link { color: var(--info); cursor: pointer; background: none; border: 0; p
 .rd-gridbox { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
 .rd-gridbox .sm { justify-self: start; }
 .modal .rd-grid-t input, .modal .rd-grid-t select { min-width: 110px; }
+
+/* ---------- dashboard: two labelled groups of numbers, then the trend, then the experts ---------- */
+.dash-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px; margin-bottom: 16px; }
+.dash-group { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 0 16px; min-width: 0; }
+.dash-group-title { font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin: 0; padding: 0 18px 10px; }
+.dash-stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.dash-stat { display: flex; flex-direction: column; gap: 3px; padding: 0 18px; border-left: 1px solid var(--line); min-width: 0; }
+.dash-stat:first-child { border-left: 0; }
+.dash-stat-label { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-stat-value { font-size: 26px; font-weight: 600; letter-spacing: -.02em; line-height: 1.15; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dash-stat-value small { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 3px; }
+.dash-stat.flag .dash-stat-value { color: var(--bad); }
+.dash-stat-sub { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.dash-stat-sub a { font-weight: 500; }
+.dash-chip { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 0 6px; border-radius: 5px; font-variant-numeric: tabular-nums; }
+.dash-chip.good { background: var(--ok-tint); color: var(--ok); } .dash-chip.bad { background: var(--bad-tint); color: var(--bad); }
+.dash-chip.flat { background: var(--hover); color: var(--muted); font-weight: 500; }
+.dash-card { border-radius: 12px; padding: 0 18px 16px; margin-bottom: 16px; }
+.dash-card.flush { padding: 0; }
+.dash-card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 0 12px; }
+.dash-card.flush .dash-card-head { padding: 14px 18px 12px; }
+.dash-card-head h3 { margin: 0; font-size: 14px; }
+.dash-card-tools { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dash-card .seg.sm button { padding: 4px 10px; }
+.dash-table-wrap { overflow-x: auto; }
+.dash-table { border: 0; border-radius: 0; }
+.dash-card:not(.flush) .dash-table { border: 1px solid var(--line); border-radius: 10px; }
+.dash-table td, .dash-table th { white-space: nowrap; }
+.dash-card.flush .dash-table th:first-child, .dash-card.flush .dash-table td:first-child { padding-left: 18px; }
+.dash-card.flush .dash-table th:last-child, .dash-card.flush .dash-table td:last-child { padding-right: 18px; }
+.dash-zero { color: var(--faint); }
+.dash-flag { display: inline-block; min-width: 22px; text-align: center; background: var(--bad-tint); color: var(--bad); font-weight: 600; font-size: 12px; border-radius: 6px; padding: 1px 6px; }
+.dash-ontime { display: inline-flex; align-items: center; gap: 8px; } .dash-ontime.low { color: var(--bad); }
+.dash-meter { width: 56px; height: 4px; border-radius: 2px; background: var(--hover); overflow: hidden; display: inline-block; }
+.dash-meter i { display: block; height: 100%; background: var(--ink-2); border-radius: 2px; } .dash-ontime.low .dash-meter i { background: var(--bad); }
+.dash-more { display: block; width: 100%; text-align: left; padding: 10px 18px; border-top: 1px solid var(--line); border-radius: 0; font-size: 13px; }
+.dash-empty { margin: 0; padding: 0 18px 16px; }
+.dash-export { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); }
+.dash-vs { color: var(--faint); }
+.dash-custom { position: relative; display: inline-flex; }
+.dash-custom > button { white-space: nowrap; }
+.dash-custom-box { position: absolute; top: calc(100% + 8px); right: -3px; z-index: 40; width: 300px; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(16,24,40,.16); padding: 14px; display: grid; gap: 10px; }
+.dash-custom-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dash-custom-fields label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 500; }
+.dash-custom-fields input { padding: 6px 8px; font-size: 13px; }
+.dash-custom-box .error { margin: 0; }
+.dash-custom-foot { display: flex; justify-content: flex-end; gap: 8px; }
+.legend-key b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+@media (max-width: 980px) { .dash-stat { padding: 0 14px; } .dash-stat-value { font-size: 22px; } }
+@media (max-width: 560px) { .dash-stats { grid-auto-flow: row; grid-template-columns: 1fr 1fr; row-gap: 14px; } .dash-stat:nth-child(odd) { border-left: 0; } }
+.seg .dash-custom-box button { border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 4px 12px; border-radius: 8px; font-size: 13px; box-shadow: none; font-weight: 500; }
+.seg .dash-custom-box button.primary { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+.seg .dash-custom-box button.primary:disabled { background: var(--hover); color: var(--muted); border-color: var(--line); }
