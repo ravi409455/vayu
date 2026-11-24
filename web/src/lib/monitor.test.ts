@@ -22,7 +22,8 @@ describe("web errors to Sentry (R-36, F-235)", () => {
   it("with a DSN, the SDK starts with nothing collected about people or requests", async () => {
     const init = vi.fn();
     vi.doMock("@sentry/react", () => ({ init, captureException: vi.fn(), setUser: vi.fn() }));
-    const m = await import("./monitor?with-dsn");
+    vi.resetModules();
+    const m = await import("./monitor");
     await m.startMonitoring("https://key@o1.ingest.sentry.io/1");
     expect(init).toHaveBeenCalledWith(expect.objectContaining({ dataCollection: { userInfo: false, cookies: false, httpHeaders: false, httpBodies: [], urlQueryParams: false } }));
     vi.doUnmock("@sentry/react");
