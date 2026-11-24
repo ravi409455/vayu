@@ -486,10 +486,10 @@ input.switch:focus-visible { outline: 2px solid var(--info); outline-offset: 2px
 .inbox-row:last-child { border-bottom: 0; }
 .schedule-card { margin: 0; padding: 16px 0 8px; }
 .schedule-card > .sheet-head { padding: 0 18px 10px !important; }
-.sched-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+.sched-scroll { flex: 1; min-width: 0; max-height: calc(100vh - 300px); overflow: auto; overscroll-behavior-x: contain; cursor: grab; }   /* both scrollbars stay in view; drag to slide */
 .sched { position: relative; }
 .sched-row { display: flex; border-top: 1px solid var(--line); }
-.sched-hours { border-top: 0; position: relative; }
+.sched-hours { border-top: 0; position: sticky; top: 0; z-index: 3; background: var(--panel); }   /* the times stay while the experts scroll */
 .sched-who { position: sticky; left: 0; z-index: 2; width: 200px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 14px 0 18px; background: var(--panel); border-right: 1px solid var(--line); box-sizing: border-box; }
 .sched-hours .sched-who { border-right-color: transparent; }
 .sched-axis { position: relative; height: 44px; flex: none; }   /* the clock chip on top, the times below */
@@ -501,8 +501,22 @@ input.switch:focus-visible { outline: 2px solid var(--info); outline-offset: 2px
 .sched .job-block { top: 8px; bottom: 8px; display: flex; flex-direction: column; justify-content: center; gap: 1px; padding: 4px 8px; line-height: 1.25; font-size: 12px; }
 .jb-top { display: flex; gap: 6px; justify-content: space-between; } .jb-top span { font-size: 11px; opacity: .85; }
 .jb-sub { font-size: 11px; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sched .now-line { position: absolute; top: 0; bottom: 0; z-index: 1; width: 2px; margin-left: -1px; background: var(--bad); opacity: .7; pointer-events: none; }
+.sched .now-line { position: absolute; top: 44px; bottom: 0; z-index: 1; width: 2px; margin-left: -1px; background: var(--bad); opacity: .7; pointer-events: none; }
+.sched-axis .now-line { top: 0; }
+.sched { user-select: none; }
 .now-chip { position: absolute; top: 4px; z-index: 1; transform: translateX(-50%); padding: 1px 7px; border-radius: 9px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 600; white-space: nowrap; pointer-events: none; }
+.sched-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 0 18px 10px; }
+.sched-bar button.on { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.sched-bar button.icon { padding-left: 6px; padding-right: 6px; }
+.sched-body { display: flex; align-items: flex-start; border-top: 1px solid var(--line); }
+.sched-side { width: 220px; flex: none; padding: 12px 14px; border-right: 1px solid var(--line); max-height: calc(100vh - 300px); overflow: auto; box-sizing: border-box; }
+.sched-side-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.sched-side input[type="search"] { width: 100%; box-sizing: border-box; }
+.sched-side ul { list-style: none; margin: 0; padding: 0; }
+.sched-pick { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.sched-pick > span:first-of-type { flex: 1; min-width: 0; }
+.sched-pick:hover { background: var(--hover); }
+.sched-pick.idle { opacity: .6; }
 .job-block.late { box-shadow: inset 4px 0 0 var(--bad); }
 .legend.late::before { border-color: var(--bad); background: var(--bad); }
 /* chart: reference categorical palette (validated on our light and dark surfaces) */

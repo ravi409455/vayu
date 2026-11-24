@@ -71,3 +71,24 @@ export function spanTitle(s: Span): string {
       : `Started ${hm(s.start)}, finished ${hm(s.end)} (${length(s.end - s.start)})`;
   return s.late ? `${text}\nStarted ${s.late} min late` : text;
 }
+
+export const WINDOW_HOURS = 3;
+
+/** Where the quick 3-hour windows start: 8, 11, 2, 5 for an 8 am to 8 pm day. */
+export function windowStarts(lo: number, hi: number): number[] {
+  const out: number[] = [];
+  for (let s = lo; s + WINDOW_HOURS <= hi; s += WINDOW_HOURS) out.push(s);
+  if (out.length && out[out.length - 1]! + WINDOW_HOURS < hi) out.push(hi - WINDOW_HOURS);
+  return out.length ? out : [lo];
+}
+
+/** Keep a window's start inside the day. */
+export const clampStart = (s: number, lo: number, hi: number) => Math.min(Math.max(s, lo), Math.max(lo, hi - WINDOW_HOURS));
+
+const h12 = (h: number) => ((Math.floor(h) + 11) % 12) + 1;
+const ampm = (h: number) => (h >= 12 && h < 24 ? "pm" : "am");
+/** "8–11 am", "11 am–2 pm". */
+export function rangeLabel(start: number): string {
+  const end = start + WINDOW_HOURS;
+  return ampm(start) === ampm(end) ? `${h12(start)}–${h12(end)} ${ampm(end)}` : `${h12(start)} ${ampm(start)}–${h12(end)} ${ampm(end)}`;
+}

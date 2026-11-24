@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { jobSpan, spanTitle, stackRows } from "./schedule";
+import { clampStart, jobSpan, rangeLabel, spanTitle, stackRows, windowStarts } from "./schedule";
 
 const at = (h: number, m = 0) => new Date(2026, 10, 24, h, m);               // today, 24 Nov 2026
 const job = (stage: string, booked: string, started?: Date, finished?: Date) => ({
@@ -46,5 +46,24 @@ describe("the hover", () => {
     expect(spanTitle({ start: 10, end: 11.25, kind: "finished", late: 0 })).toBe("Started 10:00 am, finished 11:15 am (1 h 15 min)");
     expect(spanTitle({ start: 10, end: 11, kind: "finished", late: 0 })).toContain("(1 h)");
     expect(spanTitle({ start: 10, end: 10.5, kind: "finished", late: 0 })).toContain("(30 min)");
+  });
+});
+
+describe("the 3-hour windows", () => {
+  it("start every three hours and the last one ends with the day", () => {
+    expect(windowStarts(8, 20)).toEqual([8, 11, 14, 17]);
+    expect(windowStarts(7, 21)).toEqual([7, 10, 13, 16, 18]);          // the last is pulled back to end at 9 pm
+    expect(windowStarts(8, 9)).toEqual([8]);
+  });
+  it("are kept inside the day", () => {
+    expect(clampStart(5, 8, 20)).toBe(8);
+    expect(clampStart(19, 8, 20)).toBe(17);
+    expect(clampStart(12.5, 8, 20)).toBe(12.5);
+  });
+  it("are named the way people say them", () => {
+    expect(rangeLabel(8)).toBe("8–11 am");
+    expect(rangeLabel(11)).toBe("11 am–2 pm");
+    expect(rangeLabel(17)).toBe("5–8 pm");
+    expect(rangeLabel(21)).toBe("9 pm–12 am");
   });
 });
