@@ -18,7 +18,7 @@ from .models import (
     VersionStatus,
     lock_draft,
 )
-from .system_fields import PAGE_TITLE, SYSTEM_FIELDS
+from .system_fields import PAGE_TITLE, STARTER_FIELDS, SYSTEM_FIELDS
 
 
 def item_label(list_key: str, item_key: str) -> str | None:
@@ -28,19 +28,22 @@ def item_label(list_key: str, item_key: str) -> str | None:
 
 
 def _build_first_version(form: Form) -> FormVersion:
-    """Version 1 of a new form: one page, with the locked system fields of its type."""
+    """Version 1 of a new form: one page, with the locked system fields of its type and the
+    ordinary fields it starts with (the wrap-up's payment questions)."""
     version = FormVersion.objects.create(form=form, number=1)
     page = Page.objects.create(version=version, title=PAGE_TITLE[form.type], order=0,
                                gate=form.type == FormType.START)
     sections: dict[str, Section] = {}
-    for order, spec in enumerate(SYSTEM_FIELDS.get(form.type, [])):
+    specs = [(spec, True) for spec in SYSTEM_FIELDS.get(form.type, [])] + \
+        [(spec, False) for spec in STARTER_FIELDS.get(form.type, [])]
+    for order, (spec, locked) in enumerate(specs):
         spec = dict(spec)
         title = spec.pop("section", "Section 1")
         if title not in sections:
             sections[title] = Section.objects.create(version=version, page=page, title=title,
                                                      order=len(sections))
         Field.objects.create(version=version, section=sections[title], order=order,
-                             is_system=True, **{"config": {}, **spec})
+                             is_system=locked, **{"config": {}, **spec})
     if not sections:                                          # no system fields: one empty section
         Section.objects.create(version=version, page=page, title="Section 1", order=0)
     return version

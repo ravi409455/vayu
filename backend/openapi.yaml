@@ -848,6 +848,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/Booking'
           description: ''
+  /api/v1/bookings/answer-fields:
+    get:
+      operationId: bookings_answer_fields_retrieve
+      description: Fields Bookings can be filtered by (choice and yes/no answers this
+        person may see).
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
   /api/v1/checks/{id}:
     get:
       operationId: checks_retrieve
@@ -3399,6 +3415,9 @@ components:
         actor_username:
           type: string
           readOnly: true
+        actor_name:
+          type: string
+          readOnly: true
         action:
           type: string
           maxLength: 64
@@ -3415,6 +3434,7 @@ components:
           format: date-time
       required:
       - action
+      - actor_name
       - actor_username
       - id
       - summary

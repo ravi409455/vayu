@@ -12,7 +12,7 @@ OPS_ALLOWED = {
     "bookings.view": "all", "bookings.create": "all", "bookings.edit": "all",
     "bookings.assign": "all", "bookings.reschedule": "all", "bookings.cancel": "all",
     "bookings.force_release": "all", "submissions.view": "all", "submissions.edit": "all",
-    "media.manage": "all", "media.download": "all", "payments.verify": "all",
+    "media.manage": "all", "media.download": "all",
     "ratings.override": "all", "reports.view": "all",
     "dashboards.view": "all", "dashboards.export": "all", "users.view": "all",
     "users.sign_out_devices": "all", "forms.view": "all", "library.view": "all",
@@ -22,10 +22,9 @@ OPS_DENIED = [
     "forms.edit", "forms.publish", "forms.promote", "library.edit", "pdf_templates.view",
     "pdf_templates.edit", "master_lists.manage", "submissions.delete",
     "submissions.fill", "users.manage", "roles.manage", "audit.view", "integrations.manage",
-    "api_keys.manage", "payments.record",
+    "api_keys.manage",
 ]
-EXPERT_ALLOWED = {"bookings.view": "own", "submissions.view": "own", "submissions.fill": "own",
-                  "payments.record": "own"}
+EXPERT_ALLOWED = {"bookings.view": "own", "submissions.view": "own", "submissions.fill": "own"}
 
 
 def put_perms(client, role, permissions):
@@ -396,3 +395,17 @@ def test_perm_any_needs_one_of_the_permissions(api_as):
 
     request.user = AnonymousUser()
     assert not perm_any("submissions.fill")().has_permission(request, None)
+
+
+def test_payment_permissions_are_gone_and_their_old_grants_removed(db):
+    """Payment is form fields (owner, 2026-11-24): who fills or sees it is set on the fields."""
+    import importlib
+
+    from django.apps import apps as live
+
+    from apps.accounts.catalog import KEYS
+    from apps.accounts.models import RolePermission
+    assert "payments.record" not in KEYS and "payments.verify" not in KEYS
+    RolePermission.objects.create(role="ops", permission="payments.verify", scope="all")
+    importlib.import_module("apps.accounts.migrations.0013_drop_payment_permissions").drop(live, None)
+    assert not RolePermission.objects.filter(permission__startswith="payments.").exists()

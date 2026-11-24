@@ -35,7 +35,7 @@ OPS_SYSTEM_KEYS = {"checkin_gps", "checkin_time", "selfie", "taking_payment", "p
     "kind,expected",
     [("booking", BOOKING_SYSTEM_KEYS), ("inspection", {"chassis_no"}),
      ("start", {"checkin_gps", "checkin_time", "selfie"}),
-     ("end", {"taking_payment", "payment_mode", "payment_amount", "payment_screenshot"})],
+     ("end", set())],          # payment is ordinary fields (owner, 2026-11-24)
 )
 def test_system_fields_are_created_per_type(make_form, tree, kind, expected):
     form = make_form(key=f"{kind}_form", kind=kind)
@@ -43,6 +43,9 @@ def test_system_fields_are_created_per_type(make_form, tree, kind, expected):
     system = {f["key"] for p in t["pages"] for s in p["sections"] for f in s["fields"]
               if f["is_system"]}
     assert system == expected
+    if kind == "end":                # it still starts with the payment questions, unlocked
+        assert {f["key"] for p in t["pages"] for s in p["sections"] for f in s["fields"]} == {
+            "taking_payment", "payment_mode", "payment_amount", "payment_screenshot"}
 
 
 def test_the_three_system_forms_exist_once_and_cannot_be_added(make_form, admin):

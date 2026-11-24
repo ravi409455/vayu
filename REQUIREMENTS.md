@@ -92,9 +92,18 @@ Reference report: `SA37926PDI.pdf` (PDI, 35 pp). Clappia (garuda) was reviewed r
 - Last wizard steps: **Payment → Google review → Submit** (one submit).
 
 ### 5.2 Payment
-- The app shows **one static Razorpay QR** (uploaded by Admin).
-- **2 fixed payment slots** (slot 2 appears via "Add another"), each with mode, amount, screenshot, txn ID, and an Ops "Verified/Mismatch" flag.
-- Payment is required before submit **unless the expert marks "Pay later"**. Ops record later payments on the booking.
+**Changed 2026-11-24 (owner): payment is ordinary wrap-up form fields**, built by Admin in the form
+builder like any other field; there are no payment-specific screens, models or permissions ("they are
+forms at the end of the day; the app keeps its generic nature").
+- New wrap-up forms start with Taking payment?, mode, amount and screenshot as **ordinary** fields
+  (not locked); Admin changes them freely: e.g. up to 2 payments, Paid now / Pay later, transaction
+  ID, the payment QR (an image field), an Ops-only "Verified / Mismatch" choice and note.
+- Who fills or sees each payment field, and whether it is in the report, is set on the field (field
+  access by role and stage; the report designer).
+- Pay later: Ops fill the payment in the wrap-up answers when it arrives (normal answer editing).
+- No Needs-you item for payments; the expert is not told about a mismatch.
+- To find payments: Bookings **filter by an answer** (generic, web and Android): pick any choice or
+  yes/no field the person may see and a value, or "not filled".
 
 ### 5.3 Media
 - Photo/video fields: the expert taps the camera repeatedly up to the configured count. Camera and gallery are both allowed.

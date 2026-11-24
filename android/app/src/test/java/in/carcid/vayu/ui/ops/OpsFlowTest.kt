@@ -298,4 +298,27 @@ class OpsFlowTest {
         compose.waitUntil(15_000) { server.bodiesOf("POST bookings").isNotEmpty() }   // slow under a full run
         assertTrue(server.bodiesOf("POST bookings").single().contains("Ananya Gupta"))
     }
+
+    @Test fun bookingsFilterByAnAnswerSuchAsAPaymentNotYetVerified() {
+        server.on("GET bookings/answer-fields", """[{"field":"end.payment_verified","label":"Payment verified?","type":"single_choice","form":"Wrap-up",
+            "options":[{"value":"verified","label":"Verified"},{"value":"mismatch","label":"Mismatch"}]}]""")
+        show(user = me.copy(permissions = me.permissions + "submissions.view"))
+        compose.onNodeWithText("Bookings").performClick()
+        compose.onNodeWithContentDescription("Filter").performClick()
+        waitFor("Wrap-up · Payment verified?")
+        compose.onNodeWithText("Wrap-up · Payment verified?").performScrollTo().performClick()
+        compose.onNodeWithText("Not filled").performScrollTo().performClick()
+        compose.onNodeWithText("Show bookings").performScrollTo().performClick()
+        waitFor("Payment verified?: Not filled")
+        compose.onNodeWithContentDescription("Filter, 1 on").assertExists()
+    }
+
+    @Test fun theAnswerFilterIsNotOfferedWithoutSeeingAnswers() {
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        compose.onNodeWithContentDescription("Filter").performClick()
+        waitFor("Stage")
+        assertEquals(0, compose.onAllNodes(hasText("Answer")).fetchSemanticsNodes().size)
+        assertTrue(server.requests.none { it.first == "GET bookings/answer-fields" })
+    }
 }

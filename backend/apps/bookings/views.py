@@ -26,6 +26,7 @@ ACTION_PERMISSIONS = {
     "resolve_conflict": "bookings.edit", "activity": "bookings.view",
     "start": "submissions.fill", "forms": "submissions.fill", "submit": "submissions.fill",
     "inspections": "submissions.view", "timing_review": "bookings.review_timing",
+    "answer_fields": "submissions.view",
 }
 
 
@@ -95,6 +96,11 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
                 qs = qs.filter(**{f"{flag}_reviewed_at__isnull": p["reviewed"] == "0"})
             elif p.get("reviewed"):
                 raise ValidationError({"reviewed": "Use 0 or 1."})
+        if p.get("answer"):                           # any choice / yes-no answer (answers_filter)
+            from . import answers_filter
+            if scope_for(self.request.user, "submissions.view", self.request) is None:
+                raise PermissionDenied("You may not see inspection answers.")
+            qs = answers_filter.apply(qs, self.request.user, p["answer"], p.get("value", ""))
         for param, lookup in (("date_from", "inspection_date__gte"),
                               ("date_to", "inspection_date__lte")):
             if p.get(param):
@@ -151,6 +157,12 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
     def cancel(self, request, pk=None):
         return self._out(services.cancel(request.user, self.get_object(),
                                          request.data.get("reason")))
+
+    @action(detail=False, methods=["get"], url_path="answer-fields")
+    def answer_fields(self, request):
+        """Fields Bookings can be filtered by (choice and yes/no answers this person may see)."""
+        from . import answers_filter
+        return Response(answers_filter.fields_for(request.user))
 
     @action(detail=True, methods=["post"], url_path="force-release")
     def force_release(self, request, pk=None):

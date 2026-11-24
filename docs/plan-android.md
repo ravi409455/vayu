@@ -125,8 +125,9 @@ Each phase: tests first (red), then the code, then CI green, then a short demo o
 
 ### Phase 18 — Launch (was Phase 16)
 Unchanged from plan.md: seeds, release rehearsal, staging trial with 2–3 experts and Ops.
-- Also moved here (owner, 2026-11-24): Ops payments verify / record — needs a server payments API
-  first, then the app screen.
+- Payments (owner, 2026-11-24): **done as generic form features, not payment screens**: payment is
+  ordinary wrap-up fields (unlocked), the two unused payment permissions are removed, and Bookings can
+  be filtered by an answer (web and Android). See REQUIREMENTS §5.2.
 
 ## Testing and gates
 - Unit (JUnit 4, a route-based fake server instead of mocks), Robolectric, Compose UI tests for every

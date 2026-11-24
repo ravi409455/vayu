@@ -2,10 +2,10 @@
 "custom", and every `ops.<key>` a rule or PDF row can hold becomes `start.<key>` or `end.<key>`."""
 from typing import Any
 
-from .system_fields import SYSTEM_FIELDS
+from .system_fields import STARTER_FIELDS, SYSTEM_FIELDS
 
 START_KEYS = {s["key"] for s in SYSTEM_FIELDS["start"]}
-END_KEYS = {s["key"] for s in SYSTEM_FIELDS["end"]}
+END_KEYS = {s["key"] for s in SYSTEM_FIELDS["end"] + STARTER_FIELDS["end"]}
 
 
 class OldBundleError(ValueError):

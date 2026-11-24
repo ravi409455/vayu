@@ -51,7 +51,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import `in`.carcid.vayu.core.ops.a
 import `in`.carcid.vayu.core.ops.count
+import kotlinx.serialization.json.JsonObject
 import `in`.carcid.vayu.core.ops.rows
 import `in`.carcid.vayu.core.ops.s
 import `in`.carcid.vayu.ui.components.Avatar
@@ -184,6 +186,8 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
     var term by remember { mutableStateOf("") }
     var filters by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     var sheet by remember { mutableStateOf(false) }
+    // any choice or yes/no answer the person may see (generic: payments are ordinary fields)
+    val answerFields = if (env.can("submissions.view")) rememberLoad(env, "bookings/answer-fields").value?.data?.rows().orEmpty() else emptyList()
     // opened from a Dashboard tile: all dates, that tile's filters
     LaunchedEffect(preset) { if (preset != null) { view = 2; search = ""; filters = preset; onPresetUsed() } }
     var pages by remember(view, term, filters) { mutableStateOf(1) }
@@ -219,10 +223,10 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
                     Row(Modifier.heightIn(min = 44.dp).widthIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
                         .background(if (filters.isEmpty()) Vayu.colors.soft else Vayu.colors.primary)
                         .clickable(role = Role.Button) { sheet = true }.padding(horizontal = 12.dp)
-                        .semantics { contentDescription = if (filters.isEmpty()) "Filter" else "Filter, ${filters.size} on" },
+                        .semantics { contentDescription = if (filters.isEmpty()) "Filter" else "Filter, ${filters.keys.count { it != "value" }} on" },
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                         Icon(Icons.Outlined.FilterList, null, tint = if (filters.isEmpty()) Vayu.colors.ink else Vayu.colors.onPrimary, modifier = Modifier.size(18.dp))
-                        if (filters.isNotEmpty()) Text(" ${filters.size}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.onPrimary)
+                        if (filters.isNotEmpty()) Text(" ${filters.keys.count { it != "value" }}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.onPrimary)
                     }
                 }
             }
@@ -233,7 +237,8 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
                 val words = listOfNotNull(
                     if (from != null && to != null) rangeLabel(from, to) else null,
                     filters["stage"]?.let { STAGE_WORDS[it] }, filters["timing"]?.let { if (it == "late") "Started late" else "Too quick" },
-                    filters["type"]?.let(env.labels::type), filters["city"]?.let(env.labels::city), filters["expert"]?.toIntOrNull()?.let(env.labels::person))
+                    filters["type"]?.let(env.labels::type), filters["city"]?.let(env.labels::city), filters["expert"]?.toIntOrNull()?.let(env.labels::person),
+                    filters["answer"]?.let { a -> answerWords(answerFields.firstOrNull { it.s("field") == a }, filters["value"]) })
                 Row(Modifier.padding(top = 12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Showing " + words.joinToString(" · "), fontSize = 13.sp, color = Vayu.colors.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     Text("Clear", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.info,
@@ -288,13 +293,36 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
             Text("Stage", fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
             SingleChoice("Stage", STAGE_WORDS.map { Option(it.key, it.value, false, null) }, draft["stage"], false,
                 { draft = if (it == null) draft - "stage" else draft + ("stage" to it as String) }, forceList = true)
+            if (answerFields.isNotEmpty()) {
+                Text("Answer", fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
+                SingleChoice("Answer", answerFields.map { Option(it.s("field"), it.s("form") + " · " + it.s("label"), false, null) }, draft["answer"], false,
+                    { draft = (draft - "answer" - "value") + (if (it == null) emptyMap() else mapOf("answer" to it as String)) }, forceList = true)
+                answerFields.firstOrNull { it.s("field") == draft["answer"] }?.let { f ->
+                    Text(f.s("label"), fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
+                    SingleChoice(f.s("label"), answerOptions(f).map { (v, l) -> Option(v, l, false, null) }, draft["value"], false,
+                        { draft = if (it == null) draft - "value" else draft + ("value" to it as String) }, forceList = true)
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 SoftButton("Clear", { draft = emptyMap(); filters = emptyMap(); sheet = false }, Modifier.weight(1f))
-                PrimaryButton("Show bookings", { filters = draft; sheet = false }, Modifier.weight(1f))
+                // an answer counts only with its value chosen
+                PrimaryButton("Show bookings", { filters = if (draft["value"] == null) draft - "answer" else draft; sheet = false }, Modifier.weight(1f))
             }
         }
     }
 }
+
+/** The values an answer filter offers: the field's choices, then "Not filled". */
+fun answerOptions(f: JsonObject): List<Pair<String, String>> =
+    f.a("options").mapNotNull { it as? JsonObject }.map { it.s("value") to it.s("label") } + (NOT_FILLED to "Not filled")
+
+/** "Payment verified?: Not filled", as the Showing line says it. */
+fun answerWords(f: JsonObject?, value: String?): String? {
+    f ?: return null
+    return f.s("label") + ": " + (answerOptions(f).firstOrNull { it.first == value }?.second ?: value.orEmpty())
+}
+
+const val NOT_FILLED = "__none__"
 
 /** The bell: what needs a person (Problems), and Updates (with notifications, Phase 17). */
 @Composable

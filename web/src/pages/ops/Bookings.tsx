@@ -21,8 +21,11 @@ export function canDelete(role: string, stage: string): boolean {
 }
 
 export type View = "today" | "unassigned" | "in_progress" | "uploading" | "upcoming" | "completed" | "late" | "quick" | "all";
-export type Filters = { search: string; city: string; expert: string; type: string; stage: string; date_from: string; date_to: string };
-export const EMPTY: Filters = { search: "", city: "", expert: "", type: "", stage: "", date_from: "", date_to: "" };
+export type Filters = { search: string; city: string; expert: string; type: string; stage: string; date_from: string; date_to: string; answer: string; value: string };
+export const EMPTY: Filters = { search: "", city: "", expert: "", type: "", stage: "", date_from: "", date_to: "", answer: "", value: "" };
+/** A field Bookings can be filtered by (server: bookings/answer-fields). */
+export type AnswerField = { field: string; label: string; type: string; form: string; options: { value: string; label: string }[] };
+export const NOT_FILLED = "__none__";
 
 /** What each saved view asks the server for (on top of the person's own filters). */
 export function viewQuery(view: View, now = new Date()): Record<string, string> {
@@ -78,7 +81,7 @@ export function Bookings() {
   const view = (sp.get("view") as View | null) ?? (sp.get("search") ? "all" : "today");
   const key = `vayu:bookings:${me?.id}`;
   // Arriving from a number on Today (?all=1) shows exactly what that number counted: saved filters are set aside.
-  const [f, setF] = useState<Filters>(() => ({ ...(sp.get("all") ? EMPTY : loadJSON<Filters>(key, EMPTY)), search: sp.get("search") ?? "", ...Object.fromEntries((["stage", "date_from", "date_to"] as const).filter((k) => sp.get(k)).map((k) => [k, sp.get(k)!])) }));
+  const [f, setF] = useState<Filters>(() => ({ ...EMPTY, ...(sp.get("all") ? EMPTY : loadJSON<Filters>(key, EMPTY)), search: sp.get("search") ?? "", ...Object.fromEntries((["stage", "date_from", "date_to"] as const).filter((k) => sp.get(k)).map((k) => [k, sp.get(k)!])) }));
   const [layout, setLayout] = useState<"list" | "board">(() => loadJSON(`${key}:layout`, "list"));
   const [page, setPage] = useState(1);
   const [acting, setActing] = useState<{ kind: "assign" | "reschedule" | "cancel"; b: Booking } | null>(null);
@@ -89,12 +92,16 @@ export function Bookings() {
   useEffect(() => { if (urlSearch !== null) { setF((x) => ({ ...x, search: urlSearch })); setPage(1); } }, [urlSearch]);
   const set = (p: Partial<Filters>) => { setF({ ...f, ...p }); setPage(1); };
   const pick = (v: View) => { setSp(v === "today" ? {} : { view: v }); setPage(1); };
-  const own = Object.fromEntries(Object.entries(f).filter(([, v]) => v !== ""));
+  // an answer filter counts only once its value is chosen too
+  const own = Object.fromEntries(Object.entries(f).filter(([k, v]) => v !== "" && !((k === "answer" || k === "value") && !(f.answer && f.value))));
   const query = { ...own, ...viewQuery(view), page };
   const q = useQuery({ queryKey: ["bookings-page", query], queryFn: () => api<Page<Booking>>("bookings", { query }) });
   const experts = useList<User>("experts", "users", { role: "expert" });
   const cities = useQuery({ queryKey: ["list-items", "city"], queryFn: async () => asList<MasterListItem>(await api("master-lists/city/items")) });
   const types = useInspectionTypes();
+  const answerFields = useQuery({ queryKey: ["answer-fields"], enabled: can("submissions.view"),
+    queryFn: () => api<AnswerField[]>("bookings/answer-fields") });
+  const picked = (answerFields.data ?? []).find((a) => a.field === f.answer);
   const car = useLabels("car_make_model");
   const city = useLabels("city");
   const type = useTypeLabels();
@@ -137,6 +144,10 @@ export function Bookings() {
         <select aria-label="Expert" className={f.expert ? "set" : ""} value={f.expert} onChange={(e) => set({ expert: e.target.value })}><option value="">Expert</option>{(experts.data ?? []).map((u) => <option key={u.id} value={u.id}>{u.name || u.username}</option>)}</select>
         {view === "all" && <select aria-label="Stage" className={f.stage ? "set" : ""} value={f.stage} onChange={(e) => set({ stage: e.target.value })}><option value="">Stage</option>{Object.entries(STAGE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
         {(view === "all" || view === "completed" || view === "late" || view === "quick") && <label className="date-range"><span>From</span><input aria-label="From" type="date" value={f.date_from} onChange={(e) => set({ date_from: e.target.value })} /><span>to</span><input aria-label="To" type="date" value={f.date_to} onChange={(e) => set({ date_to: e.target.value })} /></label>}
+        {(answerFields.data ?? []).length > 0 && <select aria-label="Answer" className={f.answer ? "set" : ""} value={f.answer} onChange={(e) => set({ answer: e.target.value, value: "" })}>
+          <option value="">Answer</option>{(answerFields.data ?? []).map((a) => <option key={a.field} value={a.field}>{a.form} · {a.label}</option>)}</select>}
+        {picked && <select aria-label="Answer value" className={f.value ? "set" : ""} value={f.value} onChange={(e) => set({ value: e.target.value })}>
+          <option value="">Any answer</option>{picked.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}<option value={NOT_FILLED}>Not filled</option></select>}
         {filtered && <button className="link" onClick={() => setF({ ...EMPTY, search: f.search })}>Clear filters</button>}
       </div>
       {layout === "list" ? (

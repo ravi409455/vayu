@@ -37,7 +37,13 @@ SYSTEM_FIELDS: dict[str, list[dict]] = {
          "key": "selfie", "label": "Selfie at the car", "type": "photo", "required": True,
          "config": {"max_count": 1, "capture": "camera", "camera": "front"}},
     ],
-    # the wrap-up (payment) after it
+    # the wrap-up has no locked fields: payment is ordinary form fields (owner, 2026-11-24)
+    "end": [],
+}
+
+# fields a new form of a type starts with, as ordinary fields the Admin may change or remove
+STARTER_FIELDS: dict[str, list[dict]] = {
+    # a starting point for the wrap-up's payment questions
     "end": [
         {"section": "Payment",
          "key": "taking_payment", "label": "Taking payment?", "type": "yes_no", "required": True},

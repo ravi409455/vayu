@@ -233,28 +233,25 @@ def test_submission_visibility_travels_and_bad_values_are_refused(admin, staging
         "INVALID_BUNDLE"
 
 
-def test_the_choices_of_a_system_choice_field_can_be_changed_but_nothing_else(admin, end_form):
+def test_payment_fields_are_ordinary_fields_the_admin_may_change_or_remove(admin, end_form):
+    """Payment is forms like any other (owner, 2026-11-24): no locked payment fields."""
     v = end_form.versions.get()
     publish(admin, v.id)
     d = admin.post(f"/api/v1/forms/{end_form.id}/drafts").json()["id"]
-    mode = next(f for p in tree(admin, d)["pages"] for s in p["sections"] for f in s["fields"]
-                if f["key"] == "payment_mode")
-    options = [*mode["config"]["options"], {"key": "wallet", "label": "Wallet"}]
-    ok = admin.patch(f"/api/v1/fields/{mode['id']}", {"config": {**mode["config"],
-                                                                  "options": options}},
-                     format="json")
-    assert ok.status_code == 200 and ok.json()["config"]["options"][-1]["key"] == "wallet"
-    assert Field.objects.get(pk=mode["id"]).config["options"][-1]["label"] == "Wallet"
-    other = admin.patch(f"/api/v1/fields/{mode['id']}", {"config": {"options": options,
-                                                                     "display": "dropdown"}},
-                        format="json")
-    assert other.status_code == 200                                      # display is a choice setting too
-    bad = admin.patch(f"/api/v1/fields/{mode['id']}", {"required": True}, format="json")
-    assert bad.json()["code"] == "SYSTEM_FIELD"
-    # the model refuses the same thing underneath, whoever calls it
-    from apps.core.errors import CodedError
+    fields = {f["key"]: f for p in tree(admin, d)["pages"] for s in p["sections"]
+              for f in s["fields"]}
+    assert not any(f["is_system"] for f in fields.values())
+    mode = fields["payment_mode"]
+    assert admin.patch(f"/api/v1/fields/{mode['id']}", {"required": True},
+                       format="json").status_code == 200
+    assert admin.delete(f"/api/v1/fields/{fields['payment_screenshot']['id']}").status_code == 204
 
-    f = Field.objects.get(pk=mode["id"])
-    f.config = {**f.config, "surprise": 1}
-    with pytest.raises(CodedError):
-        f.save()
+
+def test_existing_payment_fields_are_unlocked_by_the_data_fix(end_form):
+    import importlib
+
+    from django.apps import apps as live
+    fix = importlib.import_module("apps.forms.migrations.0019_payment_fields_ordinary")
+    Field.objects.filter(key="payment_mode").update(is_system=True)
+    fix.unlock(live, None)
+    assert not Field.objects.filter(key__in=fix.KEYS, is_system=True).exists()

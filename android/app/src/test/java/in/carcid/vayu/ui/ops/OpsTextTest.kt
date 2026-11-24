@@ -102,4 +102,12 @@ class OpsTextTest {
         `in`.carcid.vayu.Graph(`in`.carcid.vayu.core.api.Api("http://localhost/", tokens), tokens, root, {}, cache).forgetCopies(5)
         assertEquals(listOf("keep.txt"), cache.list()!!.toList())
     }
+
+    @Test fun answerFilterWords() {
+        val f = Json.parseToJsonElement("""{"field":"end.paid","label":"Pay later?","options":[{"value":"true","label":"Yes"},{"value":"false","label":"No"}]}""").jsonObject
+        assertEquals(listOf("true" to "Yes", "false" to "No", "__none__" to "Not filled"), answerOptions(f))
+        assertEquals("Pay later?: Not filled", answerWords(f, "__none__"))
+        assertEquals("Pay later?: Yes", answerWords(f, "true"))
+        assertEquals(null, answerWords(null, "true"))
+    }
 }
