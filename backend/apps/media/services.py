@@ -291,9 +291,7 @@ def attach(request, new: MediaAsset, replaces=None) -> None:
                      {"media": [str(old.id) if old else None, str(new.id)]},
                      keys=[f"{part}.{field.key}"], inspection=insp)
         events.emit("inspection.updated", booking=str(booking.id), inspection=str(insp.id),
-                    keys=[field.key])
-        if booking.stage == "completed" and new.status == "verified":
-            rebuild_report(booking.id)
+                    keys=[field.key])                     # the report is made again (handlers)
     check_completion(booking.id)     # a submitted booking now also waits for this file
 
 
@@ -460,4 +458,5 @@ def delete_asset(actor, asset: MediaAsset) -> None:
 
 def stuck_uploads(hours: int | None = None):
     cutoff = timezone.now() - timedelta(hours=hours or settings.STUCK_UPLOAD_HOURS)
-    return MediaAsset.objects.exclude(status="verified").filter(created_at__lt=cutoff)
+    return MediaAsset.objects.exclude(status__in=("verified", "purged")) \
+        .filter(created_at__lt=cutoff)

@@ -43,7 +43,7 @@ export const GROUP_LABEL: Record<string, string> = {
 export const EVENT_LABEL: Record<string, string> = {
   "booking.created": "Booking created", "booking.updated": "Booking updated (incl. assignment and stage)", "booking.deleted": "Booking deleted",
   "inspection.started": "Inspection started", "inspection.submitted": "Inspection submitted", "media.completed": "All media verified (Completed)",
-  "pdf.ready": "PDF ready (also on regenerate)", "alert.conflict": "Conflict alert", "alert.stuck_upload": "Stuck upload alert",
+  "pdf.ready": "PDF ready (each time it is made again)", "alert.conflict": "Conflict alert", "alert.stuck_upload": "Stuck upload alert",
 };
 /** The event in a few words, for lists (the editor uses the longer labels). */
 export const eventWord = (e: string) => (EVENT_LABEL[e] ?? e).replace(/ \(.*\)$/, "");

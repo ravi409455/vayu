@@ -60,6 +60,8 @@ describe("activity lines", () => {
     expect(line({ kind: "key_checks_changed", keys: ["check.accident"], changes: { "check.accident": ["None seen", "Minor, rear"] } }))
       .toBe("Priya changed check.accident: None seen → Minor, rear");
     expect(line({ kind: "key_checks_changed", keys: ["check.odo"], changes: { "check.odo": ["", null] } })).toBe("Priya changed check.odo: empty → empty");
+    expect(line({ kind: "report_downloaded", changes: { revision: 3 } as never })).toBe("Priya downloaded the report");
+    expect(line({ kind: "report_shared", changes: { revision: 3, how: "check_link" } as never })).toBe("Priya copied the report's check link");
   });
 });
 
@@ -303,5 +305,24 @@ describe("field validations on the Logic tab", () => {
     expect(onSave.mock.calls[0]![1]).toEqual([
       { id: 7, rule: checks[0]!.rule, message: "Must be more than 0", fields: ["odo"] },
       { rule: { "!!": [{ var: "inspection.odo" }] }, message: "Needed", fields: ["odo"] }]);
+  });
+
+  it("go away when their last condition is deleted", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    const onSave = vi.fn();
+    const f = { id: 1, section: 1, key: "odo", label: "Odometer", helper_text: "", type: "number", required: false, required_if: null, show_if: null,
+      config: {}, visible: true, order: 0, is_system: false, access: {}, locked: false, library: null };
+    const checks = [{ id: 7, rule: { ">": [{ var: "inspection.odo" }, 0] }, message: "Too low", fields: ["odo"], order: 0 }];
+    const u = userEvent.setup();
+    render(<FieldEditor field={f as never} choices={[{ value: "inspection.odo", label: "Odometer" }]} lists={[]} categories={[]} onSave={onSave} onDelete={() => {}} readOnly={false} kind="custom" checks={checks} />);
+    await u.click(screen.getByRole("tab", { name: "Logic" }));
+    const validation = screen.getByRole("region", { name: "Validation" });
+    const { within } = await import("@testing-library/react");
+    await u.click(within(validation).getByRole("button", { name: "Remove condition" }));
+    expect(screen.queryByLabelText("Message when not valid")).toBeNull();
+    await u.click(screen.getByRole("button", { name: "Save field" }));
+    expect(onSave.mock.calls[0]![1]).toEqual([]);
   });
 });

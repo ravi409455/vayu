@@ -85,4 +85,13 @@ class OpsTextTest {
         assertEquals("Priya Ops shared the report PDF", activityText(row("report_shared", """{"revision":2,"how":"pdf"}"""), env))
         assertEquals("Priya Ops copied the report's check link", activityText(row("report_shared", """{"revision":2,"how":"check_link"}"""), env))
     }
+
+    @Test fun signingOutForgetsDownloadedCopies() {
+        val root = kotlin.io.path.createTempDirectory("vayu").toFile(); val cache = kotlin.io.path.createTempDirectory("cache").toFile()
+        java.io.File(cache, "media-1").writeText("x"); java.io.File(cache, "reports").mkdirs(); java.io.File(cache, "reports/r.pdf").writeText("x")
+        java.io.File(cache, "a.up").writeText("x"); java.io.File(cache, "keep.txt").writeText("x")
+        val tokens = `in`.carcid.vayu.core.auth.MemoryTokenStore()
+        `in`.carcid.vayu.Graph(`in`.carcid.vayu.core.api.Api("http://localhost/", tokens), tokens, root, {}, cache).forgetCopies(5)
+        assertEquals(listOf("keep.txt"), cache.list()!!.toList())
+    }
 }

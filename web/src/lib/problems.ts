@@ -6,7 +6,7 @@ import { addDays, fmtSlot, today } from "./format";
 import { FLAG_NAME, timingFlags, type Flag } from "./timing";
 
 export type Stuck = { id: string; booking: string; booking_id: string; field_key: string; status: string; expert: string; created_at: string };
-export type PdfProblem = { booking: string; booking_id: string; status: string; stale: boolean; error: string };
+export type PdfProblem = { booking: string; booking_id: string; status: string; error: string };
 
 /** Everything that needs a person, from the four problem queues. Shared by the Problems page,
  *  the Today page, the sidebar badge and the top-bar bell (one cache, polled every minute). */
@@ -45,7 +45,8 @@ export function useNeeds(): { needs: Need[]; loading: boolean } {
     ...p.conflicts.map((b) => ({ key: `c${b.id}`, kind: "conflict" as const, tone: "bad" as const, title: `${b.booking_id}: two experts submitted`, meta: "Choose which inspection counts", to: `/booking/${b.id}`, action: "Resolve" })),
     ...(open.data?.results ?? []).map((b) => ({ key: `a${b.id}`, kind: "unassigned" as const, tone: "warn" as const, title: `${b.booking_id} has no expert`, meta: `Today at ${String(b.answers.inspection_time ?? "")} · ${String(b.answers.customer_name ?? "")}`, to: `/booking/${b.id}`, action: "Assign" })),
     ...p.stuck.map((s) => ({ key: `s${s.id}`, kind: "upload" as const, tone: "bad" as const, title: `Upload stuck: ${s.booking_id}`, meta: `${s.expert} · ${s.field_key} · ${s.status}`, to: `/booking/${s.booking}`, action: "Open", at: s.created_at })),
-    ...p.pdf.map((r) => ({ key: `p${r.booking}`, kind: "report" as const, tone: (r.stale ? "warn" : "bad") as Need["tone"], title: r.stale ? `Report out of date: ${r.booking_id}` : `Report failed: ${r.booking_id}`, meta: r.error || "Answers changed after the PDF was made", to: `/booking/${r.booking}`, action: r.stale ? "Regenerate" : "Open" })),
+    // a report is made again by itself after every change: only a failed one is a problem (tried again by itself too)
+    ...p.pdf.map((r) => ({ key: `p${r.booking}`, kind: "report" as const, tone: "bad" as const, title: `Report failed: ${r.booking_id}`, meta: r.error ? `${r.error}; it is tried again by itself` : "It is tried again by itself", to: `/booking/${r.booking}`, action: "Open" })),
     ...(["late", "quick"] as const).flatMap((flag) => p[flag].map((b) => ({ key: `${flag}${b.id}`, kind: flag, tone: "warn" as const,
       title: `${b.booking_id}: ${(timingFlags(b.timing).find((f) => f.flag === flag)?.words ?? FLAG_NAME[flag]).toLowerCase()}`,
       meta: `${fmtSlot(b.answers.inspection_date, b.answers.inspection_time)} · ${String(b.answers.customer_name ?? "")}`, to: `/booking/${b.id}`, action: "Review" }))),

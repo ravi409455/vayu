@@ -1,4 +1,4 @@
-import { Download, FileText, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw } from "lucide-react";
+import { Download, FileText, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
@@ -151,7 +151,7 @@ function Detail({ id }: { id: string }) {
           {current === "inspection" && <InspectionTab booking={booking} insp={insp} trees={pinned} activity={activity.data ?? []} onSaved={reload} />}
           {current === "media" && <MediaTab booking={booking} insp={insp} trees={pinned} onChanged={reload} />}
           {current === "review" && <ReviewTab booking={booking} insp={insp} trees={pinned} onSaved={reload} />}
-          {current === "report" && <ReportTab booking={booking} />}
+          {current === "report" && <ReportTab booking={booking} activity={activity.data ?? []} />}
         </div>
       </div>
       {action && <Actions kind={action} booking={booking} experts={experts.data ?? []} onClose={() => setAction(null)} onDone={() => { setAction(null); say("Done."); void reload(); }} fail={fail} />}
@@ -175,6 +175,8 @@ export function activityText(r: Activity, expertName: (id: unknown) => string, l
   if (r.kind === "created") return `Created by ${by}`;
   if (r.kind === "inspection_edited") return `${by} changed ${r.keys.length} answer${r.keys.length === 1 ? "" : "s"}`;
   if (r.kind === "ratings_changed") return `${by} changed the ratings`;
+  if (r.kind === "report_downloaded") return `${by} downloaded the report`;
+  if (r.kind === "report_shared") return `${by} ${(c?.how as unknown as string) === "pdf" ? "shared the report PDF" : "copied the report's check link"}`;
   if (r.kind === "key_checks_changed") {
     const moved = Object.entries(c ?? {}) as [string, [string | null, string | null]][];
     return moved.length ? `${by} changed ${moved.map(([k, [a, b]]) => `${label(k)}: ${a || "empty"} → ${b || "empty"}`).join("; ")}`
@@ -681,28 +683,80 @@ function KeyCheckRow({ id, label, v, disabled, onSave }: { id: string; label: st
     </div>);
 }
 
-type ReportInfo = { verify_url?: string; revision: number; status: string; stale: boolean; generated_at: string | null; filename: string; error: string; url: string | null; preview_url?: string | null };
+const ZOOMS = [50, 75, 100, 125, 150, 200];
 
-function ReportTab({ booking }: { booking: Booking }) {
-  const { can } = useAuth();
+/** The report shown in the page: a whole page at a glance by default, fit to width, or zoomed;
+ *  full screen keeps these controls. The viewer's own toolbar is hidden: its download button would
+ *  skip the log (Download PDF is the logged one). */
+function PdfPreview({ url }: { url: string }) {
+  const [view, setView] = useState<"fit" | "width" | number>("fit");
+  const [big, setBig] = useState(false);          // fills the whole window (works in every browser)
+  useEffect(() => {
+    if (!big) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setBig(false); };
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, [big]);
+  const zoom = typeof view === "number" ? view : 100;
+  const step = (by: number) => setView(ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, ZOOMS.indexOf(zoom) + by))]!);
+  const hash = `toolbar=0&navpanes=0&${view === "fit" ? "view=Fit" : view === "width" ? "view=FitH" : `zoom=${view}`}`;
+  return (
+    <div className={`pdf-wrap${big ? " big" : ""}`}>
+      <div className="bar pdf-tools">
+        <div className="seg" role="group" aria-label="Page view">
+          <button aria-pressed={view === "fit"} onClick={() => setView("fit")}>Whole page</button>
+          <button aria-pressed={view === "width"} onClick={() => setView("width")}>Fit width</button>
+        </div>
+        <button className="sm" aria-label="Zoom out" disabled={typeof view === "number" && zoom <= ZOOMS[0]!} onClick={() => step(-1)}><ZoomOut size={15} aria-hidden /></button>
+        <span className="muted small" style={{ minWidth: 40, textAlign: "center" }}>{typeof view === "number" ? `${view}%` : "Auto"}</span>
+        <button className="sm" aria-label="Zoom in" disabled={zoom >= ZOOMS[ZOOMS.length - 1]!} onClick={() => step(1)}><ZoomIn size={15} aria-hidden /></button>
+        <span className="grow" />
+        <button className="sm" onClick={() => setBig(!big)}>{big ? <><Minimize2 size={15} aria-hidden /> Close full screen</> : <><Maximize2 size={15} aria-hidden /> Full screen</>}</button>
+      </div>
+      {/* the key reloads the viewer: it reads its view settings only when it opens */}
+      <iframe key={hash} className="pdf-frame" title="Report preview" src={`${url}#${hash}`} />
+    </div>
+  );
+}
+
+type ReportInfo = { verify_url?: string; revision: number; status: string; updating: boolean; generated_at: string | null; filename: string; error: string; url: string | null; preview_url?: string | null };
+
+/** The PDF: made when the booking completes and made again by itself after every change (nobody
+ *  regenerates it). Downloads and shares are logged; the list below shows who and when. */
+function ReportTab({ booking, activity }: { booking: Booking; activity: Activity[] }) {
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const q = useQuery({ queryKey: ["report", booking.id], retry: false, queryFn: async () => { try { return await api<ReportInfo>(`bookings/${booking.id}/report`); } catch (e) { if (e instanceof ApiError && e.status === 404) return null; throw e; } } });
-  const regen = useMutation({ mutationFn: () => api(`bookings/${booking.id}/report/regenerate`, { body: {} }), onSuccess: () => { say("Regenerating. This takes a few seconds."); setTimeout(() => void refresh("report"), 4000); }, onError: fail });
+  const q = useQuery({ queryKey: ["report", booking.id], retry: false,
+    // while it is being made again, look every few seconds so the new one shows by itself
+    refetchInterval: (x) => (x.state.data?.updating ? 3000 : false),
+    queryFn: async () => { try { return await api<ReportInfo>(`bookings/${booking.id}/report`); } catch (e) { if (e instanceof ApiError && e.status === 404) return null; throw e; } } });
   const r = q.data;
+  const passedOn = activity.filter((a) => a.kind === "report_downloaded" || a.kind === "report_shared");
+  async function copyCheckLink() {
+    try {
+      await api(`bookings/${booking.id}/report/shared`, { body: { how: "check_link" } });
+      await navigator.clipboard?.writeText(r!.verify_url!);
+      say("Check link copied."); void refresh("activity");
+    } catch (e) { fail(e); }
+  }
   return (
     <>
       <div className="bar">
-        {r && <><Pill tone={r.status === "ready" ? "ok" : r.status === "failed" ? "bad" : "warn"}>{r.status === "ready" ? "Ready" : r.status}</Pill><span className="muted small">Revision {r.revision} · {fmtStamp(r.generated_at)}</span></>}
+        {r && <><Pill tone={r.updating ? "warn" : r.status === "ready" ? "ok" : r.status === "failed" ? "bad" : "warn"}>{r.updating ? "Updating…" : r.status === "ready" ? "Ready" : r.status}</Pill>
+          <span className="muted small">Revision {r.revision} · {fmtStamp(r.generated_at)}</span></>}
         <span className="grow" />
-        {r?.verify_url && <button onClick={() => { void navigator.clipboard?.writeText(r.verify_url!); say("Check link copied."); }}>Copy check link</button>}
-        {can("reports.regenerate") && booking.stage === "completed" && <button onClick={() => regen.mutate()}>Regenerate PDF</button>}
-        {r?.url && <a className="btn primary" href={r.url} download={r.filename}><Download size={15} aria-hidden /> Download PDF</a>}
+        {r?.verify_url && r.status === "ready" && <button onClick={() => void copyCheckLink()}>Copy check link</button>}
+        {r?.url && <a className="btn primary" href={r.url} download={r.filename} onClick={() => setTimeout(() => void refresh("activity"), 1500)}><Download size={15} aria-hidden /> Download PDF</a>}
       </div>
-      {r?.stale && <div className="banner warn">Out of date: answers changed after this PDF was made. Regenerate it to include them.</div>}
-      {r?.error && <div className="banner bad">Problem: {r.error}</div>}
+      {r?.updating && <p className="muted small">Something changed: the report is being made again with it. This page shows the new one by itself.</p>}
+      {r?.error && !r.updating && <div className="banner bad">Problem: {r.error}. It is tried again by itself.</div>}
       {!r && <Empty title="No report yet">It is made automatically when the booking is Completed.</Empty>}
-      {r?.preview_url && <iframe className="pdf-frame" title="Report preview" src={r.preview_url} />}
+      {r?.preview_url && <PdfPreview url={r.preview_url} />}
+      {r && <section className="card" aria-label="Downloads and shares" style={{ marginTop: 14 }}>
+        <h3 style={{ marginTop: 0 }}>Downloads and shares</h3>
+        {passedOn.length === 0 ? <p className="muted small">Nobody has downloaded or shared it yet.</p> : (
+          <ul className="plain-list">{passedOn.map((a, i) => <li key={i}><strong>{a.by?.name ?? "Someone"}</strong> {a.kind === "report_downloaded" ? "downloaded the PDF" : (a.changes as Record<string, unknown>).how === "pdf" ? "shared the PDF" : "copied the check link"} <span className="muted small">· revision {String((a.changes as Record<string, unknown>).revision ?? "")} · {fmtStamp(a.at)}</span></li>)}</ul>)}
+      </section>}
     </>
   );
 }

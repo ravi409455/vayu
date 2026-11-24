@@ -13,7 +13,7 @@ OPS_ALLOWED = {
     "bookings.assign": "all", "bookings.reschedule": "all", "bookings.cancel": "all",
     "bookings.force_release": "all", "submissions.view": "all", "submissions.edit": "all",
     "media.manage": "all", "media.download": "all", "payments.verify": "all",
-    "ratings.override": "all", "reports.view": "all", "reports.regenerate": "all",
+    "ratings.override": "all", "reports.view": "all",
     "dashboards.view": "all", "dashboards.export": "all", "users.view": "all",
     "users.sign_out_devices": "all", "forms.view": "all", "library.view": "all",
     "bookings.delete": "all",          # the service only lets Ops delete untouched drafts

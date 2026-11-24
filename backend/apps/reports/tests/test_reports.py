@@ -629,7 +629,7 @@ def test_no_template_means_no_report_but_the_booking_still_completes(env, settin
     assert env.ops.get(f"/api/v1/bookings/{b['id']}/report").status_code == 404
 
 
-def test_regenerate_after_an_edit_keeps_one_pdf_and_the_same_token(renv, settings):
+def test_an_edit_remakes_the_report_by_itself_keeping_one_pdf_and_the_token(renv, settings):
     set_template(renv)
     b = complete_job(renv, settings=settings)
     first = Report.objects.get(booking_id=b["id"])
@@ -640,30 +640,72 @@ def test_regenerate_after_an_edit_keeps_one_pdf_and_the_same_token(renv, setting
     r = renv.ops.patch(f"/api/v1/inspections/{insp.id}", {
         "answers": {"inspection": {"odometer": 99}}, "row_version": 0}, format="json")
     assert r.status_code == 200
-    stale = renv.ops.get(f"/api/v1/bookings/{b['id']}/report").json()
-    assert stale["stale"] is True and stale["revision"] == 1           # not regenerated yet
-    assert renv.ops.get("/api/v1/problems/reports").json()[0]["stale"] is True
-    g = renv.ops.post(f"/api/v1/bookings/{b['id']}/report/regenerate")
-    assert g.status_code == 202
     now = Report.objects.get(booking_id=b["id"])
-    assert now.revision == 2 and now.stale is False and now.token == token
+    assert now.revision == 2 and now.stale is False and now.token == token    # nobody asked
     assert not storage.exists(old_key) and storage.exists(now.key)    # only the latest is kept
     text, _ = pdf_text(b["id"])
     assert "99 km" in text and "rev 2" in text
     assert renv.ops.get("/api/v1/problems/reports").json() == []
-    url = renv.ops.get(f"/api/v1/bookings/{b['id']}/report").json()
-    assert url["url"].startswith("https://") and url["filename"] == "SA37926PDI.pdf"
-    assert url["preview_url"].startswith("https://") and "attachment" not in url["preview_url"]
+    info = renv.ops.get(f"/api/v1/bookings/{b['id']}/report").json()
+    assert info["updating"] is False and info["filename"] == "SA37926PDI.pdf"
+    assert info["url"] == f"/api/v1/bookings/{b['id']}/report/download"
+    assert info["preview_url"].startswith("https://") and "attachment" not in info["preview_url"]
+    assert renv.ops.post(f"/api/v1/bookings/{b['id']}/report/regenerate").status_code == 404
 
 
-def test_regenerate_needs_permission_and_a_completed_booking(renv, settings):
+def test_downloads_and_shares_are_logged_with_who_and_when(renv, settings):
+    from apps.bookings.models import BookingActivity
+
+    set_template(renv)
+    b = complete_job(renv, settings=settings)
+    d = renv.ops.get(f"/api/v1/bookings/{b['id']}/report/download")
+    assert d.status_code == 302 and d["Location"].startswith("https://")
+    assert renv.ops.post(f"/api/v1/bookings/{b['id']}/report/shared", {"how": "check_link"},
+                         format="json").status_code == 204
+    assert renv.ops.post(f"/api/v1/bookings/{b['id']}/report/shared", {"how": "fax"},
+                         format="json").status_code == 400
+    rows = BookingActivity.objects.filter(booking_id=b["id"], kind__startswith="report_")
+    assert sorted((r.kind, r.actor_id, r.changes.get("how")) for r in rows) == [
+        ("report_downloaded", renv.ops_user.pk, None), ("report_shared", renv.ops_user.pk,
+                                                        "check_link")]
+    seen = renv.ops.get(f"/api/v1/bookings/{b['id']}/activity").json()
+    assert {"revision": 1, "how": "check_link"} in [x["changes"] for x in seen]
+    assert renv.expert.get(f"/api/v1/bookings/{b['id']}/report/download").status_code == 403
+
+
+def test_no_download_before_the_report_is_ready(renv, settings):
     set_template(renv)
     b = create(renv.ops, booking_id="RG1").json()
-    assert renv.ops.post(f"/api/v1/bookings/{b['id']}/report/regenerate").status_code == 409
-    assert renv.expert.post(f"/api/v1/bookings/{b['id']}/report/regenerate").status_code == 403
+    assert renv.ops.get(f"/api/v1/bookings/{b['id']}/report/download").status_code == 404
 
 
-def test_a_failing_render_is_retried_then_recorded_and_alerted(renv, settings, monkeypatch):
+def test_a_change_during_a_render_makes_it_once_more(renv, settings, monkeypatch):
+    set_template(renv)
+    b = complete_job(renv, settings=settings)
+    real, calls = render.render_pdf, []
+
+    def edit_meanwhile(html):
+        calls.append(1)
+        if len(calls) == 1:          # someone saves a change while the PDF is being made
+            Report.objects.filter(booking_id=b["id"]).update(stale=True)
+        return real(html)
+
+    monkeypatch.setattr(render, "render_pdf", edit_meanwhile)
+    from apps.reports.tasks import render_report
+
+    render_report(b["id"])
+    r = Report.objects.get(booking_id=b["id"])
+    assert len(calls) == 2 and r.revision == 3 and r.stale is False
+
+
+def test_a_failing_render_is_retried_then_recorded_alerted_once_and_swept(renv, settings,
+                                                                          monkeypatch):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.reports.tasks import render_report, sweep_reports
+
     set_template(renv)
     calls = []
 
@@ -674,13 +716,16 @@ def test_a_failing_render_is_retried_then_recorded_and_alerted(renv, settings, m
     monkeypatch.setattr(render, "render_pdf", boom)
     with events.capture() as seen:
         b = complete_job(renv, settings=settings)
+        render_report(b["id"])                                     # fails again: no 2nd alert
     r = Report.objects.get(booking_id=b["id"])
-    assert r.status == "failed" and r.error == "render_failed" and len(calls) == 3   # 1 + 2 retries
+    assert r.status == "failed" and r.error == "render_failed" and len(calls) == 6   # 2 x 3 tries
     assert "renderer crashed" not in r.error                      # raw error text stays in the logs
-    assert "alert.pdf_failed" in [n for n, _ in seen]
+    assert [n for n, _ in seen].count("alert.pdf_failed") == 1
     assert renv.ops.get("/api/v1/problems/reports").json()[0]["status"] == "failed"
     monkeypatch.undo()
-    renv.ops.post(f"/api/v1/bookings/{b['id']}/report/regenerate")
+    assert sweep_reports() == 0                                    # not due yet
+    Report.objects.filter(pk=r.pk).update(retry_at=timezone.now() - timedelta(seconds=1))
+    assert sweep_reports() == 1
     assert Report.objects.get(booking_id=b["id"]).status == "ready"
 
 

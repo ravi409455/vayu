@@ -49,7 +49,7 @@ export function KeyChecks({ version, choices, edit, run }: { version: FormVersio
           <span className="grow muted small">Facts Ops review on each booking. Experts never see them.</span>
           {edit && <button className="sm" onClick={add}><Plus size={14} aria-hidden /> Add Key Check</button>}
         </div>
-        {items.length === 0 ? <Empty title="No Key Checks yet">Add one, e.g. “Accident history” or “Odometer”.</Empty> : (
+        {items.length === 0 ? <Empty title="No Key Checks yet">{edit ? "Add one, e.g. “Accident history” or “Odometer”." : "This version is live and cannot change. Start a new draft (top right) to add Key Checks."}</Empty> : (
           <div className="kc-list">
             {items.map((k, i) => (
               <div key={i} role="button" tabIndex={0} className={`field-row${k === current ? " on" : ""}`} onClick={() => setSel(i)}
@@ -72,7 +72,7 @@ export function KeyChecks({ version, choices, edit, run }: { version: FormVersio
           </div>)}
       </section>
       <aside className="card inspector" aria-label="Key Check settings">
-        {!current ? <p className="muted small">Add a Key Check to set it up.</p> : (
+        {!current ? <p className="muted small">{edit ? "Add a Key Check to set it up." : "Start a new draft to add or change Key Checks."}</p> : (
           <fieldset disabled={!edit} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
             <div className="insp-head"><div className="grow"><h2>{current.label || "Key Check"}</h2>
               <p className="muted small">key <code>{current.key}</code></p></div></div>

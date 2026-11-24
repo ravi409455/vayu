@@ -5,9 +5,10 @@ from .models import BookingActivity
 
 # values worth keeping for the timeline (still shown only to people who may see the field)
 SAFE_KEYS = {"stage", "assigned_expert", "inspection_date", "inspection_time", "inspection_type",
-             "conflict", "media"}
-COLUMNS = {"stage", "conflict"}       # booking columns, not form answers: always visible
+             "conflict", "media", "revision", "how"}
+COLUMNS = {"stage", "conflict", "revision", "how"}   # not form answers: always visible
 TIMING_KINDS = ("late_reviewed", "quick_reviewed")   # Admin / Ops only, never Experts
+REPORT_KINDS = ("report_downloaded", "report_shared")   # who passed the report on: not Experts
 
 
 def log(b, actor, kind: str, changes: dict | None = None, keys: list[str] | None = None,
@@ -54,6 +55,8 @@ def for_user(b, user, since=None) -> list[dict]:
                                      "inspection__start_version", "inspection__end_version")
     if scope_for(user, "bookings.review_timing") is None:
         rows = rows.exclude(kind__in=TIMING_KINDS)
+    if role == "expert":
+        rows = rows.exclude(kind__in=REPORT_KINDS)
     if since is not None:
         rows = rows.filter(at__gt=since).exclude(actor=user)
     out = []

@@ -23,7 +23,9 @@ import java.util.concurrent.TimeUnit
 /** What the screens and the background sender share: one sign-in, one API, each person's files. */
 class Graph(val api: Api, val tokens: TokenStore, private val root: File,
             /** Ask for the outbox to run (WorkManager in the app, directly in tests). */
-            val kick: () -> Unit) {
+            val kick: () -> Unit,
+            /** Where downloaded photos, reports and spreadsheets are kept for viewing. */
+            private val cache: File? = null) {
     private val jobStores = HashMap<Int, JobStore>()
     private val draftStores = HashMap<Int, DraftStore>()
 
@@ -32,6 +34,16 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
 
     /** Ops' saved copies of what they last loaded (read-only offline). */
     fun ops(userId: Int) = `in`.carcid.vayu.core.ops.OpsData(api, File(root, "ops-$userId"))
+
+    /**
+     * Signed out (here, on another phone or by an Admin): nothing that person opened stays on the
+     * phone, neither Ops' saved copies nor downloaded photos, reports and spreadsheets.
+     */
+    fun forgetCopies(userId: Int) {
+        ops(userId).clear()
+        cache?.listFiles()?.filter { it.name.startsWith("media-") || it.name == "reports" || it.name.endsWith(".up") }
+            ?.forEach { it.deleteRecursively() }
+    }
 
     /** A cleared store never writes again, so a later sign-in needs a fresh one. */
     @Synchronized fun forgetJobs(userId: Int) { jobStores.remove(userId)?.clear() ?: JobStore(File(root, "jobs-$userId.json")).clear() }
@@ -54,7 +66,7 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
 class VayuApp : Application() {
     val graph: Graph by lazy {
         val tokens = PrefsTokenStore(this)
-        Graph(Api(BuildConfig.API_URL, tokens), tokens, filesDir) { OutboxWorker.enqueue(this) }
+        Graph(Api(BuildConfig.API_URL, tokens), tokens, filesDir, { OutboxWorker.enqueue(this) }, cacheDir)
     }
 }
 

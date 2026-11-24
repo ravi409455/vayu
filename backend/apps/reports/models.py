@@ -77,3 +77,4 @@ class Report(models.Model):
     error = models.TextField(blank=True)
     generated_at = models.DateTimeField(null=True, blank=True)
     render_started_at = models.DateTimeField(null=True, blank=True)   # set while a render runs
+    retry_at = models.DateTimeField(null=True, blank=True)    # failed: tried again from then

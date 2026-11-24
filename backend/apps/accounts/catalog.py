@@ -57,7 +57,6 @@ CATALOG: list[Perm] = [
     Perm("payments.verify", "Inspections", "Verify recorded payments"),
     Perm("ratings.override", "Inspections", "Review: edit Key Checks and ratings"),
     Perm("reports.view", "Reports", "View and download PDF reports", scoped=True),
-    Perm("reports.regenerate", "Reports", "Regenerate PDF reports"),
     Perm("dashboards.view", "Reports", "View dashboards"),
     Perm("dashboards.export", "Reports", "Export dashboard data to CSV"),
 ]
@@ -70,7 +69,7 @@ DEFAULTS: dict[str, dict[str, str]] = {
         "bookings.view", "bookings.create", "bookings.edit", "bookings.assign",
         "bookings.reschedule", "bookings.cancel", "bookings.force_release", "bookings.delete",
         "submissions.view", "submissions.edit", "media.manage", "media.download",
-        "payments.verify", "ratings.override", "reports.view", "reports.regenerate",
+        "payments.verify", "ratings.override", "reports.view",
         "dashboards.view", "dashboards.export", "settings.view", "bookings.review_timing")},
     "expert": {"bookings.view": "own", "submissions.view": "own", "submissions.fill": "own",
                "payments.record": "own"},

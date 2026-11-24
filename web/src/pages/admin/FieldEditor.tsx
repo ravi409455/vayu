@@ -176,9 +176,10 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
             <div className="label-row" style={{ margin: "14px 0 6px" }}><strong>Validation</strong>
               <InfoTip label="About validation">The answer must match the condition, or the expert sees your message under the field and cannot submit. Checked only once the fields it uses are answered.</InfoTip></div>
             {vals.map((v, i) => (
-              <div key={v.id ?? `new-${i}`} className="card" style={{ marginBottom: 8 }}>
+              <div key={v.id ?? `new-${i}`} className="val-item">
                 <ConditionBuilder label="Valid when" value={v.rule} fields={choices}
-                  onChange={(r) => setVals(vals.map((x, j) => (j === i ? { ...x, rule: r ?? { "!!": [{ var: ref }] } } : x)))} />
+                  onClear={() => setVals(vals.filter((_, j) => j !== i))}
+                  onChange={(r) => setVals(vals.map((x, j) => (j === i ? { ...x, rule: r } : x)))} />
                 <Field label="Message when not valid">
                   <input value={v.message} placeholder="e.g. Cannot be after the registration date" maxLength={300}
                     onChange={(e) => setVals(vals.map((x, j) => (j === i ? { ...x, message: e.target.value } : x)))} />
@@ -196,7 +197,8 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
         <div className="insp-foot">
           {!field.is_system && <button className="link danger-link" onClick={onDelete}><Trash2 size={14} aria-hidden /> Delete field</button>}
           <span className="grow muted small" style={{ textAlign: "right" }}>{dirty ? "Unsaved changes" : ""}</span>
-          <button className="primary" disabled={!dirty || vals.some((v) => !v.message.trim())} title={vals.some((v) => !v.message.trim()) ? "Every validation needs a message" : undefined}
+          <button className="primary" disabled={!dirty || vals.some((v) => !v.message.trim() || !v.rule)}
+            title={vals.some((v) => !v.rule) ? "Finish the validation's condition" : vals.some((v) => !v.message.trim()) ? "Every validation needs a message" : undefined}
             onClick={() => (checks ? onSave(d, vals) : onSave(d))}>Save field</button>
         </div>
       )}

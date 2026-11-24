@@ -39,4 +39,4 @@ class FakeServer {
 /** The app's shared parts against [server], files in a fresh folder; the outbox is run by hand. */
 fun testGraph(server: FakeServer, tokens: `in`.carcid.vayu.core.auth.TokenStore = `in`.carcid.vayu.core.auth.MemoryTokenStore(),
               root: java.io.File = java.nio.file.Files.createTempDirectory("vayu").toFile()) =
-    `in`.carcid.vayu.Graph(Api(server.url, tokens), tokens, root) {}
+    `in`.carcid.vayu.Graph(Api(server.url, tokens), tokens, root, {})

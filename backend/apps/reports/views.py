@@ -153,27 +153,59 @@ class BookingReport(APIView):
         r = Report.objects.filter(booking=b).first()
         if r is None:
             raise err("NO_REPORT", "No report has been generated yet.", 404)
-        return Response({"revision": r.revision, "status": r.status, "stale": r.stale,
+        return Response({"revision": r.revision, "status": r.status,
+                         # being made again after a change (it updates by itself)
+                         "updating": b.stage == "completed" and (r.stale or bool(
+                             r.render_started_at)),
                          "generated_at": r.generated_at, "filename": r.filename, "error": r.error,
                          "verify_url": f"{settings.VERIFY_BASE_URL}/{r.token}",
-                         "url": storage.presign_get(r.key, r.filename) if r.status == "ready"
-                         else None,
+                         # a download goes through the server so it is logged (who, when)
+                         "url": f"/api/v1/bookings/{b.id}/report/download"
+                         if r.status == "ready" else None,
                          # same file, shown in the page instead of downloaded
                          "preview_url": storage.presign_get(r.key) if r.status == "ready"
                          else None})
 
 
-class Regenerate(APIView):
-    permission_classes = [perm("reports.regenerate")]
+def _ready_report(request, pk) -> Report:
+    b = _report_booking(request, pk)
+    r = Report.objects.filter(booking=b, status="ready").first()
+    if r is None:
+        raise err("NO_REPORT", "The report is not ready yet.", 404)
+    return r
+
+
+class Download(APIView):
+    """The PDF itself: each download is logged on the booking's timeline (who and when)."""
+
+    permission_classes = [perm("reports.view")]
+
+    def get(self, request, pk):
+        from django.http import HttpResponseRedirect
+
+        from apps.bookings import activity
+
+        r = _ready_report(request, pk)
+        activity.log(r.booking, request.user, "report_downloaded", {"revision": r.revision})
+        return HttpResponseRedirect(storage.presign_get(r.key, r.filename))
+
+
+class Shared(APIView):
+    """Someone passed the report on (the check link copied, the PDF sent from a phone): logged
+    on the booking's timeline. `how`: check_link | pdf."""
+
+    permission_classes = [perm("reports.view")]
 
     def post(self, request, pk):
-        b = _report_booking(request, pk)
-        if b.stage != "completed":
-            raise err("NOT_COMPLETED", "Only a completed booking has a report.", 409)
-        tasks.render_report.delay(str(b.id))
-        r = Report.objects.filter(booking=b).first()
-        return Response({"status": r.status if r else "pending",
-                         "revision": r.revision if r else 0}, status=status.HTTP_202_ACCEPTED)
+        from apps.bookings import activity
+
+        how = request.data.get("how")
+        if how not in ("check_link", "pdf"):
+            raise err("INVALID", "how must be check_link or pdf.")
+        r = _ready_report(request, pk)
+        activity.log(r.booking, request.user, "report_shared", {"revision": r.revision,
+                                                                 "how": how})
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class Problems(APIView):
@@ -181,12 +213,12 @@ class Problems(APIView):
 
     def get(self, request):
         killed = timezone.now() - tasks.STUCK_AFTER       # a render that never finished
-        qs = (Report.objects.filter(status="failed") | Report.objects.filter(stale=True)
-              | Report.objects.filter(render_started_at__lt=killed))
+        qs = Report.objects.filter(status="failed") | Report.objects.filter(
+            render_started_at__lt=killed)      # changes alone are no problem: they remake it
         if scope_for(request.user, "reports.view", request) == "own":
             qs = qs.filter(booking__in=Booking.objects.filter(own_filter(request.user)))
         return Response([{"booking": str(r.booking_id), "booking_id": r.booking.booking_id,
-                          "status": r.status, "stale": r.stale, "error": r.error}
+                          "status": r.status, "error": r.error}
                          for r in qs.select_related("booking").distinct()])
 
 

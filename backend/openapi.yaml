@@ -580,9 +580,31 @@ paths:
       responses:
         '200':
           description: No response body
-  /api/v1/bookings/{id}/report/regenerate:
+  /api/v1/bookings/{id}/report/download:
+    get:
+      operationId: bookings_report_download_retrieve
+      description: 'The PDF itself: each download is logged on the booking''s timeline
+        (who and when).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/bookings/{id}/report/shared:
     post:
-      operationId: bookings_report_regenerate_create
+      operationId: bookings_report_shared_create
+      description: |-
+        Someone passed the report on (the check link copied, the PDF sent from a phone): logged
+        on the booking's timeline. `how`: check_link | pdf.
       parameters:
       - in: path
         name: id

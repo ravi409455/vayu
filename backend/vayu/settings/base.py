@@ -122,6 +122,7 @@ WEBHOOK_ALLOW_PRIVATE = False      # never call private/loopback/link-local addr
 WEBHOOK_LINK_DAYS = 7
 CELERY_BEAT_SCHEDULE = {
     "retry-webhooks": {"task": "apps.integrations.tasks.retry_due", "schedule": 60.0},
+    "sweep-reports": {"task": "apps.reports.tasks.sweep_reports", "schedule": 300.0},
 }
 
 CELERY_BROKER_URL = REDIS_URL

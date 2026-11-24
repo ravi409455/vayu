@@ -20,6 +20,7 @@ from .models import PdfTemplateVersion, Report
 MAX_RETRIES = 2
 SOFT_LIMIT, HARD_LIMIT = 300, 330        # seconds: 150 photos must fit with room to spare
 STUCK_AFTER = timedelta(seconds=HARD_LIMIT + 60)   # a render older than this was killed
+RETRY_FAILED = timedelta(minutes=30)               # a failed render is tried again after this
 logger = logging.getLogger(__name__)
 
 
@@ -78,8 +79,8 @@ def render_report(booking_id: str) -> str:
         return "skipped"                          # nothing to render yet
     report, _ = Report.objects.get_or_create(booking=booking)
     now = timezone.now()
-    # one render at a time per booking: a second request while one runs is dropped (edits made
-    # meanwhile set 'stale', and the claim below clears it only for data read after this point)
+    # one render at a time per booking: a second request while one runs is dropped; edits made
+    # meanwhile set 'stale' again, and the running render then goes once more (see the end)
     claimed = Report.objects.filter(pk=report.pk).filter(
         Q(render_started_at__isnull=True) | Q(render_started_at__lt=now - STUCK_AFTER)
     ).update(render_started_at=now, stale=False)
@@ -94,19 +95,42 @@ def render_report(booking_id: str) -> str:
                   else "storage_failed" if isinstance(exc, ClientError) else "render_failed")
         logger.exception("PDF render failed for booking %s", booking.id)   # detail stays in logs
         Report.objects.filter(pk=report.pk).update(status="failed", error=reason,
-                                                   render_started_at=None)
-        events.emit("alert.pdf_failed", booking=str(booking.id), reason=reason)
+                                                   render_started_at=None,
+                                                   retry_at=timezone.now() + RETRY_FAILED)
+        if report.status != "failed":                # alert once, not on every retry
+            events.emit("alert.pdf_failed", booking=str(booking.id), reason=reason)
         return "failed"
     with transaction.atomic():
         report = Report.objects.select_for_update().get(pk=report.pk)
         old = report.key
         report.revision, report.key, report.filename = revision, key, name
         report.status, report.error, report.render_started_at = "ready", "", None
+        report.retry_at = None
         report.template_version, report.generated_at = tv, timezone.now()
         report.save(update_fields=["revision", "key", "filename", "status", "error",
-                                   "render_started_at", "template_version", "generated_at"])
+                                   "render_started_at", "template_version", "generated_at",
+                                   "retry_at"])
+        again = report.stale                     # changed while this one was being made
     if old:
         storage.delete(old)
     events.emit("pdf.ready", booking=str(booking.id), booking_id=booking.booking_id,
                 revision=revision)
+    if again:
+        render_report.delay(booking_id)
     return "ready"
+
+
+@shared_task
+def sweep_reports() -> int:
+    """Every few minutes: make again the reports of completed bookings that missed a render
+    (changed while one was busy, a killed worker) or whose last try failed a while ago."""
+    now = timezone.now()
+    due = Report.objects.filter(booking__stage="completed").filter(
+        (Q(stale=True) & (Q(render_started_at__isnull=True)
+                          | Q(render_started_at__lt=now - STUCK_AFTER)))
+        | Q(render_started_at__lt=now - STUCK_AFTER)
+        | Q(status="failed", retry_at__lte=now))
+    ids = [str(b) for b in due.values_list("booking_id", flat=True)]
+    for b in ids:
+        render_report.delay(b)
+    return len(ids)

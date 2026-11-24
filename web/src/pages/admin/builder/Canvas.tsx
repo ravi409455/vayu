@@ -3,7 +3,8 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { EyeOff, FileText, GitBranch, GripVertical, Link2, Lock, Plus, ShieldCheck } from "lucide-react";
+import { EyeOff, FileText, GitBranch, GripVertical, Link2, Lock, PanelLeftClose, PanelLeftOpen, Plus, ShieldCheck } from "lucide-react";
+import { useState } from "react";
 import type { FormField, FormPage, FormSection } from "../../../api/types";
 import type { Ref } from "../../../lib/tree";
 import { iconFor } from "../../../lib/typeIcons";
@@ -87,20 +88,31 @@ export function Canvas({ pages, pageId, sel, onSelect, onPage, onDrag, onAddPage
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const page = pages.find((p) => p.id === pageId) ?? pages[0];
+  // the pages list folds to page numbers, giving the questions and the settings more room
+  const [folded, setFolded] = useState(() => { try { return localStorage.getItem("vayu:builder-pages") === "folded"; } catch { return false; } });
+  const fold = (v: boolean) => { setFolded(v); try { localStorage.setItem("vayu:builder-pages", v ? "folded" : "open"); } catch { /* not remembered */ } };
   function end(e: DragEndEvent) {
     if (!e.over) return;
     onDrag(parse(e.active.id), parse(e.over.id));
   }
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={end}>
-      <div className="builder-cols">
+      <div className={`builder-cols${folded ? " folded" : ""}`}>
+        {folded ? (
+          <aside className="rail" aria-label="Pages">
+            <button type="button" className="icon-only" aria-label="Show pages" title="Show pages" onClick={() => fold(false)}><PanelLeftOpen size={16} aria-hidden /></button>
+            {pages.map((p, i) => <button key={p.id} type="button" className={`rail-num${p.id === page?.id ? " on" : ""}`} title={p.title} aria-label={`Page ${i + 1}: ${p.title}`}
+              onClick={() => { onPage(p.id); onSelect({ kind: "page", id: p.id }); }}>{i + 1}</button>)}
+          </aside>
+        ) : (
         <aside className="rail" aria-label="Pages">
-          <div className="rail-title">Pages</div>
+          <div className="rail-title rail-title-row">Pages
+            <button type="button" className="icon-only" aria-label="Hide pages" title="Hide pages" onClick={() => fold(true)}><PanelLeftClose size={15} aria-hidden /></button></div>
           <SortableContext items={pages.map((p) => sid({ kind: "page", id: p.id }))} strategy={verticalListSortingStrategy}>
             {pages.map((p) => <PageTab key={p.id} page={p} active={p.id === page?.id} onSelect={() => { onPage(p.id); onSelect({ kind: "page", id: p.id }); }} readOnly={readOnly} />)}
           </SortableContext>
           {!readOnly && <button type="button" className="add-row" onClick={onAddPage}><Plus size={14} aria-hidden /> Add page</button>}
-        </aside>
+        </aside>)}
         <div className="canvas" aria-label="Questions">
           {page && (
             <>

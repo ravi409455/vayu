@@ -412,11 +412,7 @@ def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Insp
     if moved:
         activity.log(insp.booking, actor, "key_checks_changed", moved, inspection=insp)
     events.emit("inspection.updated", booking=str(insp.booking_id), inspection=str(insp.id),
-                keys=["overrides"])
-    if moved and insp.booking.stage == "completed":
-        from apps.media.services import rebuild_report
-
-        rebuild_report(insp.booking_id)
+                keys=["overrides"])                       # the report is made again (handlers)
     return insp
 
 
