@@ -68,7 +68,7 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         } catch (e: ApiError) {
             when {
                 e.code == "DEVICE_REVOKED" -> {
-                    tokens.clear(); jobs.forget(savedId); savedId?.let { graph.forgetCopies(it) }; bell.clear(); _screen.value = Screen.SignIn()
+                    tokens.clear(); jobs.forget(savedId); savedId?.let { graph.forgetCopies(it) }; graph.clearNotices(); bell.clear(); _screen.value = Screen.SignIn()
                 }
                 // no signal or the server is down: still signed in, already open on the saved copy
                 JobsModel.unreachable(e) && cached != null -> {}
@@ -154,6 +154,7 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
     /** Signed out from the server (another phone, or an Admin): nothing of theirs stays on this phone. */
     private fun revoked() {
         signedIn()?.let { graph.forgetCopies(it) }
+        graph.clearNotices()                         // even when nobody could be told apart
         tokens.clear(); jobs.forget(); bell.clear(); _screen.value = Screen.SignIn()
     }
 
@@ -219,6 +220,7 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         viewModelScope.launch {
             runCatching { api.logout() }
             signedIn()?.let { graph.forgetCopies(it) }
+            graph.clearNotices()
             tokens.clear()
             jobs.forget()
             bell.clear()

@@ -19,7 +19,10 @@ PROGRESS = {"inspection.started": ("started", "{bid} started"),
 WHEN = ("inspection_date", "inspection_time")
 # told about in their own way, or internal (which inspection counts, a conflict mark)
 QUIET = {"stage", "assigned_expert", "inspection", "conflict", *WHEN}
-REPEAT_HOURS = 24                                   # the same problem is told once a day at most
+REPEAT_HOURS = 24
+# problems that fire again and again for one cause: told once a day per job. Conflicts and
+# rejected type changes are each a new event and are always told.
+ONCE_A_DAY = {"alert.stuck_upload", "alert.pdf_failed"}
 
 
 def _when(date, time) -> str:
@@ -74,7 +77,7 @@ def on_event(name: str, payload: dict) -> None:
         return
     bid, who = b.booking_id, b.answers.get("customer_name") or ""
     if name in PROBLEMS:
-        to_ops(b, "problem", PROBLEMS[name].format(bid=bid), who)
+        to_ops(b, "problem", PROBLEMS[name].format(bid=bid), who, once_a_day=name in ONCE_A_DAY)
     elif name in PROGRESS:
         kind, title = PROGRESS[name]
         to_ops(b, kind, title.format(bid=bid), who)
@@ -120,7 +123,7 @@ def to_user(user_id, booking, kind: str, title: str, body: str = "") -> None:
     _send([user_id], booking, kind, title, body)
 
 
-def to_ops(booking, kind: str, title: str, body: str = "") -> None:
+def to_ops(booking, kind: str, title: str, body: str = "", once_a_day: bool = False) -> None:
     from django.utils import timezone
 
     from apps.accounts.models import Role, User
@@ -130,7 +133,7 @@ def to_ops(booking, kind: str, title: str, body: str = "") -> None:
     pref = OPS_PREF.get(kind)
     users = [u.id for u in User.objects.filter(role=Role.OPS, is_active=True)
              .only("id", "notify_prefs") if pref is None or u.notify_prefs.get(pref, True)]
-    if kind == "problem":     # ten stuck photos, or a report failing on every retry: told once
+    if once_a_day:            # ten stuck photos, or a report failing on every retry: told once
         told = set(Notification.objects.filter(
             booking=booking, kind=kind, title=title[:200],
             created_at__gte=timezone.now() - timedelta(hours=REPEAT_HOURS),

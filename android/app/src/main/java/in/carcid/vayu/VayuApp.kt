@@ -29,7 +29,7 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
             /** An expert's jobs were saved fresh: set their reminders (WorkManager in the app). */
             val onJobs: (Int) -> Unit = {},
             /** Signed out: take this person's notices off the phone and drop their reminders. */
-            private val clearNotices: () -> Unit = {}) {
+            val clearNotices: () -> Unit = {}) {
     /** A push arrived; the open app listens and refreshes at once. */
     val pushes = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
