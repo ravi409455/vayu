@@ -300,6 +300,9 @@ def test_the_same_problem_is_told_once_a_day(env, booking):
     Notification.objects.update(created_at=timezone.now() - timedelta(hours=25))
     events.emit("alert.stuck_upload", booking=booking["id"], media="m", field_key="f")
     assert len(titles(env.ops)) == 2                  # still stuck a day later: told again
-    for _ in range(2):                                # each conflict is its own event: always told
+    for _ in range(5):                                # a burst of the same conflict: told once
         events.emit("alert.conflict", booking=booking["id"])
+    assert titles(env.ops).count("Two experts inspected SA37926") == 1
+    Notification.objects.update(created_at=timezone.now() - timedelta(minutes=11))
+    events.emit("alert.conflict", booking=booking["id"])   # a new conflict later: told again
     assert titles(env.ops).count("Two experts inspected SA37926") == 2
