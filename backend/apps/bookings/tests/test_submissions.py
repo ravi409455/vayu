@@ -244,11 +244,18 @@ def test_a_cancelled_booking_still_accepts_the_experts_submission(started):
 def test_a_force_released_draft_arriving_late_is_accepted_and_flagged(started):
     ienv, booking, _ = started
     ienv.ops.post(f"/api/v1/bookings/{booking['id']}/force-release")
+    assert Inspection.objects.get(booking_id=booking["id"]).status == "released"   # H-08
     r = submit(ienv.expert, booking)
     assert r.status_code == 200
     b = Booking.objects.get(pk=booking["id"])
-    assert b.stage == "completed" and b.conflict == "RELEASED_DRAFT_ARRIVED"
+    # no completion (and no report) while a conflict is open: Ops choose first (C-01)
+    assert b.stage == "submitted" and b.conflict == "RELEASED_DRAFT_ARRIVED"
     assert b.released_draft_expected is False
+    keep = Inspection.objects.get(booking_id=booking["id"])
+    assert keep.status == "submitted"
+    assert ienv.ops.post(f"/api/v1/bookings/{booking['id']}/resolve-conflict",
+                         {"inspection": str(keep.id)}, format="json").status_code == 200
+    assert Booking.objects.get(pk=booking["id"]).stage == "completed"
 
 
 def test_the_original_expert_still_sees_a_reassigned_job_while_holding_a_draft(started):

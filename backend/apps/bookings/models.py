@@ -58,6 +58,16 @@ class Booking(models.Model):
         constraints = [models.UniqueConstraint(Lower("booking_id"), name="booking_id_ci_unique")]
         ordering = ["-created_at"]
 
+    def counted_inspection(self) -> "Inspection | None":
+        """The inspection that counts: what the report, its ZIPs, webhooks and the external API
+        use. Normally the newest submitted one. During a conflict, the one that counted before it
+        arrived (the earlier), so the customer keeps the old report; none when the conflict came
+        with the first submission (no report until Ops choose)."""
+        done = list(self.inspections.filter(status="submitted").order_by("submitted_at"))
+        if self.conflict:
+            return done[0] if len(done) > 1 else None
+        return done[-1] if done else None
+
 
 class RescheduleLog(models.Model):
     booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name="reschedules")
@@ -88,7 +98,9 @@ class Inspection(models.Model):
                                       on_delete=models.PROTECT, related_name="+")
     end_version = models.ForeignKey("forms.FormVersion", null=True, blank=True,
                                     on_delete=models.PROTECT, related_name="+")
-    status = models.CharField(max_length=10, default="draft")  # draft | submitted
+    # draft | submitted | superseded (Ops kept the other in a conflict) | released (Ops
+    # force-released the job while it was a draft: it may still arrive from the phone)
+    status = models.CharField(max_length=10, default="draft")
     # {"inspection": {...}, "start": {...}, "end": {...}} (cleaned)
     answers = models.JSONField(default=dict)
     scores = models.JSONField(default=dict)     # computed: Key Checks, ratings, overall
@@ -106,6 +118,9 @@ class Inspection(models.Model):
 
     class Meta:
         ordering = ["created_at"]
+        constraints = [models.UniqueConstraint(fields=["booking", "expert"],
+                                               condition=models.Q(status="draft"),
+                                               name="one_open_draft_per_expert")]
 
     def pinned(self) -> dict:
         """part -> the form version this inspection was started on (None: part not used)."""

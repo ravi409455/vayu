@@ -4,10 +4,12 @@ import io
 from celery import shared_task
 from django.utils import timezone
 from PIL import Image, ImageOps
+from pillow_heif import register_heif_opener
 
 from . import storage
 from .models import MediaAsset
 
+register_heif_opener()       # Pillow opens iPhone HEIC photos
 MAX_EDGE = 2048
 PREVIEW_EDGE = 480
 # the first box of an MP4 / MOV file (QuickTime files may begin with any of these)
@@ -29,12 +31,39 @@ def _jpeg(image: Image.Image, quality: int) -> bytes:
 @shared_task
 def verify_asset(asset_id: str) -> str:
     """Check the stored file against the phone's SHA-256, then make previews. Streams the file,
-    so a 300 MB video never sits in memory."""
-    from .services import check_completion, expected_media, rebuild_report
+    so a 300 MB video never sits in memory. Safe to run twice (F-107): one run claims the file;
+    the original is never rewritten (a picture too big or in HEIC gets a separate JPEG copy)."""
+    from .services import check_completion, expected_media, report_out_of_date
 
+    claimed = MediaAsset.objects.filter(pk=asset_id, status="uploaded").update(
+        status="verifying")
     asset = MediaAsset.objects.get(pk=asset_id)
-    if asset.status == "verified":
-        return "verified"
+    if not claimed:                       # already done, or another run is at it
+        return asset.status
+    try:
+        ok = _check(asset)
+    except Exception:
+        MediaAsset.objects.filter(pk=asset_id).update(status="uploaded")   # can be run again
+        raise
+    if not ok:
+        storage.delete(asset.key)
+        asset.status = "failed"
+        asset.save(update_fields=["status"])
+        return "failed"
+    asset.status, asset.verified_at = "verified", timezone.now()
+    asset.save(update_fields=["status", "verified_at", "preview_key", "jpeg_key"])
+    booking = asset.booking
+    if booking.stage == "completed" and asset.replaced_at is None:   # Ops added it afterwards
+        insp = booking.counted_inspection()
+        if insp is not None and str(asset.id) in expected_media(insp):
+            report_out_of_date(booking.id)
+    check_completion(asset.booking_id)
+    return "verified"
+
+
+def _check(asset: MediaAsset) -> bool:
+    """Is the stored file what the phone sent (and a real picture or video)? Makes the preview
+    and, when needed, the JPEG copy on the way."""
     digest, total, head = hashlib.sha256(), 0, b""
     for chunk in storage.stream(asset.key):
         digest.update(chunk)
@@ -43,35 +72,23 @@ def verify_asset(asset_id: str) -> str:
     # a video must really be one: its first box names an MP4 / MOV container (F-244)
     not_video = asset.kind == "video" and head[4:8] not in VIDEO_BOXES
     if digest.hexdigest() != asset.sha256 or total != asset.size or not_video:
-        storage.delete(asset.key)
-        asset.status = "failed"
-        asset.save()
-        return "failed"
+        return False
     # a file that is a picture gets a preview too, but its original is kept as sent (a document)
     picture_file = asset.kind == "file" and asset.content_type in ("image/jpeg", "image/png")
-    picture = asset.kind in ("photo", "signature") and asset.content_type != "image/heic"
-    if picture or picture_file:
-        try:
-            image = Image.open(io.BytesIO(storage.read(asset.key)))
-            if not picture_file and max(image.size) > MAX_EDGE:  # stored copy: at most 2048 px
-                storage.put(asset.key, _jpeg(_shrink(image, MAX_EDGE), 85), "image/jpeg")
-                asset.content_type = "image/jpeg"
-            asset.preview_key = f"previews/{asset.id}.jpg"
-            storage.put(asset.preview_key, _jpeg(_shrink(image, PREVIEW_EDGE), 75), "image/jpeg")
-        except (OSError, ValueError, Image.DecompressionBombError):   # not a readable image
-            storage.delete(asset.key)
-            asset.status = "failed"
-            asset.save()
-            return "failed"
-    asset.status, asset.verified_at = "verified", timezone.now()
-    asset.save()
-    booking = asset.booking
-    if booking.stage == "completed" and asset.replaced_at is None:   # Ops added it afterwards
-        insp = booking.inspections.filter(status="submitted").order_by("-submitted_at").first()
-        if insp is not None and str(asset.id) in expected_media(insp):
-            rebuild_report(booking.id)
-    check_completion(asset.booking_id)
-    return "verified"
+    if asset.kind not in ("photo", "signature") and not picture_file:
+        return True
+    try:
+        image = Image.open(io.BytesIO(storage.read(asset.key)))
+        # previews and the PDF use a JPEG of at most 2048 px: HEIC (iPhones) can't be shown
+        # everywhere, and a huge photo is slow to print (F-110)
+        if not picture_file and (image.format == "HEIF" or max(image.size) > MAX_EDGE):
+            asset.jpeg_key = f"copies/{asset.id}.jpg"
+            storage.put(asset.jpeg_key, _jpeg(_shrink(image, MAX_EDGE), 85), "image/jpeg")
+        asset.preview_key = f"previews/{asset.id}.jpg"
+        storage.put(asset.preview_key, _jpeg(_shrink(image, PREVIEW_EDGE), 75), "image/jpeg")
+    except (OSError, ValueError, Image.DecompressionBombError):   # not a readable image
+        return False
+    return True
 
 
 @shared_task
@@ -98,7 +115,7 @@ def purge_expired(batch: int = 500) -> int:
                                         created_at__lt=timezone.now() - timedelta(days=keep)) \
             .exclude(status="purged").order_by("created_at")[:batch]
         for a in old:
-            for key in filter(None, (a.key, a.preview_key, *print_keys(a.id))):
+            for key in filter(None, (a.key, a.preview_key, a.jpeg_key, *print_keys(a.id))):
                 storage.delete(key)
             a.status = "purged"
             a.save(update_fields=["status"])

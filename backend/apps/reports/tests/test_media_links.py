@@ -46,7 +46,7 @@ def test_a_photo_whose_field_is_hidden_for_this_car_stays_out(renv, settings):
     assert source(b, token=r.token).values()["sys"]["photo_count"] == "2"
     body = APIClient().get(f"/api/v1/verify/{r.token}/photos").json()
     assert body["count"] == 2
-    assert MediaZip.objects.get().excluded == ["door_photo"]
+    assert str(a.pk) not in MediaZip.objects.get().only and len(MediaZip.objects.get().only) == 2
 
 
 def test_the_link_builds_one_readable_zip_and_reuses_it(done):

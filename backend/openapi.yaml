@@ -662,6 +662,24 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/bookings/{id}/report/regenerate:
+    post:
+      operationId: bookings_report_regenerate_create
+      description: Ops make the report again after changes (one new PDF, one pdf.ready).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/bookings/{id}/report/shared:
     post:
       operationId: bookings_report_shared_create

@@ -68,7 +68,8 @@ class Report(models.Model):
                                    related_name="report")
     token = models.CharField(max_length=64, unique=True, default=new_token)
     revision = models.PositiveIntegerField(default=0)
-    status = models.CharField(max_length=10, default="pending")   # pending | ready | failed
+    # pending | ready (a PDF exists, even if a later render failed: see error) | failed (none yet)
+    status = models.CharField(max_length=10, default="pending")
     key = models.CharField(max_length=200, blank=True)
     filename = models.CharField(max_length=200, blank=True)
     template_version = models.ForeignKey(PdfTemplateVersion, null=True, blank=True,
@@ -76,5 +77,7 @@ class Report(models.Model):
     stale = models.BooleanField(default=False)    # data changed since this PDF was made
     error = models.TextField(blank=True)
     generated_at = models.DateTimeField(null=True, blank=True)
+    # the booking's first PDF: the photo / video ZIP links in it last 30 days from then (R-09)
+    first_generated_at = models.DateTimeField(null=True, blank=True)
     render_started_at = models.DateTimeField(null=True, blank=True)   # set while a render runs
     retry_at = models.DateTimeField(null=True, blank=True)    # failed: tried again from then

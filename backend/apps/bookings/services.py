@@ -13,7 +13,7 @@ from apps.forms.models import Field, Form, FormType, FormVersion, MasterListItem
 from apps.forms.rules import validate_answers
 
 from . import activity
-from .models import Booking, RescheduleLog
+from .models import Booking, Inspection, RescheduleLog
 from .stages import can_transition
 
 COLUMNS = {"customer_name": "customer_name", "customer_phone": "customer_phone", "city": "city",
@@ -214,6 +214,9 @@ def force_release(actor, b: Booking) -> Booking:
     b.stage, b.started_at, b.late_minutes = "assigned", None, None
     b.late_reviewed_by = b.late_reviewed_at = None     # the next start is judged afresh
     b.released_by, b.released_at, b.released_draft_expected = actor, timezone.now(), True
+    # the expert's draft is closed: a new start opens a new one; the old one may still arrive
+    Inspection.objects.filter(booking=b, expert_id=b.assigned_expert_id, status="draft").update(
+        status="released")
     audit.record(actor, "booking.force_release", "booking", b.id,
                  f"Force-released {b.booking_id} from expert {b.assigned_expert_id}")
     _changed(actor, b, {"stage": ["in_progress", "assigned"]})

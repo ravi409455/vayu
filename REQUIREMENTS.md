@@ -109,7 +109,7 @@ forms at the end of the day; the app keeps its generic nature").
 ### 5.3 Media
 - Photo/video fields: the expert taps the camera repeatedly up to the configured count. Camera and gallery are both allowed.
 - **In-app camera photos get a burned-in stamp** (booking ID, expert, server time, GPS, or **"GPS unavailable"**). Gallery photos aren't stamped. The source is tagged internally and never shown in the PDF.
-- Stored at **~2048px / ~500 KB** plus a preview copy. Videos are clips of up to 60 s at 720p, compressed on the phone. The server checks each video really is an MP4 / MOV file. A failed upload, or one left unfinished longer than the stuck-upload limit (6 h), does not use up a place on its field.
+- Stored as sent, plus a preview copy and, for an iPhone **HEIC** photo or one larger than 2048 px, a **separate JPEG copy** (≤ 2048 px) used for previews and the PDF. Videos are clips of up to 60 s at 720p, compressed on the phone. The server checks each video really is an MP4 / MOV file. A failed upload, or one left unfinished longer than the stuck-upload limit (6 h), does not use up a place on its field.
 - Expert can **delete/retake** and review full-screen before submit.
 - **Upload as you go** on any network: background, resumable, chunked, checksum-verified, **sent directly from the phone to R2** via pre-signed URLs (never through the API server).
 - **Local copies:** cleared manually only; **unuploaded files can never be cleared**. Low-storage warning below 2 GB, and starting a job is blocked below 500 MB.
@@ -140,7 +140,9 @@ forms at the end of the day; the app keeps its generic nature").
 - **Concurrent web edits:** a save is stopped if someone else saved since the form was opened ("Priya changed this 2 min ago – reload"). On retry only the fields you changed are applied.
 - **Ops changes while the expert is offline:** push notification + banner on the next sync (old → new).
 - **Cancelled while the expert has a draft:** the draft still syncs and is kept on the cancelled booking.
-- **Reassigned while the expert has a draft:** the job **stays in that expert's list** as "Reassigned – submit or discard". If submitted, **the submission is accepted** and the booking is flagged "Conflict: two experts". If the new expert hasn't started, their job is withdrawn; otherwise Ops choose which inspection to keep.
+- **Reassigned while the expert has a draft:** the job **stays in that expert's list** as "Reassigned – submit or discard". If submitted, **the submission is accepted** and the booking is flagged "Conflict: two experts". If the new expert hasn't started, their job is withdrawn; otherwise Ops choose which inspection to keep. Nothing completes and no report is made from the late work until Ops choose.
+- **Force-release** closes the expert's draft (released): a new start opens a new draft (one open draft per expert per booking); the released one is still accepted if it arrives, as a conflict.
+- **A second submit** by the same expert on a lead they already submitted is **refused** ("Already submitted; Ops can edit it"); the same request id still returns the first result.
 - **Logout is blocked while data is unsynced.** If Admin disables an account with unsynced data, the Admin sees a data-loss warning.
 - **Time:** server-corrected using the offset from the last sync. If there's been no sync that day, the last known offset is used and the time is **flagged "unverified"**.
 
@@ -161,7 +163,11 @@ forms at the end of the day; the app keeps its generic nature").
   - **Verification QR** linking to a verify page on your own subdomain. The page shows a summary only: booking ID, car, type, date, overall rating, current revision.
   - Admin-set filename pattern.
 - **No PDF size limit.** Videos are internal only.
-- **Generation:** automatic once media is complete. After Ops edits, regenerated with a **"Regenerate PDF" button**. **Only the latest PDF is kept** (no old revisions). Renders run one at a time, with a memory limit and timeout.
+- **Generation:** automatic **once**, when the booking completes. After that nothing re-renders by itself: Ops edits, files Ops add or replace and booking changes only mark the PDF **"out of date"**; Ops press **"Regenerate PDF"** (one new PDF, one `pdf.ready`). The every-few-minutes sweep only retries failed or killed renders. **Only the latest PDF is kept** (no old revisions). Renders run one at a time, with a memory limit and timeout. A later render that fails keeps the last PDF (the verify page keeps working); the failure is listed for Ops.
+- **Which inspection the report uses:** the one that counts. During a two-expert conflict the customer **keeps the old report** and Regenerate is disabled; when Ops pick the inspection that counts, the PDF renders once automatically. If the first completion is already in conflict, there is no report until Ops resolve it.
+- **Retention:** once the retention setting has purged a booking's photos, its **last PDF is kept** and Regenerate is disabled with the reason.
+- **Photo / video ZIP links** in the report hold only the files the counted inspection uses, and **expire 30 days after the booking's first PDF**; a PDF regenerated after that leaves those links out. The verify page (QR) keeps working.
+- An inspection on an older form version keeps the **layout made for that version** (the newest template version published before the next form version). "Not able to check" counts the option keys `not_checked` and `not_able_to_check`.
 - **Access:** Ops + Admin (web), plus the webhook link.
 
 ## 8. Integrations

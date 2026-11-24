@@ -202,7 +202,7 @@ def build_payload(d: Delivery, preview: bool = False) -> dict:
     if booking is None or d.event == "booking.deleted":     # nothing of a deleted booking leaves
         return body
     body["booking"]["booking_id"] = booking.booking_id
-    insp = booking.inspections.filter(status="submitted").order_by("-submitted_at").first()
+    insp = booking.counted_inspection()
     if integ.include_data:
         body["data"] = {"booking": _scoped(booking.answers, integ.fields),
                         "inspection": _scoped(((insp.answers.get("inspection") or {})

@@ -66,7 +66,8 @@ def print_image(media_id: str, edge: int = PRINT_EDGE) -> str | None:
     if storage.exists(key):
         return _jpeg_uri(storage.read(key))
     try:
-        image = ImageOps.exif_transpose(Image.open(io.BytesIO(storage.read(asset.key))))
+        image = ImageOps.exif_transpose(Image.open(io.BytesIO(storage.read(
+            asset.jpeg_key or asset.key))))
     except (OSError, ValueError, Image.DecompressionBombError):
         return None
     image.thumbnail((edge, edge))
@@ -266,6 +267,8 @@ def part_html(part: dict, width_mm: float, ctx: dict) -> str:
                  f'height:{size}mm">{link}</div>')
     elif t == "button":
         href = ctx.get("links", {}).get(part["link"], "")
+        if not href:                       # a link that expired (R-09) is left out, not dead
+            return ""
         inner = (f'<div class="btnrow" style="text-align:{part.get("align", "center")}">'
                  f'<a class="btn" href="{e(href)}">{e(part["label_out"])}</a></div>')
     elif t == "columns":

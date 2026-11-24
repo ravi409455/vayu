@@ -18,6 +18,7 @@ urlpatterns = [
     path("pdf-template-versions/<int:pk>/checks", views.Checks.as_view()),
     path("bookings/<uuid:pk>/report", views.BookingReport.as_view()),
     path("bookings/<uuid:pk>/report/download", views.Download.as_view()),
+    path("bookings/<uuid:pk>/report/regenerate", views.Regenerate.as_view()),
     path("bookings/<uuid:pk>/report/shared", views.Shared.as_view()),
     path("problems/reports", views.Problems.as_view()),
     path("verify/<str:token>", views.Verify.as_view()),

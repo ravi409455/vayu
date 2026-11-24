@@ -99,3 +99,42 @@ def test_only_a_file_that_never_arrived_on_a_waiting_job_is_taken_over(job, sett
     MediaAsset.objects.filter(pk=old).update(status="pending")
     Booking.objects.filter(pk=b["id"]).update(stage="completed")      # no longer waiting
     assert unarrived(Booking.objects.get(pk=b["id"]), [old]) == []
+
+
+def test_a_booking_in_conflict_cannot_be_finished_until_ops_choose(job, settings):
+    env, b = job
+    stuck(env, b)
+    Booking.objects.filter(pk=b["id"]).update(conflict="TWO_EXPERTS")
+    r = env.ops.post(f"/api/v1/bookings/{b['id']}/finish")
+    assert r.status_code == 409 and r.json()["code"] == "CONFLICT_OPEN"
+    assert Booking.objects.get(pk=b["id"]).stage == "submitted"
+
+
+def test_a_missing_file_that_arrives_after_the_finish_marks_the_report_out_of_date(job, settings):
+    from apps.media import storage
+    from apps.media.models import MediaAsset
+    from apps.media.tasks import verify_asset
+    from apps.media.tests.conftest import put_parts
+    from apps.reports.models import Report
+
+    env, b = job
+    data = jpeg(color=(3, 1, 1))
+    init = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], data),
+                           format="json").json()
+    assert submit_with(env, b, photo_a=[init["id"]]).status_code == 200
+    env.ops.post(f"/api/v1/bookings/{b['id']}/finish")
+    report = Report.objects.create(booking_id=b["id"], status="ready", key="k")
+    parts = put_parts(init, data, settings)                   # the phone sends it after all
+    a = MediaAsset.objects.get(pk=init["id"])
+    storage.complete_multipart(a.key, a.upload_id, [
+        {"part_number": p["part_number"], "etag": p["etag"]} for p in parts])
+    MediaAsset.objects.filter(pk=a.pk).update(status="uploaded", upload_id="")
+    with mock.patch("apps.reports.tasks.render_report.delay") as render:
+        assert verify_asset(str(a.pk)) == "verified"
+    render.assert_not_called()
+    assert Report.objects.get(pk=report.pk).stale is True
+    MediaAsset.objects.filter(pk=a.pk).update(status="uploaded")        # an unused file: no mark
+    Report.objects.filter(pk=report.pk).update(stale=False)
+    Booking.objects.filter(pk=b["id"]).update(stage="cancelled")
+    verify_asset(str(a.pk))
+    assert Report.objects.get(pk=report.pk).stale is False

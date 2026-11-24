@@ -88,7 +88,9 @@ def deliver_filter(user) -> Q:
     to them if the new expert has not started, else a conflict for Ops. Never used for lists."""
     recent = timezone.localdate() - timedelta(days=MOVED_DAYS)
     return own_filter(user) | Q(activity__changes__assigned_expert__0=user.pk,
-                                inspection_date__gte=recent)
+                                inspection_date__gte=recent) | Q(
+        # a draft Ops force-released may still arrive (then a conflict for Ops)
+        inspections__expert_id=user.pk, inspections__status="released")
 
 
 def form_for_role(version: FormVersion, role: str, stage: str) -> dict:
@@ -358,7 +360,14 @@ def _submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id):
         if done.booking_id != b.id or done.expert_id != actor.pk:
             raise err("UUID_CONFLICT", "That request ID belongs to another request.", 409)
         return b, done
-    insp = b.inspections.filter(expert=actor, status="draft").first()
+    # their open draft; else the one Ops force-released while they worked (it still counts)
+    insp = (b.inspections.filter(expert=actor, status="draft").first()
+            or b.inspections.filter(expert=actor, status="released").order_by("-created_at")
+            .first())
+    if insp is None and b.inspections.filter(expert=actor,
+                                             status__in=("submitted", "superseded")).exists():
+        # a new request id for work already sent (a reinstalled app): never a second inspection
+        raise err("ALREADY_SUBMITTED", "Already submitted; Ops can edit it.", 409)
     if insp is None:
         # an offline start that never reached us: the phone names its pinned version, but it must
         # belong to a form that handles this booking's type (no shopping for another type's form)
@@ -587,7 +596,16 @@ def resolve_conflict(actor, b: Booking, inspection_id) -> Booking:
     scoring.recompute(keep)
     events.emit("inspection.updated", booking=str(b.id), inspection=str(keep.id),
                 keys=["conflict_resolved"])
-    from apps.media.services import check_completion
-
-    core_tasks.after_commit(lambda: check_completion(b.id))
+    core_tasks.after_commit(lambda: _after_resolving(b.id))
     return b
+
+
+def _after_resolving(booking_id) -> None:
+    """The kept inspection now counts: a booking waiting for it completes (its first report is
+    made then); one already completed gets its report made again once, from the kept one."""
+    from apps.media.services import check_completion
+    from apps.reports.tasks import render_report
+
+    if not check_completion(booking_id) and Booking.objects.filter(
+            pk=booking_id, stage="completed").exists():
+        render_report.delay(str(booking_id))

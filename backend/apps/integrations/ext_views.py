@@ -199,7 +199,11 @@ class BookingInspection(ExtView):
         if not isinstance(answers, dict):
             raise ValidationError({"answers": "An object of field keys and values is required."})
         need_keys(allowed, answers)
-        insp = latest_inspection(b)
+        # only the inspection that counts: a draft is overwritten by the expert's submit, a
+        # superseded one never reaches the report
+        insp = b.counted_inspection()
+        if insp is None:
+            raise CodedError("NOT_SUBMITTED", "This booking has no submitted inspection yet.", 409)
         rv = request.data.get("row_version")
         insp = submissions.edit_inspection(request.user, insp, {"inspection": answers},
                                            insp.row_version if rv is None else rv)

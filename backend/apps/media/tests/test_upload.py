@@ -139,10 +139,12 @@ def test_complete_verifies_and_makes_a_preview(job, settings):
 
 def test_a_huge_photo_is_stored_at_most_2048px(job, settings):
     env, b = job
-    r = upload(env.expert, b["id"], jpeg(4000, 3000), settings)
+    data = jpeg(4000, 3000)
+    r = upload(env.expert, b["id"], data, settings)
     assert r.status_code == 200
     a = MediaAsset.objects.get()
-    assert max(Image.open(io.BytesIO(storage.read(a.key))).size) == 2048
+    assert storage.read(a.key) == data                    # the original is never rewritten (F-107)
+    assert max(Image.open(io.BytesIO(storage.read(a.jpeg_key))).size) == 2048   # the copy is
 
 
 def test_resume_lists_uploaded_parts_and_completes_the_rest(job, settings):
@@ -194,7 +196,8 @@ def test_a_corrupted_upload_fails_the_checksum_and_can_be_restarted(job, setting
     init = env.expert.post("/api/v1/media/initiate", body, format="json").json()
     parts = put_parts(init, bad, settings)                      # bytes differ from the declared hash
     r = env.expert.post(f"/api/v1/media/{init['id']}/complete", {"parts": parts}, format="json")
-    assert r.status_code == 409 and r.json()["code"] == "CHECKSUM_MISMATCH"
+    # checked in the background (F-162): the answer is read from the status, never a 409
+    assert r.status_code == 200 and r.json()["status"] == "failed"
     a = MediaAsset.objects.get()
     assert a.status == "failed" and not storage.exists(a.key)
     again = env.expert.post("/api/v1/media/initiate", body, format="json")   # same client_uuid
@@ -588,7 +591,7 @@ def test_a_video_that_is_not_a_video_fails_verification(job, settings, ctype):
     env, b = job
     r = upload(env.expert, b["id"], jpeg(), settings, field_key="clip", kind="video",
                content_type=ctype)
-    assert r.status_code == 409
+    assert r.status_code == 200 and r.json()["status"] == "failed"
     a = MediaAsset.objects.get()
     assert a.status == "failed" and not storage.exists(a.key)
 
@@ -606,7 +609,7 @@ def test_a_video_shorter_than_a_box_header_fails(job, settings):
     env, b = job
     r = upload(env.expert, b["id"], b"\x00\x00", settings, field_key="clip", kind="video",
                content_type="video/mp4")
-    assert r.status_code == 409 and MediaAsset.objects.get().status == "failed"
+    assert r.json()["status"] == "failed" and MediaAsset.objects.get().status == "failed"
 
 
 def test_an_abandoned_pending_upload_stops_holding_a_place_after_the_stuck_limit(job, settings):
@@ -624,3 +627,56 @@ def test_an_abandoned_pending_upload_stops_holding_a_place_after_the_stuck_limit
     MediaAsset.objects.update(created_at=timezone.now() - timedelta(
         hours=settings.STUCK_UPLOAD_HOURS, minutes=1))
     assert upload(env.expert, b["id"], jpeg(), settings).status_code == 200   # a retake fits
+
+
+# ---------------------------------------------------------------- plan batch 2 (F-107, F-110)
+
+def heic(w=64, h=48) -> bytes:
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+    buf = io.BytesIO()
+    Image.new("RGB", (w, h), (10, 200, 30)).save(buf, "HEIF")
+    return buf.getvalue()
+
+
+def test_an_iphone_heic_photo_gets_a_jpeg_copy_for_previews_and_the_pdf(job, settings):
+    from apps.reports.render import print_image
+
+    env, b = job
+    data = heic()
+    r = upload(env.expert, b["id"], data, settings, content_type="image/heic")
+    assert r.status_code == 200 and r.json()["status"] == "verified"
+    a = MediaAsset.objects.get()
+    assert storage.read(a.key) == data and a.content_type == "image/heic"    # kept as sent
+    copy = Image.open(io.BytesIO(storage.read(a.jpeg_key)))
+    assert copy.format == "JPEG" and copy.size == (64, 48)
+    assert Image.open(io.BytesIO(storage.read(a.preview_key))).format == "JPEG"
+    assert (print_image(str(a.id)) or "").startswith("data:image/jpeg;base64,")
+
+
+def test_verifying_twice_is_safe_and_never_rewrites_the_original(job, settings):
+    from apps.media.tasks import verify_asset
+
+    env, b = job
+    data = jpeg(4000, 3000)
+    a = MediaAsset.objects.get(pk=upload(env.expert, b["id"], data, settings).json()["id"])
+    assert verify_asset(str(a.id)) == "verified"                    # a second run: nothing done
+    MediaAsset.objects.filter(pk=a.pk).update(status="verifying")   # a run in progress
+    assert verify_asset(str(a.id)) == "verifying"
+    assert storage.read(a.key) == data
+
+
+def test_a_storage_error_while_verifying_leaves_the_file_to_be_checked_again(job, settings):
+    from unittest import mock
+
+    from apps.media.tasks import verify_asset
+
+    env, b = job
+    a = MediaAsset.objects.get(pk=upload(env.expert, b["id"], jpeg(), settings).json()["id"])
+    MediaAsset.objects.filter(pk=a.pk).update(status="uploaded")
+    with mock.patch("apps.media.storage.stream", side_effect=OSError("R2 down")), \
+            pytest.raises(OSError):
+        verify_asset(str(a.id))
+    assert MediaAsset.objects.get(pk=a.pk).status == "uploaded"
+    assert verify_asset(str(a.id)) == "verified"

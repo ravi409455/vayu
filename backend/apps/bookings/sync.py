@@ -47,7 +47,9 @@ def payload(user, have: set[int], since, context, drafts: set[int] | None = None
         for v in pinned.values():
             if v is not None and v.id not in have:
                 versions[v.id] = v
-        draft = b.inspections.filter(expert=user, status="draft").first()
+        # a draft Ops force-released still counts: the phone may yet send it
+        draft = b.inspections.filter(expert=user, status__in=("draft", "released")).order_by(
+            "-created_at").first()
         report = getattr(b, "report", None)
         jobs.append({**BookingSerializer(b, context=context).data,
                      # the finished job's PDF, in a word (no link: experts don't open it)
