@@ -107,6 +107,12 @@ class Filled(val trees: Map<String, FormTree?>, val answers: Map<String, Map<Str
     fun visible(part: String, key: String) = result(part).visible[key] == true
     fun required(part: String, key: String) = result(part).required[key] == true
 
+    /** The Admin's message of a broken answer rule on this field (first failing rule wins), else null. */
+    fun checkMessage(part: String, key: String): String? = result(part).let { r ->
+        if (r.errors[key] != "check_failed") null
+        else r.failed.firstOrNull { key in it.fields }?.message?.ifBlank { null } ?: "This doesn't fit with another answer."
+    }
+
     fun visiblePages(part: String): List<Page> {
         val t = trees[part] ?: return emptyList()
         return t.pages.filter { p -> p.fields.any { visible(part, it.key) } }
@@ -117,7 +123,7 @@ class Filled(val trees: Map<String, FormTree?>, val answers: Map<String, Map<Str
         val values = answers[part].orEmpty()
         return t.pages.flatMap { p -> p.fields.filter {
             it.answerable && visible(part, it.key) &&
-                ((required(part, it.key) && FormRules.isEmpty(values[it.key])) || answerProblem(it, values[it.key]) != null)
+                ((required(part, it.key) && FormRules.isEmpty(values[it.key])) || answerProblem(it, values[it.key]) != null || checkMessage(part, it.key) != null)
         }.map { Gap(part, it.key, it.label, p.id, p.title) } }
     }
 

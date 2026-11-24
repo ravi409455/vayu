@@ -91,7 +91,7 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
             is Route.Detail -> when (r.part) {
                 Part.ANSWERS -> AnswersScreen(env, r.id, r.group) { pop() }
                 Part.MEDIA -> MediaScreen(env, r.id) { pop() }
-                Part.RATINGS -> RatingsScreen(env, r.id) { pop() }
+                Part.REVIEW -> ReviewScreen(env, r.id) { pop() }
                 Part.HISTORY -> HistoryScreen(env, r.id) { pop() }
             }
             is Route.Form -> BookingFormScreen(env, r.id, onBack = { pop() }) { saved, assign ->

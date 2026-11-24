@@ -261,7 +261,7 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
                             Question(f, v, filled.required(part, f.key),
                                 missing = blocked.isNotEmpty() && gaps.any { it.key == f.key },
                                 // what the server refused, or what its rules would refuse, right under the answer
-                                error = draft.fieldErrors[f.key]?.let(::refusalText) ?: `in`.carcid.vayu.core.forms.answerProblem(f, v),
+                                error = draft.fieldErrors[f.key]?.let(::refusalText) ?: `in`.carcid.vayu.core.forms.answerProblem(f, v) ?: filled.checkMessage(part, f.key),
                                 nested = f.showIf != null, env = FieldEnv(
                                     locked = draft.locked, list = env.list, types = env.types, files = files, now = env.now,
                                     onCamera = { tool = Tool.Camera(part, it) },

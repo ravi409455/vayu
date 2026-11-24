@@ -37,6 +37,17 @@ class FormTreeTest {
         assertEquals(listOf("odometer"), f.gaps("inspection").map { it.key })
     }
 
+    @Test fun aBrokenAnswerRuleShowsTheAdminsMessageAndBlocksSubmit() {
+        val withCheck = tree(Fixtures.INSPECTION.replaceFirst("""{"id":7,"checks":[]""",
+            """{"id":7,"checks":[{"rule":{"<":[{"var":"inspection.odometer"},500000]},"message":"Odometer looks too high.","fields":["odometer"]}]"""))
+        fun f(odo: Any) = Filled(trees + ("inspection" to withCheck),
+            mapOf("inspection" to mapOf("chassis_no" to "MA3", "odometer" to odo, "bonnet" to "ok", "door" to "ok")), emptyMap(), "2026-11-24")
+        assertEquals("Odometer looks too high.", f(900000.0).checkMessage("inspection", "odometer"))
+        assertEquals(listOf("odometer"), f(900000.0).gaps("inspection").map { it.key })
+        assertEquals(null, f("12000").checkMessage("inspection", "odometer"))
+        assertTrue(f("12000").gaps("inspection").isEmpty())
+    }
+
     @Test fun aFollowUpAppearsOnlyAfterADefect() {
         assertFalse(filled().visible("inspection", "door_photos"))
         val f = filled(mapOf("inspection" to mapOf("door" to "minor")))

@@ -88,7 +88,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 
 /** Where a booking's rows lead. */
-enum class Part { ANSWERS, MEDIA, RATINGS, HISTORY }
+enum class Part { ANSWERS, MEDIA, REVIEW, HISTORY }
 
 /** The inspection that counts on a booking: the latest submitted one, else the latest draft. */
 fun currentInspection(list: List<JsonObject>): JsonObject? =
@@ -210,12 +210,13 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
             if (insp != null) {
                 val sc = insp.o("scores")
                 val word = sc.o("overall").s("word").replaceFirstChar { it.uppercase() }
-                Section("Ratings and Key Checks")
-                val nRatings = sc.o("ratings").size; val nChecks = sc.o("derived").size
-                val ov = insp.o("overrides"); val changed = ov.o("ratings").size + ov.o("derived").size + (if (ov["overall"] != null) 1 else 0)
-                NavRow("Overall: ${word.ifBlank { "—" }}", listOfNotNull("$nRatings rating${if (nRatings == 1) "" else "s"}".takeIf { nRatings > 0 },
-                    "$nChecks Key Check${if (nChecks == 1) "" else "s"}".takeIf { nChecks > 0 },
-                    "$changed changed by Ops".takeIf { changed > 0 }).joinToString(" · ")) { onPart(Part.RATINGS) }
+                Section("Review")
+                val nRatings = sc.o("ratings").size; val nChecks = sc.o("key_checks").size
+                val ov = insp.o("overrides"); val changed = ov.o("ratings").size + (if (ov["overall"] != null) 1 else 0) +
+                    sc.o("key_checks").values.count { (it as? JsonObject)?.s("edited") == "true" }
+                NavRow("Overall: ${word.ifBlank { "—" }}", listOfNotNull("$nChecks Key Check${if (nChecks == 1) "" else "s"}".takeIf { nChecks > 0 },
+                    "$nRatings rating${if (nRatings == 1) "" else "s"}".takeIf { nRatings > 0 },
+                    "$changed changed by Ops".takeIf { changed > 0 }).joinToString(" · ")) { onPart(Part.REVIEW) }
                 Section("Payment")
                 val (title, sub) = paymentText(data)
                 NavRow(title, sub) { onAnswers("end") }

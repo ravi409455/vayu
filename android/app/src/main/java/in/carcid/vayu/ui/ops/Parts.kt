@@ -101,6 +101,7 @@ import `in`.carcid.vayu.ui.components.Banner
 import `in`.carcid.vayu.ui.components.ChoiceRow
 import `in`.carcid.vayu.ui.components.PrimaryButton
 import `in`.carcid.vayu.ui.components.SoftButton
+import `in`.carcid.vayu.ui.components.SoftField
 import `in`.carcid.vayu.ui.components.Tone
 import `in`.carcid.vayu.ui.expert.FieldEnv
 import `in`.carcid.vayu.ui.expert.Question
@@ -571,26 +572,50 @@ private fun MediaViewer(env: OpsEnv, m: JsonObject, fieldLabel: String, onClose:
 }
 
 /**
- * Ratings, Key Checks and the overall word. A dot marks what the answers suggest; changes wait for
- * Save (Undo drops them), so a stray tap changes nothing. "Back to suggested" drops an override.
+ * Review (web: ReviewTab): Key Checks, the overall word and ratings. Key Checks are plain text Ops
+ * type over (editable once the expert submits); a dot marks what the answers suggest. Changes wait
+ * for Save (Undo drops them), so a stray tap changes nothing. "Back to suggested" / "Reset to
+ * automatic" drop an override.
  */
 @Composable
-fun RatingsScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
+fun ReviewScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val data = rememberBooking(env, id)
-    // unsaved choices: "overall" -> word, "r:<key>" -> 1..5, "d:<key>" -> true/false; null means back to suggested
+    // unsaved choices: "overall" -> word, "r:<key>" -> 1..5, "k:<key>" -> text; null means back to suggested / automatic
     var pending by remember(data?.insp?.int("row_version")) { mutableStateOf(mapOf<String, Any?>()) }
     var saving by remember { mutableStateOf(false) }
     BackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
-        SubHeader("Ratings and Key Checks", data?.let { "${it.b.code} · ${it.b.customer}" }, onBack)
+        SubHeader("Review", data?.let { "${it.b.code} · ${it.b.customer}" }, onBack)
         val insp = data?.insp
-        if (insp == null) { Text(if (data == null) "Loading…" else "Ratings are calculated once the expert submits.", color = Vayu.colors.muted, modifier = Modifier.padding(20.dp)); return }
+        if (insp == null) { Text(if (data == null) "Loading…" else "Key Checks and ratings are worked out once the expert submits.", color = Vayu.colors.muted, modifier = Modifier.padding(20.dp)); return }
         val s = insp.o("scores")
         val edit = env.can("ratings.override") && !data.offline && !saving
         fun pick(k: String, v: Any?) { if (edit) pending = pending + (k to v) }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             if (data.offline) OfflineNote(rememberLoad(env, "bookings/$id").value)
+            val kcs = data.raw["inspection"]?.a("key_checks").orEmpty().map { it as JsonObject }
+            val kcEdit = edit && data.b.stage in setOf("submitted", "completed")
+            if (kcs.isNotEmpty()) Section("Key Checks")
+            if (kcs.isNotEmpty() && data.b.stage !in setOf("submitted", "completed"))
+                Text("Editable once the expert submits.", fontSize = 13.sp, color = Vayu.colors.muted)
+            kcs.forEach { kc ->
+                val k = "k:" + kc.s("key")
+                val v = s.o("key_checks").o(kc.s("key"))
+                val reset = k in pending && pending[k] == null
+                val text = if (k in pending) (pending[k] as String?) ?: v.s("auto") else v.s("value")
+                Row(Modifier.padding(top = 12.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(kc.s("label"), fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, modifier = Modifier.weight(1f))
+                    if (v.s("edited") == "true" && !reset) Text("Edited", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.warn)
+                }
+                SoftField(text, { t -> if (kcEdit) pending = if (t == v.s("value")) pending - k else pending + (k to t.take(500)) },
+                    kc.s("label"), enabled = kcEdit)
+                if (v.s("edited") == "true" && k !in pending) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Automatic: ${v.s("auto").ifBlank { "empty" }}" + if (kcEdit) " · " else "", fontSize = 13.sp, color = Vayu.colors.muted,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    if (kcEdit) BackLink("Reset to automatic") { pick(k, null) }
+                }
+            }
             val overall = s.o("overall")
             Section("Overall")
             val sugWord = overall.s("suggested_word")
@@ -612,21 +637,6 @@ fun RatingsScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
                 }
                 Picks((1..5).map { "$it" }, now, sug, columns = 5) { pick(k, it.toInt()) }
             }
-            val checks = data.trees["inspection"]?.fields.orEmpty().filter { it.type == "derived" }
-            if (checks.isNotEmpty()) Section("Key Checks")
-            checks.forEach { f ->
-                val k = "d:" + f.key
-                val yes = f.config["true_label"] as? String ?: "Yes"; val no = f.config["false_label"] as? String ?: "No"
-                val fromAnswers = (s.o("derived_suggested").s(f.key).ifBlank { null } ?: s.o("derived").s(f.key)) == "true"
-                val savedMine = insp.o("overrides").o("derived").s(f.key).isNotBlank()
-                val now = if (k in pending) (pending[k] as Boolean?) ?: fromAnswers else s.o("derived").s(f.key) == "true"
-                val mine = if (k in pending) pending[k] != null else savedMine
-                Row(Modifier.padding(top = 12.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(f.label, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, modifier = Modifier.weight(1f))
-                    if (mine) BackLink("Back to the answers' result") { pick(k, null) }
-                }
-                Picks(listOf(yes, no), if (now) yes else no, if (savedMine) null else if (fromAnswers) yes else no, columns = 2) { pick(k, it == yes) }
-            }
             Spacer(Modifier.height(24.dp))
         }
         if (pending.isNotEmpty()) {
@@ -639,9 +649,9 @@ fun RatingsScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
                         saving = true
                         val body = buildJsonObject {
                             if ("overall" in pending) put("overall", (pending["overall"] as String?)?.let { JsonPrimitive(it) } ?: JsonNull)
-                            val rs = pending.filterKeys { it.startsWith("r:") }; val ds = pending.filterKeys { it.startsWith("d:") }
+                            val rs = pending.filterKeys { it.startsWith("r:") }; val ks = pending.filterKeys { it.startsWith("k:") }
                             if (rs.isNotEmpty()) put("ratings", buildJsonObject { rs.forEach { (k, v) -> put(k.drop(2), (v as Int?)?.let { JsonPrimitive(it) } ?: JsonNull) } })
-                            if (ds.isNotEmpty()) put("derived", buildJsonObject { ds.forEach { (k, v) -> put(k.drop(2), (v as Boolean?)?.let { JsonPrimitive(it) } ?: JsonNull) } })
+                            if (ks.isNotEmpty()) put("key_checks", buildJsonObject { ks.forEach { (k, v) -> put(k.drop(2), (v as String?)?.let { JsonPrimitive(it) } ?: JsonNull) } })
                             put("row_version", insp.int("row_version") ?: 0)
                         }
                         try { env.data.act("PATCH", "inspections/${insp.s("id")}/overrides", body); env.say("Saved."); env.refresh() }
@@ -788,13 +798,14 @@ private fun Note(text: String, bg: Color) = Text(text, fontSize = 13.sp, color =
 @Composable
 fun HistoryScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
     val rows = rememberLoad(env, "bookings/$id/activity").value?.data?.rows().orEmpty()
+    val kcs = rememberBooking(env, id)?.raw?.get("inspection")?.a("key_checks").orEmpty().map { it as JsonObject }
     BackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         SubHeader("History", null, onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             rows.forEach { r ->
                 Column(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 8.dp)) {
-                    Text(activityText(r, env), color = Vayu.colors.ink)
+                    Text(activityText(r, env) { k -> kcs.firstOrNull { it.s("key") == k }?.s("label") ?: k }, color = Vayu.colors.ink)
                     Text(whenStamp(r.s("at"), env.today()), fontSize = 13.sp, color = Vayu.colors.muted)
                 }
                 HorizontalDivider(color = Vayu.colors.line)
@@ -805,7 +816,7 @@ fun HistoryScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
 }
 
 /** One history row in words (web: activityText). */
-fun activityText(r: JsonObject, env: OpsEnv): String {
+fun activityText(r: JsonObject, env: OpsEnv, kcLabel: (String) -> String = { it }): String {
     val by = r.o("by").s("name").ifBlank { "The system" }
     val c = r.o("changes")
     fun new(k: String) = (c[k] as? kotlinx.serialization.json.JsonArray)?.getOrNull(1)?.let { (it as? JsonPrimitive)?.content }
@@ -816,6 +827,11 @@ fun activityText(r: JsonObject, env: OpsEnv): String {
         r.s("kind") == "report_shared" -> if (new("how") == "check_link" || c.s("how") == "check_link") "$by copied the report's check link" else "$by shared the report PDF"
         r.s("kind") == "inspection_edited" -> "$by changed ${r.a("keys").size} answer${if (r.a("keys").size == 1) "" else "s"}"
         r.s("kind") == "ratings_changed" -> "$by changed the ratings"
+        r.s("kind") == "key_checks_changed" -> c.entries.map { (k, ab) ->
+            val label = kcLabel(k.removePrefix("check."))
+            fun at(i: Int) = ((ab as? kotlinx.serialization.json.JsonArray)?.getOrNull(i) as? JsonPrimitive)?.let { if (it is kotlinx.serialization.json.JsonNull) null else it.content }?.ifBlank { null } ?: "empty"
+            "$label: ${at(0)} → ${at(1)}"
+        }.let { if (it.isEmpty()) "$by changed Key Checks" else "$by changed ${it.joinToString("; ")}" }
         r.s("kind") == "late_reviewed" -> "Late start reviewed by $by"
         r.s("kind") == "quick_reviewed" -> "Quick finish reviewed by $by"
         new("stage") == "completed" -> "Completed: every file uploaded"
@@ -888,7 +904,7 @@ fun BookingFormScreen(env: OpsEnv, id: String?, onBack: () -> Unit, onSaved: (St
                 fs.forEach { f ->
                     Box(Modifier.onGloballyPositioned { where[f.key] = it.positionInParent().y.toInt() }) {
                         Question(f, values[f.key], filled.required("booking", f.key), false,
-                            errors[f.key]?.let { refusalText(it) } ?: answerProblem(f, values[f.key]), false, fe) { v ->
+                            errors[f.key]?.let { refusalText(it) } ?: answerProblem(f, values[f.key]) ?: filled.checkMessage("booking", f.key), false, fe) { v ->
                             values = values + (f.key to v); changed = changed + f.key; errors = errors - f.key
                         }
                     }

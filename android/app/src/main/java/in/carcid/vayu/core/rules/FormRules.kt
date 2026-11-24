@@ -24,7 +24,7 @@ object FormRules {
 
     data class Result(val visible: Map<String, Boolean>, val required: Map<String, Boolean>,
                       val errors: Map<String, String>, val derived: Map<String, Any?>,
-                      val defects: List<String>)
+                      val defects: List<String>, val failed: List<Check> = emptyList())
 
     fun isEmpty(v: Any?): Boolean = when (v) {
         null -> true
@@ -94,12 +94,13 @@ object FormRules {
                 (it.required || (it.requiredIf != null && JsonLogic.truthy(it.requiredIf, data))))
         }
         val errors = linkedMapOf<String, String>()
+        val failed = mutableListOf<Check>()
         spec.fields.filter { required[it.key] == true && values[it.key] == null }.forEach { errors[it.key] = "required" }
         for (c in spec.checks) {
             val runnable = c.fields.all { visible[it] == true && values[it] != null }
-            if (runnable && !JsonLogic.truthy(c.rule, data)) c.fields.forEach { errors.putIfAbsent(it, "check_failed") }
+            if (runnable && !JsonLogic.truthy(c.rule, data)) { failed += c; c.fields.forEach { errors.putIfAbsent(it, "check_failed") } }
         }
         @Suppress("UNCHECKED_CAST")
-        return Result(visible, required, errors, derived, data["_defects"] as List<String>)
+        return Result(visible, required, errors, derived, data["_defects"] as List<String>, failed)
     }
 }

@@ -82,13 +82,16 @@ class OpsFlowTest {
         server.on("GET bookings/$B14/inspections", """[
             {"id":"aaaaaaaa-0000-0000-0000-000000000001","expert":4,"status":"submitted","submitted_at":"2026-11-24T10:40:00Z","created_at":"2026-11-24T09:00:00Z",
              "row_version":2,"form_version":7,"start_version":null,"end_version":null,"overrides":{},
-             "scores":{"overall":{"word":"good","suggested_word":"good"},"ratings":{},"derived":{"seal":true}},
+             "scores":{"overall":{"word":"good","suggested_word":"good"},"ratings":{},"derived":{"seal":true},
+               "key_checks":{"fuel":{"auto":"Petrol · Manual","value":"Petrol · Manual","edited":false},
+                             "accident":{"auto":"None seen","value":"Front bumper repainted","edited":true}}},
              "answers":{"inspection":{"chassis_no":"MA3","odometer":12400,"bonnet":"ok","door":"ok"},"start":{},"end":{}}},
             {"id":"aaaaaaaa-0000-0000-0000-000000000002","expert":3,"status":"submitted","submitted_at":"2026-11-24T10:05:00Z","created_at":"2026-11-24T09:05:00Z",
              "row_version":1,"form_version":7,"start_version":null,"end_version":null,"overrides":{},"scores":{},"answers":{"inspection":{"chassis_no":"MA3"}}}]""")
         server.on("GET bookings/$B14/media", "[]")
         server.on("GET bookings/$B14/report", """{"code":"NO_REPORT","detail":"No report has been generated yet."}""", 404)
-        server.on("GET form-versions/7", Fixtures.INSPECTION)
+        server.on("GET form-versions/7", Fixtures.INSPECTION.replaceFirst("{\"id\":7,",
+            "{\"id\":7,\"key_checks\":[{\"key\":\"fuel\",\"label\":\"Fuel and gearbox\",\"type\":\"linked\"},{\"key\":\"accident\",\"label\":\"Accident history\",\"type\":\"text\"}],"))
         // the real server's shape: {"rows": [...]}
         server.on("GET dashboards/volume", """{"rows":[{"period":"2026-W46","key":"pdi","count":12},{"period":"2026-W47","key":"pdi","count":10},
             {"period":"2026-W48","key":"pdi","count":14},{"period":"2026-W48","key":"ev","count":4}]}""")
@@ -168,6 +171,27 @@ class OpsFlowTest {
         val body = Json.parseToJsonElement(server.bodiesOf("PATCH inspections/aaaaaaaa-0000-0000-0000-000000000001").single()).jsonObject
         assertEquals(2, body["row_version"]!!.jsonPrimitive.int)
         assertEquals(12400, body["answers"]!!.jsonObject["inspection"]!!.jsonObject["odometer"]!!.jsonPrimitive.int)
+    }
+
+    @Test fun keyChecksAreTypedOverAndResetOnReview() {
+        server.on("PATCH inspections/aaaaaaaa-0000-0000-0000-000000000001/overrides", "{}")
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("2 Key Checks"); compose.onNode(hasText("2 Key Checks", substring = true)).performScrollTo().performClick()
+        waitFor("Accident history")
+        compose.onNodeWithText("Edited").assertIsDisplayed()
+        compose.onNodeWithText("Automatic: None seen · ").assertIsDisplayed()
+        shot("ops_review")
+        compose.onNodeWithText("Reset to automatic").performClick()
+        compose.onNodeWithContentDescription("Fuel and gearbox").performTextInput("Diesel · ")
+        compose.onNodeWithText("Save").performClick()
+        compose.waitUntil(5_000) { server.bodiesOf("PATCH inspections/aaaaaaaa-0000-0000-0000-000000000001/overrides").isNotEmpty() }
+        val body = Json.parseToJsonElement(server.bodiesOf("PATCH inspections/aaaaaaaa-0000-0000-0000-000000000001/overrides").single()).jsonObject
+        assertEquals(2, body["row_version"]!!.jsonPrimitive.int)
+        val kc = body["key_checks"]!!.jsonObject
+        assertEquals("Diesel · Petrol · Manual", kc["fuel"]!!.jsonPrimitive.content)
+        assertTrue(kc["accident"] is kotlinx.serialization.json.JsonNull)
     }
 
     @Test fun withoutSignalTheLastCopyShowsAndActionsLock() {
