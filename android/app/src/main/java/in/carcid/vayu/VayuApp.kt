@@ -89,6 +89,15 @@ class VayuApp : Application() {
             o.isEnableNetworkEventBreadcrumbs = false
             o.isEnableActivityLifecycleTracingAutoFinish = false
             o.tracesSampleRate = null
+            o.maxBreadcrumbs = 0
+            // only what broke and where in the code: no error text (it can name a booking or a
+            // customer), no extras, no user, no request; so nothing personal is ever stored or sent
+            o.beforeSend = io.sentry.SentryOptions.BeforeSendCallback { e, _ ->
+                e.message = null; e.request = null; e.user = null; e.breadcrumbs = null
+                e.extras?.keys?.toList()?.forEach { e.removeExtra(it) }
+                e.exceptions?.forEach { it.value = null }
+                e
+            }
         }; android.util.Log.i("Vayu", "crash reports on: ${io.sentry.Sentry.isEnabled()}") }
             .apply { priority = Thread.MIN_PRIORITY }.start()
     }

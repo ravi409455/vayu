@@ -80,6 +80,8 @@ class InspectionFlowTest {
         compose.onNodeWithContentDescription("Chassis number").performTextInput("MA3YPKCSKTJ273129")
         compose.onNodeWithContentDescription("Odometer").performTextInput("12450")
         assertEquals(12450.0, model.draft.answer("inspection", "odometer"))   // saved as it is typed
+        compose.waitForIdle()
+        compose.onNode(hasText("Finish this page first", substring = true)).assertDoesNotExist()  // done: message gone
         compose.onNodeWithText("Next · Exterior").performClick()
         compose.onNodeWithText("Bonnet").assertIsDisplayed()
     }

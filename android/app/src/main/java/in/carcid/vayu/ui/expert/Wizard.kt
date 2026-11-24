@@ -283,6 +283,8 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
                         }
                     }
                 }
+                // once nothing is missing here, the "finish this page" message goes too
+                androidx.compose.runtime.LaunchedEffect(gaps.isEmpty()) { if (gaps.isEmpty()) blocked = emptyList() }
                 if (blocked.isNotEmpty()) Text(blocked.first(), color = Vayu.colors.bad, modifier = Modifier.padding(vertical = 12.dp))
                 Spacer(Modifier.height(24.dp))
             }
