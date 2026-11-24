@@ -14,7 +14,7 @@ coroutines = "1.9.0"
 kover = "0.9.1"
 work = "2.10.0"
 camerax = "1.4.1"
-mlkitText = "16.0.1"
+mlkitText = "19.0.1"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -48,7 +48,8 @@ camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "cam
 camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 camera-video = { module = "androidx.camera:camera-video", version.ref = "camerax" }
-mlkit-text = { module = "com.google.mlkit:text-recognition", version.ref = "mlkitText" }
+# the Play-services text reader: same API, its model comes from Google Play services (not in the APK)
+mlkit-text = { module = "com.google.android.gms:play-services-mlkit-text-recognition", version.ref = "mlkitText" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -15,6 +15,10 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="${cleartext}"
         android:theme="@style/Theme.Vayu">
+        <!-- Google Play fetches Scan's text model when the app is installed, so it's ready offline -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="ocr" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

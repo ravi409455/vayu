@@ -349,6 +349,8 @@ fun ScanScreen(field: Field, current: String?, onUse: (String) -> Unit, onClose:
     var text by remember { mutableStateOf(current ?: "") }
     var found by remember { mutableStateOf<List<String>?>(null) }
     var reading by remember { mutableStateOf(false) }
+    // the text reader comes from Google Play services; until its model is on the phone it can't read
+    var unavailable by remember { mutableStateOf(false) }
     var torch by remember { mutableStateOf(false) }
     var camera by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
     val armed = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
@@ -385,9 +387,10 @@ fun ScanScreen(field: Field, current: String?, onUse: (String) -> Unit, onClose:
                                         val b = l.boundingBox ?: return@filter false
                                         b.centerY() in (h / 3)..(h * 2 / 3) && b.centerX() in (w / 10)..(w * 9 / 10)
                                     }.map { it.text }
-                                    found = scanCandidates(inBox)
+                                    found = scanCandidates(inBox); unavailable = false
                                     found?.firstOrNull()?.let { if (text.isBlank()) text = it }
                                 }
+                                .addOnFailureListener { unavailable = true }
                                 .addOnCompleteListener { reading = false; proxy.close() }
                         }
                         provider.unbindAll()
@@ -413,6 +416,8 @@ fun ScanScreen(field: Field, current: String?, onUse: (String) -> Unit, onClose:
         }
         Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
+                unavailable -> Text("Scan is still getting ready on this phone (a one-time download from Google Play). Type the number, or try again in a minute.",
+                    color = Vayu.colors.warn, fontSize = 13.sp)
                 found == null -> {}
                 found!!.isEmpty() -> Text("Nothing read. Move closer, tap to focus, read again.", color = Vayu.colors.warn, fontSize = 13.sp)
                 // a few picks in one sideways row, so the answer stays in view
