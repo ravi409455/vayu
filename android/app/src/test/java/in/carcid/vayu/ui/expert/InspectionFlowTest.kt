@@ -61,7 +61,7 @@ class InspectionFlowTest {
 
     @Test fun theCheckInStartsTheJobOnlyWhenComplete() {
         show()
-        compose.onNodeWithText("Not started yet. The job starts once the check-in is complete.").assertIsDisplayed()
+        compose.onNodeWithText("Not started yet", substring = true).assertDoesNotExist()   // everyone knows; no banner
         shot("check_in")
         assertNull(model.draft.startedAt)
         compose.onNodeWithText("Car").performClick()

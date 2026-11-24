@@ -131,7 +131,6 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
     var pages by remember { mutableStateOf(false) }
     var blocked by remember { mutableStateOf<List<String>>(emptyList()) }
     var confirm by remember { mutableStateOf<String?>(null) }
-    var checkInNote by rememberSaveable { mutableStateOf(true) }
     var dismissed by rememberSaveable { mutableStateOf(false) }
     val files = draft.files.associateBy { it.id }
     val dir = env.drafts.filesDir
@@ -237,10 +236,6 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
             val part = step.part!!
             val gaps = filled.pageGaps(part, step.page!!)
             Column(Modifier.weight(1f).verticalScroll(scroll).padding(horizontal = 20.dp)) {
-                if (part == "start" && draft.startedAt == null && checkInNote) {
-                    Spacer(Modifier.height(12.dp))
-                    Banner("Not started yet. The job starts once the check-in is complete.", Tone.INFO, { checkInNote = false })
-                }
                 if (draft.problem != null && !dismissed) {
                     Spacer(Modifier.height(12.dp))
                     Banner(problemText(draft), Tone.BAD, { dismissed = true })
