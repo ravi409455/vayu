@@ -470,6 +470,10 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             OfflineNote(list.value)
             Text("${items.count { it.s("kind") == "photo" }} photos · ${items.count { it.s("kind") == "video" }} videos", color = Vayu.colors.muted)
+            // files deleted after the storage time Admin set (Settings) are gone for good: say so
+            val deleted = list.value?.data?.rows().orEmpty().count { it.s("status") == "purged" }
+            if (deleted > 0) Text("$deleted ${if (deleted == 1) "file was" else "files were"} deleted after the storage time set in Settings.",
+                color = Vayu.colors.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
             val filled = data?.filled(env.today().toString())
             fields.groupBy { it.second }.forEach { (section, fs) ->
                 val here = items.filter { m -> fs.any { it.third.key == m.s("field_key") } }

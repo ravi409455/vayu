@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
-import { Logo } from "../ui/Logo";
 import { fmtDay, fmtStamp } from "../lib/format";
+
+/** Customers see the Car C.I.D. brand on these pages, never the staff app's name. */
+function BrandLogo() {
+  useEffect(() => { document.title = "Car C.I.D."; }, []);
+  return <p className="brand-logo"><img src="/carcid-logo.png" alt="" width={44} height={44} /><strong>Car C.I.D.</strong></p>;
+}
 
 type Verify = { valid: boolean; booking_id: string; car: string; type: string; date: string | null; overall_rating: string | null; revision: number; generated_at: string | null; current: boolean };
 
@@ -14,7 +19,7 @@ export function VerifyPage() {
   useEffect(() => { api<Verify>(`verify/${token}`).then(setV).catch(() => setBad(true)); }, [token]);
   return (
     <div className="public-page">
-      <p><Logo /></p>
+      <BrandLogo />
       <h1 style={{ fontSize: 22 }}>Report check</h1>
       {bad && <div className="card" role="alert"><strong>We could not find this report.</strong><p className="muted">The link may be wrong or the report was replaced.</p></div>}
       {v && (
@@ -70,7 +75,7 @@ export function ZipPage() {
   const { state, gone } = useZip(`zips/${token}`);
   return (
     <div className="public-page">
-      <p><Logo /></p>
+      <BrandLogo />
       <h1 style={{ fontSize: 22 }}>Download</h1>
       {gone ? <div className="card" role="alert"><strong>This download link is invalid, expired or has nothing in it.</strong></div> : (
         <div className="card" role="status"><Progress state={state} note="This takes a moment the first time. The file is kept for 7 days." /></div>)}
@@ -96,7 +101,7 @@ export function ReportMediaPage() {
   const what = link === "videos" ? "videos" : "photos";
   return (
     <div className="public-page">
-      <p><Logo /></p>
+      <BrandLogo />
       <h1 style={{ fontSize: 22 }}>{info ? `${info.count} ${info.count === 1 ? what.slice(0, -1) : what}` : `Inspection ${what}`}</h1>
       {info && <p className="muted">From the Car C.I.D. inspection, booking {info.booking_id}. They download as one ZIP file, in a folder for each part of the car.</p>}
       {bad || gone ? <div className="card" role="alert"><strong>{bad ?? "This download is not available right now. Please try again later."}</strong></div> : (

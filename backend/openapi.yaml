@@ -2460,6 +2460,8 @@ paths:
   /api/v1/pdf-shared/{id}:
     get:
       operationId: pdf_shared_retrieve_2
+      description: GET one item (any version); PATCH {name} renames it; DELETE removes
+        an unused one.
       parameters:
       - in: path
         name: id
@@ -2472,6 +2474,40 @@ paths:
       - cookieAuth: []
       responses:
         '200':
+          description: No response body
+    patch:
+      operationId: pdf_shared_partial_update
+      description: GET one item (any version); PATCH {name} renames it; DELETE removes
+        an unused one.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pdf-shared
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: pdf_shared_destroy
+      description: GET one item (any version); PATCH {name} renames it; DELETE removes
+        an unused one.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - pdf-shared
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
           description: No response body
   /api/v1/pdf-template-versions/{id}:
     get:

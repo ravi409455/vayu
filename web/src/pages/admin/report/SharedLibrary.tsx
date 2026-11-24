@@ -9,7 +9,8 @@ import { useRefresh } from "../../../api/hooks";
 import type { Booking, FormSummary, FormVersion } from "../../../api/types";
 import { fmtDay } from "../../../lib/format";
 import { useRefChoices } from "../../../lib/useChoices";
-import { Confirm, Empty, Pill, useToast } from "../../../ui/kit";
+import { Confirm, Empty, Field, Pill, useToast } from "../../../ui/kit";
+import { MoreMenu } from "../../../ui/Menu";
 import { findPart, locate, partName, removePart, shiftPart, themeOf, updatePage, updatePart, withIds, withoutTheme, type Definition, type Part } from "./model";
 import { PagesPanel, type Sel } from "./PagesPanel";
 import { PageSettings, PartSettings } from "./PartSettings";
@@ -31,7 +32,20 @@ export function usedBy(u: Usage[]): string {
 
 export function SharedLibrary({ templates, forms, editable }: { templates: Template[]; forms: FormSummary[]; editable: boolean }) {
   const items = useShared();
+  const { say, fail } = useToast();
+  const refresh = useRefresh();
   const [open, setOpen] = useState<number | null>(null);
+  const [renaming, setRenaming] = useState<SharedItem | null>(null);
+  const [newName, setNewName] = useState("");
+  const [deleting, setDeleting] = useState<SharedItem | null>(null);
+  async function rename() {
+    const it = renaming!; setRenaming(null);
+    try { await api(`pdf-shared/${it.id}`, { method: "PATCH", body: { name: newName } }); await refresh("pdf-shared"); say("Renamed."); } catch (e) { fail(e); }
+  }
+  async function remove() {
+    const it = deleting!; setDeleting(null);
+    try { await api(`pdf-shared/${it.id}`, { method: "DELETE" }); await refresh("pdf-shared"); say(`“${it.name}” deleted.`); } catch (e) { fail(e); }
+  }
   const item = (items.data ?? []).find((i) => i.id === open);
   if (item) return <SharedEditor key={`${item.id}-${item.revision}`} item={item} all={items.data ?? []} templates={templates} forms={forms} editable={editable} onBack={() => setOpen(null)} />;
   const group = (kind: SharedItem["kind"]) => (items.data ?? []).filter((i) => i.kind === kind);
@@ -43,12 +57,27 @@ export function SharedLibrary({ templates, forms, editable }: { templates: Templ
           <tbody>{group(kind).map((i) => (
             <tr key={i.id}><td><Icon size={14} aria-hidden /> <strong>{i.name}</strong></td><td>v{i.revision}</td>
               <td className="small">{i.used_by.length ? usedBy(i.used_by) : <span className="muted">not used</span>}</td>
-              <td><button type="button" className="sm" onClick={() => setOpen(i.id)}>{editable ? "Edit" : "View"}</button></td></tr>))}
+              <td><span className="bar" style={{ margin: 0, justifyContent: "flex-end" }}>
+                <button type="button" className="sm" onClick={() => setOpen(i.id)}>{editable ? "Edit" : "View"}</button>
+                {editable && <MoreMenu label={`More for ${i.name}`} items={[
+                  { label: "Rename", onClick: () => { setNewName(i.name); setRenaming(i); } },
+                  { label: "Delete", danger: true, onClick: () => setDeleting(i), hidden: i.used_by.length > 0 },
+                ]} />}</span></td></tr>))}
           </tbody></table>)}
     </section>);
   if (items.isLoading) return <p className="muted">Loading…</p>;
   return (
     <div className="stack">
+      {renaming && (
+        <Confirm title={`Rename “${renaming.name}”`} confirmLabel="Rename" onCancel={() => setRenaming(null)} onConfirm={() => void rename()}>
+          <Field label="Name"><input value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={100} autoFocus /></Field>
+          <p className="muted small">Only the name changes. Reports keep using it as they are.</p>
+        </Confirm>)}
+      {deleting && (
+        <Confirm title={`Delete “${deleting.name}”?`} danger confirmLabel="Delete" onCancel={() => setDeleting(null)} onConfirm={() => void remove()}>
+          <p>It and all its versions are deleted for good. No report uses it.</p>
+          <p className="muted small">If an older version of a report still uses it, the server refuses and says which.</p>
+        </Confirm>)}
       {list("theme", "Themes", "Colours, fonts, header, footer and watermark. Change once, every report using it changes.", Palette)}
       {list("snippet", "Shared parts", "Parts used in several reports, e.g. the disclaimer.", Link2)}
     </div>

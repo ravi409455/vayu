@@ -292,6 +292,9 @@ describe("download links", () => {
     render(<MemoryRouter initialEntries={["/verify/tok/photos"]}><Routes><Route path="/verify/:token/:link" element={<ReportMediaPage />} /></Routes></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: "48 photos" })).toBeTruthy();
     expect(screen.getByText(/booking DEMO-3/)).toBeTruthy();
+    expect(screen.getByText("Car C.I.D.")).toBeTruthy();              // the customer's brand, not "Vayu"
+    expect(screen.queryByText("Vayu")).toBeNull();
+    expect(document.title).toBe("Car C.I.D.");
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("https://files.test/DEMO-3%20photos.zip"));
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -350,6 +353,33 @@ describe("photo and video storage setting", () => {
 });
 
 describe("the shared library", () => {
+  it("renames an item and offers delete only when no report uses it", async () => {
+    const { render, screen, waitFor } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+    const { SharedLibrary } = await import("./pages/admin/report/SharedLibrary");
+    const calls: { method: string; url: string; body?: unknown }[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      calls.push({ method: init?.method ?? "GET", url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      const items = [{ id: 1, kind: "theme", key: "carcid", name: "Car C.I.D.", revision: 4, used_by: [{ template: 7, form: "PDI", published: 4 }] },
+        { id: 2, kind: "snippet", key: "old", name: "Old terms", revision: 1, used_by: [] }];
+      return init?.method === "DELETE" ? new Response(null, { status: 204 }) : new Response(JSON.stringify(init?.method && init.method !== "GET" ? items[0] : items), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    const u = userEvent.setup();
+    render(<QueryClientProvider client={new QueryClient()}><SharedLibrary editable forms={[]} templates={[]} /></QueryClientProvider>);
+    await u.click(await screen.findByRole("button", { name: "More for Car C.I.D." }));
+    expect(screen.queryByRole("menuitem", { name: "Delete" })).toBeNull();        // in use: no delete
+    await u.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const box = screen.getByLabelText("Name");
+    await u.clear(box); await u.type(box, "Car C.I.D. look");
+    await u.click(screen.getByRole("button", { name: "Rename" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "PATCH", url: expect.stringContaining("pdf-shared/1"), body: { name: "Car C.I.D. look" } }));
+    await u.click(screen.getByRole("button", { name: "More for Old terms" }));
+    await u.click(screen.getByRole("menuitem", { name: "Delete" }));
+    await u.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.url.includes("pdf-shared/2"))).toBe(true));
+    vi.restoreAllMocks();
+  });
   it("says who uses an item at which version", async () => {
     const { usedBy } = await import("./pages/admin/report/SharedLibrary");
     expect(usedBy([{ template: 1, form: "PDI", published: 4, draft: 4 }, { template: 2, form: "EV", published: 3, draft: 4 }, { template: 3, form: "Used car", draft: 2 }]))

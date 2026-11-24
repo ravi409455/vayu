@@ -340,7 +340,18 @@ class SharedItems(APIView):
 
 
 class SharedItemDetail(APIView):
+    """GET one item (any version); PATCH {name} renames it; DELETE removes an unused one."""
+
     permission_classes = [perm("pdf_templates.view", "pdf_templates.edit")]
+
+    def patch(self, request, pk):
+        item = shared.rename(request.user, get_object_or_404(SharedItem, pk=pk),
+                             request.data.get("name"))
+        return Response(_shared_body(item))
+
+    def delete(self, request, pk):
+        shared.delete(request.user, get_object_or_404(SharedItem, pk=pk))
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def get(self, request, pk):
         item = get_object_or_404(SharedItem, pk=pk)

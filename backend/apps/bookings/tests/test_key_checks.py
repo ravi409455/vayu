@@ -1,4 +1,6 @@
 """Key Checks: set up by Admin per form version, worked out from answers, filled by Ops."""
+from typing import Any
+
 import pytest
 
 from apps.bookings.models import BookingActivity
@@ -9,7 +11,7 @@ from .test_submissions import publish_form
 
 pytestmark = pytest.mark.django_db
 
-KC = [
+KC: list[dict[str, Any]] = [
     {"key": "accident", "label": "Accident history", "type": "text", "default": "None seen"},
     {"key": "odo", "label": "Odometer", "type": "number"},
     {"key": "body", "label": "Body", "type": "linked", "fields": ["door", "inspection.paint"],
@@ -62,7 +64,7 @@ def test_ops_text_wins_stays_after_edits_and_can_be_reset(kenv):
     assert scores(insp)["key_checks"]["body"] == {"auto": "Ok / Ok", "value": "Ok / Ok",
                                                   "edited": False}
     row = BookingActivity.objects.filter(kind="key_checks_changed").order_by("id").first()
-    assert row.changes == {"check.body": ["Dent / Ok", "Dent, repainted"]}
+    assert row is not None and row.changes == {"check.body": ["Dent / Ok", "Dent, repainted"]}
     ops_rows = kenv.ops.get(f"/api/v1/bookings/{b['id']}/activity").json()
     mine = [x for x in ops_rows if x["kind"] == "key_checks_changed"]   # newest first
     assert mine[-1]["changes"] == {"check.body": ["Dent / Ok", "Dent, repainted"]}

@@ -166,6 +166,31 @@ def save(actor, kind: str, key: str, name: str, content) -> tuple[SharedItem, li
     return item, updated
 
 
+def rename(actor, item: SharedItem, name) -> SharedItem:
+    """Only the name people see; the key templates point at stays, so nothing else moves."""
+    if not isinstance(name, str) or not name.strip() or len(name.strip()) > 100:
+        raise err("INVALID_SHARED", "A shared item needs a name (up to 100 characters).")
+    old, item.name = item.name, name.strip()
+    item.save(update_fields=["name"])
+    audit.record(actor, f"pdf_{item.kind}.rename", "pdf_shared", item.id,
+                 f"Renamed {item.kind} {item.key}: {old} -> {item.name}")
+    return item
+
+
+def delete(actor, item: SharedItem) -> None:
+    """Only an item no template version uses, live, draft or old (an old version can still be
+    shown or brought back), so no report ever points at a missing item."""
+    users = sorted({v.template.form.name for v in PdfTemplateVersion.objects
+                    .select_related("template__form")
+                    if uses(v.definition, item.kind, item.key) is not None})
+    if users:
+        raise err("SHARED_IN_USE", f"Still used by {', '.join(users)}. Remove it from those "
+                  "reports first.", 409)
+    audit.record(actor, f"pdf_{item.kind}.delete", "pdf_shared", item.id,
+                 f"Deleted {item.kind} {item.key} ({item.name})")
+    item.delete()
+
+
 def usage(item: SharedItem) -> list[dict]:
     """Templates using this item: their draft or live version, and which revision."""
     out = []

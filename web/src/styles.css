@@ -456,6 +456,7 @@ button.danger:disabled { color: var(--muted); border-color: var(--line); backgro
 .profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; max-width: 1100px; }
 .profile-grid .card { margin: 0; }
 .public-page { max-width: 520px; margin: 8vh auto; padding: 16px; }
+.brand-logo { display: flex; align-items: center; gap: 10px; font-size: 18px; letter-spacing: .04em; }
 .wide-modal .modal { max-width: 860px; }
 .library-editor { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; align-items: start; }
 .library-editor > .card { margin: 0; }

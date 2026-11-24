@@ -170,7 +170,16 @@ problems).
   (0 = for ever, else 30–3650). An hourly job deletes older originals of completed jobs for
   good, with their previews, print copies and ZIPs. Stored PDFs keep their pictures; the
   report's links then say the files are no longer available.
-- PDI template: Download photos and Download videos under the verify box.
+- PDI template: Download photos and Download videos under the verify box. Used car and EV end
+  with a verify page that has both buttons.
+- **Deployment (to do before go-live):** `infra/Caddyfile` only sends `APP_HOST` to the API; it
+  serves neither the web app nor `verify.carcid.in`. Report links are
+  `VERIFY_BASE_URL/<token>`, `/<token>/photos` and `/<token>/videos`, and the web app answers them
+  at `/verify/<token>[/photos|/videos]`. Either set `VERIFY_BASE_URL=https://app.carcid.in/verify`
+  once the app host serves the web build, or give the verify host a site that serves the web
+  build, sends `/api/*` to the API, and rewrites every other path `/x` to `/verify/x`. Add the
+  verify host to `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` either way. PDFs already made keep
+  the address they were made with, so decide this before the first real report.
 
 ## 7. Changes to the form builder
 

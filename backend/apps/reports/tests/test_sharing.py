@@ -209,6 +209,34 @@ def test_shared_items_api(renv):
     assert renv.ops.post("/api/v1/pdf-shared", {}, format="json").status_code == 403
 
 
+def test_rename_and_delete_shared_items(renv):
+    a = renv.admin
+    theme = a.post("/api/v1/pdf-shared", {"kind": "theme", "key": "brand", "name": "Brand",
+                                          "content": THEME}, format="json").json()
+    a.post("/api/v1/pdf-shared", {"kind": "snippet", "key": "terms", "name": "Terms",
+                                  "content": DISCLAIMER}, format="json")
+    url = f"/api/v1/pdf-shared/{theme['id']}"
+    r = a.patch(url, {"name": "  Car C.I.D. look "}, format="json")
+    assert r.status_code == 200 and r.json()["name"] == "Car C.I.D. look"
+    assert r.json()["key"] == "brand" and r.json()["revision"] == 1     # nothing else moves
+    assert a.patch(url, {"name": " "}, format="json").json()["code"] == "INVALID_SHARED"
+    assert renv.ops.patch(url, {"name": "x"}, format="json").status_code == 403
+    assert renv.ops.delete(url).status_code == 403
+    set_template(renv, linked(), publish=True)              # the template uses both
+    used = a.delete(url)
+    assert used.status_code == 409 and used.json()["code"] == "SHARED_IN_USE"
+    assert "PDI" in used.json()["detail"]
+    v = renv.admin.post(f"/api/v1/pdf-templates/{renv.template_id}/drafts", {}, format="json")
+    assert v.status_code in (200, 201)
+    draft = PdfTemplateVersion.objects.get(template_id=renv.template_id, status="draft")
+    draft.definition = one_page(table([{"field": "inspection.door"}]))
+    draft.save()
+    assert a.delete(url).status_code == 409        # the live version (an old one later) uses it
+    PdfTemplateVersion.objects.filter(template_id=renv.template_id).exclude(pk=draft.pk).delete()
+    assert a.delete(url).status_code == 204 and not SharedItem.objects.filter(key="brand").exists()
+    assert AuditLog.objects.filter(action__in=["pdf_theme.rename", "pdf_theme.delete"]).count() == 2
+
+
 def test_copy_export_and_import(renv):
     a, u = renv.admin, renv.admin_user
     logo = assets.create_asset(u, png(), "Logo")

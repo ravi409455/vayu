@@ -108,7 +108,7 @@ def test_start_and_submit_stamp_the_minutes(ienv, booking):
     assign(ienv, booking)
     assert start(ienv.expert, booking).status_code == 200
     b = Booking.objects.get(pk=booking["id"])
-    assert b.late_minutes > 15                               # booked weeks ago
+    assert b.late_minutes is not None and b.late_minutes > 15   # booked weeks ago
     assert submit(ienv.expert, booking, GOOD).status_code == 200
     b.refresh_from_db()
     assert b.duration_minutes == 0                           # submitted at once: too quick
