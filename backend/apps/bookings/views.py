@@ -74,8 +74,12 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         for param, column in (("stage", "stage"), ("type", "inspection_type"), ("city", "city"),
                               ("expert", "assigned_expert_id")):
             if p.get(param):
-                if param == "expert" and not p[param].isdigit():
-                    raise ValidationError({param: "Use a user id."})
+                if param == "expert":                 # one id or several: expert=3,7
+                    ids = p[param].split(",")
+                    if not all(i.isdigit() for i in ids):
+                        raise ValidationError({param: "Use user ids, separated by commas."})
+                    qs = qs.filter(assigned_expert_id__in=ids)
+                    continue
                 qs = qs.filter(**{column: p[param]})
         problem = p.get("problem")                    # the Ops problem queue
         if problem == "conflict":

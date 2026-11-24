@@ -47,8 +47,8 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
     var tab by rememberSaveable { mutableStateOf(OpsTab.TODAY) }
-    // a Dashboard tile opens Bookings with these filters (dates, stage, late / quick, expert)
-    var preset by remember { mutableStateOf<Map<String, String>?>(null) }
+    // Bookings' filters live here, so they stay across tabs; a Dashboard tile sets them (dates, stage, late / quick, expert)
+    var bookingFilters by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     var tick by remember { mutableStateOf(0) }
     val stack = remember { mutableStateListOf<Route>() }
     var assigning by remember { mutableStateOf<Bk?>(null) }
@@ -94,9 +94,9 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
         when (val r = stack.lastOrNull()) {
             null -> when (tab) {
                 OpsTab.TODAY -> TodayScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { push(Route.Booking(it)) }, { assigning = it }, bar)
-                OpsTab.BOOKINGS -> BookingsScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { push(Route.Booking(it)) }, { assigning = it }, preset = preset, onPresetUsed = { preset = null },
+                OpsTab.BOOKINGS -> BookingsScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { push(Route.Booking(it)) }, { assigning = it }, bookingFilters, { bookingFilters = it },
                     onNew = { push(Route.Form(null)) }, bar)
-                OpsTab.DASHBOARD -> DashboardScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { preset = it; tab = OpsTab.BOOKINGS }, bar)
+                OpsTab.DASHBOARD -> DashboardScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { bookingFilters = BookingFilters.fromTile(it); tab = OpsTab.BOOKINGS }, bar)
             }
             Route.Needs -> {
                 LaunchedEffect(Unit) { onBell() }

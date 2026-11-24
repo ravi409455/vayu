@@ -81,6 +81,9 @@ def test_filter_by_expert(many):
     b = many.ops.get("/api/v1/bookings?search=SA100").json()["results"][0]
     assign(many, b)
     assert ids(many.ops, f"expert={many.expert_user.id}") == ["SA10001"]
+    # several experts at once; an unknown id adds nothing; a bad one is refused
+    assert ids(many.ops, f"expert={many.expert_user.id},999999") == ["SA10001"]
+    assert many.ops.get("/api/v1/bookings?expert=1,x").status_code == 400
 
 
 # ---------------------------------------------------------------- dashboards

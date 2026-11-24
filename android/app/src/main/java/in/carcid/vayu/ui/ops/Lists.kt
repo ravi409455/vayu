@@ -1,10 +1,8 @@
 package `in`.carcid.vayu.ui.ops
 
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.async
-import `in`.carcid.vayu.ui.components.VayuSheet
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,13 +24,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,7 +52,6 @@ import kotlinx.serialization.json.JsonObject
 import `in`.carcid.vayu.core.ops.rows
 import `in`.carcid.vayu.core.ops.s
 import `in`.carcid.vayu.ui.components.Avatar
-import `in`.carcid.vayu.ui.components.PrimaryButton
 import `in`.carcid.vayu.ui.components.Segmented
 import `in`.carcid.vayu.ui.components.SoftButton
 import `in`.carcid.vayu.ui.components.SoftField
@@ -65,10 +59,8 @@ import `in`.carcid.vayu.ui.components.StatusDot
 import `in`.carcid.vayu.ui.components.Tone
 import `in`.carcid.vayu.ui.components.VayuTopBar
 import `in`.carcid.vayu.ui.components.toneColor
-import `in`.carcid.vayu.ui.expert.SingleChoice
 import `in`.carcid.vayu.ui.expert.time12
 import `in`.carcid.vayu.ui.theme.Vayu
-import `in`.carcid.vayu.core.forms.Option
 import java.net.URLEncoder
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -83,6 +75,8 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
     val day = rememberLoad(env, "bookings?date_from=$t&date_to=$t&order=schedule")
     val all = day.value?.data?.rows().orEmpty().map(::Bk).filter { it.stage != "cancelled" }
     var open by rememberSaveable { mutableStateOf(setOf<Int>()) }
+    var pick by rememberSaveable { mutableStateOf<String?>(null) }      // the status chip: null = All
+    val shown = if (pick == null) all else all.filter { it.stage == pick }
     val online = day.value?.offline == false
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         VayuTopBar("Today", env.me.initials, bellCount = needs, onBell = onBell, onProfile = onProfile)
@@ -91,9 +85,13 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
                 Text(t.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.ENGLISH)), color = Vayu.colors.muted)
                 OfflineNote(day.value)
                 day.error?.takeIf { day.value == null }?.let { Text(it, color = Vayu.colors.bad, modifier = Modifier.padding(top = 12.dp)) }
-                if (all.isNotEmpty()) DayCard(all)
+                if (all.isNotEmpty()) {
+                    DayCard(all)
+                    StatusChips(listOf<Pair<String?, Int>>(null to all.size) + STAGE_WORDS.keys.filter { it != "cancelled" }
+                        .map { k -> k to all.count { it.stage == k } }.filter { it.second > 0 || it.first == pick }, pick) { pick = it }
+                }
             }
-            val unassigned = all.filter { it.stage == "draft" }
+            val unassigned = shown.filter { it.stage == "draft" }
             if (unassigned.isNotEmpty()) {
                 item { Section("Unassigned · ${unassigned.size}") }
                 items(unassigned, key = { it.id }) { b ->
@@ -101,10 +99,11 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
                         onOpen = { onOpen(b.id) }) { PillButton("Assign", online && env.can("bookings.assign")) { onAssign(b) } }
                 }
             }
-            val experts = all.mapNotNull { it.expert }.distinct()
+            val experts = shown.mapNotNull { it.expert }.distinct()
             if (experts.isNotEmpty()) item { Section("Experts") }
             experts.forEach { id ->
                 val jobs = all.filter { it.expert == id }
+                val listed = shown.filter { it.expert == id }
                 item(key = "e$id") {
                     val name = env.labels.person(id)
                     val onSite = jobs.firstOrNull { it.stage == "in_progress" }
@@ -127,15 +126,19 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
                             Text("${jobs.count { it.stage == "completed" || it.stage == "submitted" }} of ${jobs.size}", color = Vayu.colors.muted, fontSize = 14.sp, maxLines = 1, softWrap = false)
                             Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = Vayu.colors.muted)
                         }
-                        if (expanded) jobs.forEach { b ->
-                            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(role = Role.Button) { onOpen(b.id) }.padding(start = 48.dp, top = 4.dp, bottom = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text(b.time, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink2, fontSize = 14.sp, maxLines = 1, softWrap = false)
-                                Column(Modifier.weight(1f)) {
-                                    Text(b.customer.ifBlank { b.code }, color = Vayu.colors.ink, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(b.code, fontSize = 13.sp, color = Vayu.colors.ink2)
+                        // their bookings in a grey box under the name, full width (no empty gap on the left)
+                        if (expanded) Column(Modifier.padding(bottom = 12.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Vayu.colors.soft).padding(horizontal = 12.dp)) {
+                            listed.forEachIndexed { i, b ->
+                                if (i > 0) HorizontalDivider(color = Vayu.colors.line)
+                                Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(role = Role.Button) { onOpen(b.id) }.padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(b.time, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink2, fontSize = 14.sp, maxLines = 1, softWrap = false)
+                                    Column(Modifier.weight(1f)) {
+                                        Text(b.customer.ifBlank { b.code }, color = Vayu.colors.ink, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(b.code, fontSize = 13.sp, color = Vayu.colors.ink2)
+                                    }
+                                    opsStatus(b).let { StatusDot(it.first, it.second) }
                                 }
-                                opsStatus(b).let { StatusDot(it.first, it.second) }
                             }
                         }
                         HorizontalDivider(color = Vayu.colors.line)
@@ -144,6 +147,12 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
             }
             if (day.value != null && all.isEmpty()) item {
                 Text("Nothing booked for today.", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp))
+            }
+            else if (shown.isEmpty() && pick != null) item {
+                Column(Modifier.padding(vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Nothing ${STAGE_WORDS[pick]?.lowercase()} today.", color = Vayu.colors.muted)
+                    SoftButton("Show all", { pick = null }, Modifier.fillMaxWidth())
+                }
             }
             item { Spacer(Modifier.height(24.dp)) }
         }
@@ -175,30 +184,19 @@ private fun DayCard(all: List<Bk>) {
     }
 }
 
-/** Bookings: search, Today / Upcoming / All, one filter sheet; Unassigned first. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** Bookings: search, Status ▾ · Experts ▾ · Filter (today by default); Unassigned first. [filters] live in OpsHome, so they stay across tabs. */
 @Composable
 fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Unit, onOpen: (String) -> Unit, onAssign: (Bk) -> Unit,
-                   preset: Map<String, String>? = null, onPresetUsed: () -> Unit = {}, onNew: () -> Unit, bottomBar: @Composable () -> Unit) {
+                   filters: Map<String, String>, onFilters: (Map<String, String>) -> Unit, onNew: () -> Unit, bottomBar: @Composable () -> Unit) {
     val t = env.today()
-    var view by rememberSaveable { mutableStateOf(0) }
     var search by rememberSaveable { mutableStateOf("") }
     var term by remember { mutableStateOf("") }
-    var filters by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     var sheet by remember { mutableStateOf(false) }
-    // any choice or yes/no answer the person may see (generic: payments are ordinary fields)
-    val answerFields = if (env.can("submissions.view")) rememberLoad(env, "bookings/answer-fields").value?.data?.rows().orEmpty() else emptyList()
-    // opened from a Dashboard tile: all dates, that tile's filters
-    LaunchedEffect(preset) { if (preset != null) { view = 2; search = ""; filters = preset; onPresetUsed() } }
-    var pages by remember(view, term, filters) { mutableStateOf(1) }
+    var pages by remember(term, filters) { mutableStateOf(1) }
     LaunchedEffect(search) { kotlinx.coroutines.delay(350); term = search.trim() }
     fun query(page: Int) = buildList {
-        when (view) {
-            0 -> { add("date_from=$t"); add("date_to=$t"); add("order=schedule") }
-            1 -> { add("date_from=${t.plusDays(1)}"); add("order=schedule") }
-        }
+        addAll(BookingFilters.query(filters, t))
         if (term.isNotEmpty()) add("search=" + URLEncoder.encode(term, "UTF-8"))
-        filters.forEach { (k, v) -> add("$k=" + URLEncoder.encode(v, "UTF-8")) }
         if (page > 1) add("page=$page")
     }.joinToString("&")
     val loads = (1..pages).map { rememberLoad(env, "bookings?" + query(it)) }
@@ -217,32 +215,13 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
                 OfflineNote(first)
                 Spacer(Modifier.height(12.dp))
                 SoftField(search, { search = it }, "Name, phone, ID, chassis", icon = Icons.Outlined.Search)
-                Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Segmented(listOf("Today", "Upcoming", "All"), view, { view = it }, Modifier.weight(1f))
-                    // an icon, so the three tabs keep their room; filled with the count when filters are on
-                    Row(Modifier.heightIn(min = 44.dp).widthIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
-                        .background(if (filters.isEmpty()) Vayu.colors.soft else Vayu.colors.primary)
-                        .clickable(role = Role.Button) { sheet = true }.padding(horizontal = 12.dp)
-                        .semantics { contentDescription = if (filters.isEmpty()) "Filter" else "Filter, ${filters.keys.count { it != "value" }} on" },
-                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                        Icon(Icons.Outlined.FilterList, null, tint = if (filters.isEmpty()) Vayu.colors.ink else Vayu.colors.onPrimary, modifier = Modifier.size(18.dp))
-                        if (filters.isNotEmpty()) Text(" ${filters.keys.count { it != "value" }}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.onPrimary)
-                    }
-                }
-            }
-            // what the list is narrowed to (from a Dashboard tile or the filter), with a way out
-            if (filters.isNotEmpty()) item {
-                val from = filters["date_from"]?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
-                val to = filters["date_to"]?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
-                val words = listOfNotNull(
-                    if (from != null && to != null) rangeLabel(from, to) else null,
-                    filters["stage"]?.let { STAGE_WORDS[it] }, filters["timing"]?.let { if (it == "late") "Started late" else "Too quick" },
-                    filters["type"]?.let(env.labels::type), filters["city"]?.let(env.labels::city), filters["expert"]?.toIntOrNull()?.let(env.labels::person),
-                    filters["answer"]?.let { a -> answerWords(answerFields.firstOrNull { it.s("field") == a }, filters["value"]) })
-                Row(Modifier.padding(top = 12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Showing " + words.joinToString(" · "), fontSize = 13.sp, color = Vayu.colors.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Text("Clear", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.info,
-                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { filters = emptyMap() }.padding(8.dp))
+                QuickFilters(filters, env.labels, onFilters) { sheet = true }
+                // what the list shows, always (today is the default), with a way back to it
+                Row(Modifier.padding(top = 4.dp).fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text((listOfNotNull(first?.let { "Showing $total" }) + BookingFilters.words(filters, env.labels)).joinToString(" · "),
+                        fontSize = 13.sp, color = Vayu.colors.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    if (filters.isNotEmpty()) Text("Clear", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.info,
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { onFilters(emptyMap()) }.padding(12.dp))
                 }
             }
             val need = rows.filter { it.stage == "draft" }
@@ -263,11 +242,11 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
             }
             if (first == null) item { Text(if (term.isNotEmpty()) "Searching…" else "Loading…", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
             else if (rows.isEmpty()) item {
+                val dated = filters["dates"] != "all"
                 Column(Modifier.padding(vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(if (term.isNotEmpty()) "Nothing matches \"$term\" ${listOf("today", "from tomorrow on", "")[view]}.".replace(" .", ".")
-                        else "No bookings here.", color = Vayu.colors.muted)
-                    // a search on Today or Upcoming misses other days: one tap widens it
-                    if (term.isNotEmpty() && view != 2) SoftButton("Search all dates", { view = 2 }, Modifier.fillMaxWidth())
+                    Text(if (term.isNotEmpty()) "Nothing matches \"$term\"${if (dated) " · " + BookingFilters.dateWord(filters) else ""}." else "No bookings here.", color = Vayu.colors.muted)
+                    // a search on some dates misses the others: one tap widens it
+                    if (term.isNotEmpty() && dated) SoftButton("Search all dates", { onFilters(filters - "date_from" - "date_to" + ("dates" to "all")) }, Modifier.fillMaxWidth())
                 }
             }
             if (rows.size < total) item {
@@ -277,39 +256,7 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
         }
         bottomBar()
     }
-    if (sheet) VayuSheet({ sheet = false }) {
-        var draft by remember { mutableStateOf(filters) }
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("Filter", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Vayu.colors.ink)
-            Text("City", fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
-            SingleChoice("City", env.labels.cities.map { Option(it.key, it.value, false, null) }, draft["city"], false,
-                { draft = if (it == null) draft - "city" else draft + ("city" to it as String) }, forceList = true)
-            Text("Expert", fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
-            SingleChoice("Expert", env.labels.experts.map { Option(it.s("id"), it.s("name").ifBlank { it.s("username") }, false, null) }, draft["expert"], false,
-                { draft = if (it == null) draft - "expert" else draft + ("expert" to it as String) }, forceList = true)
-            Text("Inspection type", fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
-            SingleChoice("Inspection type", env.labels.types.map { Option(it.first, it.second, false, null) }, draft["type"], false,
-                { draft = if (it == null) draft - "type" else draft + ("type" to it as String) }, forceList = true)
-            Text("Stage", fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
-            SingleChoice("Stage", STAGE_WORDS.map { Option(it.key, it.value, false, null) }, draft["stage"], false,
-                { draft = if (it == null) draft - "stage" else draft + ("stage" to it as String) }, forceList = true)
-            if (answerFields.isNotEmpty()) {
-                Text("Answer", fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
-                SingleChoice("Answer", answerFields.map { Option(it.s("field"), it.s("form") + " · " + it.s("label"), false, null) }, draft["answer"], false,
-                    { draft = (draft - "answer" - "value") + (if (it == null) emptyMap() else mapOf("answer" to it as String)) }, forceList = true)
-                answerFields.firstOrNull { it.s("field") == draft["answer"] }?.let { f ->
-                    Text(f.s("label"), fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
-                    SingleChoice(f.s("label"), answerOptions(f).map { (v, l) -> Option(v, l, false, null) }, draft["value"], false,
-                        { draft = if (it == null) draft - "value" else draft + ("value" to it as String) }, forceList = true)
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                SoftButton("Clear", { draft = emptyMap(); filters = emptyMap(); sheet = false }, Modifier.weight(1f))
-                // an answer counts only with its value chosen
-                PrimaryButton("Show bookings", { filters = if (draft["value"] == null) draft - "answer" else draft; sheet = false }, Modifier.weight(1f))
-            }
-        }
-    }
+    if (sheet) FilterSheet(filters, env.labels, t, { sheet = false }, onFilters)
 }
 
 /** The values an answer filter offers: the field's choices, then "Not filled". */
