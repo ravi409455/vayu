@@ -508,11 +508,12 @@ input.switch:focus-visible { outline: 2px solid var(--info); outline-offset: 2px
 .sched-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 0 18px 10px; }
 .sched-bar button.on { background: var(--ink); color: var(--panel); border-color: var(--ink); }
 .sched-bar button.icon { padding-left: 6px; padding-right: 6px; }
-.sched-body { display: flex; align-items: flex-start; border-top: 1px solid var(--line); }
-.sched-side { width: 220px; flex: none; padding: 12px 14px; border-right: 1px solid var(--line); max-height: calc(100vh - 300px); overflow: auto; box-sizing: border-box; }
-.sched-side-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.sched-side input[type="search"] { width: 100%; box-sizing: border-box; }
-.sched-side ul { list-style: none; margin: 0; padding: 0; }
+.sched-body { border-top: 1px solid var(--line); }
+.sched-menu { position: relative; }
+.sched-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 10; width: 260px; padding: 10px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .14); }
+.sched-pop input[type="search"] { width: 100%; box-sizing: border-box; }
+.sched-pop-head { display: flex; justify-content: space-between; align-items: center; min-height: 28px; }
+.sched-pop ul { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow: auto; }
 .sched-pick { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 6px; cursor: pointer; font-size: 13px; }
 .sched-pick > span:first-of-type { flex: 1; min-width: 0; }
 .sched-pick:hover { background: var(--hover); }

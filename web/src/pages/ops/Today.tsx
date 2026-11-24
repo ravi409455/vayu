@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Plus, Users } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Plus, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
@@ -74,7 +74,15 @@ export function Today() {
       .sort((x, y) => x.name.localeCompare(y.name)),
   ];
   const [sel, setSel] = useState<number[]>(() => loadJSON<number[]>(CHOSEN, []));
-  const [side, setSide] = useState(true);
+  const [menu, setMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {                                   // the expert menu closes on a click outside or Escape
+    if (!menu) return;
+    const away = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenu(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(false); };
+    document.addEventListener("mousedown", away); document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
+  }, [menu]);
   const [find, setFind] = useState("");
   const choose = (next: number[]) => { setSel(next); saveJSON(CHOSEN, next); };
   const lanes = sel.length ? everyone.filter((l) => sel.includes(l.id)) : everyone.filter((l) => l.jobs.length > 0);
@@ -93,7 +101,7 @@ export function Today() {
     const ro = new ResizeObserver(() => setViewW(el.clientWidth));
     ro.observe(el); setViewW(el.clientWidth);
     return () => ro.disconnect();
-  }, [hasJobs, side]);
+  }, [hasJobs]);
   const slotPx = mode === "3h" && viewW > LANE_W + 240 ? Math.floor((viewW - LANE_W) / (WINDOW_HOURS * 2)) : SLOT_PX;
   const nowX = (nowAt - lo) * 2 * slotPx;
   const goTo = (start: number, smooth = true) => {
@@ -104,7 +112,7 @@ export function Today() {
   const onScroll = (el: HTMLDivElement) => { const h = lo + el.scrollLeft / (2 * slotPx); left.current = h; setLeftH(h); };
   const pick = (start: number) => { if (mode === "day") { want.current = start; setMode("3h"); } else goTo(start); };
   const step = (dir: number) => goTo(Math.round(leftH) + dir);
-  const drag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
+  const drag = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(null);
   return (
     <>
       <PageHeader title="Today" subtitle={now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}>
@@ -123,7 +131,24 @@ export function Today() {
         <div className="sheet-head" style={{ padding: "0 0 10px", border: 0 }}>
           <h3>Schedule by expert</h3>
           <span className="legend done">Done</span><span className="legend prog">In progress</span><span className="legend next">To start</span><span className="legend open">Unassigned</span><span className="legend late">Started late</span>
-          <button className="sm" aria-pressed={side} onClick={() => setSide(!side)}><Users size={14} aria-hidden /> Experts{sel.length ? ` (${sel.length})` : ""}</button>
+          <div className="sched-menu" ref={menuRef}>
+            <button className="sm" aria-haspopup="listbox" aria-expanded={menu} onClick={() => setMenu(!menu)}><Users size={14} aria-hidden /> {sel.length ? `${sel.length} expert${sel.length === 1 ? "" : "s"}` : "All experts"} <ChevronDown size={14} aria-hidden /></button>
+            {menu && (
+              <div className="sched-pop" role="listbox" aria-label="Choose experts" aria-multiselectable>
+                <input type="search" placeholder="Find an expert" aria-label="Find an expert" autoFocus value={find} onChange={(e) => setFind(e.target.value)} />
+                <div className="sched-pop-head"><span className="muted small">{sel.length ? `${sel.length} chosen` : "Everyone with a job today"}</span>{sel.length > 0 && <button className="sm" onClick={() => choose([])}>Show all</button>}</div>
+                <ul>
+                  {pickRows.map((l) => (
+                    <li key={l.id}>
+                      <label className={`sched-pick${l.jobs.length ? "" : " idle"}`}>
+                        <input type="checkbox" checked={sel.includes(l.id)} onChange={() => choose(sel.includes(l.id) ? sel.filter((x) => x !== l.id) : [...sel, l.id])} />
+                        <span className="ellipsis">{l.name}</span><span className="muted small">{l.jobs.length}</span>
+                      </label>
+                    </li>))}
+                  {pickRows.length === 0 && <li className="muted small" style={{ padding: 6 }}>No one by that name.</li>}
+                </ul>
+              </div>)}
+          </div>
         </div>
         {hasJobs && (
           <div className="sched-bar" role="group" aria-label="Time window">
@@ -137,29 +162,14 @@ export function Today() {
         {all.length === 0 && q.data && <Empty title="Nothing booked for today">New bookings for today show here.</Empty>}
         {hasJobs && (
           <div className="sched-body">
-            {side && (
-              <aside className="sched-side" aria-label="Filter by expert">
-                <div className="sched-side-head"><b>Experts</b>{sel.length > 0 && <button className="sm" onClick={() => choose([])}>Show all</button>}</div>
-                <input type="search" placeholder="Find an expert" aria-label="Find an expert" value={find} onChange={(e) => setFind(e.target.value)} />
-                <p className="muted small" style={{ margin: "6px 0" }}>{sel.length ? `${sel.length} chosen` : "Everyone with a job today"}</p>
-                <ul>
-                  {pickRows.map((l) => (
-                    <li key={l.id}>
-                      <label className={`sched-pick${l.jobs.length ? "" : " idle"}`}>
-                        <input type="checkbox" checked={sel.includes(l.id)} onChange={() => choose(sel.includes(l.id) ? sel.filter((x) => x !== l.id) : [...sel, l.id])} />
-                        <span className="ellipsis">{l.name}</span><span className="muted small">{l.jobs.length}</span>
-                      </label>
-                    </li>))}
-                </ul>
-              </aside>)}
             <div className="sched-scroll" ref={scroller}
               onScroll={(e) => onScroll(e.currentTarget)}
-              onPointerDown={(e) => { if (e.pointerType === "mouse" && e.button === 0) drag.current = { x: e.clientX, left: e.currentTarget.scrollLeft, moved: false }; }}
+              onPointerDown={(e) => { if (e.pointerType === "mouse" && e.button === 0) drag.current = { x: e.clientX, y: e.clientY, left: e.currentTarget.scrollLeft, top: e.currentTarget.scrollTop, moved: false }; }}
               onPointerMove={(e) => {
                 const d = drag.current; if (!d) return;
-                const dx = e.clientX - d.x;
-                if (!d.moved && Math.abs(dx) > 4) { d.moved = true; e.currentTarget.setPointerCapture(e.pointerId); }
-                if (d.moved) e.currentTarget.scrollLeft = d.left - dx;
+                const dx = e.clientX - d.x, dy = e.clientY - d.y;
+                if (!d.moved && Math.hypot(dx, dy) > 4) { d.moved = true; e.currentTarget.setPointerCapture(e.pointerId); }
+                if (d.moved) { e.currentTarget.scrollLeft = d.left - dx; e.currentTarget.scrollTop = d.top - dy; }   // any direction
               }}
               onPointerUp={() => setTimeout(() => { drag.current = null; }, 0)}
               onPointerCancel={() => setTimeout(() => { drag.current = null; }, 0)}
@@ -179,7 +189,7 @@ export function Today() {
                     })}
                   </div>
                 </div>
-                {lanes.length === 0 && <div className="sched-row"><div className="sched-who" /><div className="muted" style={{ padding: 18 }}>Nobody to show. Choose experts in the side panel, or Show all.</div></div>}
+                {lanes.length === 0 && <div className="sched-row"><div className="sched-who" /><div className="muted" style={{ padding: 18 }}>Nobody to show. Choose experts in the Experts menu, or Show all.</div></div>}
                 {lanes.map((l) => {
                   const laid = stackRows(l.jobs.map((b) => spans.get(b.id)!));
                   return (
