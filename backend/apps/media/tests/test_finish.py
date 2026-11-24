@@ -85,3 +85,17 @@ def test_with_room_left_an_ops_add_is_just_added(job, settings):
     assert env.ops.post(f"/api/v1/media/{new}/attach", {}, format="json").status_code == 204
     from apps.bookings.models import Inspection
     assert Inspection.objects.get(booking_id=b["id"]).answers["inspection"]["photo_a"] == [mine, new]
+
+
+def test_only_a_file_that_never_arrived_on_a_waiting_job_is_taken_over(job, settings):
+    from apps.media.models import MediaAsset
+    from apps.media.services import unarrived
+    env, b = job
+    [old] = stuck(env, b)
+    booking = Booking.objects.get(pk=b["id"])
+    assert unarrived(booking, [old]) == [old]
+    MediaAsset.objects.filter(pk=old).update(status="purged")         # arrived once, purged later
+    assert unarrived(booking, [old]) == []
+    MediaAsset.objects.filter(pk=old).update(status="pending")
+    Booking.objects.filter(pk=b["id"]).update(stage="completed")      # no longer waiting
+    assert unarrived(Booking.objects.get(pk=b["id"]), [old]) == []

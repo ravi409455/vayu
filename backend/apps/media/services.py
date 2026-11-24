@@ -197,8 +197,8 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
         _, _, ids = submitted_answer(booking, field)
         if replaces is not None and str(replaces) not in ids:
             raise err("UNKNOWN_MEDIA", "The file to replace is not on this field.")
-        if replaces is None and len(ids) >= max_count(field) \
-                and first_unarrived(booking, ids) is None:   # a missing one is taken over
+        # places held by files that never arrived can be taken over, one upload each
+        if replaces is None and len(ids) - len(unarrived(booking, ids)) >= max_count(field):
             raise err("TOO_MANY", f"'{field.label}' takes at most {max_count(field)}. "
                       "Replace one instead.", 409)
         # uploads not (yet) in the answers: a few may be left by closed tabs, never a pile
@@ -253,11 +253,22 @@ def live_asset(booking: Booking, field_key: str, asset_id) -> MediaAsset | None:
         return None
 
 
+NEVER_ARRIVED = ("pending", "uploaded", "failed")   # never checked in: not verified or purged
+
+
+def unarrived(booking: Booking, ids: list[str]) -> list[str]:
+    """Files a field names that never arrived (the expert's phone lost or broken), oldest first.
+    Only while the job is waiting for its files; a file that arrived (even if later purged by the
+    retention setting) never counts."""
+    if booking.stage != "submitted":
+        return []
+    lost = set(map(str, MediaAsset.objects.filter(
+        booking=booking, id__in=ids, status__in=NEVER_ARRIVED).values_list("id", flat=True)))
+    return [i for i in ids if i in lost]
+
+
 def first_unarrived(booking: Booking, ids: list[str]) -> str | None:
-    """The oldest file a field names that never arrived (the expert's phone lost or broken)."""
-    arrived = set(map(str, MediaAsset.objects.filter(
-        booking=booking, id__in=ids, status="verified").values_list("id", flat=True)))
-    return next((i for i in ids if i not in arrived), None)
+    return next(iter(unarrived(booking, ids)), None)
 
 
 def attach(request, new: MediaAsset, replaces=None) -> None:
