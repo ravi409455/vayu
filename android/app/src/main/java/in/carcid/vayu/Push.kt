@@ -82,12 +82,14 @@ class VayuMessaging : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
-        val d = message.data
         val graph = (application as VayuApp).graph
-        // only the person it is for, signed in on this phone, ever sees it (a phone used by
-        // someone else since may still get an earlier person's push)
-        if (d["user"] == null || d["user"] != graph.signedInId()?.toString()) return
-        Notices.show(this, "push-${d["id"]}", d["title"].orEmpty(), d["body"].orEmpty(), d["booking"], problem = d["kind"] == "problem")
+        if (graph.signedInId() == null) return
+        // a push carries only the notice's id; its words are read with this phone's own sign-in,
+        // so a push meant for someone else finds nothing and shows nothing
+        val id = message.data["id"]?.toLongOrNull() ?: return
+        val note = runCatching { kotlinx.coroutines.runBlocking { `in`.carcid.vayu.ui.parseNotes(graph.api.notifications()) } }
+            .getOrNull()?.notes?.firstOrNull { it.id == id } ?: return
+        Notices.show(this, "push-$id", note.title, note.body, note.booking, problem = note.kind == "problem")
         // the app is open: it refreshes now; closed: an expert's jobs are fetched so they're there offline
         if (!graph.pushed()) SyncWorker.enqueue(this)
     }

@@ -146,8 +146,8 @@ def test_push_sends_to_live_phones_and_forgets_dead_tokens(env, booking, setting
             mock.patch.object(fcm, "send", side_effect=lambda t, d: sent.append((t, d)) or False):
         assign(env, booking)
     assert [t for t, _ in sent] == ["live"]
-    assert sent[0][1]["kind"] == "assigned" and sent[0][1]["booking"] == booking["id"]
-    assert sent[0][1]["user"] == str(env.expert_user.id)
+    n = Notification.objects.get(user=env.expert_user)
+    assert sent[0][1] == {"id": str(n.id)}            # no content travels in the push
     live.refresh_from_db()
     assert live.push_token == ""                      # dead token dropped
     assert tasks.push([]) == 0
