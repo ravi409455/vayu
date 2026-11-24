@@ -111,7 +111,14 @@ jobs:
       - name: image can render a PDF (system libraries present)
         run: docker run --rm vayu-api python -c "from weasyprint import HTML; assert HTML(string='<p>x</p>').write_pdf()[:4] == b'%PDF'"
       - name: image can sign push tokens (RS256 needs cryptography in the runtime install)
-        run: docker run --rm vayu-api python -c "import jwt; from cryptography.hazmat.primitives.asymmetric import rsa; k = rsa.generate_private_key(public_exponent=65537, key_size=2048); assert jwt.decode(jwt.encode({'a': 1}, k, algorithm='RS256'), k.public_key(), algorithms=['RS256']) == {'a': 1}"
+        run: |
+          docker run --rm vayu-api python -c "
+          import jwt
+          from cryptography.hazmat.primitives.asymmetric import rsa
+          k = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+          assert jwt.decode(jwt.encode({'a': 1}, k, algorithm='RS256'), k.public_key(), algorithms=['RS256']) == {'a': 1}
+          print('RS256 signing works')
+          "
   android:
     runs-on: ubuntu-latest
     defaults: {run: {working-directory: android}}
