@@ -1,6 +1,7 @@
 package `in`.carcid.vayu.ui.expert
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,6 +38,7 @@ import `in`.carcid.vayu.core.draft.LocalFile
 import `in`.carcid.vayu.ui.components.ExpertBottomBar
 import `in`.carcid.vayu.ui.components.ExpertTab
 import `in`.carcid.vayu.ui.components.SoftButton
+import `in`.carcid.vayu.ui.components.SoftField
 import `in`.carcid.vayu.ui.components.VayuTopBar
 import `in`.carcid.vayu.ui.theme.Vayu
 
@@ -48,21 +53,60 @@ private fun size(bytes: Long): String = when {
 fun UploadsScreen(me: Me, extras: ExpertExtras, onProfile: () -> Unit, onJobs: () -> Unit, onRefresh: () -> Unit,
                   onBell: () -> Unit = {}, refreshing: Boolean = false, say: (String) -> Unit = {}) {
     var confirm by remember { mutableStateOf(false) }
+    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    var openId by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
     val pending = extras.drafts.values.map { d -> d to d.files.filter { !it.sent } }.filter { it.second.isNotEmpty() }
     val count = pending.sumOf { it.second.size }
+    // one booking's files on their own screen
+    pending.firstOrNull { it.first.bookingId == openId }?.let { (d, files) ->
+        androidx.activity.compose.BackHandler { openId = null }
+        Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
+            androidx.compose.material3.IconButton(onClick = { openId = null }, modifier = Modifier.padding(start = 6.dp, top = 10.dp)) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back to Uploads", tint = Vayu.colors.ink)
+            }
+            Text(d.customer.ifBlank { d.code }, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink, modifier = Modifier.padding(horizontal = 20.dp))
+            Text("${d.code} · ${files.size} file${if (files.size == 1) "" else "s"} to send", color = Vayu.colors.muted, modifier = Modifier.padding(horizontal = 20.dp))
+            LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp, vertical = 8.dp)) { items(files.size) { FileRow(files[it]) } }
+        }
+        return
+    }
+    val needle = query.trim().lowercase()
+    val digits = needle.filter { it.isDigit() }
+    val shown = pending.filter { (d, _) ->
+        needle.isEmpty() || d.code.lowercase().contains(needle) || d.customer.lowercase().contains(needle) ||
+            (digits.length >= 4 && (extras.phones[d.bookingId] ?: "").filter { it.isDigit() }.contains(digits))
+    }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
         VayuTopBar("Uploads", me.initials, bellCount = 0, onBell = onBell, onProfile = onProfile)
         LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp)) {
             item {
-                Text(if (count == 0) "Everything is sent." else "Sending $count file${if (count == 1) "" else "s"}",
-                    color = Vayu.colors.muted, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+                Text(if (count == 0) "Everything is sent." else "Sending $count file${if (count == 1) "" else "s"} from ${pending.size} job${if (pending.size == 1) "" else "s"}",
+                    color = Vayu.colors.muted, modifier = Modifier.padding(top = 12.dp, bottom = 10.dp))
+                if (pending.isNotEmpty()) SoftField(query, { query = it }, "Booking ID, customer or phone",
+                    icon = androidx.compose.material.icons.Icons.Outlined.Search)
             }
-            pending.forEach { (d, files) ->
-                item(d.bookingId) {
-                    Text("${d.code} · ${d.customer}".uppercase(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                        color = Vayu.colors.muted, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
-                    files.forEach { FileRow(it) }
+            items(shown.size, key = { shown[it].first.bookingId }) { i ->
+                val (d, files) = shown[i]
+                val failed = files.count { it.error != null }
+                Column(Modifier.fillMaxWidth().clickable(role = androidx.compose.ui.semantics.Role.Button) { openId = d.bookingId }) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(d.code, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
+                            Text(d.customer + if (failed > 0) " · $failed need you" else "", fontSize = 13.sp,
+                                color = if (failed > 0) Vayu.colors.bad else Vayu.colors.muted)
+                        }
+                        Box(Modifier.clip(RoundedCornerShape(12.dp)).background(if (failed > 0) Vayu.colors.badTint else Vayu.colors.infoTint)
+                            .padding(horizontal = 10.dp, vertical = 4.dp)) {
+                            Text("${files.size}", fontWeight = FontWeight.Bold, color = if (failed > 0) Vayu.colors.bad else Vayu.colors.info)
+                        }
+                        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.ChevronRight, null, tint = Vayu.colors.muted)
+                    }
+                    HorizontalDivider(color = Vayu.colors.line)
                 }
+            }
+            if (pending.isNotEmpty() && shown.isEmpty()) item {
+                Text("No job matches \"$query\".", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 20.dp))
             }
             item {
                 Text("THIS PHONE", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.muted,

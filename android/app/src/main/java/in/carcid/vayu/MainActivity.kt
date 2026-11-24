@@ -114,6 +114,7 @@ private fun expertExtras(vm: AppViewModel, me: `in`.carcid.vayu.core.api.Me): Ex
             },
             onDiscard = { drafts.discard(it) },
             onClearSent = { drafts.clearSentCopies() },
+            phones = jobs.jobs.associate { it.id to it.phone },
         )
     }
 }

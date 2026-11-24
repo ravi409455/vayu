@@ -21,6 +21,8 @@ android {
     compileSdk = 35
 
     defaultConfig {
+        // one processor type only (smaller APK to copy to a test phone): -Pvayu.abi=arm64-v8a
+        (project.findProperty("vayu.abi") as String?)?.let { ndk { abiFilters += it } }
         applicationId = "in.carcid.vayu"
         minSdk = 30          // Android 11
         targetSdk = 35

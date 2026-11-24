@@ -139,6 +139,8 @@ class ExpertExtras(
     val inspection: ((Job) -> InspectionEnv)? = null,
     val onDiscard: (String) -> Unit = {},
     val onClearSent: () -> Unit = {},
+    /** Customer phones by booking id (Uploads search). */
+    val phones: Map<String, String> = emptyMap(),
 )
 
 private const val GB = 1024L * 1024 * 1024
