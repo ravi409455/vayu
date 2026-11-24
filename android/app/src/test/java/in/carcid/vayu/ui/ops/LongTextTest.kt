@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
@@ -15,7 +16,6 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import `in`.carcid.vayu.ui.theme.ThemeMode
 import `in`.carcid.vayu.ui.components.OpsBottomBar
 import `in`.carcid.vayu.ui.components.OpsTab
-import `in`.carcid.vayu.ui.components.Segmented
 import `in`.carcid.vayu.ui.components.SoftField
 import `in`.carcid.vayu.ui.theme.VayuTheme
 import kotlinx.serialization.json.Json
@@ -32,7 +32,7 @@ import java.time.LocalDate
 
 /**
  * Real-world long text on a small phone with large text (360dp, 130%), the case that broke lists:
- * tabs stay on one line, the booking ID is never cut, names end in "…".
+ * the quick filters stay on one line, the booking ID is never cut, names end in "…".
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -56,7 +56,7 @@ class LongTextTest {
             VayuTheme(ThemeMode.LIGHT) { Column(Modifier.background(androidx.compose.ui.graphics.Color.White)) {
                 Column(Modifier.padding(horizontal = 20.dp)) {
                     SoftField("", {}, "Name, phone, ID, chassis")
-                    Segmented(listOf("Today", "Upcoming", "All"), 0, {})
+                    QuickFilters(mapOf("stage" to "in_progress", "expert" to "3"), Labels(), {}, {})
                     BookingRow(bk("CARCID-2026-001234", "Venkata Subramanian Lakshminarayanan Iyer", "draft"), "Pre-Delivery Inspection (Electric) · Thiruvananthapuram", today, {}) {
                         PillButton("Assign", true) {}
                     }
@@ -65,7 +65,11 @@ class LongTextTest {
                 OpsBottomBar(OpsTab.BOOKINGS, {}, {}, refreshing = true)
             } }
         }
-        assertEquals(1, lines("Upcoming"))
+        // the quick row stays on one line: Status, Experts and Filter share one top edge
+        val tops = listOf("Status: In progress", "Experts: 1 chosen", "All filters, 2 on").map {
+            compose.onNodeWithContentDescription(it).fetchSemanticsNode().boundsInRoot.top }
+        assertEquals(1, tops.distinct().size)
+        assertEquals(1, lines("In progress"))
         assertEquals(1, lines("CARCID-2026-001234"))
         assertEquals(1, lines("Venkata Subramanian Lakshminarayanan Iyer"))
         assertEquals(1, lines("Updating…"))

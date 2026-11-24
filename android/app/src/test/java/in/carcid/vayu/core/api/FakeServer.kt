@@ -10,11 +10,14 @@ class FakeServer {
     private val routes = mutableMapOf<String, MockResponse>()
     /** Every request received: route and body. */
     val requests = java.util.Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+    /** Every query string received ("date_from=…&stage=…"), to check filters. */
+    val queries = java.util.Collections.synchronizedList(mutableListOf<String>())
     private val server = MockWebServer().apply {
         dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val path = request.requestUrl!!.encodedPath.removePrefix("/api/v1/")
                 requests.add("${request.method} $path" to request.body.readUtf8())
+                request.requestUrl!!.encodedQuery?.let { queries.add(java.net.URLDecoder.decode(it, "UTF-8")) }
                 return synchronized(routes) { routes["${request.method} $path"] }
                     ?: MockResponse().setResponseCode(404).setBody("""{"code":"NOT_FOUND","detail":"no route"}""")
             }

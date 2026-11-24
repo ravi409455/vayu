@@ -118,6 +118,52 @@ class OpsFlowTest {
         shot("ops_today")
     }
 
+    @Test fun todayStatusChipsNarrowTheDay() {
+        show()
+        waitFor("of 5 completed")
+        compose.onNodeWithContentDescription("In progress, 1").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Rohit Sharma")).fetchSemanticsNodes().isEmpty() }   // unassigned hidden
+        compose.onNode(hasText("Ravi Expert", substring = true)).performClick()
+        compose.onNodeWithText("Farhan Ali").assertIsDisplayed()                       // in progress
+        assertTrue(compose.onAllNodes(hasText("Arjun Mehta")).fetchSemanticsNodes().isEmpty())   // assigned: not listed
+        assertTrue(compose.onAllNodes(hasText("Meera Expert")).fetchSemanticsNodes().isEmpty())  // nothing in progress
+        shot("ops_today_in_progress")
+        compose.onNodeWithContentDescription("In progress, 1, chosen").performClick()  // tap again: All
+        waitFor("Rohit Sharma")
+    }
+
+    @Test fun quickFiltersAndTheFilterViewAreOneChoice() {
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Showing 5 · Today")
+        assertTrue(server.queries.any { it.startsWith("date_from=$TODAY&date_to=$TODAY&order=schedule") })   // today by default
+        compose.onNodeWithContentDescription("Status: any").performClick()
+        compose.onAllNodes(hasText("Assigned")).onLast().performClick()               // the menu, over the list
+        compose.waitUntil(5_000) { server.queries.any { "stage=assigned" in it } }
+        compose.onNodeWithContentDescription("Experts: any").performClick()
+        compose.onNodeWithText("Ravi Expert").performClick()
+        compose.onNodeWithText("Meera Expert").performClick()
+        compose.onNodeWithText("Done · 2 chosen").performClick()
+        compose.waitUntil(5_000) { server.queries.any { "stage=assigned" in it && "expert=3,4" in it } }
+        waitFor("Today · Assigned · 2 experts")
+        compose.onNodeWithContentDescription("All filters, 2 on").assertIsDisplayed()
+        shot("ops_bookings_quick")
+        // the Filter view starts from the same choices
+        compose.onNodeWithContentDescription("All filters, 2 on").performClick()
+        compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Status: Assigned")).onLast().assertIsDisplayed()   // the sheet's box
+        compose.onNodeWithContentDescription("Experts: Ravi Expert, Meera Expert").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Inspection type: any").assertIsDisplayed()
+        com.github.takahirom.roborazzi.captureScreenRoboImage("src/test/screenshots/ops_filter_view.png", roborazziOptions = options)   // the sheet over the list
+        compose.onNodeWithText("Upcoming").performClick()
+        compose.onNodeWithContentDescription("Remove Status").performClick()
+        compose.onNodeWithText("Show bookings").performClick()
+        compose.waitUntil(5_000) { server.queries.any { it.startsWith("date_from=2026-11-25&order=schedule") && "expert=3,4" in it && "stage" !in it } }
+        waitFor("Upcoming · 2 experts")
+        compose.onNodeWithContentDescription("Status: any").assertIsDisplayed()       // and back in the quick row
+        compose.onNodeWithText("Clear").performClick()
+        waitFor("Showing 5 · Today")
+    }
+
     @Test fun assigningFromTodaySendsTheExpert() {
         show()
         waitFor("Rohit Sharma")
