@@ -106,7 +106,7 @@ class OpsFlowTest {
 
     @Test fun todayShowsTheDayUnassignedAndExperts() {
         show()
-        waitFor("of 5 jobs done")
+        waitFor("of 5 completed")
         compose.onNodeWithText("UNASSIGNED · 1").assertIsDisplayed()
         compose.onNodeWithText("Rohit Sharma").assertIsDisplayed()
         waitFor("Meera Expert")
@@ -158,7 +158,7 @@ class OpsFlowTest {
         show()
         compose.onNodeWithText("Bookings").performClick()
         waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
-        waitFor("Inspection"); compose.onNodeWithText("Inspection").performScrollTo().performClick()
+        waitFor("Answers"); compose.onNodeWithText("Answers").performScrollTo().performClick()
         waitFor("Chassis number")
         shot("ops_answers")
         compose.onNodeWithText("Odometer").performClick()

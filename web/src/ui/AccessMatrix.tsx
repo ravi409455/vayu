@@ -2,7 +2,7 @@ import type { Access } from "../api/types";
 import { getCell, LEVELS, ROLES, setCell, setRole, STAGES, type Level } from "../lib/access";
 
 const STAGE_LABEL: Record<string, string> = {
-  draft: "Draft", assigned: "Assigned", in_progress: "In progress", submitted: "Submitted", completed: "Completed", cancelled: "Cancelled",
+  draft: "Unassigned", assigned: "Assigned", in_progress: "In progress", submitted: "Uploading", completed: "Completed", cancelled: "Cancelled",
 };
 
 /** Who sees or edits this at each stage. "—" means not decided here: the section, page or default applies. */

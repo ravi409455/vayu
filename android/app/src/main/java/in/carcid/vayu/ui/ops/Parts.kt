@@ -1,5 +1,9 @@
 package `in`.carcid.vayu.ui.ops
 
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.automirrored.outlined.List
@@ -168,8 +172,14 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
     var onlyProblems by rememberSaveable { mutableStateOf(false) }
     var jump by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Pair<String, Field>?>(null) }
+    var viewing by remember { mutableStateOf<JsonObject?>(null) }
     val list = androidx.compose.foundation.lazy.rememberLazyListState()
     val media = rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty().filter { it.s("status") in setOf("uploaded", "verified") }
+    viewing?.let { m ->
+        MediaViewer(env, m, fieldLabel = data?.trees?.values?.filterNotNull()?.flatMap { it.fields }?.firstOrNull { it.key == m.s("field_key") }?.label ?: m.s("field_key"),
+            canManage = false, onClose = { viewing = null }, onDelete = {}, onReplace = {})
+        return
+    }
     BackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -253,7 +263,7 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
                             // photos of this answer, small, right here
                             val keys = setOf(f.key) + photosOf[f.key].orEmpty()
                             val mine = media.filter { it.s("field_key") in keys }
-                            mine.take(2).forEach { m -> MediaTile(env, m, size = 56) {} }
+                            mine.take(2).forEach { m -> MediaTile(env, m, size = 56) { viewing = m } }
                         }
                         HorizontalDivider(color = Vayu.colors.line)
                     }
@@ -453,7 +463,7 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
 private fun MediaTile(env: OpsEnv, m: JsonObject, size: Int = 76, onClick: () -> Unit) {
     val ctx = LocalContext.current
     val img by produceState<ImageBitmap?>(null, m.s("id")) {
-        if (m.s("kind") == "photo") value = mediaBytes(env, ctx.cacheDir, m.s("id"))?.let { thumb(it, 160) }
+        if (m.s("kind") in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.s("id"))?.let { thumb(it, 160) }
     }
     Box(Modifier.size(size.dp).clip(RoundedCornerShape(if (size < 76) 10.dp else 12.dp)).background(Vayu.colors.illo).clickable(role = Role.Button, onClick = onClick)
         .semantics { contentDescription = "${m.s("kind")} ${m.s("field_key")}" }, contentAlignment = Alignment.Center) {
@@ -467,27 +477,46 @@ private fun MediaViewer(env: OpsEnv, m: JsonObject, fieldLabel: String, canManag
     BackHandler(onBack = onClose)
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    val img by produceState<ImageBitmap?>(null, m.s("id")) {
-        if (m.s("kind") == "photo") value = mediaBytes(env, ctx.cacheDir, m.s("id"))?.let { thumb(it, 1400) }
+    // null while loading; false when it couldn't be loaded
+    val img by produceState<Any?>(null, m.s("id")) {
+        if (m.s("kind") in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.s("id"))?.let { thumb(it, 2000) } ?: false
     }
+    var videoUrl by remember { mutableStateOf<String?>(null) }
+    var scale by remember { mutableStateOf(1f) }
+    var pan by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     Column(Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding()) {
         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             `in`.carcid.vayu.ui.expert.CloseButton("Back", onClose, tint = Color.White)
             Text(fieldLabel, color = Color.White, fontWeight = FontWeight.Bold)
         }
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            img?.let { Image(it, fieldLabel, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
-            if (m.s("kind") != "photo") Column(horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable(role = Role.Button) {
-                    scope.launch {
-                        try {
-                            val url = (env.data.api.get("media/${m.s("id")}/url") as JsonObject).s("url")
-                            ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
-                        } catch (e: ApiError) { env.say(e.message) }
-                    }
-                }) {
-                Icon(Icons.Outlined.PlayCircle, null, tint = Color.White, modifier = Modifier.size(72.dp))
-                Text(if (m.s("kind") == "video") "Play" else "Open", color = Color.White)
+            when {
+                // pinch to zoom, drag to look around
+                img is ImageBitmap -> Image(img as ImageBitmap, fieldLabel, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()
+                    .pointerInput(Unit) { detectTransformGestures { _, p, z, _ -> scale = (scale * z).coerceIn(1f, 5f); pan = if (scale == 1f) androidx.compose.ui.geometry.Offset.Zero else pan + p } }
+                    .graphicsLayer(scaleX = scale, scaleY = scale, translationX = pan.x, translationY = pan.y))
+                img == false -> Text("Couldn't load this photo. Check the signal and try again.", color = Color.White, modifier = Modifier.padding(24.dp))
+                m.s("kind") in setOf("photo", "signature") -> Text("Loading…", color = Color.White)
+                videoUrl != null -> AndroidView(factory = { c -> android.widget.VideoView(c).apply {
+                    setMediaController(android.widget.MediaController(c).also { it.setAnchorView(this) })
+                    setVideoURI(android.net.Uri.parse(videoUrl)); setOnPreparedListener { start() }
+                    setOnErrorListener { _, _, _ -> env.say("Couldn't play this video."); true }
+                } }, onRelease = { it.stopPlayback() }, modifier = Modifier.fillMaxSize())
+                else -> Column(horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable(role = Role.Button) {
+                        scope.launch {
+                            try {
+                                val url = (env.data.api.get("media/${m.s("id")}/url") as JsonObject).s("url")
+                                // videos play here; other files open in an app that can show them
+                                if (m.s("kind") == "video") videoUrl = url
+                                else try { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                                    catch (e: android.content.ActivityNotFoundException) { env.say("No app on this phone can open this file.") }
+                            } catch (e: ApiError) { env.say(e.message) }
+                        }
+                    }) {
+                    Icon(Icons.Outlined.PlayCircle, null, tint = Color.White, modifier = Modifier.size(72.dp))
+                    Text(if (m.s("kind") == "video") "Play" else "Open", color = Color.White)
+                }
             }
         }
         if (canManage) Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.SpaceEvenly) {

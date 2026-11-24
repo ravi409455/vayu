@@ -198,12 +198,11 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
             Section("Inspection")
             if (insp == null || filled == null) Text(if (insp == null) "Not started yet." else "Loading…", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 12.dp))
             else {
-                val names = mapOf("start" to "Check-in", "inspection" to "Inspection", "end" to "Wrap-up")
-                PARTS.filter { filled.visiblePages(it).isNotEmpty() }.forEach { part ->
-                    val (n, bad) = partCounts(data, filled, part)
-                    NavRow(names[part] ?: part, "$n answer${if (n == 1) "" else "s"}" + if (bad > 0) " · $bad problem${if (bad == 1) "" else "s"}" else "",
-                        if (bad > 0) Vayu.colors.warn else Vayu.colors.muted) { onAnswers(part) }
-                }
+                // one row: Check-in, Inspection and Wrap-up are tabs inside it
+                val counts = PARTS.filter { filled.visiblePages(it).isNotEmpty() }.map { partCounts(data, filled, it) }
+                val n = counts.sumOf { it.first }; val bad = counts.sumOf { it.second }
+                NavRow("Answers", "$n answer${if (n == 1) "" else "s"}" + if (bad > 0) " · $bad problem${if (bad == 1) "" else "s"}" else "",
+                    if (bad > 0) Vayu.colors.warn else Vayu.colors.muted) { onAnswers("inspection") }
             }
             val media = rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty().filter { it.s("status") in setOf("uploaded", "verified") }
             val photos = media.count { it.s("kind") == "photo" }; val videos = media.count { it.s("kind") == "video" }
@@ -346,14 +345,21 @@ fun AssignSheet(env: OpsEnv, b: Bk, onClose: () -> Unit, onAssign: (Int) -> Unit
     var find by remember { mutableStateOf("") }
     var pick by remember { mutableStateOf(b.expert) }
     val at = runCatching { LocalTime.parse(b.time) }.getOrNull()
-    VayuSheet(onClose) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+    VayuSheet(onClose, footer = {
+        // always in view: pick an expert, assign, no scrolling
+        Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SoftButton("Cancel", onClose, Modifier.weight(1f))
+            PrimaryButton(pick?.let { "Assign ${env.labels.person(it).split(" ").first()}" } ?: "Assign", { pick?.let(onAssign) },
+                Modifier.weight(1f), enabled = pick != null && pick != b.expert)
+        }
+    }) {
+        Column(Modifier.padding(horizontal = 20.dp)) {
             Text(if (b.expert == null) "Assign an expert" else "Reassign", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Vayu.colors.ink)
             Text(listOf(b.code, slot(b, env.today()), env.labels.type(b.type), env.labels.city(b.a("city"))).filter { it.isNotBlank() }.joinToString(" · "),
                 color = Vayu.colors.muted, fontSize = 14.sp)
             Spacer(Modifier.height(12.dp))
             SoftField(find, { find = it }, "Find an expert", icon = Icons.Outlined.Search)
-            LazyColumn(Modifier.heightIn(max = 380.dp)) {
+            LazyColumn(Modifier.heightIn(max = 520.dp)) {
                 items(env.labels.experts.filter { find.isBlank() || it.s("name").contains(find, true) || it.s("username").contains(find, true) },
                     key = { it.s("id") }) { u ->
                     val uid = u.int("id")!!
@@ -372,11 +378,6 @@ fun AssignSheet(env: OpsEnv, b: Bk, onClose: () -> Unit, onAssign: (Int) -> Unit
                         }
                     }
                 }
-            }
-            Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                SoftButton("Cancel", onClose, Modifier.weight(1f))
-                PrimaryButton(pick?.let { "Assign ${env.labels.person(it).split(" ").first()}" } ?: "Assign", { pick?.let(onAssign) },
-                    Modifier.weight(1f), enabled = pick != null && pick != b.expert)
             }
         }
     }

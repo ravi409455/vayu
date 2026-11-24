@@ -107,9 +107,9 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
                     val onSite = jobs.firstOrNull { it.stage == "in_progress" }
                     val next = jobs.firstOrNull { it.stage == "assigned" }
                     val status = when {
-                        onSite != null -> "On site · ${onSite.code}"
+                        onSite != null -> "In progress · ${onSite.code}"
                         next != null -> "Next at ${time12(next.time)}"
-                        else -> "All done"
+                        else -> "All completed"
                     }
                     val expanded = id in open
                     Column {
@@ -148,20 +148,20 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
     }
 }
 
-/** "4 of 12 jobs done" with one bar split by stage and its legend. */
+/** "4 of 12 completed" with one bar split by stage and its legend. */
 @Composable
 private fun DayCard(all: List<Bk>) {
     val done = all.count { it.stage == "completed" || it.stage == "submitted" }
     val parts = listOf(
-        Triple(done, Tone.OK, "done"),
-        Triple(all.count { it.stage == "in_progress" }, Tone.INFO, "on site"),
-        Triple(all.count { it.stage == "assigned" }, Tone.NEUTRAL, "to start"),
+        Triple(done, Tone.OK, "completed"),
+        Triple(all.count { it.stage == "in_progress" }, Tone.INFO, "in progress"),
+        Triple(all.count { it.stage == "assigned" }, Tone.NEUTRAL, "assigned"),
         Triple(all.count { it.stage == "draft" }, Tone.WARN, "unassigned"),
     )
     Column(Modifier.padding(top = 16.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Vayu.colors.soft).padding(16.dp)) {
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("$done", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink)
-            Text("of ${all.size} jobs done", color = Vayu.colors.muted, modifier = Modifier.padding(bottom = 6.dp))
+            Text("of ${all.size} completed", color = Vayu.colors.muted, modifier = Modifier.padding(bottom = 6.dp))
         }
         Row(Modifier.padding(vertical = 10.dp).fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Vayu.colors.line)) {
             parts.filter { it.first > 0 }.forEach { (n, tone, _) -> Box(Modifier.weight(n.toFloat()).height(8.dp).background(toneColor(tone))) }
@@ -269,8 +269,7 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
             SingleChoice("Inspection type", env.labels.types.map { Option(it.first, it.second, false, null) }, draft["type"], false,
                 { draft = if (it == null) draft - "type" else draft + ("type" to it as String) }, forceList = true)
             Text("Stage", fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
-            SingleChoice("Stage", listOf("draft" to "Unassigned", "assigned" to "To start", "in_progress" to "On site", "submitted" to "Uploading",
-                "completed" to "Done", "cancelled" to "Cancelled").map { Option(it.first, it.second, false, null) }, draft["stage"], false,
+            SingleChoice("Stage", STAGE_WORDS.map { Option(it.key, it.value, false, null) }, draft["stage"], false,
                 { draft = if (it == null) draft - "stage" else draft + ("stage" to it as String) }, forceList = true)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 SoftButton("Clear", { draft = emptyMap(); filters = emptyMap(); sheet = false }, Modifier.weight(1f))

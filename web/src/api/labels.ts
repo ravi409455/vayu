@@ -25,7 +25,7 @@ export function useLabels(list: string): (key: unknown) => string {
 }
 
 export const STAGE_LABEL: Record<string, string> = {
-  draft: "Not assigned", assigned: "Assigned", in_progress: "In progress", submitted: "Uploading", completed: "Completed", cancelled: "Cancelled",
+  draft: "Unassigned", assigned: "Assigned", in_progress: "In progress", submitted: "Uploading", completed: "Completed", cancelled: "Cancelled",
 };
 export const STAGE_TONE: Record<string, "ok" | "warn" | "bad" | "info" | undefined> = {
   draft: "warn", assigned: undefined, in_progress: "info", submitted: "info", completed: "ok", cancelled: "bad",

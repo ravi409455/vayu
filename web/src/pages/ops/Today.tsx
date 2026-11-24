@@ -24,7 +24,7 @@ const CHOSEN = "vayu:today-experts";  // the experts picked in the Experts menu,
 const LANE_H = 76;                 // height of one row of boxes; a lane with overlapping jobs gets more rows
 export { dayWindow };
 
-const STAGE_NAME: Record<string, string> = { draft: "Not assigned", assigned: "Assigned", in_progress: "In progress", submitted: "Uploading files", completed: "Completed" };
+const STAGE_NAME: Record<string, string> = { draft: "Unassigned", assigned: "Assigned", in_progress: "In progress", submitted: "Uploading", completed: "Completed" };
 const KIND: Record<string, string> = { draft: "open", assigned: "next", in_progress: "prog", submitted: "prog", completed: "done", cancelled: "off" };
 
 /** Ops' home: what today looks like and who is where. What needs a person is in the bell and the "Needs you" menu. */

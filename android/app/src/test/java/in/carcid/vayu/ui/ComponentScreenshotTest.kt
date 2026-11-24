@@ -54,9 +54,9 @@ class ComponentScreenshotTest {
             VayuTopBar("Today", "PO", bellCount = 3, onBell = {}, onProfile = {})
             Page {
                 SectionLabel("Unassigned · 3")
-                ListRow("Rohit Sharma", subtitle = "DEMO-4 · Delhi", trailing = { StatusDot("To start", Tone.NEUTRAL) })
+                ListRow("Rohit Sharma", subtitle = "DEMO-4 · Delhi", trailing = { StatusDot("Assigned", Tone.NEUTRAL) })
                 ListRow("Farhan Ali", subtitle = "DEMO-8 · Ravi", leading = { Avatar("RA") },
-                    trailing = { StatusDot("On site", Tone.INFO) })
+                    trailing = { StatusDot("In progress", Tone.INFO) })
                 SectionLabel("Controls")
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Segmented(listOf("Today", "Upcoming", "All"), 0, {})

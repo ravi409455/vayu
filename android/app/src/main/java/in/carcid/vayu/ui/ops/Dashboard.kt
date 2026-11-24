@@ -92,7 +92,7 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
     val byKey = rows.filter { it.s("period") == last }.map { it.s("key") to (it.s("count").toIntOrNull() ?: 0) }.sortedByDescending { it.second }
     fun label(k: String) = when (split) {
         "type" -> env.labels.type(k); "city" -> env.labels.city(k); "expert" -> env.labels.person(k.toIntOrNull()).ifBlank { "Not assigned" }
-        else -> mapOf("draft" to "Unassigned", "assigned" to "To start", "in_progress" to "On site", "submitted" to "Uploading", "completed" to "Done", "cancelled" to "Cancelled")[k] ?: k
+        else -> STAGE_WORDS[k] ?: k
     }.ifBlank { "—" }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         VayuTopBar("Dashboard", env.me.initials, bellCount = needs, onBell = onBell, onProfile = onProfile) {

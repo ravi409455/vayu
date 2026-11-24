@@ -6,7 +6,7 @@ import { pageGaps, visiblePages, type Answers, type Kind } from "../../../lib/fo
 import { FormRenderer } from "../../../ui/FormRenderer";
 import { Modal } from "../../../ui/kit";
 
-const STAGE_LABEL: Record<string, string> = { draft: "Not assigned", assigned: "Assigned", in_progress: "Working", submitted: "Submitted", completed: "Completed", cancelled: "Cancelled" };
+const STAGE_LABEL: Record<string, string> = { draft: "Unassigned", assigned: "Assigned", in_progress: "In progress", submitted: "Uploading", completed: "Completed", cancelled: "Cancelled" };
 
 /** What a person would see: pick a role and a stage, click through the pages, and try the rules.
  *  Nothing is saved, uploaded or located. */

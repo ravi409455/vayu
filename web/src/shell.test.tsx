@@ -187,7 +187,7 @@ describe("access matrix editor", () => {
     const onChange = vi.fn();
     const u = userEvent.setup();
     render(<AccessMatrix value={{}} onChange={onChange} />);
-    await u.selectOptions(screen.getByLabelText("expert Submitted"), "hidden");
+    await u.selectOptions(screen.getByLabelText("expert Uploading"), "hidden");
     expect(onChange).toHaveBeenLastCalledWith({ expert: { submitted: "hidden" } });
     await u.selectOptions(screen.getByLabelText("ops all stages"), "view");
     const all = onChange.mock.lastCall![0] as Record<string, Record<string, string>>;

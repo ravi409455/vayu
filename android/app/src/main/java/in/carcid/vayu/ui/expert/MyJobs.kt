@@ -100,9 +100,9 @@ fun statusOf(j: Job, d: Draft? = null): Pair<String, Tone> = when {
     !j.assignedToMe -> "Reassigned" to Tone.BAD
     j.stage == "in_progress" -> "In progress" to Tone.INFO
     j.stage == "submitted" -> "Uploading" to Tone.WARN
-    j.stage == "completed" -> "Done" to Tone.OK
+    j.stage == "completed" -> "Completed" to Tone.OK
     j.stage == "cancelled" -> "Cancelled" to Tone.BAD
-    else -> "To start" to Tone.NEUTRAL
+    else -> "Assigned" to Tone.NEUTRAL
 }
 
 private val SHORT_DAY = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)

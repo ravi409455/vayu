@@ -95,13 +95,17 @@ fun fmtMinutes(m: Int?): String = when {
     else -> { val d = m / 1440; val h = m % 1440 / 60; "$d day${if (d == 1) "" else "s"}" + if (h != 0) " $h h" else "" }
 }
 
+/** One set of short words for a booking's stage, the same as the web app's. */
+val STAGE_WORDS = linkedMapOf("draft" to "Unassigned", "assigned" to "Assigned", "in_progress" to "In progress",
+    "submitted" to "Uploading", "completed" to "Completed", "cancelled" to "Cancelled")
+
 fun opsStatus(b: Bk): Pair<String, Tone> = when {
     b.conflict.isNotEmpty() -> "Conflict" to Tone.BAD
     b.stage == "draft" -> "Unassigned" to Tone.WARN
-    b.stage == "assigned" -> "To start" to Tone.NEUTRAL
-    b.stage == "in_progress" -> "On site" to Tone.INFO
+    b.stage == "assigned" -> "Assigned" to Tone.NEUTRAL
+    b.stage == "in_progress" -> "In progress" to Tone.INFO
     b.stage == "submitted" -> "Uploading" to Tone.WARN
-    b.stage == "completed" -> "Done" to Tone.OK
+    b.stage == "completed" -> "Completed" to Tone.OK
     else -> "Cancelled" to Tone.BAD
 }
 

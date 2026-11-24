@@ -136,7 +136,7 @@ fun toneColor(t: Tone): Color = when (t) {
     Tone.INFO -> Vayu.colors.info
 }
 
-/** A coloured dot and a short status word, e.g. "● On site". */
+/** A coloured dot and a short status word, e.g. "● In progress". */
 @Composable
 fun StatusDot(label: String, tone: Tone) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -334,9 +334,14 @@ fun Page(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> U
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun VayuSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) =
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Vayu.colors.bg) {
-        Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().imePadding(), content = content)
+fun VayuSheet(onDismiss: () -> Unit, footer: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) =
+    // opens all the way at once (no half-open step to drag up); [footer] stays pinned under the scroll
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Vayu.colors.bg,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.navigationBarsPadding().imePadding()) {
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), content = content)
+            footer?.invoke()
+        }
     }
 
 /** Pick a day in the app's own colours; days before [notBefore] can't be picked. */

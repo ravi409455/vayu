@@ -4,10 +4,10 @@ import { defaultLevel, effectiveLevel, getCell, PRESETS, ROLES, setCell, STAGES,
 import { InfoTip } from "./InfoTip";
 
 const STAGE: Record<string, { label: string; tip: string }> = {
-  draft: { label: "Not assigned", tip: "The booking exists but no expert has it yet." },
+  draft: { label: "Unassigned", tip: "The booking exists but no expert has it yet." },
   assigned: { label: "Assigned", tip: "An expert has the job but has not started." },
-  in_progress: { label: "Working", tip: "The expert is doing the inspection." },
-  submitted: { label: "Submitted", tip: "The expert submitted; photos are still uploading." },
+  in_progress: { label: "In progress", tip: "The expert is doing the inspection." },
+  submitted: { label: "Uploading", tip: "The expert submitted; photos are still uploading." },
   completed: { label: "Completed", tip: "Everything arrived and the report was made." },
   cancelled: { label: "Cancelled", tip: "The booking was cancelled." },
 };
