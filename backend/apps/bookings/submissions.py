@@ -73,6 +73,14 @@ def own_filter(user) -> Q:
                                              inspections__status="draft")
 
 
+def deliver_filter(user) -> Q:
+    """Bookings an expert may still send work for (check-in, answers, their own photos): their
+    own, or one Ops moved away from them (the timeline says it was theirs), because they may
+    have inspected it offline before they knew. What then happens is decided in _advance: back
+    to them if the new expert has not started, else a conflict for Ops. Never used for lists."""
+    return own_filter(user) | Q(activity__changes__assigned_expert__0=user.pk)
+
+
 def form_for_role(version: FormVersion, role: str, stage: str) -> dict:
     """The version tree an expert fills in: hidden fields removed, each field tagged with the
     caller's access level."""
@@ -260,16 +268,19 @@ def _advance(actor, b: Booking, insp: Inspection) -> None:
     if b.stage == "cancelled":
         pass                                          # kept on the cancelled booking
     elif b.assigned_expert_id != actor.pk:            # reassigned while the expert worked offline
-        other_started = b.inspections.filter(expert_id=b.assigned_expert_id,
-                                             status="draft").exists()
-        b.conflict = "TWO_EXPERTS"
-        _alert(b, "CONFLICT_TWO_EXPERTS", "Two experts inspected this booking.")
-        events.emit("alert.conflict", booking=str(b.id), booking_id=b.booking_id,
-                    code="CONFLICT_TWO_EXPERTS")
-        if not other_started:
-            b.withdrawn_expert_id = b.assigned_expert_id
+        other = b.assigned_expert_id
+        other_started = b.inspections.filter(expert_id=other,
+                                             status__in=("draft", "submitted")).exists()
+        if other_started:                             # two real inspections: Ops choose one
+            b.conflict = "TWO_EXPERTS"
+            _alert(b, "CONFLICT_TWO_EXPERTS", "Two experts inspected this booking.")
+            events.emit("alert.conflict", booking=str(b.id), booking_id=b.booking_id,
+                        code="CONFLICT_TWO_EXPERTS")
+        else:                                         # the new expert never began: back to this one
+            b.withdrawn_expert_id = other
             b.assigned_expert = actor
-            changes = {"stage": [b.stage, "submitted"]}
+            b.answers = {**b.answers, "assigned_expert": actor.pk}
+            changes = {"stage": [b.stage, "submitted"], "assigned_expert": [other, actor.pk]}
             b.stage = "submitted"
     elif b.stage in ("in_progress", "assigned"):
         if b.stage == "assigned" and b.released_draft_expected:

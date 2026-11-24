@@ -203,7 +203,9 @@ def test_submit_needs_a_started_inspection(ienv, booking):
 
 # ---------------------------------------------------------------- offline conflicts
 
-def test_reassigned_to_b_who_has_not_started_a_wins_and_b_is_withdrawn(started):
+def test_reassigned_to_b_who_has_not_started_goes_back_to_a_without_a_conflict(started):
+    # owner's rule (2026-11-24): B never began, so nothing to compare: A's inspection is used,
+    # the job is A's again and B is told; a conflict is only when both inspected
     ienv, booking, _ = started
     b_user = ienv.make_user("expert", username="bee")
     Booking.objects.filter(pk=booking["id"]).update(stage="assigned", assigned_expert=b_user,
@@ -212,7 +214,8 @@ def test_reassigned_to_b_who_has_not_started_a_wins_and_b_is_withdrawn(started):
     assert r.status_code == 200
     b = Booking.objects.get(pk=booking["id"])
     assert b.stage == "completed" and b.assigned_expert_id == ienv.expert_user.id
-    assert b.conflict == "TWO_EXPERTS" and b.withdrawn_expert_id == b_user.id
+    assert b.conflict == "" and b.withdrawn_expert_id == b_user.id
+    assert b.answers["assigned_expert"] == ienv.expert_user.id
 
 
 def test_reassigned_to_b_who_started_keeps_both_for_ops_to_choose(started):

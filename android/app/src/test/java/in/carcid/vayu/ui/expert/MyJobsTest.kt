@@ -85,6 +85,20 @@ class MyJobsTest {
         assertEquals(0, compose.onAllNodes(hasText("Farhan Ali")).fetchSemanticsNodes().size)
     }
 
+    @Test fun aJobMovedAwayShowsOnlyWhileThePhoneHoldsWorkForIt() {
+        val moved = j("42", "Zoya Merchant", "20:45").copy(assignedToMe = false)
+        val draft = `in`.carcid.vayu.core.draft.Draft("42", "DEMO-42", "Zoya Merchant", emptyMap(), "tour")
+        val held = androidx.compose.runtime.mutableStateOf(false)
+        compose.setContent { VayuTheme(ThemeMode.LIGHT) {
+            ExpertHome(me, JobsState(jobs + moved), today, {}, {}, ExpertExtras(drafts = if (held.value) mapOf("42" to draft) else emptyMap()))
+        } }
+        assertEquals(0, compose.onAllNodes(hasText("Zoya Merchant")).fetchSemanticsNodes().size)
+        held.value = true
+        compose.onNodeWithText("Zoya Merchant").assertIsDisplayed()
+        compose.onNodeWithText("Submit anyway").assertIsDisplayed()
+        compose.onNodeWithText("Discard draft").assertIsDisplayed()
+    }
+
     @Test fun offlineShowsTheStripWithTheSavedTime() {
         show(JobsState(jobs, offline = true, syncedAt = "10:42"))
         compose.onNodeWithText("Offline · as of 10:42").assertIsDisplayed()

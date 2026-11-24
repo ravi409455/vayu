@@ -14,7 +14,7 @@ from apps.accounts.permissions import scope_for
 from apps.bookings import activity
 from apps.bookings.models import Booking, Inspection
 from apps.bookings.services import err
-from apps.bookings.submissions import current_versions, own_filter
+from apps.bookings.submissions import current_versions, deliver_filter, own_filter
 from apps.core import events
 from apps.core import tasks as core_tasks
 from apps.core.errors import CodedError
@@ -40,7 +40,7 @@ def writable_booking(request, booking_id) -> Booking:
     qs = Booking.objects.all()
     if scope_for(user, "media.manage", request) is None \
             and scope_for(user, "submissions.fill", request) == "own":
-        qs = qs.filter(own_filter(user)).distinct()
+        qs = qs.filter(deliver_filter(user)).distinct()   # incl. a job moved away meanwhile
     b = qs.filter(pk=booking_id).first()
     if b is None:
         raise err("NOT_FOUND", "Booking not found.", 404)

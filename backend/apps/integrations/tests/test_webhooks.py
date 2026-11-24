@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import timedelta
 
 import pytest
@@ -201,10 +202,12 @@ def test_a_real_conflict_fires_alert_conflict(ienv, http, booking):
     make(ienv, ienv.form_id, event="alert.conflict")
     assign(ienv, booking)
     start(ienv.expert, booking)
-    from apps.bookings.models import Booking
-
+    from apps.bookings.models import Booking, Inspection
     other = ienv.make_user("expert")
     Booking.objects.filter(pk=booking["id"]).update(assigned_expert=other)   # reassigned offline
+    mine = Inspection.objects.get(booking_id=booking["id"])
+    Inspection.objects.create(booking_id=booking["id"], expert=other,      # and the other began
+                              form_version=mine.form_version, client_start_uuid=uuid.uuid4())
     submit(ienv.expert, booking)
     bodies = [body_of(c) for c in sent(http)]
     assert bodies and bodies[0]["event"] == "alert.conflict"

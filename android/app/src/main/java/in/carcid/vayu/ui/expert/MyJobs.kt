@@ -266,10 +266,12 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
     var tab by rememberSaveable { mutableStateOf(JobTab.TODAY) }
     var query by rememberSaveable { mutableStateOf("") }
     val needle = query.trim().lowercase()
-    val shown = state.jobs.filter { tabOf(it, today) == tab }
+    // a job moved to someone else shows only while this phone holds work for it (submit or discard)
+    val mine = state.jobs.filter { it.assignedToMe || it.myDraft != null || extras.drafts[it.id] != null }
+    val shown = mine.filter { tabOf(it, today) == tab }
         .filter { needle.isEmpty() || it.bookingId.lowercase().contains(needle) || it.customer.lowercase().contains(needle) }
         .let { if (tab == JobTab.DONE) it.reversed() else it }
-    val todayCount = state.jobs.count { tabOf(it, today) == JobTab.TODAY }
+    val todayCount = mine.count { tabOf(it, today) == JobTab.TODAY }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
         VayuTopBar("My jobs", me.initials, bellCount = extras.bell.unread, onBell = onBell, onProfile = onProfile)
         // a thin bar while jobs download (Refresh, reopening); fixed height so nothing jumps

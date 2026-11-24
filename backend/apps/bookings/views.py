@@ -50,7 +50,10 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         key = ACTION_PERMISSIONS.get(self.action, "bookings.view")
         scoped = ("bookings.view", "bookings.edit", "submissions.fill", "submissions.view")
         if key in scoped and scope_for(self.request.user, key, self.request) == "own":
-            qs = qs.filter(submissions.own_filter(self.request.user)).distinct()
+            # start / submit: also a job moved away while its expert worked offline
+            rule = (submissions.deliver_filter if self.action in ("start", "submit")
+                    else submissions.own_filter)
+            qs = qs.filter(rule(self.request.user)).distinct()
         if self.action != "list":
             return qs
         # only submissions this user may see, the same rule as the `inspections` action
