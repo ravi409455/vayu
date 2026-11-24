@@ -518,6 +518,19 @@ input.switch:focus-visible { outline: 2px solid var(--info); outline-offset: 2px
 .sched-pick > span:first-of-type { flex: 1; min-width: 0; }
 .sched-pick:hover { background: var(--hover); }
 .sched-pick.idle { opacity: .6; }
+.job-tip { position: fixed; z-index: 60; width: 320px; padding: 14px 16px; background: var(--panel); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 14px 36px rgba(0, 0, 0, .24); font-size: 14px; line-height: 1.45; pointer-events: none; }
+.job-tip-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 15px; }
+.job-tip-pill { font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 10px; border: 1px solid; }
+.job-tip-pill.done { background: var(--ok-tint); border-color: var(--ok-line); color: var(--ok); }
+.job-tip-pill.prog { background: var(--info-tint); border-color: var(--info-line); color: var(--info); }
+.job-tip-pill.next { background: var(--panel); border-color: var(--line-strong); color: var(--ink-2); }
+.job-tip-pill.open { background: var(--warn-tint); border-color: var(--warn); color: var(--warn); }
+.job-tip-name { font-size: 16px; font-weight: 600; margin-top: 6px; }
+.job-tip-sub { color: var(--ink-2); margin-bottom: 8px; }
+.job-tip dl { display: grid; grid-template-columns: 76px 1fr; gap: 5px 10px; margin: 0; padding-top: 8px; border-top: 1px solid var(--line); }
+.job-tip dt { color: var(--ink-2); }
+.job-tip dd { margin: 0; font-weight: 600; }
+.job-tip dd.bad { color: var(--bad); }
 .job-block.late { box-shadow: inset 4px 0 0 var(--bad); }
 .legend.late::before { border-color: var(--bad); background: var(--bad); }
 /* chart: reference categorical palette (validated on our light and dark surfaces) */

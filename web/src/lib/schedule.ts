@@ -43,9 +43,11 @@ export function jobSpan(b: Job, now: Date): Span {
   return { start: started, end: Math.max(finished, started + MIN_HOURS), kind: "finished", late };
 }
 
-/** The hours the schedule spans: 8 am to 8 pm, widened to fit the day's boxes. */
+export const DAY_START = 9, DAY_END = 21;      // the working day: 9 am to 9 pm
+
+/** The hours the schedule spans: 9 am to 9 pm, widened to fit the day's boxes. */
 export function dayWindow(spans: { start: number; end: number }[]): [number, number] {
-  return [Math.min(8, ...spans.map((s) => Math.floor(s.start))), Math.max(20, ...spans.map((s) => Math.ceil(s.end)))];
+  return [Math.min(DAY_START, ...spans.map((s) => Math.floor(s.start))), Math.max(DAY_END, ...spans.map((s) => Math.ceil(s.end)))];
 }
 
 /** Which sub-row each box goes in so none covers another (first row that is free by its start). */
@@ -74,7 +76,7 @@ export function spanTitle(s: Span): string {
 
 export const WINDOW_HOURS = 3;
 
-/** Where the quick 3-hour windows start: 8, 11, 2, 5 for an 8 am to 8 pm day. */
+/** Where the quick 3-hour windows start: 9, 12, 3, 6 for a 9 am to 9 pm day. */
 export function windowStarts(lo: number, hi: number): number[] {
   const out: number[] = [];
   for (let s = lo; s + WINDOW_HOURS <= hi; s += WINDOW_HOURS) out.push(s);
@@ -91,4 +93,21 @@ const ampm = (h: number) => (h >= 12 && h < 24 ? "pm" : "am");
 export function rangeLabel(start: number): string {
   const end = start + WINDOW_HOURS;
   return ampm(start) === ampm(end) ? `${h12(start)}–${h12(end)} ${ampm(end)}` : `${h12(start)} ${ampm(start)}–${h12(end)} ${ampm(end)}`;
+}
+
+export type Fact = { label: string; value: string; bad?: boolean };
+
+/** The lines of the hover card: what was booked, when it really began and ended, how long it took. */
+export function spanFacts(s: Span, booked: number | null, nowAt: number): Fact[] {
+  if (s.kind === "planned") {
+    return [{ label: "Booked", value: `${hm(s.start)} – ${hm(s.end)} (planned)` },
+      nowAt > s.start ? { label: "Status", value: `Not started, ${length(nowAt - s.start)} past the booked time`, bad: true }
+        : { label: "Status", value: `Not started, begins in ${length(s.start - nowAt)}` }];
+  }
+  const out: Fact[] = [];
+  if (booked !== null) out.push({ label: "Booked", value: hm(booked) });
+  out.push({ label: "Started", value: s.late ? `${hm(s.start)}, ${s.late} min late` : hm(s.start), bad: s.late > 0 });
+  if (s.kind === "running") out.push({ label: "Now", value: `Still going, ${length(Math.max(0, nowAt - s.start))} so far` });
+  else out.push({ label: "Finished", value: hm(s.end) }, { label: "Took", value: length(s.end - s.start) });
+  return out;
 }

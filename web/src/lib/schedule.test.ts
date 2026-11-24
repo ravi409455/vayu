@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampStart, jobSpan, rangeLabel, spanTitle, stackRows, windowStarts } from "./schedule";
+import { clampStart, jobSpan, rangeLabel, spanFacts, spanTitle, stackRows, windowStarts } from "./schedule";
 
 const at = (h: number, m = 0) => new Date(2026, 10, 24, h, m);               // today, 24 Nov 2026
 const job = (stage: string, booked: string, started?: Date, finished?: Date) => ({
@@ -51,6 +51,7 @@ describe("the hover", () => {
 
 describe("the 3-hour windows", () => {
   it("start every three hours and the last one ends with the day", () => {
+    expect(windowStarts(9, 21)).toEqual([9, 12, 15, 18]);
     expect(windowStarts(8, 20)).toEqual([8, 11, 14, 17]);
     expect(windowStarts(7, 21)).toEqual([7, 10, 13, 16, 18]);          // the last is pulled back to end at 9 pm
     expect(windowStarts(8, 9)).toEqual([8]);
@@ -61,9 +62,27 @@ describe("the 3-hour windows", () => {
     expect(clampStart(12.5, 8, 20)).toBe(12.5);
   });
   it("are named the way people say them", () => {
+    expect(rangeLabel(9)).toBe("9 am–12 pm");
+    expect(rangeLabel(12)).toBe("12–3 pm");
+    expect(rangeLabel(18)).toBe("6–9 pm");
     expect(rangeLabel(8)).toBe("8–11 am");
     expect(rangeLabel(11)).toBe("11 am–2 pm");
     expect(rangeLabel(17)).toBe("5–8 pm");
     expect(rangeLabel(21)).toBe("9 pm–12 am");
+  });
+});
+
+describe("the hover card lines", () => {
+  it("say what is planned, and how far past it is", () => {
+    expect(spanFacts({ start: 10, end: 11, kind: "planned", late: 0 }, 10, 11.5)).toEqual([
+      { label: "Booked", value: "10:00 am – 11:00 am (planned)" },
+      { label: "Status", value: "Not started, 1 h 30 min past the booked time", bad: true }]);
+    expect(spanFacts({ start: 10, end: 11, kind: "planned", late: 0 }, 10, 9.5)[1]).toEqual({ label: "Status", value: "Not started, begins in 30 min" });
+  });
+  it("show the real start, how late, and how long it took or has been going", () => {
+    expect(spanFacts({ start: 10.5, end: 12, kind: "running", late: 30 }, 10, 12)).toEqual([
+      { label: "Booked", value: "10:00 am" }, { label: "Started", value: "10:30 am, 30 min late", bad: true },
+      { label: "Now", value: "Still going, 1 h 30 min so far" }]);
+    expect(spanFacts({ start: 10, end: 11.25, kind: "finished", late: 0 }, 10, 18).map((f) => f.value)).toEqual(["10:00 am", "10:00 am", "11:15 am", "1 h 15 min"]);
   });
 });

@@ -37,9 +37,9 @@ describe("booking views", () => {
     expect(viewQuery("upcoming", NOW)).toMatchObject({ date_from: "2026-11-24" });
     expect(viewQuery("all", NOW)).toEqual({});
   });
-  it("the schedule spans at least 8 am to 8 pm and grows to fit early or late jobs", () => {
-    expect(dayWindow([])).toEqual([8, 20]);
-    expect(dayWindow([{ start: 7.5, end: 8.5 }, { start: 19.75, end: 20.75 }])).toEqual([7, 21]);
+  it("the schedule spans at least 9 am to 9 pm and grows to fit early or late jobs", () => {
+    expect(dayWindow([])).toEqual([9, 21]);
+    expect(dayWindow([{ start: 7.5, end: 8.5 }, { start: 20.25, end: 21.25 }])).toEqual([7, 22]);
   });
 });
 

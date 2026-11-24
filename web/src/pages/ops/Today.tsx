@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronLeft, ChevronRight, Plus, Users } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type Page } from "../../api/client";
@@ -9,7 +9,7 @@ import type { Booking, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { fmtTime, today } from "../../lib/format";
 import { loadJSON, saveJSON } from "../../lib/store";
-import { clampStart, dayWindow, hm, jobSpan, rangeLabel, spanTitle, stackRows, WINDOW_HOURS, windowStarts } from "../../lib/schedule";
+import { clampStart, DAY_END, DAY_START, dayWindow, hm, hoursOf, jobSpan, rangeLabel, spanFacts, spanTitle, stackRows, WINDOW_HOURS, windowStarts, type Span } from "../../lib/schedule";
 import { useNeeds } from "../../lib/problems";
 import { Avatar } from "../../ui/Avatar";
 import { Empty, PageHeader, useToast } from "../../ui/kit";
@@ -23,6 +23,7 @@ const CHOSEN = "vayu:today-experts";  // the experts picked in the side panel, k
 const LANE_H = 76;                 // height of one row of boxes; a lane with overlapping jobs gets more rows
 export { dayWindow };
 
+const STAGE_NAME: Record<string, string> = { draft: "Not assigned", assigned: "Assigned", in_progress: "In progress", submitted: "Uploading files", completed: "Completed" };
 const KIND: Record<string, string> = { draft: "open", assigned: "next", in_progress: "prog", submitted: "prog", completed: "done", cancelled: "off" };
 
 /** Ops' home: what today looks like, who is where, and what needs a person now. */
@@ -112,6 +113,11 @@ export function Today() {
   const onScroll = (el: HTMLDivElement) => { const h = lo + el.scrollLeft / (2 * slotPx); left.current = h; setLeftH(h); };
   const pick = (start: number) => { if (mode === "day") { want.current = start; setMode("3h"); } else goTo(start); };
   const step = (dir: number) => goTo(Math.round(leftH) + dir);
+  const [tip, setTip] = useState<{ b: Booking; sp: Span; who: string; x: number; y: number; up: boolean } | null>(null);
+  const showTip = (el: HTMLElement, b: Booking, sp: Span, who: string) => {      // the card sits under the box, or over it near the bottom
+    const r = el.getBoundingClientRect(), below = r.bottom + 230 < window.innerHeight;
+    setTip({ b, sp, who, x: Math.min(Math.max(8, r.left), window.innerWidth - 328), y: below ? r.bottom + 8 : r.top - 8, up: !below });
+  };
   const drag = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(null);
   return (
     <>
@@ -154,7 +160,7 @@ export function Today() {
           <div className="sched-bar" role="group" aria-label="Time window">
             {mode === "3h" && <button className="sm icon" aria-label="One hour earlier" onClick={() => step(-1)}><ChevronLeft size={15} aria-hidden /></button>}
             <button className="sm" onClick={() => pick(nowAt - 1)}>Now</button>
-            {windowStarts(lo, hi).map((s) => (
+            {windowStarts(DAY_START, DAY_END).map((s) => (
               <button key={s} className={`sm${mode === "3h" && Math.abs(leftH - s) < 0.26 ? " on" : ""}`} aria-pressed={mode === "3h" && Math.abs(leftH - s) < 0.26} onClick={() => pick(s)}>{rangeLabel(s)}</button>))}
             {mode === "3h" && <button className="sm icon" aria-label="One hour later" onClick={() => step(1)}><ChevronRight size={15} aria-hidden /></button>}
             <button className={`sm${mode === "day" ? " on" : ""}`} aria-pressed={mode === "day"} onClick={() => setMode(mode === "day" ? "3h" : "day")}>Full day</button>
@@ -203,7 +209,9 @@ export function Today() {
                           const sp = spans.get(b.id)!;
                           return (
                             <Link key={b.id} to={`/booking/${b.id}`} className={`job-block ${KIND[b.stage]}${sp.late ? " late" : ""}`}
-                              title={`${b.booking_id} · ${String(b.answers.customer_name ?? "")}\n${spanTitle(sp)}`}
+                              aria-label={`${b.booking_id}, ${String(b.answers.customer_name ?? "")}. ${spanTitle(sp).replace("\n", ". ")}`}
+                              onMouseEnter={(e) => showTip(e.currentTarget, b, sp, l.name)} onMouseLeave={() => setTip(null)}
+                              onFocus={(e) => showTip(e.currentTarget, b, sp, l.name)} onBlur={() => setTip(null)}
                               style={{ left: (sp.start - lo) * 2 * slotPx + 2, width: (sp.end - sp.start) * 2 * slotPx - 4, top: laid.row[i]! * LANE_H + 8, height: LANE_H - 16, bottom: "auto" }}>
                               <span className="jb-top"><b>{b.booking_id}</b><span>{hm(sp.start)}</span></span>
                               <span className="jb-sub">{String(b.answers.customer_name ?? "")}</span>
@@ -217,6 +225,16 @@ export function Today() {
             </div>
           </div>)}
       </section>
+      {tip && (
+        <div className="job-tip" role="tooltip" style={{ left: tip.x, top: tip.y, transform: tip.up ? "translateY(-100%)" : undefined }}>
+          <div className="job-tip-head"><b>{tip.b.booking_id}</b><span className={`job-tip-pill ${KIND[tip.b.stage]}`}>{STAGE_NAME[tip.b.stage] ?? tip.b.stage}</span></div>
+          <div className="job-tip-name">{String(tip.b.answers.customer_name ?? "")}</div>
+          <div className="job-tip-sub">{car(tip.b.answers.car_make_model)} · {city(tip.b.answers.city)}</div>
+          <dl>
+            <dt>Expert</dt><dd>{tip.who === "Unassigned" ? "Not assigned yet" : tip.who}</dd>
+            {spanFacts(tip.sp, hoursOf(tip.b.answers.inspection_time), nowAt).map((f) => <Fragment key={f.label}><dt>{f.label}</dt><dd className={f.bad ? "bad" : ""}>{f.value}</dd></Fragment>)}
+          </dl>
+        </div>)}
       {assigning && <Actions kind="assign" booking={assigning} experts={experts.data ?? []} onClose={() => setAssigning(null)} fail={fail} onDone={() => { setAssigning(null); say("Assigned."); void refresh("bookings-page"); }} />}
     </>
   );
