@@ -14,6 +14,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -141,11 +142,25 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
     suspend fun act(method: String, path: String, body: JsonObject? = null): JsonElement = callAny(method, path, body)
 
     /** A file the server signed (photo, report): its bytes, no sign-in header. */
-    suspend fun download(url: String): ByteArray = withContext(Dispatchers.IO) {
+    suspend fun download(url: String, maxBytes: Long = 100L * 1024 * 1024): ByteArray = withContext(Dispatchers.IO) {
+        // only signed storage links: https (plain http only against a local server in a debug build)
+        val u = url.toHttpUrlOrNull()
+        if (u == null || (!u.isHttps && !`in`.carcid.vayu.BuildConfig.DEBUG)) throw ApiError("BAD_LINK", "That download link isn't safe to open.", 0)
         try {
-            http.newCall(Request.Builder().url(url).build()).execute().use { r ->
+            http.newCall(Request.Builder().url(u).build()).execute().use { r ->
                 if (!r.isSuccessful) throw ApiError("HTTP_${r.code}", "Couldn't download it (${r.code}).", r.code)
-                r.body!!.bytes()
+                val body = r.body!!
+                if (body.contentLength() > maxBytes) throw ApiError("TOO_LARGE", "That file is too large to open on the phone.", 0)
+                val out = java.io.ByteArrayOutputStream()
+                body.byteStream().use { input ->
+                    val buf = ByteArray(1 shl 16)
+                    while (true) {
+                        val n = input.read(buf); if (n < 0) break
+                        out.write(buf, 0, n)
+                        if (out.size() > maxBytes) throw ApiError("TOO_LARGE", "That file is too large to open on the phone.", 0)
+                    }
+                }
+                out.toByteArray()
             }
         } catch (e: IOException) {
             throw ApiError(ApiError.NETWORK, "No connection. Check your signal and try again.", 0)

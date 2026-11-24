@@ -446,7 +446,8 @@ fun ReportScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
         val url = rep?.s("url")?.ifBlank { null } ?: return null
         return withContext(Dispatchers.IO) {
             runCatching {
-                val f = File(File(ctx.cacheDir, "reports").apply { mkdirs() }, rep.s("filename").ifBlank { "report.pdf" }.replace("/", "_"))
+                // our own name, never the server's (no path tricks in the cache folder)
+                val f = File(File(ctx.cacheDir, "reports").apply { mkdirs() }, "report-${(b?.code ?: "booking").filter { it.isLetterOrDigit() || it == '-' }}.pdf")
                 writeAtomically(f, env.data.api.download(url)); f
             }.getOrNull()
         }

@@ -45,7 +45,9 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
             enter(api.me())
         } catch (e: ApiError) {
             when {
-                e.code == "DEVICE_REVOKED" -> { tokens.clear(); jobs.forget(cached?.id); _screen.value = Screen.SignIn() }
+                e.code == "DEVICE_REVOKED" -> {
+                    tokens.clear(); jobs.forget(cached?.id); cached?.let { graph.ops(it.id).clear() }; _screen.value = Screen.SignIn()
+                }
                 // no signal or the server is down: still signed in, so open on the saved copy
                 JobsModel.unreachable(e) && cached != null -> {
                     _screen.value = Screen.Home(cached)
