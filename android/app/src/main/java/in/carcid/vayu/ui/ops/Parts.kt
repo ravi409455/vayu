@@ -742,6 +742,8 @@ fun activityText(r: JsonObject, env: OpsEnv): String {
         r.s("kind") == "created" -> "Created by $by"
         r.s("kind") == "inspection_edited" -> "$by changed ${r.a("keys").size} answer${if (r.a("keys").size == 1) "" else "s"}"
         r.s("kind") == "ratings_changed" -> "$by changed the ratings"
+        r.s("kind") == "late_reviewed" -> "Late start reviewed by $by"
+        r.s("kind") == "quick_reviewed" -> "Quick finish reviewed by $by"
         new("stage") == "completed" -> "Completed: every file uploaded"
         new("stage") == "submitted" -> "Submitted by $by"
         new("stage") == "in_progress" -> "Started by $by"

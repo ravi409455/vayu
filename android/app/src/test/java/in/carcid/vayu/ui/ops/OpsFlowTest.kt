@@ -97,8 +97,8 @@ class OpsFlowTest {
 
     @After fun stop() = server.stop()
 
-    private fun show(theme: ThemeMode = ThemeMode.LIGHT) = compose.setContent {
-        VayuTheme(theme) { OpsHome(me, data, { LocalDate.parse(TODAY) }, onProfile = {}) }
+    private fun show(theme: ThemeMode = ThemeMode.LIGHT, user: Me = me) = compose.setContent {
+        VayuTheme(theme) { OpsHome(user, data, { LocalDate.parse(TODAY) }, onProfile = {}) }
     }
 
     private fun waitFor(text: String) = compose.waitUntil(5_000) { compose.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty() }
@@ -189,6 +189,39 @@ class OpsFlowTest {
         compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).performClick()
         waitFor("Two experts inspected DEMO-14")
+    }
+
+    @Test fun aLateStartIsListedAndMarkedReviewed() {
+        val late = day[1].trimEnd().removeSuffix("}") + ""","timing":{"late_minutes":40,"duration_minutes":null,"late":true,"quick":false,"min_minutes":30,
+            "grace_minutes":15,"late_reviewed_by":null,"late_reviewed_at":null,"quick_reviewed_by":null,"quick_reviewed_at":null}}"""
+        server.on("GET bookings", """{"count":1,"results":[$late]}""")
+        server.on("GET bookings/$B8", late)
+        server.on("POST bookings/$B8/timing-review", late)
+        show(user = me.copy(permissions = me.permissions + "bookings.review_timing"))
+        compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).performClick()
+        waitFor("DEMO-8: started 40 min late")
+        compose.onNodeWithText("STARTED LATE · 1").assertIsDisplayed()
+        compose.onNodeWithText("DEMO-8: started 40 min late").performClick()
+        waitFor("Limit: start within 15 min of the booked time.")
+        shot("ops_booking_late")
+        compose.onNodeWithText("Mark reviewed").performClick()
+        compose.waitUntil(5_000) { server.bodiesOf("POST bookings/$B8/timing-review").isNotEmpty() }
+        assertEquals("late", Json.parseToJsonElement(server.bodiesOf("POST bookings/$B8/timing-review").single()).jsonObject["flag"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun aReviewedFlagIsCalmAndTheOtherStaysOpen() {
+        val both = day[1].trimEnd().removeSuffix("}") + ""","timing":{"late_minutes":40,"duration_minutes":25,"late":true,"quick":true,"min_minutes":45,
+            "grace_minutes":15,"late_reviewed_by":"priya","late_reviewed_at":"2026-11-24T10:44:00+05:30","quick_reviewed_by":null,"quick_reviewed_at":null}}"""
+        server.on("GET bookings", """{"count":1,"results":[$both]}""")
+        server.on("GET bookings/$B8", both)
+        show(user = me.copy(permissions = me.permissions + "bookings.review_timing"))
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Farhan Ali"); compose.onNodeWithText("Farhan Ali").performClick()
+        waitFor("Limit: take at least 45 min.")
+        compose.onNode(hasText("Started 40 min late · Reviewed by Priya Ops", substring = true)).assertIsDisplayed()
+        compose.onAllNodes(hasText("Took 25 min (min 45)")).fetchSemanticsNodes().let { assertEquals(2, it.size) }   // header tag + box
+        shot("ops_booking_timing_reviewed")
     }
 
     @Test fun theDashboardShowsThePeriodAndTheSplit() {

@@ -71,6 +71,28 @@ class Bk(val o: JsonObject) {
     val typeRejected: String? get() = (o["alerts"] as? kotlinx.serialization.json.JsonArray)?.map { it as JsonObject }
         ?.firstOrNull { it.s("code") == "TYPE_CHANGE_REJECTED" }?.s("detail")
     val live get() = stage !in setOf("completed", "cancelled")
+    /** Started late / too quick; only Admin and Ops get "timing" (web: timingFlags). */
+    val flags: List<TimingFlag> get() {
+        val t = o["timing"] as? JsonObject ?: return emptyList()
+        fun on(k: String) = t.s(k) == "true"
+        fun mins(k: String) = t.s(k).toIntOrNull()
+        return listOfNotNull(
+            TimingFlag("late", "Started ${fmtMinutes(mins("late_minutes"))} late", "Limit: start within ${t.s("grace_minutes")} min of the booked time.",
+                t.s("late_reviewed_by"), t.s("late_reviewed_at")).takeIf { on("late") },
+            TimingFlag("quick", "Took ${fmtMinutes(mins("duration_minutes"))} (min ${t.s("min_minutes")})", "Limit: take at least ${t.s("min_minutes")} min.",
+                t.s("quick_reviewed_by"), t.s("quick_reviewed_at")).takeIf { on("quick") })
+    }
+}
+
+/** One timing problem on a job; [reviewedAt] blank until someone marks it reviewed. */
+data class TimingFlag(val flag: String, val words: String, val limit: String, val reviewedBy: String, val reviewedAt: String)
+
+/** 40 -> "40 min", 125 -> "2 h 5 min", 7125 -> "4 days 22 h" (web: fmtMinutes). */
+fun fmtMinutes(m: Int?): String = when {
+    m == null -> "—"
+    m < 60 -> "$m min"
+    m < 24 * 60 -> "${m / 60} h" + if (m % 60 != 0) " ${m % 60} min" else ""
+    else -> { val d = m / 1440; val h = m % 1440 / 60; "$d day${if (d == 1) "" else "s"}" + if (h != 0) " $h h" else "" }
 }
 
 fun opsStatus(b: Bk): Pair<String, Tone> = when {

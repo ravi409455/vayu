@@ -108,6 +108,7 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
     var menu by remember { mutableStateOf(false) }
     var action by remember { mutableStateOf<String?>(null) }
     var compare by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf<String?>(null) }
     val online = load.value?.offline == false
     if (b == null) {
         Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
@@ -162,6 +163,7 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
                 Chip(listOf(st, why).filter { it.isNotBlank() }.joinToString(" · "), tone)
                 env.labels.type(b.type).takeIf { it.isNotBlank() }?.let { Chip(it) }
                 slot(b, t).takeIf { it.isNotBlank() }?.let { Chip(it) }
+                b.flags.filter { it.reviewedAt.isBlank() }.forEach { Chip(it.words, Tone.WARN) }
             }
             val digits = b.phone.filter { it in '0'..'9' }
             val place = listOf(b.a("address"), env.labels.city(b.a("city"))).filter { it.isNotBlank() }.joinToString(", ")
@@ -175,6 +177,18 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
                 val subs = insps.filter { it.s("status") == "submitted" }
                 Attention("Two experts inspected this car", subs.joinToString(". ") { "${env.labels.person(it.int("expert"))} submitted ${whenStamp(it.s("submitted_at"), env.today()).replaceFirstChar { c -> c.lowercase() }}" } +
                     ". Choose which one counts.", "Compare and choose", online && env.can("bookings.edit")) { compare = true }
+            }
+            b.flags.sortedBy { it.reviewedAt.isNotBlank() }.forEach { f ->   // open ones first
+                if (f.reviewedAt.isNotBlank()) Attention("${f.words} · Reviewed by ${env.labels.byUsername(f.reviewedBy)}, ${whenStamp(f.reviewedAt, t).replaceFirstChar { it.lowercase() }}",
+                    "", null, false, tone = Tone.NEUTRAL) {}
+                // one tap only: a second tap while it saves does nothing (no double review in History)
+                else Attention(f.words, f.limit, (if (saving == f.flag) "Saving…" else "Mark reviewed").takeIf { env.can("bookings.review_timing") }, online, tone = Tone.WARN) {
+                    if (saving == null) { saving = f.flag; scope.launch {
+                        try { env.data.act("POST", "bookings/$id/timing-review", buildJsonObject { put("flag", f.flag) }); env.say("Marked reviewed."); env.refresh() }
+                        catch (e: ApiError) { env.say(e.message) }
+                        saving = null
+                    } }
+                }
             }
             b.typeRejected?.let { Attention("Your type change wasn't applied", env.labels.typeRejected(it), null, false) {} }
             if (b.stage == "completed" || b.conflict.isNotEmpty() || report.value?.data is JsonObject) {
@@ -253,11 +267,16 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
 }
 
 @Composable
-private fun Attention(title: String, text: String, action: String?, enabled: Boolean, onAction: () -> Unit) {
-    Column(Modifier.padding(top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Vayu.colors.badTint).padding(14.dp),
+private fun Attention(title: String, text: String, action: String?, enabled: Boolean, tone: Tone = Tone.BAD, onAction: () -> Unit) {
+    val (bg, fg) = when (tone) {
+        Tone.WARN -> Vayu.colors.warnTint to Vayu.colors.warn
+        Tone.NEUTRAL -> Vayu.colors.soft to Vayu.colors.ink2          // done: calm, nothing to do
+        else -> Vayu.colors.badTint to Vayu.colors.bad
+    }
+    Column(Modifier.padding(top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(bg).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, fontWeight = FontWeight.Bold, color = Vayu.colors.bad)
-        Text(text, color = Vayu.colors.ink, fontSize = 14.sp)
+        Text(title, fontWeight = if (tone == Tone.NEUTRAL) FontWeight.Medium else FontWeight.Bold, color = fg, fontSize = if (tone == Tone.NEUTRAL) 14.sp else androidx.compose.ui.unit.TextUnit.Unspecified)
+        if (text.isNotBlank()) Text(text, color = Vayu.colors.ink, fontSize = 14.sp)
         if (action != null) PillButton(action, enabled, onAction)
     }
 }

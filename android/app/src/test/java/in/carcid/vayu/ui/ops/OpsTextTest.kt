@@ -12,6 +12,19 @@ import java.time.ZoneId
 
 /** The words Ops screens show for server values (found testing on a phone). */
 class OpsTextTest {
+    @Test fun minutesReadLikeTheWeb() {
+        assertEquals("40 min", fmtMinutes(40)); assertEquals("2 h 5 min", fmtMinutes(125)); assertEquals("2 h", fmtMinutes(120))
+        assertEquals("4 days 22 h", fmtMinutes(7125)); assertEquals("1 day", fmtMinutes(1440)); assertEquals("—", fmtMinutes(null))
+    }
+
+    @Test fun timingFlagsAreTwoSeparateProblems() {
+        val b = Bk(Json.parseToJsonElement("""{"timing":{"late_minutes":40,"duration_minutes":25,"late":true,"quick":true,"min_minutes":45,
+            "grace_minutes":15,"late_reviewed_by":"ops","late_reviewed_at":"2026-11-24T10:44:00+05:30","quick_reviewed_by":null,"quick_reviewed_at":null}}""").jsonObject)
+        assertEquals(listOf("Started 40 min late", "Took 25 min (min 45)"), b.flags.map { it.words })
+        assertEquals(listOf("ops", ""), b.flags.map { it.reviewedBy })
+        assertEquals(emptyList<TimingFlag>(), Bk(Json.parseToJsonElement("{}").jsonObject).flags)   // Experts never get "timing"
+    }
+
     @Test fun dashboardRowsAreRead() {
         // the dashboard answers {"rows": [...]}, lists answer {"results": [...]}
         assertEquals(2, Json.parseToJsonElement("""{"rows":[{"a":1},{"a":2}]}""").rows().size)

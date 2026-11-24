@@ -294,7 +294,11 @@ fun NeedsYouScreen(env: OpsEnv, loaded: List<Need>?, onBack: () -> Unit, onOpen:
             if (tab == 1) item { Text("Updates (new bookings, jobs started, submitted) arrive here with notifications.", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
             else if (loaded == null) item { Text("Loading…", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
             else if (problems.isEmpty()) item { Text("All clear. Nothing needs you right now.", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
-            else items(problems, key = { it.key }) { n ->
+            else problems.groupBy { it.group }.forEach { (group, list) ->
+              if (group.isNotBlank()) item(key = "h$group") {
+                Section("$group · ${list.size}")
+              }
+              items(list, key = { it.key }) { n ->
                 Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).clickable(role = Role.Button) { onOpen(n.booking) },
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(Modifier.size(10.dp).clip(CircleShape).background(toneColor(n.tone)))
@@ -304,31 +308,38 @@ fun NeedsYouScreen(env: OpsEnv, loaded: List<Need>?, onBack: () -> Unit, onOpen:
                     }
                 }
                 HorizontalDivider(color = Vayu.colors.line)
+              }
             }
         }
     }
 }
 
-/** One thing that needs a person (web: lib/problems.ts). */
-data class Need(val key: String, val booking: String, val tone: Tone, val title: String, val meta: String)
+/** One thing that needs a person (web: lib/problems.ts); [group] is its heading in the bell. */
+data class Need(val key: String, val booking: String, val tone: Tone, val title: String, val meta: String, val group: String = "")
 
-/** Every problem queue as one list, most urgent first. */
+/** Every problem queue as one list, in groups, most urgent group first. */
 suspend fun loadNeeds(env: OpsEnv): List<Need> {
     val t = env.today()
     // a failed list counts as empty; a cancelled load (a newer one started) must stay cancelled
     suspend fun rows(path: String) = try { env.data.load(path).data.rows() } catch (e: `in`.carcid.vayu.core.api.ApiError) { emptyList() }
-    // all five at once: on a weak signal the wait is the slowest one, not the sum
-    val (c, o, st, pd, ty) = kotlinx.coroutines.coroutineScope {
+    // started late, finished too quickly: last 7 days, each until someone marks it reviewed (Admin / Ops only)
+    fun flagged(f: String) = "bookings?timing=$f&reviewed=0&date_from=${t.minusDays(6)}&date_to=$t&order=schedule".takeIf { env.can("bookings.review_timing") }
+    // all at once: on a weak signal the wait is the slowest one, not the sum
+    val all = kotlinx.coroutines.coroutineScope {
         listOf("bookings?problem=conflict", "bookings?stage=draft&date_from=$t&date_to=$t&order=schedule", "problems/stuck-uploads",
-            "problems/reports", "bookings?problem=type_change").map { async { rows(it) } }.awaitAll()
+            "problems/reports", "bookings?problem=type_change", flagged("late"), flagged("quick")).map { async { it?.let { p -> rows(p) }.orEmpty() } }.awaitAll()
     }
-    val conflicts = c.map(::Bk); val open = o.map(::Bk); val stuck = st; val pdf = pd; val types = ty.map(::Bk)
-    return conflicts.map { Need("c" + it.id, it.id, Tone.BAD, "Two experts inspected ${it.code}", "${it.customer} · choose which counts") } +
-        open.map { Need("a" + it.id, it.id, Tone.WARN, "${it.code} has no expert", "Today at ${time12(it.time)} · ${it.customer}") } +
-        stuck.map { Need("s" + it.s("id"), it.s("booking"), Tone.BAD, "Photos stuck: ${it.s("booking_id")}",
-            "${env.labels.byUsername(it.s("expert"))} · ${it.s("field_key").replace('_', ' ').replaceFirstChar { c -> c.uppercase() }}") } +
-        pdf.map { Need("p" + it.s("booking"), it.s("booking"), if (it.s("stale") == "true") Tone.WARN else Tone.BAD,
+    val (c, o, st, pd, ty) = all; val lt = all[5]; val qk = all[6]
+    fun timing(list: List<kotlinx.serialization.json.JsonObject>, f: String, group: String) = list.map(::Bk).mapNotNull { b ->
+        b.flags.firstOrNull { it.flag == f }?.let { fl -> Need(f + b.id, b.id, Tone.WARN, "${b.code}: ${fl.words.replaceFirstChar { it.lowercase() }}",
+            listOf(slot(b, t), b.customer).filter { it.isNotBlank() }.joinToString(" · "), group) } }
+    return o.map(::Bk).map { Need("a" + it.id, it.id, Tone.WARN, "${it.code} has no expert", "Today at ${time12(it.time)} · ${it.customer}", "Unassigned today") } +
+        c.map(::Bk).map { Need("c" + it.id, it.id, Tone.BAD, "Two experts inspected ${it.code}", "${it.customer} · choose which counts", "Conflicts") } +
+        st.map { Need("s" + it.s("id"), it.s("booking"), Tone.BAD, "Photos stuck: ${it.s("booking_id")}",
+            "${env.labels.byUsername(it.s("expert"))} · ${it.s("field_key").replace('_', ' ').replaceFirstChar { c -> c.uppercase() }}", "Stuck uploads") } +
+        pd.map { Need("p" + it.s("booking"), it.s("booking"), if (it.s("stale") == "true") Tone.WARN else Tone.BAD,
             if (it.s("stale") == "true") "Report out of date: ${it.s("booking_id")}" else "Report failed for ${it.s("booking_id")}",
-            it.s("error").ifBlank { "Answers changed after the PDF was made" }) } +
-        types.map { Need("t" + it.id, it.id, Tone.WARN, "Your type change wasn't applied", "${it.code} · ${it.typeRejected?.let(env.labels::typeRejected) ?: "The expert started another type"}") }
+            it.s("error").ifBlank { "Answers changed after the PDF was made" }, "Reports") } +
+        ty.map(::Bk).map { Need("t" + it.id, it.id, Tone.WARN, "Your type change wasn't applied", "${it.code} · ${it.typeRejected?.let(env.labels::typeRejected) ?: "The expert started another type"}", "Type changes") } +
+        timing(lt, "late", "Started late") + timing(qk, "quick", "Too quick")
 }
