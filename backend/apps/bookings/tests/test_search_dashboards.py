@@ -328,3 +328,14 @@ def test_a_booking_without_a_time_is_left_out_of_on_time(many):
     assert _slot(b) is None
     b.inspection_date = None
     assert _slot(b) is None
+
+
+def test_summary_hides_timing_from_those_who_may_not_see_it(many, monkeypatch):
+    from apps.bookings import dashboards
+
+    assert "late" in many.ops.get("/api/v1/dashboards/summary").json()["period"]
+    monkeypatch.setattr(dashboards, "scope_for", lambda *a, **k: None)
+    body = many.ops.get("/api/v1/dashboards/summary").json()
+    for stats in [body["period"], body["previous"], *body["by_expert"]]:
+        assert not set(stats) & set(dashboards.TIMING_KEYS)
+    assert "bookings" in body["period"]

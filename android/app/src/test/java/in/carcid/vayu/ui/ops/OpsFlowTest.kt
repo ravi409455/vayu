@@ -59,7 +59,7 @@ class OpsFlowTest {
     private val me = Me(5, "priya", "Priya Ops", "ops", false, "light",
         setOf("bookings.view", "bookings.assign", "bookings.edit", "bookings.create", "bookings.cancel", "bookings.reschedule",
             "bookings.force_release", "submissions.edit", "media.manage", "media.download", "ratings.override", "reports.view",
-            "reports.regenerate", "dashboards.view", "dashboards.export"))
+            "reports.regenerate", "dashboards.view", "dashboards.export", "bookings.review_timing"))
 
     private val day = listOf(
         booking(B4, "DEMO-4", "Rohit Sharma", "13:00", "draft", null),

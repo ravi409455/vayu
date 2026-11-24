@@ -146,6 +146,9 @@ def _stats(bookings: list[Booking], cfg: dict) -> dict:
             "quick": quick, "quick_pct": _pct(quick, len(minutes))}
 
 
+TIMING_KEYS = ("late", "late_pct", "quick", "quick_pct")
+
+
 def summary(start: date, end: date) -> dict:
     days = (end - start).days + 1
     prev_start = start - timedelta(days=days)
@@ -172,4 +175,10 @@ class DashboardSummary(APIView):
     declared_permissions = ("dashboards.view",)
 
     def get(self, request):
-        return Response(summary(*_bounds(request.query_params)))
+        out = summary(*_bounds(request.query_params))
+        # started late / too quick only for those who may see timing flags (as the web shows them)
+        if scope_for(request.user, "bookings.review_timing", request) is None:
+            for stats in [out["period"], out["previous"], *out["by_expert"]]:
+                for k in TIMING_KEYS:
+                    stats.pop(k, None)
+        return Response(out)

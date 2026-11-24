@@ -120,6 +120,8 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
         .value?.data?.rows().orEmpty()
     val splitRows = rememberLoad(env, "dashboards/volume?group=month&by=$split&date_from=$from&date_to=$to").value?.data?.rows().orEmpty()
     val dates = mapOf("date_from" to from.toString(), "date_to" to to.toString())
+    // started late / too quick only for those who may see timing flags (the server leaves them out too)
+    val timing = env.can("bookings.review_timing")
     fun num(o: JsonObject?, k: String) = o?.s(k)?.toDoubleOrNull()
     fun label(k: String) = when (split) {
         "type" -> env.labels.type(k); "city" -> env.labels.city(k); "expert" -> env.labels.person(k.toIntOrNull()).ifBlank { "Unassigned" }
@@ -131,7 +133,7 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
                 val f = File(File(ctx.cacheDir, "reports").apply { mkdirs() }, "vayu-$from-$to-by-$split.csv")
                 writeAtomically(f, ("$split,count\n" + splitRows.groupBy { it.s("key") }.map { (k, r) -> k to r.sumOf { it.s("count").toIntOrNull() ?: 0 } }
                     .sortedByDescending { it.second }.joinToString("\n") { (k, n) ->
-                        listOf(label(k), "$n").joinToString(",") { v -> "\"" + v.replace("\"", "\"\"").let { if (it.firstOrNull() in setOf('=', '+', '-', '@')) "'$it" else it } + "\"" }
+                        listOf(label(k), "$n").joinToString(",") { v -> "\"" + v.replace("\"", "\"\"").let { if (it.firstOrNull() in setOf('=', '+', '-', '@', '\t', '\r', '\n')) "'$it" else it } + "\"" }
                     }).toByteArray())
                 val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
                 ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/csv").putExtra(Intent.EXTRA_STREAM, uri)
@@ -159,6 +161,7 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
                 TileData("Avg time", num(now, "avg_minutes")?.let { fmtMinutes(it.toInt()) } ?: "—",
                     change(num(now, "avg_minutes"), num(before, "avg_minutes"), " min").copy(good = null)) { onOpenList(dates + ("stage" to "completed")) },
                 TileData("On time", num(now, "on_time")?.let { "${it.toInt()}%" } ?: "—", change(num(now, "on_time"), num(before, "on_time"), " pts")) { onOpenList(dates) },
+            ) + if (!timing) emptyList() else listOf(
                 TileData("Started late", "${now?.s("late")}", change(num(now, "late"), num(before, "late"), moreIsBetter = false),
                     bad = (num(now, "late") ?: 0.0) > 0) { onOpenList(dates + ("timing" to "late")) },
                 TileData("Too quick", "${now?.s("quick")}", change(num(now, "quick"), num(before, "quick"), moreIsBetter = false),
@@ -207,8 +210,10 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
                             Text(listOfNotNull("${e.s("bookings")} job${if (e.s("bookings") == "1") "" else "s"}", e.s("on_time").ifBlank { null }?.let { "$it% on time" })
                                 .joinToString(" · "), fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        e.int("late")?.takeIf { it > 0 }?.let { Badge("$it late") }
-                        e.int("quick")?.takeIf { it > 0 }?.let { Badge("$it quick") }
+                        if (timing) {
+                            e.int("late")?.takeIf { it > 0 }?.let { Badge("$it late") }
+                            e.int("quick")?.takeIf { it > 0 }?.let { Badge("$it quick") }
+                        }
                     }
                     HorizontalDivider(color = Vayu.colors.line)
                 }
