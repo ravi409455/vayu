@@ -24,10 +24,6 @@ import com.google.firebase.messaging.RemoteMessage
 import `in`.carcid.vayu.core.alerts.reminders
 import `in`.carcid.vayu.core.alerts.stuck
 import `in`.carcid.vayu.core.api.ApiError
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import java.time.Duration
@@ -73,12 +69,10 @@ object Notices {
 
 /** Pushes from the server. Each one is shown, and what it is about is fetched (a sync). */
 class VayuMessaging : FirebaseMessagingService() {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     override fun onNewToken(token: String) {
         val graph = (application as VayuApp).graph
         if (graph.signedInId() == null) return             // sent at the next sign-in instead
-        scope.launch { runCatching { graph.api.pushToken(token) } }
+        graph.sendPushToken()
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -103,7 +97,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         if (graph.tokens.me()?.get("role") != "expert") return Result.success()
         return try {
             val store = graph.jobs(user)
-            store.apply(graph.api.syncJobs(store.haveVersions(), store.since()), System.currentTimeMillis())
+            store.apply(graph.api.syncJobs(store.haveVersions(), store.since()), System.currentTimeMillis(),
+                keep = graph.pinned(user), elapsed = android.os.SystemClock.elapsedRealtime())
             Reminders.schedule(applicationContext, graph, user)
             Result.success()
         } catch (e: ApiError) {
@@ -114,6 +109,28 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     companion object {
         fun enqueue(ctx: Context) = WorkManager.getInstance(ctx).enqueueUniqueWork("sync", ExistingWorkPolicy.REPLACE,
             OneTimeWorkRequestBuilder<SyncWorker>().setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build())
+    }
+}
+
+/** Send this phone's push token to the server, retried until it gets there (offline at sign-in, server down). */
+class PushTokenWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val graph = (applicationContext as VayuApp).graph
+        if (graph.signedInId() == null) return Result.success()
+        // no token yet (Play services starting): a few more tries; none at all on phones without them
+        val token = Notices.token() ?: return if (runAttemptCount < 5) Result.retry() else Result.success()
+        return try {
+            graph.api.pushToken(token); Result.success()
+        } catch (e: ApiError) {
+            if (`in`.carcid.vayu.core.draft.transient(e) && e.code != "DEVICE_REVOKED") Result.retry() else Result.success()
+        }
+    }
+
+    companion object {
+        fun enqueue(ctx: Context) = WorkManager.getInstance(ctx).enqueueUniqueWork("push-token", ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<PushTokenWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).build())
     }
 }
 

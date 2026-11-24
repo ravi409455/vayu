@@ -39,8 +39,13 @@ class SignInFlowTest {
     private fun me(role: String, mustChange: Boolean = false) =
         """{"id":3,"username":"ravi","name":"Ravi Expert","role":"$role","must_change_password":$mustChange,"theme":"light"}"""
 
+    private var pushTokens = 0
+    private val tokens = MemoryTokenStore()
+
     private fun launch() {
-        val vm = AppViewModel(`in`.carcid.vayu.core.api.testGraph(server), "Test phone")
+        val graph = `in`.carcid.vayu.Graph(Api(server.url, tokens), tokens, java.nio.file.Files.createTempDirectory("vayu").toFile(), {},
+            sendPushToken = { pushTokens++ })
+        val vm = AppViewModel(graph, "Test phone")
         compose.setContent { AppRoot(vm) }
     }
 
@@ -63,6 +68,21 @@ class SignInFlowTest {
     @Test fun anExpertLandsOnMyJobs() {
         signedIn("expert")
         launch(); signIn(); waitFor("My jobs")
+    }
+
+    @Test fun theSignInQueuesThePushTokenToBeSentUntilItArrives() {
+        signedIn("expert")
+        launch(); signIn(); waitFor("My jobs")
+        org.junit.Assert.assertEquals(1, pushTokens)                       // WorkManager retries it (offline at sign-in)
+    }
+
+    @Test fun aSignInThatEndsWhileTheAppRunsAsksToSignInAgain() {
+        signedIn("expert")
+        launch(); signIn(); waitFor("My jobs")
+        server.on("GET sync/jobs", """{"code":"token_not_valid","detail":"Token is invalid or expired"}""", 401)
+        server.on("POST auth/refresh", """{"code":"token_not_valid","detail":"Token is invalid or expired"}""", 401)
+        compose.onNode(androidx.compose.ui.test.hasContentDescription("Refresh", substring = true)).performClick()
+        waitFor("Your sign-in has ended. Sign in again; your unsent work stays on this phone.")
     }
 
     @Test fun opsLandOnToday() {

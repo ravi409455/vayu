@@ -29,7 +29,13 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
             /** An expert's jobs were saved fresh: set their reminders (WorkManager in the app). */
             val onJobs: (Int) -> Unit = {},
             /** Signed out: take this person's notices off the phone and drop their reminders. */
-            val clearNotices: () -> Unit = {}) {
+            val clearNotices: () -> Unit = {},
+            /** Writes drafts to storage (a thread of its own in the app; at once in tests). */
+            private val writer: java.util.concurrent.Executor = java.util.concurrent.Executor { it.run() },
+            /** A draft file that can't be read (a crash report in the app). */
+            private val onDamaged: (File, Throwable) -> Unit = { _, _ -> },
+            /** Send this phone's push token (WorkManager in the app, so it is retried). */
+            val sendPushToken: () -> Unit = {}) {
     /** One person's own phone notices (reminders, photos not sending), shown in their bell. */
     fun localNotes(userId: Int) = `in`.carcid.vayu.core.alerts.LocalNotes(File(root, "notes-$userId.json"))
 
@@ -43,7 +49,16 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
     private val draftStores = HashMap<Int, DraftStore>()
 
     @Synchronized fun jobs(userId: Int) = jobStores.getOrPut(userId) { JobStore(File(root, "jobs-$userId.json")) }
-    @Synchronized fun drafts(userId: Int) = draftStores.getOrPut(userId) { DraftStore(File(root, "drafts-$userId")) }
+    @Synchronized fun drafts(userId: Int) = draftStores.getOrPut(userId) { DraftStore(File(root, "drafts-$userId"), writer, onDamaged) }
+
+    /** Form versions this person's drafts are pinned to (their forms must stay on the phone). */
+    fun pinned(userId: Int): Set<Int> = drafts(userId).all().flatMap { it.versions.values.filterNotNull() }.toSet()
+
+    /** At app start: files no draft refers to (shots never confirmed, leftovers), for every person on this phone. */
+    fun sweep() {
+        root.listFiles { f -> f.isDirectory && f.name.startsWith("drafts-") }.orEmpty()
+            .mapNotNull { it.name.removePrefix("drafts-").toIntOrNull() }.forEach { drafts(it).sweep() }
+    }
 
     /** Ops' saved copies of what they last loaded (read-only offline). */
     fun ops(userId: Int) = `in`.carcid.vayu.core.ops.OpsData(api, File(root, "ops-$userId"))
@@ -61,17 +76,31 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
     }
 
     /** A cleared store never writes again, so a later sign-in needs a fresh one. */
-    @Synchronized fun forgetJobs(userId: Int) { jobStores.remove(userId)?.clear() ?: JobStore(File(root, "jobs-$userId.json")).clear() }
+    @Synchronized fun forgetJobs(userId: Int) {
+        val keep = pinned(userId)
+        jobStores.remove(userId)?.clear(keep) ?: JobStore(File(root, "jobs-$userId.json")).clear(keep)
+    }
 
     fun outbox(userId: Int): Outbox = Outbox(api, drafts(userId), BuildConfig.VERSION_CODE) { d ->
         jobs(userId).filled(d.bookingId, d.versions, d.answers, LocalDate.now().toString())
+    }
+
+    /**
+     * Send what this person's drafts hold, then tell the server what is still on the phone (it
+     * refuses a sign-in on another phone while work is here). False: try again later.
+     */
+    suspend fun send(userId: Int): Boolean {
+        val done = outbox(userId).run()
+        val (drafts, files) = drafts(userId).unsentCounts()
+        try { api.heartbeat(drafts, files) } catch (e: ApiError) { if (e.code == "DEVICE_REVOKED") throw e }
+        return done
     }
 
     /** Finished work the server has in full, for jobs that are done or gone, leaves the phone. */
     fun prune(userId: Int) {
         val jobs = jobs(userId).jobs().associateBy { it.id }
         val drafts = drafts(userId)
-        drafts.all().filter { d -> d.submitSent && d.files.all { it.sent } && jobs[d.bookingId].let { it == null || it.stage == "completed" } }
+        drafts.all().filter { d -> d.submitSent && d.files.all { it.verified } && jobs[d.bookingId].let { it == null || it.stage == "completed" } }
             .forEach { drafts.discard(it.bookingId) }
     }
 
@@ -104,13 +133,19 @@ class VayuApp : Application() {
             }
         }; android.util.Log.i("Vayu", "crash reports on: ${io.sentry.Sentry.isEnabled()}") }
             .apply { priority = Thread.MIN_PRIORITY }.start()
+        // shots never confirmed before the app died, and other files no draft refers to
+        Thread { runCatching { graph.sweep() } }.apply { priority = Thread.MIN_PRIORITY }.start()
     }
 
     val graph: Graph by lazy {
         val tokens = PrefsTokenStore(this)
         Graph(Api(BuildConfig.API_URL, tokens), tokens, filesDir, { OutboxWorker.enqueue(this) }, cacheDir,
             onJobs = { Reminders.schedule(this, graph, it) },
-            clearNotices = { androidx.core.app.NotificationManagerCompat.from(this).cancelAll(); Reminders.cancel(this) })
+            clearNotices = { androidx.core.app.NotificationManagerCompat.from(this).cancelAll(); Reminders.cancel(this) },
+            writer = java.util.concurrent.Executors.newSingleThreadExecutor(),
+            // only that it happened and where in the code (beforeSend drops the text)
+            onDamaged = { _, e -> io.sentry.Sentry.captureException(e) },
+            sendPushToken = { PushTokenWorker.enqueue(this) })
     }
 }
 
@@ -120,11 +155,15 @@ class OutboxWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val graph = (applicationContext as VayuApp).graph
         val user = graph.signedInId() ?: return Result.success()
         return try {
-            val done = graph.outbox(user).run()
+            val done = graph.send(user)
             alertStuck(applicationContext, graph, user)
             if (done) Result.success() else Result.retry()
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
         } catch (e: ApiError) {
             Result.success()                  // signed out by the server: the app takes it from here
+        } catch (e: Exception) {
+            Result.retry()                    // anything else: keep trying (backoff), never give up for good
         }
     }
 
@@ -134,7 +173,12 @@ class OutboxWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
-            WorkManager.getInstance(context).enqueueUniqueWork("outbox", ExistingWorkPolicy.APPEND_OR_REPLACE, work)
+            val wm = WorkManager.getInstance(context)
+            // a run in progress finishes, then this one follows; one only waiting (in backoff) is
+            // replaced, so new work never waits hours behind it
+            val running = runCatching { wm.getWorkInfosForUniqueWork("outbox").get() }.getOrNull().orEmpty()
+                .any { it.state == androidx.work.WorkInfo.State.RUNNING }
+            wm.enqueueUniqueWork("outbox", if (running) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE, work)
         }
     }
 }

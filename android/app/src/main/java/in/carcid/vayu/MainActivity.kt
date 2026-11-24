@@ -43,7 +43,8 @@ class MainActivity : ComponentActivity() {
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                AppViewModel((application as VayuApp).graph, Build.MODEL, pushToken = Notices::token, appVersion = BuildConfig.VERSION_CODE) as T
+                AppViewModel((application as VayuApp).graph, Build.MODEL, appVersion = BuildConfig.VERSION_CODE,
+                    elapsed = android.os.SystemClock::elapsedRealtime) as T
         }
         setContent {
             val vm: AppViewModel = viewModel(factory = factory)
@@ -157,6 +158,9 @@ private fun expertExtras(vm: AppViewModel, me: `in`.carcid.vayu.core.api.Me): Ex
             },
             onDiscard = { drafts.discard(it) },
             onClearSent = { drafts.clearSentCopies() },
+            listed = jobs.jobs.map { it.id }.toSet(),
+            onSend = { id -> InspectionModel(drafts, store, id, vm.jobs::now, vm.graph.kick).submit() },
+            onRemoveFile = { d, f -> InspectionModel(drafts, store, d.bookingId, vm.jobs::now, vm.graph.kick).removeFile(f.part, f.field, f.id) },
             phones = jobs.jobs.associate { it.id to it.phone },
             bell = bell, onBell = vm.bell::refresh, onRead = vm.bell::read,
             opening = vm.opening.value, onOpened = { vm.opening.value = null },

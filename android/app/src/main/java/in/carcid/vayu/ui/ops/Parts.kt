@@ -375,6 +375,9 @@ suspend fun mediaBytes(env: OpsEnv, dir: File, id: String, preview: Boolean = fa
     } catch (e: kotlin.coroutines.cancellation.CancellationException) { throw e } catch (e: Exception) { null }
 }
 
+/** [thumb] off the main thread (a 2000-px decode stutters the list on a low-end phone). */
+private suspend fun decoded(f: File, size: Int): ImageBitmap? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { thumb(f, size) }
+
 private fun thumb(f: File, size: Int): ImageBitmap? = runCatching {
     val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeFile(f.path, o)
@@ -400,7 +403,8 @@ fun rememberOpsUploader(env: OpsEnv, id: String, data: Loaded3?, online: Boolean
     suspend fun upload(f: Field, file: File, type: String, replaces: String?) {
         var loose: String? = null
         try {
-            val init = env.data.api.mediaInitiate(id, UUID.randomUUID().toString(), f.key, f.type, type, file.length(), sha256(file), "gallery", replaces)
+            val hash = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { sha256(file) }
+            val init = env.data.api.mediaInitiate(id, UUID.randomUUID().toString(), f.key, f.type, type, file.length(), hash, "gallery", replaces)
             loose = init.s("id")
             if (!transfer(env.data.api, init, file, type)) { env.say("The file arrived damaged. Try again."); return }
             env.data.act("POST", "media/$loose/attach", buildJsonObject { if (replaces != null) put("replaces", replaces) })
@@ -503,7 +507,7 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
 private fun MediaTile(env: OpsEnv, m: JsonObject, size: Int = 76, onClick: () -> Unit) {
     val ctx = LocalContext.current
     val img by produceState<ImageBitmap?>(null, m.s("id")) {
-        if (m.s("kind") in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.s("id"), preview = true)?.let { thumb(it, 160) }
+        if (m.s("kind") in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.s("id"), preview = true)?.let { decoded(it, 160) }
     }
     Box(Modifier.size(size.dp).clip(RoundedCornerShape(if (size < 76) 10.dp else 12.dp)).background(Vayu.colors.illo).clickable(role = Role.Button, onClick = onClick)
         .semantics { contentDescription = "${m.s("kind")} ${m.s("field_key")}" }, contentAlignment = Alignment.Center) {
@@ -519,7 +523,7 @@ private fun MediaViewer(env: OpsEnv, m: JsonObject, fieldLabel: String, onClose:
     val scope = rememberCoroutineScope()
     // null while loading; false when it couldn't be loaded
     val img by produceState<Any?>(null, m.s("id")) {
-        if (m.s("kind") in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.s("id"))?.let { thumb(it, 2000) } ?: false
+        if (m.s("kind") in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.s("id"))?.let { decoded(it, 2000) } ?: false
     }
     var videoUrl by remember { mutableStateOf<String?>(null) }
     var scale by remember { mutableStateOf(1f) }

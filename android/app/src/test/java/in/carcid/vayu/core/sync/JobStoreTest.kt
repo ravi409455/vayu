@@ -46,6 +46,18 @@ class JobStoreTest {
         assertEquals(setOf(8), s.haveVersions())
     }
 
+    @Test fun formsADraftIsPinnedToAreKeptWhenTheJobMovesOn() {
+        val s = JobStore(file)
+        s.apply(payload(job("1"), forms = """{"7":{"pages":[]}}"""), 0)
+        s.apply(payload(job("1", version = 8), forms = """{"8":{"pages":[]}}"""), 0, keep = setOf(7))   // Admin published v8
+        assertEquals(setOf(7, 8), s.haveVersions())
+        s.apply(payload(""), 0, keep = setOf(7))                                // the job left the list
+        assertEquals(setOf(7), s.haveVersions())
+        s.clear(keep = setOf(7))                                                 // signed out by the server
+        assertEquals(setOf(7), JobStore(file).haveVersions())
+        assertTrue(JobStore(file).jobs().isEmpty())
+    }
+
     @Test fun aJobWithoutItsFormIsNotReadyOffline() {
         val s = JobStore(file)
         s.apply(payload(job("1")), 0)

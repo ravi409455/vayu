@@ -143,4 +143,19 @@ class InspectionFlowTest {
         model.set("start", "travel", "car")
         shot("check_in_dark")
     }
+
+    @Test fun aDraftPrunedWhileItsScreenIsOpenClosesTheScreen() {
+        InspectionModel.begin(drafts, jobs.jobs().single(), verified = true)
+        drafts.update(BOOKING) { it.copy(submittedAt = "2026-11-24T16:00:00+05:30") }
+        var closed = false
+        compose.setContent {
+            VayuTheme(ThemeMode.LIGHT) {
+                InspectionScreen(InspectionEnv(model, drafts, "Ravi Expert", true, { now }, jobs::list, jobs.types(), { null }), onClose = { closed = true })
+            }
+        }
+        compose.waitForIdle()
+        drafts.discard(BOOKING)                                    // the finished work left the phone after a sync
+        compose.waitForIdle()
+        assertTrue(closed)
+    }
 }

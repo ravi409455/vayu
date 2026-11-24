@@ -41,7 +41,7 @@ data class Job(
 /**
  * What the last sync downloaded (GET sync/jobs), kept in one app-private file so My jobs, details and
  * forms work without signal. Form versions are kept across syncs (the server sends only new ones) and
- * dropped once no job uses them. Writes are atomic: a crash never leaves half a file.
+ * dropped once no job and no draft on the phone uses them. Writes are atomic: a crash never leaves half a file.
  */
 class JobStore(private val file: File) {
     private var cache: JsonObject? = null
@@ -57,6 +57,9 @@ class JobStore(private val file: File) {
 
     /** Phone time of the last good sync (ms), or null if it never synced. */
     fun syncedAt(): Long? = data()["synced_at"]?.jsonPrimitive?.longOrNull
+
+    /** Time since the phone booted (ms) at the last good sync, to notice a clock changed since. */
+    fun syncedElapsed(): Long? = data()["synced_elapsed"]?.jsonPrimitive?.longOrNull
 
     /** Server minus phone clock (ms): add it to the phone's time to get the server's. */
     fun clockOffset(): Long = data()["clock_offset"]?.jsonPrimitive?.longOrNull ?: 0L
@@ -74,11 +77,13 @@ class JobStore(private val file: File) {
 
     fun form(version: Int): JsonObject? = data().obj("forms")[version.toString()] as? JsonObject
 
+    /** [keep]: form versions the phone's drafts are pinned to (kept even when no listed job uses them). */
     @Synchronized
-    fun apply(payload: JsonObject, phoneNow: Long) {
+    fun apply(payload: JsonObject, phoneNow: Long, keep: Set<Int> = emptySet(), elapsed: Long? = null) {
         if (cleared) return
         val jobs = payload["jobs"] as? JsonArray ?: JsonArray(emptyList())
-        val used = jobs.flatMap { j -> j.jsonObject.obj("versions").values.mapNotNull { it.jsonPrimitive.intOrNull?.toString() } }.toSet()
+        val used = jobs.flatMap { j -> j.jsonObject.obj("versions").values.mapNotNull { it.jsonPrimitive.intOrNull?.toString() } }.toSet() +
+            keep.map { it.toString() }
         val forms = (data().obj("forms") + payload.obj("forms")).filterKeys { it in used }
         val server = payload["server_time"]?.jsonPrimitive?.contentOrNull
         val offset = server?.let { runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() - phoneNow }.getOrNull() } ?: 0L
@@ -90,16 +95,20 @@ class JobStore(private val file: File) {
             put("changes", payload["changes"] ?: JsonArray(emptyList()))
             if (server != null) put("server_time", server)
             put("synced_at", phoneNow)
+            if (elapsed != null) put("synced_elapsed", elapsed)
             put("clock_offset", offset)
         }
         write(next)
         cache = next
     }
 
+    /** Forget the jobs; [keep]: form versions unsent drafts still need (no customer data in them). */
     @Synchronized
-    fun clear() {
+    fun clear(keep: Set<Int> = emptySet()) {
         cleared = true
+        val forms = data().obj("forms").filterKeys { it.toIntOrNull() in keep }
         file.delete(); file.parentFile?.listFiles { f -> f.name.startsWith(file.name + ".") && f.name.endsWith(".tmp") }?.forEach { it.delete() }
+        if (forms.isNotEmpty()) write(buildJsonObject { put("forms", JsonObject(forms)) })
         cache = JsonObject(emptyMap())
     }
 

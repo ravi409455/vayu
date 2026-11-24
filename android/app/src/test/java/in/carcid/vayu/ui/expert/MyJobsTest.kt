@@ -230,4 +230,43 @@ class MyJobsTest {
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Arjun Mehta")).fetchSemanticsNodes().isNotEmpty() }
         server.stop()
     }
+
+    @Test fun aDraftOfALeadThatLeftTheListIsInUploadsToSendOrDiscard() {
+        val gone = "00000000-0000-0000-0000-000000000009"
+        val d = `in`.carcid.vayu.core.draft.Draft(gone, "DEMO-9", "Ravi Kumar", mapOf("inspection" to 7), "pdi",
+            startedAt = "2026-11-22T10:00:00+05:30", startSent = true)
+        var sent: String? = null
+        compose.setContent {
+            VayuTheme(ThemeMode.LIGHT) {
+                ExpertHome(me, JobsState(jobs), today, {}, {}, ExpertExtras(drafts = mapOf(gone to d), listed = jobs.map { it.id }.toSet(),
+                    onSend = { sent = it }))
+            }
+        }
+        compose.onNodeWithText("Uploads").performClick()
+        compose.onNodeWithText("1 lead not sent yet · 0 files").assertIsDisplayed()       // what sign-out waits for
+        compose.onNodeWithText("Ravi Kumar · No longer on your list · send or discard it").performClick()
+        compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/uploads_left_the_list.png", roborazziOptions = options)
+        compose.onNodeWithText("Send").performClick()
+        compose.onNode(hasText("Send") and androidx.compose.ui.test.hasClickAction() and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.isDialog())).performClick()
+        assertEquals(gone, sent)
+    }
+
+    @Test fun aRefusedFileSaysWhyAndCanBeRemoved() {
+        val f = `in`.carcid.vayu.core.draft.LocalFile("f1", "inspection", "walk_video", "video", "", "video/webm", "gallery", 9, "",
+            "Walk-around video 1", error = "video/webm is not allowed for a video.", refused = true)
+        val d = `in`.carcid.vayu.core.draft.Draft(jobs[0].id, jobs[0].bookingId, jobs[0].customer, mapOf("inspection" to 7), "pdi",
+            submittedAt = "2026-11-24T16:00:00+05:30", submitSent = true, files = listOf(f))
+        var removed: String? = null
+        compose.setContent {
+            VayuTheme(ThemeMode.LIGHT) {
+                ExpertHome(me, JobsState(jobs), today, {}, {}, ExpertExtras(drafts = mapOf(d.bookingId to d), listed = jobs.map { it.id }.toSet(),
+                    onRemoveFile = { _, x -> removed = x.id }))
+            }
+        }
+        compose.onNodeWithText("Uploads").performClick()
+        compose.onNodeWithText("${d.customer} · 1 need you").performClick()
+        compose.onNodeWithText("video/webm is not allowed for a video.").assertIsDisplayed()
+        compose.onNodeWithText("Remove").performClick()
+        assertEquals("f1", removed)
+    }
 }

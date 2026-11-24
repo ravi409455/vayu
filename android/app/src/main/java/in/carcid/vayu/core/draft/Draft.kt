@@ -25,10 +25,14 @@ data class LocalFile(
     val label: String,
     /** The server's id once registered (answers sent to the server use it). */
     val serverId: String? = null,
-    /** Every byte arrived and the server checked it. */
+    /** Every byte arrived on the server. */
     val sent: Boolean = false,
     val progress: Float = 0f,
     val error: String? = null,
+    /** The server checked the bytes: only now may the phone's copy go. */
+    val verified: Boolean = false,
+    /** The server will not take this file ([error] says why): the answers go without it; the expert removes it. */
+    val refused: Boolean = false,
 )
 
 /**
@@ -66,7 +70,7 @@ data class Draft(
 ) {
     val locked: Boolean get() = submittedAt != null
     /** Something still has to reach the server. */
-    val unsent: Boolean get() = !submitSent || files.any { !it.sent } || discards.isNotEmpty() || reconcile
+    val unsent: Boolean get() = !submitSent || files.any { !it.verified } || discards.isNotEmpty() || reconcile
 
     fun answer(part: String, key: String): Any? = answers[part]?.get(key)
     fun withAnswer(part: String, key: String, v: Any?): Draft =
@@ -82,7 +86,7 @@ data class Draft(
         "files" to files.map { f -> mapOf("id" to f.id, "part" to f.part, "field" to f.field, "kind" to f.kind,
             "path" to f.path, "content_type" to f.contentType, "source" to f.source, "size" to f.size,
             "sha256" to f.sha256, "label" to f.label, "server_id" to f.serverId, "sent" to f.sent,
-            "progress" to f.progress.toDouble(), "error" to f.error) },
+            "progress" to f.progress.toDouble(), "error" to f.error, "verified" to f.verified, "refused" to f.refused) },
     )) as JsonObject
 
     companion object {
@@ -108,7 +112,8 @@ data class Draft(
                     LocalFile(fs("id")!!, fs("part")!!, fs("field")!!, fs("kind")!!, fs("path")!!, fs("content_type")!!,
                         fs("source") ?: "camera", (f["size"] as? JsonPrimitive)?.longOrNull ?: 0L, fs("sha256").orEmpty(),
                         fs("label").orEmpty(), fs("server_id"), (f["sent"] as? JsonPrimitive)?.booleanOrNull ?: false,
-                        fs("progress")?.toFloatOrNull() ?: 0f, fs("error"))
+                        fs("progress")?.toFloatOrNull() ?: 0f, fs("error"),
+                        (f["verified"] as? JsonPrimitive)?.booleanOrNull ?: false, (f["refused"] as? JsonPrimitive)?.booleanOrNull ?: false)
                 },
             )
         }
@@ -116,15 +121,27 @@ data class Draft(
 }
 
 /**
- * Drafts on this phone: one file per job in [dir], written atomically on every change, and the
- * job's photos and files under [dir]/files. Nothing here is deleted until the server has it,
- * except when the expert discards a draft.
+ * Drafts on this phone: one file per job in [dir], and the job's photos and files under [dir]/files.
+ * A change is in memory at once (the screen and the outbox read it from there) and is written to
+ * storage by [writer] (in the app, a thread of its own, so typing never waits on the disk); a crash
+ * or power cut leaves the last whole save. Nothing here is deleted until the server has it, except
+ * when the expert discards a draft.
  */
-class DraftStore(private val dir: File) {
+class DraftStore(private val dir: File,
+                 private val writer: java.util.concurrent.Executor = java.util.concurrent.Executor { it.run() },
+                 /** A draft file that can't be read (kept on the phone, never silently dropped). */
+                 private val onDamaged: (File, Throwable) -> Unit = { _, _ -> }) {
     val filesDir: File get() = File(dir, "files").apply { mkdirs() }
     private val cache = HashMap<String, Draft>()
+    /** Saves not written yet, by booking: only the newest is written. */
+    private val pending = HashMap<String, Draft>()
+    /** Held while a file is written or deleted, so a discard never races a late write. */
+    private val disk = Any()
+    private val damaged = HashSet<String>()
     /** Bumped on every change, so screens redraw when the outbox moves things along. */
     val changes = kotlinx.coroutines.flow.MutableStateFlow(0L)
+    /** The last save could not be written (the phone is full); the answers are kept in memory. */
+    val writeFailed = kotlinx.coroutines.flow.MutableStateFlow(false)
 
     private fun fileOf(bookingId: String): File {
         require(bookingId.matches(Regex("[0-9a-fA-F-]{36}"))) { "Not a booking id." }
@@ -132,46 +149,77 @@ class DraftStore(private val dir: File) {
     }
 
     @Synchronized
-    fun get(bookingId: String): Draft? = cache[bookingId] ?: fileOf(bookingId).takeIf { it.exists() }
-        ?.let { f -> runCatching { Draft.fromJson(Json.parseToJsonElement(f.readText()).jsonObject) }.getOrNull() }
-        ?.also { cache[bookingId] = it }
+    fun get(bookingId: String): Draft? = cache[bookingId] ?: fileOf(bookingId).takeIf { it.exists() }?.let { f ->
+        runCatching { Draft.fromJson(Json.parseToJsonElement(f.readText()).jsonObject) }
+            .onFailure { if (damaged.add(f.name)) onDamaged(f, it) }.getOrNull()
+    }?.also { cache[bookingId] = it }
 
     @Synchronized
-    fun all(): List<Draft> = (dir.listFiles { f -> f.name.endsWith(".json") }.orEmpty())
-        .mapNotNull { get(it.name.removeSuffix(".json")) }
+    fun all(): List<Draft> = ((dir.listFiles { f -> f.name.endsWith(".json") }.orEmpty().map { it.name.removeSuffix(".json") }) + cache.keys)
+        .distinct().mapNotNull { get(it) }
 
-    /** Committed to storage before it returns (the screen acknowledges a change only after this). */
+    /** Kept in memory and queued for writing; the newest save of a draft is always the one written. */
+    fun save(d: Draft): Draft { stage(d); flushLater(d.bookingId); return d }
+
     @Synchronized
-    fun save(d: Draft): Draft {
-        writeAtomically(fileOf(d.bookingId), d.toJson().toString().toByteArray())
+    private fun stage(d: Draft) {
+        fileOf(d.bookingId)
         cache[d.bookingId] = d
+        pending[d.bookingId] = d
         changes.value++
-        return d
+    }
+
+    private fun flushLater(bookingId: String) = writer.execute {
+        synchronized(disk) {
+            val d = synchronized(this) { pending.remove(bookingId) } ?: return@execute
+            try {
+                writeAtomically(fileOf(bookingId), d.toJson().toString().toByteArray())
+                writeFailed.value = false
+            } catch (e: Exception) {
+                writeFailed.value = true                 // disk full: kept in memory, written by the next save
+            }
+        }
     }
 
     /** Change one draft under the lock (so the outbox and the screen never overwrite each other). */
-    @Synchronized
-    fun update(bookingId: String, change: (Draft) -> Draft): Draft? = get(bookingId)?.let { save(change(it)) }
+    fun update(bookingId: String, change: (Draft) -> Draft): Draft? =
+        synchronized(this) { get(bookingId)?.let(change)?.also(::stage) }?.also { flushLater(bookingId) }
 
     /** Discard: the answers and every file of this job (also ones not sent). */
-    @Synchronized
-    fun discard(bookingId: String) {
-        get(bookingId)?.files?.forEach { if (it.path.isNotEmpty()) File(it.path).delete() }
-        fileOf(bookingId).delete()
-        cache.remove(bookingId)
-        changes.value++
+    fun discard(bookingId: String) = synchronized(disk) {
+        synchronized(this) {
+            get(bookingId)?.files?.forEach { if (it.path.isNotEmpty()) File(it.path).delete() }
+            pending.remove(bookingId)
+            fileOf(bookingId).delete()
+            cache.remove(bookingId)
+            changes.value++
+        }
     }
 
-    /** What the heartbeat reports: jobs not yet submitted to the server, and files not yet sent. */
-    fun unsentCounts(): Pair<Int, Int> = all().let { d -> d.count { !it.submitSent } to d.sumOf { x -> x.files.count { !it.sent } } }
+    /** What the heartbeat and sign-out count: jobs not yet submitted to the server, and files it hasn't checked yet. */
+    fun unsentCounts(): Pair<Int, Int> = all().let { d -> d.count { !it.submitSent } to d.sumOf { x -> x.files.count { !it.verified } } }
 
-    /** Sent copies the phone may drop to free space (never unsent ones). */
+    /** Copies the phone may drop to free space: only ones the server has checked (never unsent ones). */
     @Synchronized
     fun clearSentCopies(): Long {
         var freed = 0L
-        all().forEach { d -> d.files.filter { it.sent && it.path.isNotEmpty() }.forEach { f -> File(f.path).takeIf { it.exists() }?.let { freed += it.length(); it.delete() } } }
+        all().forEach { d -> d.files.filter { it.verified && it.path.isNotEmpty() }.forEach { f -> File(f.path).takeIf { it.exists() }?.let { freed += it.length(); it.delete() } } }
         return freed
     }
 
-    fun sentBytes(): Long = all().sumOf { d -> d.files.filter { it.sent && it.path.isNotEmpty() }.sumOf { File(it.path).takeIf { f -> f.exists() }?.length() ?: 0L } }
+    fun sentBytes(): Long = all().sumOf { d -> d.files.filter { it.verified && it.path.isNotEmpty() }.sumOf { File(it.path).takeIf { f -> f.exists() }?.length() ?: 0L } }
+
+    /**
+     * Files no draft refers to (a shot never confirmed before the app died, leftovers) and
+     * half-written saves, once they are an hour old. Nothing is touched while a draft can't be read.
+     */
+    @Synchronized
+    fun sweep(now: Long = System.currentTimeMillis()) {
+        val drafts = dir.listFiles { f -> f.name.endsWith(".json") }.orEmpty().map { get(it.name.removeSuffix(".json")) }
+        if (drafts.any { it == null }) return
+        val used = all().flatMap { d -> d.files.map { File(it.path).name } }.toSet()
+        val old = now - 60 * 60 * 1000
+        filesDir.listFiles().orEmpty().filter { it.name !in used && it.lastModified() < old }.forEach { it.delete() }
+        dir.listFiles { f -> f.name.endsWith(".tmp") && f.lastModified() < old }.orEmpty().forEach { it.delete() }
+    }
 }

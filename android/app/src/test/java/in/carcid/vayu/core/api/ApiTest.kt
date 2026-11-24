@@ -1,6 +1,7 @@
 package `in`.carcid.vayu.core.api
 
 import `in`.carcid.vayu.core.auth.MemoryTokenStore
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -66,5 +67,38 @@ class ApiTest {
         server.enqueue(json(200, """{"server_time":"2026-11-24T10:00:00Z","min_app_version":4}"""))
         assertEquals(4, api.heartbeat(drafts = 0, files = 2))
         assertTrue(server.takeRequest().body.readUtf8().contains("\"files\":2"))
+    }
+
+    @Test fun callsThatFailTogetherRenewTheSignInOnce() = runTest {
+        tokens.save("old", "R1")
+        var refreshes = 0
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse = when {
+                request.path!!.endsWith("auth/refresh") -> { synchronized(this) { refreshes++ }; Thread.sleep(100); json(200, """{"access":"new"}""") }
+                request.getHeader("Authorization") == "Bearer new" -> json(200, me)
+                else -> json(401, """{"code":"token_not_valid","detail":"expired"}""")
+            }
+        }
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            (1..4).map { async { api.me() } }.forEach { assertEquals("ravi", it.await().username) }
+        }
+        assertEquals(1, refreshes)
+    }
+
+    @Test fun aRefusedRenewalEndsTheSignIn() = runTest {
+        tokens.save("old", "R1")
+        server.enqueue(json(401, """{"code":"token_not_valid","detail":"expired"}"""))
+        server.enqueue(json(401, """{"code":"token_not_valid","detail":"Token is invalid or expired"}"""))
+        val e = runCatching { api.me() }.exceptionOrNull() as ApiError
+        assertEquals(ApiError.SESSION_EXPIRED, e.code)
+        assertTrue(api.expired.value); assertNull(tokens.access())
+    }
+
+    @Test fun aBusyServerDoesNotEndTheSignIn() = runTest {
+        tokens.save("old", "R1")
+        server.enqueue(json(401, """{"code":"token_not_valid","detail":"expired"}"""))
+        server.enqueue(json(429, """{"detail":"Slow down."}"""))
+        runCatching { api.me() }
+        assertTrue(!api.expired.value); assertEquals("R1", tokens.refresh())
     }
 }

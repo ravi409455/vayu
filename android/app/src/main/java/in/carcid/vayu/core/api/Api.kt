@@ -24,7 +24,11 @@ import java.io.IOException
 /** An error the server explained ({code, detail, ...}), or NETWORK when there is no connection. */
 class ApiError(val code: String, override val message: String, val status: Int,
                val extra: JsonObject = JsonObject(emptyMap())) : Exception(message) {
-    companion object { const val NETWORK = "NETWORK" }
+    companion object {
+        const val NETWORK = "NETWORK"
+        /** The sign-in could not be renewed (60 days, or ended elsewhere): sign in again; drafts stay. */
+        const val SESSION_EXPIRED = "SESSION_EXPIRED"
+    }
 }
 
 data class Me(val id: Int, val username: String, val name: String, val role: String,
@@ -47,12 +51,16 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
 
     private val json = "application/json".toMediaType()
 
+    /** Set when the sign-in could not be renewed: the app asks the person to sign in again. */
+    val expired = kotlinx.coroutines.flow.MutableStateFlow(false)
+
     suspend fun login(username: String, password: String, deviceName: String): Me {
         val body = call("POST", "auth/login", buildJsonObject {
             put("username", username); put("password", password)
             put("client", "mobile"); put("device_name", deviceName)
         }, auth = false)
         tokens.save(body.str("access"), body.str("refresh"))
+        expired.value = false
         return me()
     }
 
@@ -187,8 +195,9 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         fun get() = http.newCall(Request.Builder().url(baseUrl + path)
             .apply { tokens.access()?.let { header("Authorization", "Bearer $it") } }.build()).execute()
         try {
+            val sentWith = tokens.access()
             var r = get()
-            if (r.code == 401) { r.close(); if (refresh()) r = get() }
+            if (r.code == 401) { r.close(); if (renewed(sentWith)) r = get() }
             r.use { capped(it, maxBytes) }
         } catch (e: IOException) {
             throw ApiError(ApiError.NETWORK, "No connection. Check your signal and try again.", 0)
@@ -227,26 +236,25 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
 
     private suspend fun call(method: String, path: String, body: JsonObject? = null, auth: Boolean = true,
                              headers: Map<String, String> = emptyMap()): JsonObject =
-        withContext(Dispatchers.IO) {
-            var res = send(method, path, body, auth, headers)
-            if (res.status == 401 && auth && res.code != "DEVICE_REVOKED" && refresh()) res = send(method, path, body, auth, headers)
-            if (res.code == "DEVICE_REVOKED") tokens.clear()
-            if (res.status !in 200..299) throw ApiError(res.code ?: "HTTP_${res.status}",
-                res.body["detail"]?.jsonPrimitive?.contentOrNull ?: "Something went wrong (${res.status}).",
-                res.status, res.body)
-            res.body
-        }
+        withContext(Dispatchers.IO) { checked(method, path, body, auth, headers).body }
 
     private suspend fun callAny(method: String, path: String, body: JsonObject? = null): JsonElement =
-        withContext(Dispatchers.IO) {
-            var res = send(method, path, body, true)
-            if (res.status == 401 && res.code != "DEVICE_REVOKED" && refresh()) res = send(method, path, body, true)
-            if (res.code == "DEVICE_REVOKED") tokens.clear()
-            if (res.status !in 200..299) throw ApiError(res.code ?: "HTTP_${res.status}",
-                res.body["detail"]?.jsonPrimitive?.contentOrNull ?: "Something went wrong (${res.status}).",
-                res.status, res.body)
-            res.raw ?: JsonObject(emptyMap())
+        withContext(Dispatchers.IO) { checked(method, path, body, true).raw ?: JsonObject(emptyMap()) }
+
+    /** One call, renewed once on a 401; an error the server explained becomes an [ApiError]. */
+    private fun checked(method: String, path: String, body: JsonObject?, auth: Boolean, headers: Map<String, String> = emptyMap()): Res {
+        val sentWith = tokens.access()
+        var res = send(method, path, body, auth, headers)
+        if (res.status == 401 && auth && res.code != "DEVICE_REVOKED") {
+            if (renewed(sentWith)) res = send(method, path, body, auth, headers)
+            else if (expired.value) throw ApiError(ApiError.SESSION_EXPIRED, "Your sign-in has ended. Sign in again; your unsent work stays on this phone.", 401)
         }
+        if (res.code == "DEVICE_REVOKED") tokens.clear()
+        if (res.status !in 200..299) throw ApiError(res.code ?: "HTTP_${res.status}",
+            res.body["detail"]?.jsonPrimitive?.contentOrNull ?: "Something went wrong (${res.status}).",
+            res.status, res.body)
+        return res
+    }
 
     private class Res(val status: Int, val body: JsonObject, val raw: JsonElement? = null) {
         val code: String? get() = (body["code"] as? JsonPrimitive)?.contentOrNull
@@ -268,12 +276,22 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         }
     }
 
-    private fun refresh(): Boolean {
+    /**
+     * Renew the sign-in after a 401 to a call sent with [sentWith]. One at a time: calls that fail
+     * together renew once, and the others use the new token. A refused renewal ends the sign-in
+     * ([expired]); a busy or unreachable server does not.
+     */
+    @Synchronized
+    private fun renewed(sentWith: String?): Boolean {
+        tokens.access()?.let { if (it != sentWith) return true }      // another call renewed it meanwhile
         val refresh = tokens.refresh() ?: return false
         val res = send("POST", "auth/refresh", buildJsonObject { put("refresh", refresh) }, auth = false)
-        if (res.status != 200) return false
-        tokens.save(res.body.getValue("access").jsonPrimitive.content,
-            (res.body["refresh"] as? JsonPrimitive)?.contentOrNull ?: refresh)
-        return true
+        val access = (res.body["access"] as? JsonPrimitive)?.contentOrNull
+        if (res.status == 200 && access != null) {
+            tokens.save(access, (res.body["refresh"] as? JsonPrimitive)?.contentOrNull ?: refresh)
+            return true
+        }
+        if (res.status == 400 || res.status == 401) { tokens.clear(); expired.value = true }
+        return false
     }
 }

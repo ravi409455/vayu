@@ -88,12 +88,13 @@ class InspectionModel(
         commit { d -> d.copy(step = index, visited = if (step.id in d.visited) d.visited else d.visited + step.id) }
     }
 
-    /** Keep a taken photo, video, file or signature and put it in the answer. */
-    fun addFile(part: String, field: String, kind: String, file: File, contentType: String, source: String, label: String, single: Boolean,
-                max: Int = Int.MAX_VALUE) {
+    /** Keep a taken photo, video, file or signature and put it in the answer (hashed off the main thread). */
+    suspend fun addFile(part: String, field: String, kind: String, file: File, contentType: String, source: String, label: String, single: Boolean,
+                        max: Int = Int.MAX_VALUE) {
         // locked, or the field already holds its most: not kept
         if (draft.locked || (!single && ((draft.answer(part, field) as? List<*>)?.size ?: 0) >= max)) { file.delete(); return }
-        val f = LocalFile(UUID.randomUUID().toString(), part, field, kind, file.path, contentType, source, file.length(), sha256(file), label)
+        val hash = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { sha256(file) }
+        val f = LocalFile(UUID.randomUUID().toString(), part, field, kind, file.path, contentType, source, file.length(), hash, label)
         commit { d ->
             val cur = d.answer(part, field)
             val value: Any? = if (single) f.id else ((cur as? List<*>).orEmpty() + f.id)
@@ -105,8 +106,9 @@ class InspectionModel(
         kick()
     }
 
+    /** Remove a file; after Submit only one the server refused (the answers went without it). */
     fun removeFile(part: String, field: String, id: String) {
-        if (draft.locked) return
+        if (draft.locked && draft.files.none { it.id == id && it.refused }) return
         commit { d ->
             val f = d.files.firstOrNull { it.id == id }
             f?.path?.takeIf { it.isNotEmpty() }?.let { File(it).delete() }

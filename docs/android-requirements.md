@@ -55,10 +55,14 @@ prototype of every screen below is approved.**
   5. Submit locks the answers → "Submitted, uploading x/y" → Completed when every file has arrived.
   6. Reassigned with a draft → "Reassigned – submit or discard". Cancelled with a draft → the draft
      still syncs. Ops type change after an offline start → the expert's type wins.
-  7. Sign-out is blocked while anything is unsynced.
+  7. Sign-out is blocked while anything is unsynced; the message names the leads, and Uploads lists
+     exactly those (answers not submitted, files to send or still being checked, files the server
+     refused, drafts of leads no longer on the list with Send / Discard).
+  7a. A file the server refuses (too large, wrong type) shows its reason in Uploads and can be
+     removed, also after Submit; the rest of the inspection is sent without it.
   8. An app below the minimum version can't start new jobs but can finish the current one.
-  9. Times are corrected by the server clock; with no sync that day, the time is marked
-     "unverified".
+  9. Times are corrected by the server clock; with no sync that day, or the phone restarted or its
+     clock changed since the last sync, the time is marked "unverified".
   10. Under 2 GB free → warning; under 500 MB → Start is blocked.
 
 ## Camera and media (confirmed)
@@ -70,7 +74,8 @@ prototype of every screen below is approved.**
 3. Photos ~2048 px / ~500 KB plus a preview; video up to 60 s at 720p, compressed on the phone.
 4. Tap the camera repeatedly up to the field's limit; full-screen review; delete and retake.
 5. Photos start uploading the moment they are taken.
-6. Local copies are cleared manually from Uploads; files not yet uploaded can never be cleared.
+6. Local copies are cleared manually from Uploads; files the server has not yet received **and
+   checked** can never be cleared (a file that fails the server's check is sent again).
 
 ## Phone-only extras
 

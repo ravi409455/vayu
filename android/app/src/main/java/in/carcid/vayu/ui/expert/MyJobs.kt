@@ -147,6 +147,12 @@ class ExpertExtras(
     val inspection: ((Job) -> InspectionEnv)? = null,
     val onDiscard: (String) -> Unit = {},
     val onClearSent: () -> Unit = {},
+    /** Leads on this person's list (a draft of any other lead has left it). */
+    val listed: Set<String> = emptySet(),
+    /** Lock a draft as it is and send it (a lead no longer on the list). */
+    val onSend: (String) -> Unit = {},
+    /** Remove a file the server refused (also after Submit). */
+    val onRemoveFile: (Draft, `in`.carcid.vayu.core.draft.LocalFile) -> Unit = { _, _ -> },
     /** Customer phones by booking id (Uploads search). */
     val phones: Map<String, String> = emptyMap(),
     /** The bell: notifications from the server; [onRead] marks some (null: all) read. */
@@ -158,7 +164,7 @@ class ExpertExtras(
     val onOpened: () -> Unit = {},
 ) {
     /** Phone storage, as Uploads and App settings show it. */
-    val storage: StorageInfo get() = StorageInfo(freeBytes, sentBytes, drafts.values.sumOf { d -> d.files.count { !it.sent } }) {
+    val storage: StorageInfo get() = StorageInfo(freeBytes, sentBytes, drafts.values.sumOf { d -> d.files.count { !it.verified } }) {
         sentBytes.also { onClearSent() }
     }
 }
@@ -225,7 +231,7 @@ fun ExpertHome(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit
             uploads -> {
                 BackHandler { uploads = false }
                 UploadsScreen(me, extras, onProfile, onJobs = { uploads = false }, onRefresh = refresh,
-                    onBell = { bell = true }, refreshing = state.syncing, say = say)
+                    onBell = { bell = true }, refreshing = state.syncing, say = say, onOpenLead = { uploads = false; openId = it })
             }
             else -> MyJobsScreen(me, state, today, onProfile, refresh, extras, onOpen = { j ->
                 val d = extras.drafts[j.id]
@@ -324,7 +330,7 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
                 }, color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp))
             }
         }
-        ExpertBottomBar(ExpertTab.JOBS, uploads = extras.drafts.values.sumOf { d -> d.files.count { !it.sent } },
+        ExpertBottomBar(ExpertTab.JOBS, uploads = extras.drafts.values.sumOf { d -> d.files.count { !it.verified } },
             onTab = { if (it == ExpertTab.UPLOADS) onUploads() }, onRefresh = onRefresh, refreshing = state.syncing)
     }
 }

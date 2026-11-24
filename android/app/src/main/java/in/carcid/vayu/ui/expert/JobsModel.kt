@@ -24,6 +24,10 @@ class JobsModel(
     private val drop: (Int) -> Unit,
     /** After a good sync: tidy what the phone no longer needs. */
     private val afterSync: (Int) -> Unit = {},
+    /** Form versions a person's drafts are pinned to (kept on the phone through every sync). */
+    private val pinned: (Int) -> Set<Int> = { emptySet() },
+    /** Time since the phone booted (ms), which no clock change moves; null where there is none (tests). */
+    private val elapsed: () -> Long? = { null },
 ) {
     private val _state = MutableStateFlow(JobsState())
     val state: StateFlow<JobsState> = _state
@@ -46,7 +50,9 @@ class JobsModel(
         _state.value = _state.value.copy(syncing = true)
         syncing = scope.launch {
             try {
-                s.apply(api.syncJobs(s.haveVersions(), s.since()), clock())
+                val payload = api.syncJobs(s.haveVersions(), s.since())
+                val keep = userId?.let(pinned).orEmpty()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { s.apply(payload, clock(), keep, elapsed()) }
                 userId?.let(afterSync)
                 show(offline = false)
             } catch (e: ApiError) {
@@ -71,8 +77,20 @@ class JobsModel(
     /** Now by the server's clock (the phone's may be wrong). */
     fun now(): Instant = Instant.ofEpochMilli(clock() + (store?.clockOffset() ?: 0L))
 
-    /** The phone's clock has been checked against the server at least once. */
-    fun verified(): Boolean = store?.syncedAt() != null
+    /**
+     * The phone's time can be trusted today: it was checked against the server today, and since
+     * then the phone has not restarted nor had its clock changed (the clock moved the same as the
+     * time since boot, within 2 minutes).
+     */
+    fun verified(): Boolean {
+        val s = store ?: return false
+        val at = s.syncedAt() ?: return false
+        val now = clock()
+        val sinceBoot = s.syncedElapsed()?.let { e -> elapsed()?.let { it - e } }
+        if (sinceBoot != null && (sinceBoot < 0 || kotlin.math.abs((now - at) - sinceBoot) > 2 * 60_000)) return false
+        fun day(ms: Long) = Instant.ofEpochMilli(ms + s.clockOffset()).atZone(ZoneId.systemDefault()).toLocalDate()
+        return day(at) == day(now)
+    }
 
     /** "Ops moved DEMO-7 · 2 Dec 10:30 → 4 Dec 4:30 pm": what others changed since the last sync. */
     fun notices(): List<Pair<String, String>> {

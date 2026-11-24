@@ -107,7 +107,9 @@ class InspectionEnv(
 @Composable
 fun InspectionScreen(env: InspectionEnv, onClose: () -> Unit) {
     val tick by env.drafts.changes.collectAsState()
-    val draft = remember(tick) { env.model.draft }
+    // the draft can leave the phone while this is open (finished work pruned after a sync)
+    val draft = remember(tick) { env.drafts.get(env.model.bookingId) }
+    if (draft == null) { LaunchedEffect(Unit) { onClose() }; return }
     val filled = remember(tick) { env.model.filled(draft) }
     LaunchedEffect(Unit) { env.model.open() }
     if (filled == null) {
@@ -151,7 +153,10 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
     }
 
     // pickers for the gallery and files (the system's own, no permission needed)
-    var picking by remember { mutableStateOf<Pair<String, Field>?>(null) }
+    // the field being filled is saved: Android may re-create the screen while its picker is open
+    var pickingKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val picking: Pair<String, Field>? = pickingKey?.split("|", limit = 2)?.let { (part, key) ->
+        filled.trees[part]?.fields?.firstOrNull { it.key == key }?.let { part to it } }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         val (part, f) = picking ?: return@rememberLauncherForActivityResult
         if (uri == null) return@rememberLauncherForActivityResult
@@ -182,13 +187,13 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
         is Tool.Camera -> {
             CameraScreen(t.field, (draft.answer(t.part, t.field.key) as? List<*>)?.size ?: 0, draft.code, env.expertName, env.now,
                 env.verified, dir, onTaken = { file, type ->
-                    model.addFile(t.part, t.field.key, t.field.type, file, type, "camera", label(t.field, model.draft, t.part), single = false, max = t.field.maxCount)
+                    scope.launch { model.addFile(t.part, t.field.key, t.field.type, file, type, "camera", label(t.field, model.draft, t.part), single = false, max = t.field.maxCount) }
                 }, onDone = { tool = null })
             return
         }
         is Tool.Sign -> {
             SignatureScreen(t.field, dir, onSigned = { file ->
-                model.addFile(t.part, t.field.key, "signature", file, "image/png", "camera", t.field.label, single = true); tool = null
+                scope.launch { model.addFile(t.part, t.field.key, "signature", file, "image/png", "camera", t.field.label, single = true) }; tool = null
             }, onClose = { tool = null })
             return
         }
@@ -230,6 +235,9 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
         Box(Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(Vayu.colors.line)) {
             Box(Modifier.fillMaxWidth(index.toFloat() / steps.lastIndex.coerceAtLeast(1)).height(3.dp).background(Vayu.colors.ink))
         }
+        val full by env.drafts.writeFailed.collectAsState()
+        if (full) Text("The phone is full, so the last answers are not saved yet. Free up space (Uploads → Phone storage).",
+            color = Vayu.colors.bad, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
         if (step.isReview) ReviewPage(draft, filled, steps, missingOn, { go(it) }, Modifier.weight(1f), onSubmit = {
             val notOpened = steps.filter { !it.isReview && it.id !in draft.visited }
             if (notOpened.isNotEmpty()) confirm = "submit" else model.submit()
@@ -265,9 +273,9 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
                                 nested = f.showIf != null, env = FieldEnv(
                                     locked = draft.locked, list = env.list, types = env.types, files = files, now = env.now,
                                     onCamera = { tool = Tool.Camera(part, it) },
-                                    onGallery = { picking = part to it; gallery.launch(PickVisualMediaRequest(
+                                    onGallery = { pickingKey = "$part|${it.key}"; gallery.launch(PickVisualMediaRequest(
                                         if (it.type == "video") ActivityResultContracts.PickVisualMedia.VideoOnly else ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                                    onPickFile = { picking = part to it; document.launch(arrayOf("image/jpeg", "image/png", "application/pdf")) },
+                                    onPickFile = { pickingKey = "$part|${it.key}"; document.launch(arrayOf("image/jpeg", "image/png", "application/pdf")) },
                                     onSign = { tool = Tool.Sign(part, it) }, onScan = { tool = Tool.Scan(part, it) },
                                     onOpenFile = { fld, file -> tool = Tool.Review(part, fld, file) },
                                     onLocate = { _, done -> scope.launch { done(Locator.fix(ctx)?.let(Locator::answer)) } },
