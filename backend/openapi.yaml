@@ -3011,6 +3011,10 @@ components:
           type: string
           format: date-time
           nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          readOnly: true
         cancel_reason:
           type: string
           maxLength: 64
@@ -3041,6 +3045,7 @@ components:
           nullable: true
       required:
       - booking_id
+      - finished_at
       - id
       - reschedules
     Check:
@@ -3579,6 +3584,10 @@ components:
           type: string
           format: date-time
           nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          readOnly: true
         cancel_reason:
           type: string
           maxLength: 64

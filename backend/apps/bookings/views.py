@@ -2,7 +2,7 @@ import re
 import uuid
 from datetime import date
 
-from django.db.models import Q
+from django.db.models import OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -50,7 +50,11 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         scoped = ("bookings.view", "bookings.edit", "submissions.fill", "submissions.view")
         if key in scoped and scope_for(self.request.user, key, self.request) == "own":
             qs = qs.filter(submissions.own_filter(self.request.user)).distinct()
-        return self._filtered(qs) if self.action == "list" else qs
+        if self.action != "list":
+            return qs
+        done = Inspection.objects.filter(booking=OuterRef("pk"), status="submitted")
+        return self._filtered(qs).annotate(finished_at=Subquery(
+            done.order_by("-submitted_at").values("submitted_at")[:1]))
 
     def _filtered(self, qs):
         p = self.request.query_params

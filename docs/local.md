@@ -23,9 +23,12 @@ Logs are in `.local/` (`api.log`, `worker.log`, `beat.log`, `web.log`).
 | `ops` | Ops | job board, bookings, reports, problems, dashboards |
 | `expert` | Expert | My jobs → DEMO-2 (assigned to Ravi) |
 | `expert2` | Expert | a second expert, to try reassigning and conflicts |
+| `expert3` to `expert20` | Expert | the rest of the team: 20 experts in all (`expert3` to `expert14` have jobs today, the others none) |
+| `ops2` | Ops | a second Ops user; with `ops` and `newuser` that makes 3 Ops |
 | `newuser` | Ops | must choose a new password at first sign in |
 
 Demo data: **DEMO-1** not assigned, **DEMO-2** assigned to `expert`, **DEMO-3** completed with a PDF (PDI). **DEMO-16** (Used car) and **DEMO-17** (EV) are completed too, so every type has a finished inspection and PDF.
+**DEMO-18 to DEMO-42** are today's busy day, placed from the clock when you reset: finished, running (some started late), still to come and unassigned, for the Today schedule.
 The **PDI** form is a small stand-in. Your real inspection forms (PDI, Used car, EV) are meant to be
 built by you in the form builder (Admin → Forms): that is the test of the builder itself.
 

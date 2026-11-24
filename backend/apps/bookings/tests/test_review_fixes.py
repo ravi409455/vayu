@@ -237,3 +237,18 @@ def test_resolving_leaves_other_experts_drafts_alone(conflict):
     assert ienv.ops.post(f"/api/v1/bookings/{booking['id']}/resolve-conflict",
                          {"inspection": str(keep.id)}, format="json").status_code == 200
     assert Inspection.objects.get(pk=draft.pk).status == "draft"                   # not set aside
+
+
+def test_the_booking_list_says_when_the_expert_submitted(started):
+    from apps.bookings.tests.test_submissions import submit
+
+    ienv, booking, _ = started
+
+    def row():
+        return next(b for b in ienv.ops.get("/api/v1/bookings").json()["results"]
+                    if b["id"] == booking["id"])
+
+    assert row()["finished_at"] is None                   # started, not submitted
+    assert submit(ienv.expert, booking).status_code == 200
+    assert row()["finished_at"] is not None
+    assert "finished_at" not in ienv.ops.get(f"/api/v1/bookings/{booking['id']}").json()

@@ -8,24 +8,18 @@ import { useLabels } from "../../api/labels";
 import type { Booking, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { fmtTime, today } from "../../lib/format";
+import { dayWindow, hm, jobSpan, spanTitle, stackRows } from "../../lib/schedule";
 import { useNeeds } from "../../lib/problems";
 import { Avatar } from "../../ui/Avatar";
 import { Empty, PageHeader, useToast } from "../../ui/kit";
 import { Actions } from "./Booking";
 import { useCount, viewQuery } from "./Bookings";
 
-const SLOT_HOURS = 1.5;            // ponytail: bookings have a start time only; a job is drawn 1.5 h long
 const SLOT_PX = 76;                // width of 30 minutes; the day scrolls sideways
 const LANE_W = 200;                // the expert column, kept in view while scrolling
 
-const toHours = (t: unknown) => { const m = typeof t === "string" ? t.match(/^(\d{1,2}):(\d{2})/) : null; return m ? Number(m[1]) + Number(m[2]) / 60 : null; };
-
-/** The hours the schedule spans: 8 am to 8 pm, widened to fit the day's jobs. */
-export function dayWindow(starts: number[]): [number, number] {
-  const lo = Math.min(8, ...starts.map(Math.floor));
-  const hi = Math.max(20, ...starts.map((s) => Math.ceil(s + SLOT_HOURS)));
-  return [lo, hi];
-}
+const LANE_H = 76;                 // height of one row of boxes; a lane with overlapping jobs gets more rows
+export { dayWindow };
 
 const KIND: Record<string, string> = { draft: "open", assigned: "next", in_progress: "prog", submitted: "prog", completed: "done", cancelled: "off" };
 
@@ -61,16 +55,19 @@ export function Today() {
     { label: "Completed", value: doneToday ?? "—", sub: "today", to: "/bookings?view=today&stage=completed&all=1", tone: "ok" },
     { label: "Needs you", value: needs.length, sub: needs.length ? "open the list" : "all clear", to: "/problems", tone: needs.length ? "bad" : "" },
   ];
-  const starts = all.map((b) => toHours(b.answers.inspection_time)).filter((x): x is number => x !== null);
-  const [lo, hi] = dayWindow(starts);
+  const [, tick] = useState(0);
+  useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 60_000); return () => clearInterval(id); }, []);
+  const now = new Date();
+  const spans = new Map(all.map((b) => [b.id, jobSpan(b, now)]));
+  const [lo, hi] = dayWindow([...spans.values()]);
   const slots = (hi - lo) * 2;                          // one column per 30 minutes
   const lanes = [
     { id: 0, name: "Unassigned", user: null as User | null, jobs: all.filter((b) => !b.assigned_expert) },
     ...[...new Set(all.map((b) => b.assigned_expert).filter((x): x is number => !!x))].map((id) => ({
       id, user: experts.data?.find((u) => u.id === id) ?? null, name: experts.data?.find((u) => u.id === id)?.name ?? `#${id}`, jobs: all.filter((b) => b.assigned_expert === id) })),
   ].filter((l) => l.jobs.length > 0);
-  const now = new Date();
   const nowAt = now.getHours() + now.getMinutes() / 60;
+  const nowX = (nowAt - lo) * 2 * SLOT_PX;
   const scrollToNow = () => { const el = scroller.current; if (el) el.scrollTo({ left: Math.max(0, (nowAt - lo - 1) * 2 * SLOT_PX), behavior: "smooth" }); };
   useEffect(() => { scrollToNow(); }, [all.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
@@ -90,40 +87,49 @@ export function Today() {
       <section className="card schedule-card" aria-label="Schedule by expert">
         <div className="sheet-head" style={{ padding: "0 0 10px", border: 0 }}>
           <h3>Schedule by expert</h3>
-          <span className="legend done">Done</span><span className="legend prog">In progress</span><span className="legend next">To start</span><span className="legend open">Unassigned</span>
+          <span className="legend done">Done</span><span className="legend prog">In progress</span><span className="legend next">To start</span><span className="legend open">Unassigned</span><span className="legend late">Started late</span>
           <button className="sm" onClick={() => scrollToNow()}>Now</button>
         </div>
         {all.length === 0 && q.data && <Empty title="Nothing booked for today">New bookings for today show here.</Empty>}
         {all.length > 0 && (
           <div className="sched-scroll" ref={scroller}>
             <div className="sched" style={{ width: LANE_W + slots * SLOT_PX }}>
+              {nowAt > lo && nowAt < hi && <>
+                <span className="now-line" style={{ left: LANE_W + nowX }} />
+                <span className="now-chip" style={{ left: LANE_W + nowX }}>{hm(nowAt)}</span>
+              </>}
               <div className="sched-row sched-hours">
                 <div className="sched-who" />
-                {Array.from({ length: slots }, (_, i) => {
-                  const m = lo * 60 + i * 30;
-                  return <div key={i} className={`sched-slot-label${m % 60 === 0 ? " hour" : ""}`} style={{ width: SLOT_PX }}>{fmtTime(`${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`)}</div>;
-                })}
+                <div className="sched-axis" style={{ width: slots * SLOT_PX }}>
+                  {Array.from({ length: slots }, (_, i) => {
+                    const m = lo * 60 + i * 30;
+                    return <span key={i} className={`sched-tick${m % 60 === 0 ? " hour" : ""}${i === 0 ? " first" : ""}`} style={{ left: i * SLOT_PX }}>{fmtTime(`${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`)}</span>;
+                  })}
+                </div>
               </div>
-              {lanes.map((l) => (
-                <div key={l.id} className="sched-row">
-                  <div className="sched-who">
-                    {l.user ? <Avatar who={l.user} size={28} /> : <span className="avatar lane-open" style={{ width: 28, height: 28 }}>?</span>}
-                    <div style={{ minWidth: 0 }}><div className="small ellipsis" style={{ fontWeight: 600 }}>{l.name}</div><div className="muted" style={{ fontSize: 11 }}>{l.jobs.length} job{l.jobs.length === 1 ? "" : "s"}</div></div>
-                  </div>
-                  <div className="sched-track" style={{ width: slots * SLOT_PX, backgroundSize: `${SLOT_PX}px 100%, ${SLOT_PX * 2}px 100%` }}>
-                    {nowAt > lo && nowAt < hi && <span className="now-line" style={{ left: (nowAt - lo) * 2 * SLOT_PX }} />}
-                    {l.jobs.map((b) => {
-                      const st = toHours(b.answers.inspection_time) ?? lo;
-                      return (
-                        <Link key={b.id} to={`/booking/${b.id}`} className={`job-block ${KIND[b.stage]}`} title={`${b.booking_id} · ${fmtTime(b.answers.inspection_time)} · ${String(b.answers.customer_name ?? "")}`}
-                          style={{ left: (st - lo) * 2 * SLOT_PX + 2, width: SLOT_HOURS * 2 * SLOT_PX - 4 }}>
-                          <span className="jb-top"><b>{b.booking_id}</b><span>{fmtTime(b.answers.inspection_time)}</span></span>
-                          <span className="jb-sub">{String(b.answers.customer_name ?? "")}</span>
-                          <span className="jb-sub">{car(b.answers.car_make_model)} · {city(b.answers.city)}</span>
-                        </Link>);
-                    })}
-                  </div>
-                </div>))}
+              {lanes.map((l) => {
+                const laid = stackRows(l.jobs.map((b) => spans.get(b.id)!));
+                return (
+                  <div key={l.id} className="sched-row">
+                    <div className="sched-who">
+                      {l.user ? <Avatar who={l.user} size={28} /> : <span className="avatar lane-open" style={{ width: 28, height: 28 }}>?</span>}
+                      <div style={{ minWidth: 0 }}><div className="small ellipsis" style={{ fontWeight: 600 }}>{l.name}</div><div className="muted" style={{ fontSize: 11 }}>{l.jobs.length} job{l.jobs.length === 1 ? "" : "s"}</div></div>
+                    </div>
+                    <div className="sched-track" style={{ width: slots * SLOT_PX, height: laid.rows * LANE_H, backgroundSize: `${SLOT_PX}px 100%, ${SLOT_PX * 2}px 100%` }}>
+                      {l.jobs.map((b, i) => {
+                        const sp = spans.get(b.id)!;
+                        return (
+                          <Link key={b.id} to={`/booking/${b.id}`} className={`job-block ${KIND[b.stage]}${sp.late ? " late" : ""}`}
+                            title={`${b.booking_id} · ${String(b.answers.customer_name ?? "")}\n${spanTitle(sp)}`}
+                            style={{ left: (sp.start - lo) * 2 * SLOT_PX + 2, width: (sp.end - sp.start) * 2 * SLOT_PX - 4, top: laid.row[i]! * LANE_H + 8, height: LANE_H - 16, bottom: "auto" }}>
+                            <span className="jb-top"><b>{b.booking_id}</b><span>{hm(sp.start)}</span></span>
+                            <span className="jb-sub">{String(b.answers.customer_name ?? "")}</span>
+                            <span className="jb-sub">{car(b.answers.car_make_model)} · {city(b.answers.city)}</span>
+                          </Link>);
+                      })}
+                    </div>
+                  </div>);
+              })}
             </div>
           </div>)}
       </section>

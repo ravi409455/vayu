@@ -17,17 +17,20 @@ class BookingSerializer(serializers.ModelSerializer):
     last_edited_by = serializers.CharField(source="last_edited_by.username", default=None)
     released_by = serializers.CharField(source="released_by.username", default=None)
     reschedules = RescheduleSerializer(many=True, read_only=True)
+    # when the expert pressed Submit; only the booking list fills it (see BookingViewSet)
+    finished_at = serializers.DateTimeField(read_only=True, required=False)
 
     class Meta:
         model = Booking
         fields = ["id", "booking_id", "stage", "ops_status", "inspection_type", "assigned_expert",
-                  "answers", "row_version", "started_at", "cancel_reason", "released_by",
-                  "released_draft_expected", "last_edited_by", "last_edited_at", "reschedules",
-                  "created_at", "conflict", "alerts", "withdrawn_expert"]
-
+                  "answers", "row_version", "started_at", "finished_at", "cancel_reason",
+                  "released_by", "released_draft_expected", "last_edited_by", "last_edited_at",
+                  "reschedules", "created_at", "conflict", "alerts", "withdrawn_expert"]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
+        if not hasattr(instance, "finished_at"):       # not annotated: leave the key out
+            data.pop("finished_at", None)
         request = self.context.get("request")
         if request is not None:
             cache = self.context.setdefault("_levels", {})

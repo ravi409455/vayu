@@ -51,7 +51,7 @@ export type MasterListItem = { id: number; list: number; key: string; label: str
 export type Booking = {
   id: string; booking_id: string; stage: string; ops_status: string; inspection_type: string;
   assigned_expert: number | null; answers: Record<string, unknown>; row_version: number;
-  started_at: string | null; cancel_reason: string; last_edited_by: string | null;
+  started_at: string | null; finished_at?: string | null; cancel_reason: string; last_edited_by: string | null;
   last_edited_at: string | null; created_at: string; conflict?: string; alerts?: { code: string; detail: string; at: string }[];
 };
 export type Inspection = {

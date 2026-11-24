@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from apps.accounts.models import Role, User
 from apps.bookings import services, submissions
+from apps.bookings.models import Booking
 from apps.forms import services as form_services
 from apps.forms.models import (
     Field,
@@ -33,7 +34,13 @@ ALLOWED = ("vayu.settings.local", "vayu.settings.test", "vayu.settings.e2e")
 USERS = [("admin", Role.ADMIN, "Asha Admin", False), ("ops", Role.OPS, "Priya Ops", False),
          ("expert", Role.EXPERT, "Ravi Expert", False),
          ("expert2", Role.EXPERT, "Meera Expert", False),
-         ("newuser", Role.OPS, "Nina New (must change password)", True)]
+         ("newuser", Role.OPS, "Nina New (must change password)", True),
+         ("ops2", Role.OPS, "Rohan Ops", False),
+         *[(f"expert{n}", Role.EXPERT, name, False) for n, name in enumerate((
+             "Suresh Patil", "Anjali Reddy", "Imran Sheikh", "Divya Nair", "Karthik Iyer",
+             "Pooja Chauhan", "Vivek Joshi", "Neelam Singh", "Rahul Bansal", "Sana Qureshi",
+             "Harish Gupta", "Lakshmi Menon", "Aditya Kulkarni", "Farah Khan", "Manish Yadav",
+             "Tara Bose", "Gaurav Mishra", "Isha Deshmukh"), start=3)]]
 LISTS = {"city": [("delhi", "Delhi"), ("pune", "Pune"), ("mumbai", "Mumbai")],
          "car_make_model": [("maruti_victoris", "Maruti Victoris"), ("tata_nexon", "Tata Nexon"),
                             ("hyundai_creta", "Hyundai Creta"),
@@ -62,8 +69,10 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--if-empty", action="store_true",
                             help="do nothing (no error) when the demo data is already there")
+        parser.add_argument("--no-today", action="store_true",
+                            help="leave out today's busy schedule (it is slow: tests use this)")
 
-    def handle(self, *args, if_empty=False, **options):
+    def handle(self, *args, if_empty=False, no_today=False, **options):
         if settings.SETTINGS_MODULE not in ALLOWED:
             raise CommandError("seed_demo only runs with local, test or e2e settings.")
         if User.objects.filter(username="admin").exists():
@@ -88,6 +97,8 @@ class Command(BaseCommand):
         self._inspection_forms(admin)
         self._bookings()
         self._more_bookings()
+        if not no_today:
+            self._today()
         self._integrations(admin)
         self.stdout.write(self.style.SUCCESS(
             f"Demo ready. Sign in as admin / ops / expert / expert2 with password {PASSWORD}"))
@@ -389,11 +400,85 @@ class Command(BaseCommand):
         submissions.start(e1, b, uuid.uuid4(), None, "pdi", None,
                           {"selfie": [self._selfie(b, e1)]})
 
+    # ---------------------------------------------------------------- today's schedule
+
+    # (expert number or None, type, booked hour from now, state, minutes late, minutes taken)
+    TODAY: list[tuple[Any, ...]] = [
+        (3, "used_car", -6, "done", 0, 55), (3, "ev", -4.5, "done", 25, 70),
+        (3, "pdi", 1.5, "planned"),
+        (4, "used_car", -5, "done", 0, 80), (4, "pdi", -1.2, "running", 0),
+        (5, "ev", -3, "done", 40, 90), (5, "used_car", 2, "planned"),
+        (6, "pdi", -0.5, "running", 20),
+        (7, "used_car", -7, "done", 5, 60), (7, "ev", -5.5, "done", 0, 45),
+        (8, "pdi", -0.8, "running", 0), (8, "used_car", -0.3, "planned"),
+        (9, "ev", 1, "planned"), (9, "pdi", 3, "planned"),
+        (10, "used_car", -2, "done", 10, 100), (10, "ev", 0.2, "planned"),
+        (11, "pdi", -2, "running", 10),
+        (12, "ev", -8, "done", 0, 50), (12, "used_car", -6, "done", 0, 60),
+        (12, "ev", -4, "done", 15, 70),
+        (13, "pdi", 4, "planned"), (14, "ev", -1, "running", 35),
+        (None, "pdi", 0.5, "planned"), (None, "used_car", -1, "planned"),
+        (None, "ev", 3, "planned")]
+
+    def _today(self):
+        """About 25 bookings for today, placed from the clock now: some finished (with the time
+        they really took), some running (some started late), some still to come, some unassigned,
+        and a few experts left with nothing, so the Today schedule has every case to look at."""
+        from datetime import datetime, time
+
+        from apps.bookings.models import Inspection
+
+        ops = User.objects.get(username="ops")
+        experts = {n: User.objects.get(username=f"expert{n}") for n in range(3, 15)}
+        now = timezone.localtime()
+        h = now.hour + now.minute / 60
+        midnight = datetime.combine(now.date(), time(0), tzinfo=now.tzinfo)
+
+        def at(x):         # an hour of today, kept inside the day
+            return midnight + timedelta(hours=min(23.9, max(0, x)))
+
+        def hhmm(x):
+            m = max(0, min(23 * 60 + 30, round(x * 12) * 5))
+            return f"{m // 60:02d}:{m % 60:02d}"
+
+        names = ["Aarav Kapoor", "Bhavna Rao", "Chetan Pawar", "Disha Malik", "Eshan Arora",
+                 "Fatima Syed", "Girish Nair", "Hema Pillai", "Irfan Mirza", "Jaya Kamat",
+                 "Kabir Sethi", "Leena Dsouza", "Mohan Rathi", "Nisha Gill", "Omkar Jadhav",
+                 "Preeti Saini", "Qasim Ali", "Radhika Iyer", "Sameer Dutta", "Trisha Bhat",
+                 "Uday Shetty", "Vandana Roy", "Waqar Hussain", "Yash Thakur", "Zoya Merchant"]
+        cities = ["delhi", "pune", "mumbai"]
+        cars = ["maruti_victoris", "tata_nexon", "hyundai_creta", "mahindra_xuv_3xo"]
+        for n, (num, itype, off, state, *rest) in enumerate(self.TODAY):
+            ref = f"DEMO-{18 + n}"
+            city = cities[n % 3]
+            b = services.create(ops, {
+                "booking_id": ref, "customer_name": names[n], "customer_phone": f"98765020{n:02d}",
+                "address": f"{ref} road, {city.title()}", "city": city,
+                "car_make_model": cars[n % 4], "inspection_type": itype,
+                "inspection_date": now.date().isoformat(), "inspection_time": hhmm(h + off)})
+            if num is None:
+                continue
+            expert = experts[num]
+            services.assign(ops, b, expert.id)
+            if state == "planned":
+                continue
+            selfie = self._selfie(b, expert)
+            submissions.start(expert, b, uuid.uuid4(), None, itype, None, {"selfie": [selfie]})
+            b.refresh_from_db()
+            began = h + off + rest[0] / 60
+            if state == "done":
+                submissions.submit(expert, b, uuid.uuid4(), {
+                    "inspection": self._form_answers(b, expert, itype, 30000 + n * 1000),
+                    "start": {"selfie": [selfie]}, "end": {"taking_payment": False}})
+                check_completion(b.id)
+                Inspection.objects.filter(booking=b, status="submitted").update(
+                    submitted_at=at(began + rest[1] / 60))
+            Booking.objects.filter(pk=b.pk).update(started_at=at(began))   # when it really began
+
     # ---------------------------------------------------------------- integrations
 
     def _integrations(self, admin):
         """Webhooks with a mix of delivered, retrying and failed attempts, and two API keys."""
-        from apps.bookings.models import Booking
         from apps.integrations import apikeys
         from apps.integrations.models import ApiKey, Delivery, Integration
 

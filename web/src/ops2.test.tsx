@@ -39,7 +39,7 @@ describe("booking views", () => {
   });
   it("the schedule spans at least 8 am to 8 pm and grows to fit early or late jobs", () => {
     expect(dayWindow([])).toEqual([8, 20]);
-    expect(dayWindow([7.5, 19.75])).toEqual([7, 22]);
+    expect(dayWindow([{ start: 7.5, end: 8.5 }, { start: 19.75, end: 20.75 }])).toEqual([7, 21]);
   });
 });
 

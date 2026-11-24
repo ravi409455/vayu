@@ -11,12 +11,12 @@ pytestmark = pytest.mark.django_db
 
 
 def test_the_demo_seed_builds_users_forms_and_bookings_in_every_state():
-    call_command("seed_demo")
+    call_command("seed_demo", "--no-today")
     assert set(User.objects.values_list("username", flat=True)) >= {"admin", "ops", "expert",
                                                                     "expert2", "newuser"}
     assert User.objects.get(username="newuser").must_change_password is True
     stages = dict(Booking.objects.values_list("booking_id", "stage"))
-    assert stages == {
+    assert {k: v for k, v in stages.items() if int(k[5:]) <= 17} == {
         "DEMO-1": "draft", "DEMO-2": "assigned", "DEMO-3": "completed", "DEMO-4": "draft",
         "DEMO-5": "draft", "DEMO-6": "assigned", "DEMO-7": "assigned", "DEMO-8": "in_progress",
         "DEMO-9": "in_progress", "DEMO-10": "submitted", "DEMO-11": "completed",
@@ -28,14 +28,35 @@ def test_the_demo_seed_builds_users_forms_and_bookings_in_every_state():
     assert Booking.objects.filter(stage="completed").values_list("inspection_type", flat=True) \
         .distinct().count() == 3
     with pytest.raises(CommandError, match="already exists"):
-        call_command("seed_demo")
+        call_command("seed_demo", "--no-today")
+
+
+def test_the_demo_has_the_real_team_and_a_busy_day_for_the_today_schedule():
+    from django.utils import timezone
+
+    from apps.bookings.models import Inspection
+
+    call_command("seed_demo")
+    assert User.objects.filter(role="expert").count() == 20
+    assert User.objects.filter(role="ops").count() == 3 and User.objects.filter(role="admin").count() == 1
+    today = Booking.objects.filter(inspection_date=timezone.localdate(), booking_id__regex=r"^DEMO-(1[89]|[2-4]\d)$")
+    assert today.count() == 25
+    assert today.filter(assigned_expert__isnull=True).count() == 3
+    busy = set(today.exclude(assigned_expert__isnull=True).values_list("assigned_expert", flat=True))
+    assert len(busy) == 12                                   # expert3 to expert14; the rest are empty
+    assert {b.stage for b in today} == {"draft", "assigned", "in_progress", "completed"}
+    now = timezone.now()
+    for b in today.filter(stage__in=["in_progress", "completed"]):
+        assert b.started_at <= now
+    for i in Inspection.objects.filter(booking__in=today.filter(stage="completed"), status="submitted"):
+        assert i.booking.started_at <= i.submitted_at <= now       # it took real time, in the past
 
 
 def test_the_demo_seed_fills_the_problems_page_and_the_integrations_screens():
     from apps.integrations.models import ApiKey, Delivery, Integration
     from apps.media.services import stuck_uploads
 
-    call_command("seed_demo")
+    call_command("seed_demo", "--no-today")
     assert {a.booking.booking_id for a in stuck_uploads()} == {"DEMO-8", "DEMO-10"}
     assert Booking.objects.get(booking_id="DEMO-14").conflict == "TWO_EXPERTS"
     assert any(a["code"] == "TYPE_CHANGE_REJECTED"
@@ -49,19 +70,19 @@ def test_the_demo_seed_fills_the_problems_page_and_the_integrations_screens():
 def test_the_demo_seed_refuses_to_run_with_other_settings(settings):
     settings.SETTINGS_MODULE = "vayu.settings.prod"
     with pytest.raises(CommandError, match="only runs with"):
-        call_command("seed_demo")
+        call_command("seed_demo", "--no-today")
 
 
 def test_the_demo_seed_can_be_told_to_leave_existing_data_alone():
-    call_command("seed_demo")
-    call_command("seed_demo", "--if-empty")                  # no error, nothing duplicated
+    call_command("seed_demo", "--no-today")
+    call_command("seed_demo", "--no-today", "--if-empty")                  # no error, nothing duplicated
     assert User.objects.filter(username="admin").count() == 1
 
 
 def test_the_demo_forms_are_large_and_the_library_is_not_empty():
     from apps.forms.models import Field, Form, LibraryItem, Page, Section
 
-    call_command("seed_demo")
+    call_command("seed_demo", "--no-today")
     for key, minimum in (("pdi", 150), ("used_car", 150), ("ev", 120)):
         form = Form.objects.get(key=key)
         v = form.versions.get(status="published")
@@ -79,7 +100,7 @@ def test_the_pdi_form_is_the_full_one_from_the_sample_report():
     from apps.forms.models import Field, Form, Section
     from apps.forms.rules import validate_version
 
-    call_command("seed_demo")
+    call_command("seed_demo", "--no-today")
     v = Form.objects.get(key="pdi").versions.get(status="published")
     assert validate_version(v) == []
     titles = list(Section.objects.filter(version=v).values_list("title", flat=True))
@@ -110,7 +131,7 @@ def test_the_pdi_report_of_the_sample_booking_reads_like_the_sample():
 
     from apps.media import storage
 
-    call_command("seed_demo")
+    call_command("seed_demo", "--no-today")
     report = Report.objects.get(booking__booking_id="DEMO-3")
     assert report.status == "ready" and report.filename == "DEMO-3PDI.pdf"
     pages = [p.extract_text() for p in pypdf.PdfReader(io.BytesIO(storage.read(report.key))).pages]
