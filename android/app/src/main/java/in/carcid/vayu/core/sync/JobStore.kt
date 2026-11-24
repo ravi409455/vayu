@@ -97,7 +97,8 @@ class JobStore(private val file: File) {
     @Synchronized
     fun clear() {
         cleared = true
-        file.delete(); File(file.path + ".tmp").delete(); cache = JsonObject(emptyMap())
+        file.delete(); file.parentFile?.listFiles { f -> f.name.startsWith(file.name + ".") && f.name.endsWith(".tmp") }?.forEach { it.delete() }
+        cache = JsonObject(emptyMap())
     }
 
     fun jobs(): List<Job> {
