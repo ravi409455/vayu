@@ -54,7 +54,9 @@ export function Forms() {
           <thead><tr><th>Name</th><th>Live version</th><th>Draft</th></tr></thead>
           <tbody>{system.map((x) => (
             <tr key={x.id} className="click" onClick={() => nav(`/forms/${x.id}`)}>
-              <td><Link className="cell-main" to={`/forms/${x.id}`} onClick={(e) => e.stopPropagation()}>{x.name}</Link></td>
+              {/* the Admin may rename a system form: the muted label still says which one it is */}
+              <td><Link className="cell-main" to={`/forms/${x.id}`} onClick={(e) => e.stopPropagation()}>{x.name}</Link>{" "}
+                <span className="muted small">{TYPE_LABEL[x.type]}</span></td>
               <Versions x={x} />
             </tr>))}</tbody>
         </table>

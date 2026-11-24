@@ -327,7 +327,8 @@ def test_a_promotion_bundle_carries_the_template_pictures_and_shared_items(renv)
 
 def test_damaged_pictures_in_a_file(renv):
     with pytest.raises(CodedError) as e:
-        assets.import_from_bundle(renv.admin_user, {"data": png().hex(), "name": 5},
+        # not base64 at all (a hex string can be valid base64 by chance, depending on its length)
+        assets.import_from_bundle(renv.admin_user, {"data": "not base64!", "name": 5},
                                   library=True)
     assert detail(e)["code"] == "INVALID_BUNDLE"
     import base64
