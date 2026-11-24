@@ -73,9 +73,9 @@ def test_yes_no_and_multi_choice_answers(ienv):
         r["forms"] = [Form.objects.get(key="pdi").id]
     with mock.patch.object(answers_filter, "_rows", return_value=rows):
         qs = Booking.objects.all()
-        assert [str(b.id) for b in answers_filter.apply(qs, ienv.ops_user, "inspection.accident", "true")] == [a]
-        assert [str(b.id) for b in answers_filter.apply(qs, ienv.ops_user, "inspection.extras", "mats")] == [a]
-        assert len(answers_filter.apply(qs, ienv.ops_user, "inspection.extras", "__none__")) == 1
+        assert [str(b.id) for b in answers_filter.apply(qs, ienv.admin_user, "inspection.accident", "true")] == [a]
+        assert [str(b.id) for b in answers_filter.apply(qs, ienv.admin_user, "inspection.extras", "mats")] == [a]
+        assert len(answers_filter.apply(qs, ienv.admin_user, "inspection.extras", "__none__")) == 1
 
 
 def test_only_people_who_may_see_answers_can_filter(ienv):
@@ -116,3 +116,31 @@ def test_answers_in_a_form_that_hides_the_field_are_never_matched(ienv):
     with mock.patch.object(answers_filter, "_rows", return_value=rows):
         assert codes(ienv, answer="inspection.door", value="ok") == []
         assert codes(ienv, answer="inspection.door", value="__none__") == []
+
+
+def test_fields_for_one_inspection_type(ienv):
+    """Ops pick a type first: only that type's questions, plus the shared check-in and wrap-up."""
+    pdi = {r["field"] for r in ienv.ops.get("/api/v1/bookings/answer-fields", {"type": "pdi"}).json()}
+    other = {r["field"] for r in ienv.ops.get("/api/v1/bookings/answer-fields", {"type": "ev"}).json()}
+    assert "inspection.door" in pdi and "inspection.door" not in other
+    assert {f for f in pdi if not f.startswith("inspection.")} == {f for f in other if not f.startswith("inspection.")}
+
+
+def test_a_field_hidden_at_the_bookings_stage_now_never_matches(ienv):
+    """Visible once completed, hidden while the job waits for files: those bookings don't count."""
+    from apps.bookings.models import Booking
+    a = done(ienv, "A1")
+    Field.objects.filter(key="door").update(access={"ops": {"submitted": "hidden"}})
+    Booking.objects.filter(pk=a).update(stage="submitted")
+    assert codes(ienv, answer="inspection.door", value="ok") == []
+    Booking.objects.filter(pk=a).update(stage="completed")
+    assert codes(ienv, answer="inspection.door", value="ok") == ["A1"]
+
+
+def test_someone_who_sees_only_their_own_inspections_matches_only_those(ienv):
+    from apps.bookings import answers_filter
+    from apps.bookings.models import Booking
+    done(ienv, "A1")
+    mine = answers_filter.apply(Booking.objects.all(), ienv.expert_user, "inspection.door", "ok", own=True)
+    other = answers_filter.apply(Booking.objects.all(), ienv.make_user("expert"), "inspection.door", "ok", own=True)
+    assert [b.booking_id for b in mine] == ["A1"] and list(other) == []

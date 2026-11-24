@@ -98,9 +98,11 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
                 raise ValidationError({"reviewed": "Use 0 or 1."})
         if p.get("answer"):                           # any choice / yes-no answer (answers_filter)
             from . import answers_filter
-            if scope_for(self.request.user, "submissions.view", self.request) is None:
+            scope = scope_for(self.request.user, "submissions.view", self.request)
+            if scope is None:
                 raise PermissionDenied("You may not see inspection answers.")
-            qs = answers_filter.apply(qs, self.request.user, p["answer"], p.get("value", ""))
+            qs = answers_filter.apply(qs, self.request.user, p["answer"], p.get("value", ""),
+                                      own=scope == "own")
         for param, lookup in (("date_from", "inspection_date__gte"),
                               ("date_to", "inspection_date__lte")):
             if p.get(param):
@@ -162,7 +164,7 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
     def answer_fields(self, request):
         """Fields Bookings can be filtered by (choice and yes/no answers this person may see)."""
         from . import answers_filter
-        return Response(answers_filter.fields_for(request.user))
+        return Response(answers_filter.fields_for(request.user, request.query_params.get("type")))
 
     @action(detail=True, methods=["post"], url_path="force-release")
     def force_release(self, request, pk=None):
