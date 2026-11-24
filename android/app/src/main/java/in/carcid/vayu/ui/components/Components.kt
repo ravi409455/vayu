@@ -253,9 +253,10 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
 
 @Composable
 fun SoftButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, color: Color = Vayu.colors.ink) {
-    Box(modifier.heightIn(min = 46.dp).clip(RoundedCornerShape(12.dp)).background(Vayu.colors.soft)
+    // the same height, corners and text size as PrimaryButton: side by side they read as one pair
+    Box(modifier.heightIn(min = 54.dp).clip(RoundedCornerShape(14.dp)).background(Vayu.colors.soft)
         .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
-        Text(text, style = MaterialTheme.typography.labelLarge, color = color)
+        Text(text, style = MaterialTheme.typography.labelLarge, fontSize = 16.sp, color = color)
     }
 }
 
