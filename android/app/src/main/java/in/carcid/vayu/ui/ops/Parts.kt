@@ -360,6 +360,8 @@ private fun answerText(f: Field, v: Any?, env: OpsEnv): String = when (f.type) {
  * preview when it has one (tiles; a phone photo is ~0.5 MB, its preview a few KB), else the file.
  */
 suspend fun mediaBytes(env: OpsEnv, dir: File, id: String, preview: Boolean = false): File? = withContext(Dispatchers.IO) {
+    // the file name comes from the server's ID: only a real ID, never a path
+    if (runCatching { java.util.UUID.fromString(id) }.isFailure) return@withContext null
     val full = File(dir, "media-$id")
     if (full.exists()) return@withContext full                  // the whole file serves as its own preview
     val f = if (preview) File(dir, "media-$id-p") else full
