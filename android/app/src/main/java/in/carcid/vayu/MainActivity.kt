@@ -70,7 +70,7 @@ fun AppRoot(vm: AppViewModel) {
             is Screen.Home -> if (s.me.role == "expert") {
                 val jobs by vm.jobs.state.collectAsState()
                 ExpertHome(s.me, jobs, vm.jobs.today(), vm::openProfile, vm.jobs::sync, expertExtras(vm, s.me))
-            } else HomeScreen(s.me, vm::openProfile)
+            } else `in`.carcid.vayu.ui.ops.OpsHome(s.me, remember(s.me.id) { vm.graph.ops(s.me.id) }, vm.jobs::today, vm::openProfile)
             is Screen.Profile -> {
                 BackHandler { vm.closeProfile() }
                 ProfileScreen(s, vm::closeProfile, vm::setTheme, vm::signOut)

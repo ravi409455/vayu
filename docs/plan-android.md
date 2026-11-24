@@ -98,6 +98,16 @@ Each phase: tests first (red), then the code, then CI green, then a short demo o
 - Needs you (Problems / Updates), Dashboard (period, one chart, split by, CSV export and share).
 - Offline for Ops: last-loaded data with the "Offline · as of 10:42" strip; actions show a lock.
 
+### Status after Phases 13–16 (built, not yet tried on a phone)
+- Done: everything listed in 14, 15 and 16, with these differences:
+  - Payments: the server has no "verify / record a payment" API, so Ratings and payment shows the
+    wrap-up answers only (change them through Answers). Needs a backend addition if wanted.
+  - Needs you → Updates waits for notifications (Phase 17); Problems is complete.
+  - Ops screens refresh on Refresh, after every change and when the app comes back to the front
+    (not every minute).
+  - Booking ⋮ menu also has "Sign out the expert's phone" (users.sign_out_devices).
+- Next: try it on a phone, then Phase 17.
+
 ### Phase 17 — Push, alerts, release (≈ 1.5 weeks)
 - **Backend:** B3, B4, B6.
 - Push for both roles; tapping opens the job or booking; each push triggers a sync. Bell lists.

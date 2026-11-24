@@ -109,8 +109,11 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         }
     }
 
+    private fun signedIn(): Int? = when (val s = screen.value) { is Screen.Home -> s.me.id; is Screen.Profile -> s.me.id; else -> null }
+
     /** Signed out from the server (another phone, or an Admin): nothing of theirs stays on this phone. */
     private fun revoked() {
+        signedIn()?.let { graph.ops(it).clear() }
         tokens.clear(); jobs.forget(); _screen.value = Screen.SignIn()
     }
 
@@ -147,6 +150,7 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         }
         viewModelScope.launch {
             runCatching { api.logout() }
+            signedIn()?.let { graph.ops(it).clear() }
             tokens.clear()
             jobs.forget()
             _screen.value = Screen.SignIn()

@@ -30,6 +30,9 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
     @Synchronized fun jobs(userId: Int) = jobStores.getOrPut(userId) { JobStore(File(root, "jobs-$userId.json")) }
     @Synchronized fun drafts(userId: Int) = draftStores.getOrPut(userId) { DraftStore(File(root, "drafts-$userId")) }
 
+    /** Ops' saved copies of what they last loaded (read-only offline). */
+    fun ops(userId: Int) = `in`.carcid.vayu.core.ops.OpsData(api, File(root, "ops-$userId"))
+
     /** A cleared store never writes again, so a later sign-in needs a fresh one. */
     @Synchronized fun forgetJobs(userId: Int) { jobStores.remove(userId)?.clear() ?: JobStore(File(root, "jobs-$userId.json")).clear() }
 

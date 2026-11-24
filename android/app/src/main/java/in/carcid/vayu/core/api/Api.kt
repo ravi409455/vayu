@@ -27,7 +27,10 @@ class ApiError(val code: String, override val message: String, val status: Int,
 }
 
 data class Me(val id: Int, val username: String, val name: String, val role: String,
-              val mustChangePassword: Boolean, val theme: String) {
+              val mustChangePassword: Boolean, val theme: String,
+              /** What this person may do ({permission: all|own} keys), from auth/me. */
+              val permissions: Set<String> = emptySet()) {
+    fun can(p: String) = p in permissions
     val initials: String
         get() = (name.ifBlank { username }).split(" ").filter { it.isNotBlank() }.take(2)
             .joinToString("") { it.first().uppercase() }
@@ -131,6 +134,24 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         }
     }
 
+    /** Any GET (Ops screens): the parsed body, list or object. */
+    suspend fun get(path: String): JsonElement = callAny("GET", path)
+
+    /** Any change (Ops actions): POST, PATCH or DELETE with a JSON body. */
+    suspend fun act(method: String, path: String, body: JsonObject? = null): JsonElement = callAny(method, path, body)
+
+    /** A file the server signed (photo, report): its bytes, no sign-in header. */
+    suspend fun download(url: String): ByteArray = withContext(Dispatchers.IO) {
+        try {
+            http.newCall(Request.Builder().url(url).build()).execute().use { r ->
+                if (!r.isSuccessful) throw ApiError("HTTP_${r.code}", "Couldn't download it (${r.code}).", r.code)
+                r.body!!.bytes()
+            }
+        } catch (e: IOException) {
+            throw ApiError(ApiError.NETWORK, "No connection. Check your signal and try again.", 0)
+        }
+    }
+
     suspend fun logout() {
         try { call("POST", "auth/logout") } finally { tokens.clear() }
     }
@@ -139,7 +160,8 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         id = o.getValue("id").jsonPrimitive.intOrNull ?: 0, username = o.str("username"),
         name = o.str("name"), role = o.str("role"),
         mustChangePassword = o["must_change_password"]?.jsonPrimitive?.booleanOrNull ?: false,
-        theme = o["theme"]?.jsonPrimitive?.contentOrNull ?: "light")
+        theme = o["theme"]?.jsonPrimitive?.contentOrNull ?: "light",
+        permissions = (o["permissions"] as? JsonObject)?.keys.orEmpty())
 
     private fun JsonObject.str(k: String) = this[k]?.jsonPrimitive?.contentOrNull ?: ""
 
@@ -155,7 +177,18 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
             res.body
         }
 
-    private class Res(val status: Int, val body: JsonObject) {
+    private suspend fun callAny(method: String, path: String, body: JsonObject? = null): JsonElement =
+        withContext(Dispatchers.IO) {
+            var res = send(method, path, body, true)
+            if (res.status == 401 && res.code != "DEVICE_REVOKED" && refresh()) res = send(method, path, body, true)
+            if (res.code == "DEVICE_REVOKED") tokens.clear()
+            if (res.status !in 200..299) throw ApiError(res.code ?: "HTTP_${res.status}",
+                res.body["detail"]?.jsonPrimitive?.contentOrNull ?: "Something went wrong (${res.status}).",
+                res.status, res.body)
+            res.raw ?: JsonObject(emptyMap())
+        }
+
+    private class Res(val status: Int, val body: JsonObject, val raw: JsonElement? = null) {
         val code: String? get() = (body["code"] as? JsonPrimitive)?.contentOrNull
     }
 
@@ -168,7 +201,7 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
             http.newCall(req.build()).execute().use { r ->
                 val text = r.body?.string().orEmpty()
                 val parsed: JsonElement? = text.takeIf { it.isNotBlank() }?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() }
-                Res(r.code, (parsed as? JsonObject) ?: JsonObject(emptyMap()))
+                Res(r.code, (parsed as? JsonObject) ?: JsonObject(emptyMap()), parsed)
             }
         } catch (e: IOException) {
             throw ApiError(ApiError.NETWORK, "No connection. Check your signal and try again.", 0)

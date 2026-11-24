@@ -126,28 +126,9 @@ class Outbox(
         val file = File(f.path)
         if (!file.exists()) return
         val init = api.mediaInitiate(id, f.id, f.field, f.kind, f.contentType, f.size, f.sha256, f.source)
-        if (init.str("status") in arrived) { mark(id, f.id) { it.copy(sent = true, progress = 1f) }; return }
-        val partSize = (init["part_size"] as? JsonPrimitive)?.intOrNull ?: (8 * 1024 * 1024)
-        val have = (api.media(f.serverId!!)["uploaded_parts"] as? JsonArray).orEmpty().map { it.jsonObject }
-            .associate { (it["part_number"] as JsonPrimitive).intOrNull!! to it.str("etag") }.toMutableMap()
-        val urls = (init["parts"] as? JsonArray).orEmpty().map { it.jsonObject }
-            .associate { (it["part_number"] as JsonPrimitive).intOrNull!! to it.str("url") }
-        RandomAccessFile(file, "r").use { raf ->
-            for ((n, url) in urls.toSortedMap()) {
-                if (n in have || url.isEmpty()) continue
-                val from = (n - 1).toLong() * partSize
-                val bytes = ByteArray(minOf(partSize.toLong(), file.length() - from).toInt())
-                raf.seek(from); raf.readFully(bytes)
-                have[n] = api.putPart(url, bytes, f.contentType)
-                mark(id, f.id) { it.copy(progress = minOf(1f, (n.toLong() * partSize).toFloat() / file.length())) }
-            }
-        }
-        val done = api.mediaComplete(f.serverId, have.toSortedMap().map { it.key to it.value })
-        when (done.str("status")) {
-            in arrived -> mark(id, f.id) { it.copy(sent = true, progress = 1f, error = null) }
-            // the server's checksum did not match: the next run registers and sends it again
-            else -> mark(id, f.id) { it.copy(progress = 0f, error = "Arrived damaged; sending again.") }
-        }
+        val ok = transfer(api, init, file, f.contentType) { p -> mark(id, f.id) { it.copy(progress = p) } }
+        // a checksum that did not match: the next run registers and sends it again
+        mark(id, f.id) { if (ok) it.copy(sent = true, progress = 1f, error = null) else it.copy(progress = 0f, error = "Arrived damaged; sending again.") }
     }
 
     private fun mark(id: String, fileId: String, change: (LocalFile) -> LocalFile) =
@@ -155,3 +136,29 @@ class Outbox(
 }
 
 private fun JsonObject.str(k: String) = (this[k] as? JsonPrimitive)?.contentOrNull ?: ""
+
+/**
+ * Send a registered file's missing parts straight to storage and finish it. [init] is the
+ * media/initiate answer. True when the server has every byte; false if it arrived damaged.
+ */
+suspend fun transfer(api: Api, init: JsonObject, file: File, contentType: String, progress: (Float) -> Unit = {}): Boolean {
+    val arrived = setOf("uploaded", "verified")
+    if (init.str("status") in arrived) return true
+    val id = init.str("id")
+    val partSize = (init["part_size"] as? JsonPrimitive)?.intOrNull ?: (8 * 1024 * 1024)
+    val have = (api.media(id)["uploaded_parts"] as? JsonArray).orEmpty().map { it.jsonObject }
+        .associate { (it["part_number"] as JsonPrimitive).intOrNull!! to it.str("etag") }.toMutableMap()
+    val urls = (init["parts"] as? JsonArray).orEmpty().map { it.jsonObject }
+        .associate { (it["part_number"] as JsonPrimitive).intOrNull!! to it.str("url") }
+    RandomAccessFile(file, "r").use { raf ->
+        for ((n, url) in urls.toSortedMap()) {
+            if (n in have || url.isEmpty()) continue
+            val from = (n - 1).toLong() * partSize
+            val bytes = ByteArray(minOf(partSize.toLong(), file.length() - from).toInt())
+            raf.seek(from); raf.readFully(bytes)
+            have[n] = api.putPart(url, bytes, contentType)
+            progress(minOf(1f, (n.toLong() * partSize).toFloat() / file.length()))
+        }
+    }
+    return api.mediaComplete(id, have.toSortedMap().map { it.key to it.value }).str("status") in arrived
+}

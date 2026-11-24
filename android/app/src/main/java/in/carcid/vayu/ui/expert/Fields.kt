@@ -113,6 +113,8 @@ class FieldEnv(
     val onOpenFile: (Field, LocalFile) -> Unit,
     val onLocate: (Field, (Map<String, Any?>?) -> Unit) -> Unit,
     val asset: suspend (String) -> ImageBitmap?,
+    /** People for "pick a user" fields (Ops): id, name, role. Empty on the expert's phone. */
+    val people: List<Triple<String, String, String>> = emptyList(),
 )
 
 /** One question: label (with * when needed), its input, help or what is missing. */
@@ -173,7 +175,9 @@ private fun Input(f: Field, value: Any?, missing: Boolean, readOnly: Boolean, en
         "master_list" -> SingleChoice(f.label, env.list(f.config["list"] as? String ?: "").map { Option(it.first, it.second, false, null) },
             value as? String, readOnly, onChange, forceList = true)
         "form_choice" -> SingleChoice(f.label, env.types.map { Option(it.first, it.second, false, null) }, value as? String, readOnly, onChange, forceList = true)
-        "user_picker" -> Text(if (value == null) "—" else "Set by Ops", color = Vayu.colors.muted)
+        "user_picker" -> if (env.people.isEmpty()) Text(if (value == null) "—" else "Set by Ops", color = Vayu.colors.muted)
+            else SingleChoice(f.label, env.people.filter { it.third == (f.config["role"] as? String ?: "expert") }.map { Option(it.first, it.second, false, null) },
+                (value as? Number)?.toLong()?.toString(), readOnly, { onChange((it as? String)?.toDouble()) }, forceList = true)
         "gps" -> Gps(f, value, readOnly, env, onChange)
         "photo", "video", "file" -> MediaTiles(f, value, readOnly, env)
         "signature" -> Signature(f, value as? String, readOnly, env)
