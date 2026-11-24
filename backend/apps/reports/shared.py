@@ -192,9 +192,9 @@ def delete(actor, item: SharedItem) -> None:
     from the check to the delete; template saves lock the items they use (lock_refs)."""
     with transaction.atomic():
         item = SharedItem.objects.select_for_update().get(pk=item.pk)
-        maybe = PdfTemplateVersion.objects.select_related("template__form") \
-            .filter(definition__icontains=item.key)          # narrows the scan; uses() decides
-        users = sorted({v.template.form.name for v in maybe
+        # every version, read whole: a few hundred rows at most, and no text search to trust
+        users = sorted({v.template.form.name for v in PdfTemplateVersion.objects
+                        .select_related("template__form")
                         if uses(v.definition, item.kind, item.key) is not None})
         if users:
             raise err("SHARED_IN_USE", f"Still used by {', '.join(users)}. Remove it from those "
