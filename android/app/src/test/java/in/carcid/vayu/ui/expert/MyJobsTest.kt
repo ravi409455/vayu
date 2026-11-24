@@ -135,6 +135,23 @@ class MyJobsTest {
         server.stop()
     }
 
+    @Test fun phoneStorageIsUnderAppSettingsInTheProfile() {
+        var freed = 0
+        compose.setContent {
+            VayuTheme(ThemeMode.LIGHT) {
+                `in`.carcid.vayu.ui.ProfileScreen(`in`.carcid.vayu.ui.Screen.Profile(me), {}, {}, {},
+                    storage = { StorageInfo(18L shl 30, 300L shl 20, 2) { freed++; 300L shl 20 } })
+            }
+        }
+        compose.onNodeWithText("App settings").performClick()
+        compose.onNodeWithText("Phone storage").performClick()
+        compose.onNodeWithText("Removes 300 MB of photos already sent.").assertIsDisplayed()
+        compose.onNodeWithText("Free up").performClick()
+        compose.onAllNodes(hasText("Free up"))[1].performClick()                        // confirm in the dialog
+        assertEquals(1, freed)
+        compose.onNodeWithText("Nothing to remove right now.").assertIsDisplayed()
+    }
+
     @Test fun labelsAndTabs() {
         assertEquals("+91 98765 00000", phoneLabel("+919876500000")); assertEquals("0201234", phoneLabel("0201234"))
         assertEquals("3:30 pm", time12("15:30")); assertEquals("12:05 pm", time12("12:05")); assertEquals("12:00 am", time12("00:00"))

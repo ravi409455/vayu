@@ -163,7 +163,19 @@ fun HomeScreen(me: Me, onProfile: () -> Unit) {
 }
 
 @Composable
-fun ProfileScreen(state: Screen.Profile, onBack: () -> Unit, onTheme: (String) -> Unit, onSignOut: () -> Unit) {
+fun ProfileScreen(state: Screen.Profile, onBack: () -> Unit, onTheme: (String) -> Unit, onSignOut: () -> Unit,
+                  /** Phone storage for App settings (experts); null hides App settings. */
+                  storage: (() -> `in`.carcid.vayu.ui.expert.StorageInfo)? = null) {
+    var page by rememberSaveable { mutableStateOf("") }
+    if (page == "settings" && storage != null) {
+        androidx.activity.compose.BackHandler { page = "" }
+        AppSettingsScreen(onBack = { page = "" }, onStorage = { page = "storage" }, storage = storage())
+        return
+    }
+    if (page == "storage" && storage != null) {
+        `in`.carcid.vayu.ui.expert.StorageScreen(storage(), onBack = { page = "settings" })
+        return
+    }
     val me = state.me
     val themes = listOf("light", "dark", "system")
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
@@ -181,8 +193,26 @@ fun ProfileScreen(state: Screen.Profile, onBack: () -> Unit, onTheme: (String) -
             SectionLabel("Look")
             Segmented(listOf("Light", "Dark", "Match phone"), themes.indexOf(me.theme).coerceAtLeast(0), { onTheme(themes[it]) })
             if (state.error != null) Text(state.error, color = Vayu.colors.bad, modifier = Modifier.padding(top = 8.dp))
+            if (storage != null) {
+                SectionLabel("App")
+                ListRow("App settings", subtitle = "Phone storage", onClick = { page = "settings" })
+            }
             SectionLabel("Account")
             ListRow("Sign out", subtitle = "Signing in on another phone signs this one out", onClick = onSignOut)
+        }
+    }
+}
+
+/** App settings: what this phone keeps (more settings can join here). */
+@Composable
+fun AppSettingsScreen(onBack: () -> Unit, onStorage: () -> Unit, storage: `in`.carcid.vayu.ui.expert.StorageInfo) {
+    Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
+        IconButton(onClick = onBack, modifier = Modifier.padding(6.dp)) {
+            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = Vayu.colors.ink)
+        }
+        Text("App settings", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink, modifier = Modifier.padding(horizontal = 20.dp))
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+            ListRow("Phone storage", subtitle = "${`in`.carcid.vayu.ui.expert.sizeText(storage.freeBytes)} free", onClick = onStorage)
         }
     }
 }

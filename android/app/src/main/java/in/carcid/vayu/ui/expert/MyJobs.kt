@@ -141,7 +141,12 @@ class ExpertExtras(
     val onClearSent: () -> Unit = {},
     /** Customer phones by booking id (Uploads search). */
     val phones: Map<String, String> = emptyMap(),
-)
+) {
+    /** Phone storage, as Uploads and App settings show it. */
+    val storage: StorageInfo get() = StorageInfo(freeBytes, sentBytes, drafts.values.sumOf { d -> d.files.count { !it.sent } }) {
+        sentBytes.also { onClearSent() }
+    }
+}
 
 private const val GB = 1024L * 1024 * 1024
 

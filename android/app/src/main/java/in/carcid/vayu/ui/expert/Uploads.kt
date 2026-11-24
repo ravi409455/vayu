@@ -21,6 +21,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SdStorage
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -52,7 +53,8 @@ private fun size(bytes: Long): String = when {
 @Composable
 fun UploadsScreen(me: Me, extras: ExpertExtras, onProfile: () -> Unit, onJobs: () -> Unit, onRefresh: () -> Unit,
                   onBell: () -> Unit = {}, refreshing: Boolean = false, say: (String) -> Unit = {}) {
-    var confirm by remember { mutableStateOf(false) }
+    var storage by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    if (storage) { StorageScreen(extras.storage, onBack = { storage = false }, say = say); return }
     var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     var openId by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
     val pending = extras.drafts.values.map { d -> d to d.files.filter { !it.sent } }.filter { it.second.isNotEmpty() }
@@ -77,7 +79,11 @@ fun UploadsScreen(me: Me, extras: ExpertExtras, onProfile: () -> Unit, onJobs: (
             (digits.length >= 4 && (extras.phones[d.bookingId] ?: "").filter { it.isDigit() }.contains(digits))
     }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
-        VayuTopBar("Uploads", me.initials, bellCount = 0, onBell = onBell, onProfile = onProfile)
+        VayuTopBar("Uploads", me.initials, bellCount = 0, onBell = onBell, onProfile = onProfile) {
+            androidx.compose.material3.IconButton(onClick = { storage = true }) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.SdStorage, contentDescription = "Phone storage", tint = Vayu.colors.ink)
+            }
+        }
         LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp)) {
             item {
                 Text(if (count == 0) "Everything is sent." else "Sending $count file${if (count == 1) "" else "s"} from ${pending.size} job${if (pending.size == 1) "" else "s"}",
@@ -108,32 +114,9 @@ fun UploadsScreen(me: Me, extras: ExpertExtras, onProfile: () -> Unit, onJobs: (
             if (pending.isNotEmpty() && shown.isEmpty()) item {
                 Text("No job matches \"$query\".", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 20.dp))
             }
-            item {
-                Text("THIS PHONE", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.muted,
-                    modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
-                Column(Modifier.fillMaxWidth().heightIn(min = 58.dp), verticalArrangement = Arrangement.Center) {
-                    Text("Free space", color = Vayu.colors.ink)
-                    Text(size(extras.freeBytes), fontSize = 13.sp, color = if (extras.freeBytes < 2L shl 30) Vayu.colors.warn else Vayu.colors.muted)
-                }
-                HorizontalDivider(color = Vayu.colors.line)
-                Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Free up space", color = Vayu.colors.ink)
-                        Text(if (extras.sentBytes > 0) "Removes ${size(extras.sentBytes)} of photos already sent. Photos still waiting stay."
-                            else "Nothing to remove: only photos already sent can go.", fontSize = 13.sp, color = Vayu.colors.muted)
-                    }
-                    if (extras.sentBytes > 0) SoftButton("Free up", { confirm = true })
-                }
-                Spacer(Modifier.height(24.dp))
-            }
         }
         ExpertBottomBar(ExpertTab.UPLOADS, uploads = count, onTab = { if (it == ExpertTab.JOBS) onJobs() }, onRefresh = onRefresh, refreshing = refreshing)
     }
-    if (confirm) androidx.compose.material3.AlertDialog(onDismissRequest = { confirm = false },
-        title = { Text("Free up ${size(extras.sentBytes)}?") },
-        text = { Text("Photos and videos the server already has are removed from this phone. They stay safe on the server; nothing waiting to send is touched.") },
-        confirmButton = { androidx.compose.material3.TextButton({ confirm = false; val n = extras.sentBytes; extras.onClearSent(); say("Freed ${size(n)}.") }) { Text("Free up") } },
-        dismissButton = { androidx.compose.material3.TextButton({ confirm = false }) { Text("Keep them") } })
 }
 
 @Composable

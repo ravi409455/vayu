@@ -83,7 +83,8 @@ fun AppRoot(vm: AppViewModel) {
             } else `in`.carcid.vayu.ui.ops.OpsHome(s.me, remember(s.me.id) { vm.graph.ops(s.me.id) }, vm.jobs::today, vm::openProfile)
             is Screen.Profile -> {
                 BackHandler { vm.closeProfile() }
-                ProfileScreen(s, vm::closeProfile, vm::setTheme, vm::signOut)
+                val extras = if (s.me.role == "expert") expertExtras(vm, s.me) else null
+                ProfileScreen(s, vm::closeProfile, vm::setTheme, vm::signOut, storage = extras?.let { e -> { e.storage } })
             }
         }
     }
