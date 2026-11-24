@@ -133,12 +133,14 @@ function track(job: PendingUpload, deviceOnly = false): Entry {
  *  and upload it in the background. Resolves with the id the answer should hold at once: the
  *  server's, or (with `keepOffline`, when there is no connection) a stand-in that is swapped later. */
 export async function addFile(args: { bookingId: string; fieldKey: string; kind: PendingUpload["kind"]; file: Blob; name: string; source: "camera" | "gallery"; replaces?: string; keepOffline?: boolean }): Promise<string> {
+  const mine = gen;                           // signed out while this file was being prepared: keep nothing
   await Promise.all([...discarding]);          // a retake right after Remove must not meet the old file at the limit
   const blob = args.kind === "photo" ? await shrinkImage(args.file) : args.file;
   const spec = { clientUuid: crypto.randomUUID(), bookingId: args.bookingId, fieldKey: args.fieldKey, kind: args.kind, contentType: blob.type || "application/octet-stream", sha256: await hashBlob(blob), source: args.source, blob, ...(args.replaces ? { replaces: args.replaces } : {}) };
   let assetId = "";
   try { assetId = (await initiate(spec)).id; }
   catch (e) { if (e instanceof ApiError || !args.keepOffline) throw e; }     // a refusal is shown; no connection is not
+  if (mine !== gen) throw new Error("Signed out.");
   const job: PendingUpload = { ...spec, kind: args.kind, name: args.name, assetId };
   const kept = await putJob(job).then(() => true, () => false);       // private window or a full disk: say so
   return track(job, !kept).state.assetId;

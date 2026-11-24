@@ -150,6 +150,18 @@ describe("sign-out (F-072) and resume (H-15)", () => {
     expect(transfer).toHaveBeenCalledTimes(2);              // the third never starts under the next person
   });
 
+  it("a file still being prepared when the person signs out is not kept", async () => {
+    let release!: () => void;
+    initiateFails = null;
+    const gate = new Promise<void>((r) => { release = r; });
+    const pending = addFile({ bookingId: "b1", fieldKey: "door", kind: "file", file: { size: 1, type: "image/jpeg", slice: () => ({ arrayBuffer: () => gate.then(() => new ArrayBuffer(1)) }) } as unknown as Blob, name: "a", source: "camera" });
+    _reset();
+    release();
+    await expect(pending).rejects.toThrow("Signed out.");
+    expect(db.size).toBe(0);
+    expect(states()).toEqual([]);
+  });
+
   it("resumes what the browser kept, once", async () => {
     db.set("u1", { clientUuid: "u1", bookingId: "b1", fieldKey: "door", kind: "file", contentType: "image/jpeg", name: "a", sha256: "", assetId: "m1", source: "camera", blob: new Blob(["x"]) });
     expect(await resumeUploads("b1")).toBe(1);
