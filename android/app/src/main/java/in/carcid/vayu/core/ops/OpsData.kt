@@ -50,10 +50,10 @@ class OpsData(val api: Api, private val dir: File, private val clock: () -> Long
     fun clear() { dir.listFiles()?.forEach { it.delete() } }
 }
 
-/** A list the API returns either bare or as a page ({count, results}). */
+/** A list the API returns bare, as a page ({count, results}) or as {rows} (dashboards). */
 fun JsonElement.rows(): List<JsonObject> = when (this) {
     is JsonArray -> map { it.jsonObject }
-    is JsonObject -> (this["results"] as? JsonArray)?.map { it.jsonObject }.orEmpty()
+    is JsonObject -> ((this["results"] ?: this["rows"]) as? JsonArray)?.map { it.jsonObject }.orEmpty()
     else -> emptyList()
 }
 

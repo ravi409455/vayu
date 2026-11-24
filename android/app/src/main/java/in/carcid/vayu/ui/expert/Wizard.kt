@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.expert
 
+import `in`.carcid.vayu.ui.components.VayuSheet
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -306,7 +307,7 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
         }
     }
 
-    if (pages) ModalBottomSheet(onDismissRequest = { pages = false }, containerColor = Vayu.colors.bg) {
+    if (pages) VayuSheet({ pages = false }) {
         val needed = filled.allGaps().size
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)) {
             Text("Pages", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Vayu.colors.ink, modifier = Modifier.weight(1f))

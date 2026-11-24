@@ -1,7 +1,8 @@
 package `in`.carcid.vayu.ui.expert
 
-import android.app.DatePickerDialog
-import android.app.TimePickerDialog
+import `in`.carcid.vayu.ui.components.TimePick
+import `in`.carcid.vayu.ui.components.DatePick
+import `in`.carcid.vayu.ui.components.VayuSheet
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -215,30 +216,30 @@ private fun DateInput(f: Field, value: String?, readOnly: Boolean, env: FieldEnv
         }
         return
     }
-    val ctx = LocalContext.current
     val shown = when {
         value == null -> "Choose…"
         f.type == "time" -> time12(value)
         f.type == "date" -> dayLabel(value, LocalDate.now()).let { if (it.isEmpty()) value else it }
-        else -> value.take(16).replace('T', ' ')
+        else -> whenStamp(value, LocalDate.now())
     }
-    fun pickTime(day: String?) {
-        val t = runCatching { LocalTime.parse((value ?: "").takeLast(5).take(5)) }.getOrDefault(LocalTime.now())
-        TimePickerDialog(ctx, { _, h, m ->
-            val hm = "%02d:%02d".format(h, m)
-            onChange(if (day == null) hm else stamp("datetime", java.time.LocalDateTime.parse("${day}T$hm").atZone(java.time.ZoneId.systemDefault()).toInstant()))
-        }, t.hour, t.minute, false).show()
-    }
+    // "date", "time", or for a date-and-time the day first, then the time
+    var picking by remember { mutableStateOf<String?>(null) }
+    var day by remember { mutableStateOf<String?>(null) }
+    val current = runCatching { LocalDate.parse(value!!.take(10)) }.getOrNull()
+    if (picking == "date") DatePick(current ?: LocalDate.now(),
+        // a booking can't be put in the past
+        notBefore = if (f.key == "inspection_date") LocalDate.now() else null,
+        onPick = { d -> picking = null; if (f.type == "date") onChange(d.toString()) else { day = d.toString(); picking = "time" } },
+        onDismiss = { picking = null })
+    if (picking == "time") TimePick(runCatching { LocalTime.parse(if (f.type == "time") value!!.take(5) else value!!.substring(11, 16)) }.getOrNull() ?: LocalTime.of(10, 0),
+        onPick = { t ->
+            picking = null
+            val hm = "%02d:%02d".format(t.hour, t.minute)
+            onChange(if (f.type == "time") hm else stamp("datetime", java.time.LocalDateTime.parse("${day}T$hm").atZone(java.time.ZoneId.systemDefault()).toInstant()))
+        }, onDismiss = { picking = null })
     Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(12.dp)).background(Vayu.colors.soft)
-        .clickable(enabled = !readOnly, role = Role.Button) {
-            if (f.type == "time") pickTime(null) else {
-                val d = runCatching { LocalDate.parse(value!!.take(10)) }.getOrDefault(LocalDate.now())
-                DatePickerDialog(ctx, { _, y, mo, day ->
-                    val iso = LocalDate.of(y, mo + 1, day).toString()
-                    if (f.type == "date") onChange(iso) else pickTime(iso)
-                }, d.year, d.monthValue - 1, d.dayOfMonth).show()
-            }
-        }.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        .clickable(enabled = !readOnly, role = Role.Button) { picking = if (f.type == "time") "time" else "date" }
+        .padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(shown, color = if (value == null) Vayu.colors.muted else Vayu.colors.ink, modifier = Modifier.weight(1f))
         Icon(if (f.type == "time") Icons.Outlined.AccessTime else Icons.Outlined.CalendarMonth, contentDescription = null, tint = Vayu.colors.muted)
     }
@@ -270,7 +271,7 @@ fun SingleChoice(label: String, options: List<Option>, value: String?, readOnly:
                     color = if (value == null) Vayu.colors.muted else Vayu.colors.ink, modifier = Modifier.weight(1f))
                 Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = Vayu.colors.muted)
             }
-            if (open) ModalBottomSheet(onDismissRequest = { open = false }, containerColor = Vayu.colors.bg) {
+            if (open) VayuSheet({ open = false }) {
                 Text(label, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Vayu.colors.ink,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 520.dp)) {

@@ -1,5 +1,8 @@
 package `in`.carcid.vayu.ui.components
 
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -321,4 +324,46 @@ fun ChipRow(content: @Composable RowScope.() -> Unit) {
 @Composable
 fun Page(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier.background(Vayu.colors.bg).padding(horizontal = 20.dp), content = content)
+}
+
+/**
+ * Every bottom sheet: scrolls when it's taller than the screen, and stays above the phone's
+ * buttons and the keyboard (its own buttons are never hidden).
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun VayuSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) =
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Vayu.colors.bg) {
+        Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().imePadding(), content = content)
+    }
+
+/** Pick a day in the app's own colours; days before [notBefore] can't be picked. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun DatePick(initial: java.time.LocalDate?, notBefore: java.time.LocalDate?, onPick: (java.time.LocalDate) -> Unit, onDismiss: () -> Unit) {
+    val utc = java.time.ZoneOffset.UTC
+    fun day(ms: Long) = java.time.Instant.ofEpochMilli(ms).atZone(utc).toLocalDate()
+    val state = androidx.compose.material3.rememberDatePickerState(
+        initialSelectedDateMillis = initial?.atStartOfDay(utc)?.toInstant()?.toEpochMilli(),
+        selectableDates = object : androidx.compose.material3.SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long) = notBefore == null || !day(utcTimeMillis).isBefore(notBefore)
+            override fun isSelectableYear(year: Int) = notBefore == null || year >= notBefore.year
+        })
+    val colors = androidx.compose.material3.DatePickerDefaults.colors(containerColor = Vayu.colors.bg)
+    androidx.compose.material3.DatePickerDialog(onDismissRequest = onDismiss, colors = colors,
+        confirmButton = { androidx.compose.material3.TextButton({ state.selectedDateMillis?.let { onPick(day(it)) } }, enabled = state.selectedDateMillis != null) { Text("OK") } },
+        dismissButton = { androidx.compose.material3.TextButton(onDismiss) { Text("Cancel") } }) {
+        androidx.compose.material3.DatePicker(state, colors = colors, showModeToggle = false)
+    }
+}
+
+/** Pick a time (12-hour clock) in the app's own colours. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun TimePick(initial: java.time.LocalTime, onPick: (java.time.LocalTime) -> Unit, onDismiss: () -> Unit) {
+    val state = androidx.compose.material3.rememberTimePickerState(initial.hour, initial.minute, is24Hour = false)
+    androidx.compose.material3.AlertDialog(onDismissRequest = onDismiss, containerColor = Vayu.colors.bg,
+        confirmButton = { androidx.compose.material3.TextButton({ onPick(java.time.LocalTime.of(state.hour, state.minute)) }) { Text("OK") } },
+        dismissButton = { androidx.compose.material3.TextButton(onDismiss) { Text("Cancel") } },
+        text = { androidx.compose.material3.TimePicker(state) })
 }

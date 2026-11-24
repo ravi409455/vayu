@@ -13,7 +13,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -46,14 +45,16 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     var tick by remember { mutableStateOf(0) }
     val stack = remember { mutableStateListOf<Route>() }
     var assigning by remember { mutableStateOf<Bk?>(null) }
-    val labels by produceState(Labels(), tick) { value = Labels.load(data) }
+    var labels by remember { mutableStateOf(Labels()) }
     val env = OpsEnv(me, data, labels, today, tick, refresh = { tick++ }, say = { scope.launch { snack.showSnackbar(it) } })
     var needs by remember { mutableStateOf(emptyList<Need>()) }
     var refreshing by remember { mutableStateOf(false) }
     var asked by remember { mutableStateOf(false) }
-    LaunchedEffect(tick, labels) {
+    // one load per Refresh: names first, then the lists (a second key here restarted it half-way)
+    LaunchedEffect(tick) {
         refreshing = true
-        needs = loadNeeds(env)
+        labels = Labels.load(data)
+        needs = loadNeeds(env.copy(labels = labels))
         // Refresh says what happened (a fresh answer, or the saved copy without signal)
         if (asked) {
             asked = false

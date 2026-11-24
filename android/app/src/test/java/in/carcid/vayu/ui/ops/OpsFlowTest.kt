@@ -89,8 +89,9 @@ class OpsFlowTest {
         server.on("GET bookings/$B14/media", "[]")
         server.on("GET bookings/$B14/report", """{"code":"NO_REPORT","detail":"No report has been generated yet."}""", 404)
         server.on("GET form-versions/7", Fixtures.INSPECTION)
-        server.on("GET dashboards/volume", """[{"period":"2026-W46","key":"pdi","count":12},{"period":"2026-W47","key":"pdi","count":10},
-            {"period":"2026-W48","key":"pdi","count":14},{"period":"2026-W48","key":"ev","count":4}]""")
+        // the real server's shape: {"rows": [...]}
+        server.on("GET dashboards/volume", """{"rows":[{"period":"2026-W46","key":"pdi","count":12},{"period":"2026-W47","key":"pdi","count":10},
+            {"period":"2026-W48","key":"pdi","count":14},{"period":"2026-W48","key":"ev","count":4}]}""")
         server.on("POST bookings/$B4/assign", "{}")
     }
 
@@ -140,8 +141,8 @@ class OpsFlowTest {
         waitFor("Manoj Pillai")
         compose.onNodeWithText("Manoj Pillai").performClick()
         waitFor("Two experts inspected this car")
-        compose.onNodeWithText("Waits for your choice").assertIsDisplayed()
         shot("ops_booking")
+        compose.onNodeWithText("Waits for your choice").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Compare and choose").performClick()
         waitFor("Which inspection counts?")
         compose.onNode(hasText("· good", substring = true)).performClick()            // Meera's: 4 answers, rated good
@@ -175,6 +176,7 @@ class OpsFlowTest {
         waitFor("Offline · as of")
         compose.onNodeWithText("Rohit Sharma").assertIsDisplayed()
         // the "No signal" message comes and goes; picture the screen once it has gone (same every run)
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("No signal", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         compose.waitUntil(10_000) { compose.onAllNodes(hasText("No signal", substring = true)).fetchSemanticsNodes().isEmpty() }
         shot("ops_today_offline")
     }

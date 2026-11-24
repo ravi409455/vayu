@@ -62,11 +62,21 @@ fun VayuTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Uni
     val scheme = if (dark) {
         darkColorScheme(primary = c.primary, onPrimary = c.onPrimary, background = c.bg, onBackground = c.ink,
             surface = c.bg, onSurface = c.ink, surfaceVariant = c.soft, onSurfaceVariant = c.muted,
-            outline = c.line2, outlineVariant = c.line, error = c.bad)
+            outline = c.line2, outlineVariant = c.line, error = c.bad,
+            // dialogs, menus and pickers use these; left out they fall back to Material's lavender
+            surfaceTint = c.bg, surfaceContainerLowest = c.bg, surfaceContainerLow = c.bg, surfaceContainer = c.bg,
+            surfaceContainerHigh = c.bg, surfaceContainerHighest = c.soft, secondaryContainer = c.soft,
+            onSecondaryContainer = c.ink, primaryContainer = c.soft, onPrimaryContainer = c.ink,
+            tertiaryContainer = c.soft, onTertiaryContainer = c.ink)
     } else {
         lightColorScheme(primary = c.primary, onPrimary = c.onPrimary, background = c.bg, onBackground = c.ink,
             surface = c.bg, onSurface = c.ink, surfaceVariant = c.soft, onSurfaceVariant = c.muted,
-            outline = c.line2, outlineVariant = c.line, error = c.bad)
+            outline = c.line2, outlineVariant = c.line, error = c.bad,
+            // dialogs, menus and pickers use these; left out they fall back to Material's lavender
+            surfaceTint = c.bg, surfaceContainerLowest = c.bg, surfaceContainerLow = c.bg, surfaceContainer = c.bg,
+            surfaceContainerHigh = c.bg, surfaceContainerHighest = c.soft, secondaryContainer = c.soft,
+            onSecondaryContainer = c.ink, primaryContainer = c.soft, onPrimaryContainer = c.ink,
+            tertiaryContainer = c.soft, onTertiaryContainer = c.ink)
     }
     CompositionLocalProvider(LocalVayuColors provides c) {
         MaterialTheme(colorScheme = scheme, typography = VayuTypography, content = content)

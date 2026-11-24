@@ -91,6 +91,13 @@ class Labels(val cities: Map<String, String> = emptyMap(), val cars: Map<String,
     fun type(k: String) = types.firstOrNull { it.first == k }?.second ?: k
     fun person(id: Int?) = people.firstOrNull { (it["id"] as? JsonPrimitive)?.intOrNull == id }?.let { it.s("name").ifBlank { it.s("username") } } ?: if (id == null) "" else "#$id"
     val experts get() = people.filter { it.s("role") == "expert" && it.s("is_active") != "false" }
+    fun byUsername(u: String) = people.firstOrNull { it.s("username") == u }?.s("name")?.ifBlank { null } ?: u
+
+    /** The server's "Type change to pdi rejected: expert started ev" in words, with type names. */
+    fun typeRejected(detail: String): String {
+        val m = Regex("Type change to (\\S+) rejected: expert started (\\S+)").find(detail) ?: return detail
+        return "The expert had already started a ${type(m.groupValues[2])} inspection, so your change to ${type(m.groupValues[1])} wasn't applied."
+    }
 
     companion object {
         suspend fun load(data: OpsData): Labels {
@@ -105,7 +112,7 @@ class Labels(val cities: Map<String, String> = emptyMap(), val cars: Map<String,
 }
 
 /** Everything an Ops screen needs from around it. */
-class OpsEnv(val me: Me, val data: OpsData, val labels: Labels, val today: () -> LocalDate,
+data class OpsEnv(val me: Me, val data: OpsData, val labels: Labels, val today: () -> LocalDate,
              /** Bump to reload every screen (Refresh, after a change). */
              val tick: Int, val refresh: () -> Unit, val say: (String) -> Unit) {
     fun can(p: String) = me.can(p)
@@ -185,7 +192,8 @@ fun slot(b: Bk, today: LocalDate) = listOf(dayLabel(b.date, today), time12(b.tim
 fun shown(v: Any?): String = when (v) {
     null -> "—"
     is Boolean -> if (v) "Yes" else "No"
-    is Double -> if (v % 1.0 == 0.0) "%,d".format(v.toLong()) else v.toString()
+    // ponytail: no comma under 10,000, so a year reads 2022 (47,000 km still gets one)
+    is Double -> if (v % 1.0 != 0.0) v.toString() else if (kotlin.math.abs(v) < 10_000) v.toLong().toString() else "%,d".format(v.toLong())
     is List<*> -> if (v.all { it is String && it.length == 36 }) "${v.size} file${if (v.size == 1) "" else "s"}" else v.joinToString(", ")
     is Map<*, *> -> if (v["lat"] != null) "%.4f, %.4f".format((v["lat"] as Number).toDouble(), (v["lng"] as Number).toDouble()) else v.toString()
     else -> v.toString()

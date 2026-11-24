@@ -1,5 +1,8 @@
 package `in`.carcid.vayu.ui.ops
 
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.async
+import `in`.carcid.vayu.ui.components.VayuSheet
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -228,8 +231,14 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
                     BookingRow(b, listOf(b.code, env.labels.person(b.expert)).filter { it.isNotBlank() }.joinToString(" · "), t, onOpen = { onOpen(b.id) })
                 }
             }
-            if (first != null && rows.isEmpty()) item {
-                Text(if (term.isNotEmpty()) "Nothing matches \"$term\"." else "No bookings here.", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp))
+            if (first == null) item { Text(if (term.isNotEmpty()) "Searching…" else "Loading…", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
+            else if (rows.isEmpty()) item {
+                Column(Modifier.padding(vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(if (term.isNotEmpty()) "Nothing matches \"$term\" ${listOf("today", "from tomorrow on", "")[view]}.".replace(" .", ".")
+                        else "No bookings here.", color = Vayu.colors.muted)
+                    // a search on Today or Upcoming misses other days: one tap widens it
+                    if (term.isNotEmpty() && view != 2) SoftButton("Search all dates", { view = 2 }, Modifier.fillMaxWidth())
+                }
             }
             if (rows.size < total) item {
                 SoftButton("Show more (${total - rows.size} left)", { pages++ }, Modifier.fillMaxWidth().padding(vertical = 12.dp))
@@ -238,7 +247,7 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
         }
         bottomBar()
     }
-    if (sheet) ModalBottomSheet(onDismissRequest = { sheet = false }, containerColor = Vayu.colors.bg) {
+    if (sheet) VayuSheet({ sheet = false }) {
         var draft by remember { mutableStateOf(filters) }
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Filter", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Vayu.colors.ink)
@@ -298,16 +307,18 @@ suspend fun loadNeeds(env: OpsEnv): List<Need> {
     val t = env.today()
     // a failed list counts as empty; a cancelled load (a newer one started) must stay cancelled
     suspend fun rows(path: String) = try { env.data.load(path).data.rows() } catch (e: `in`.carcid.vayu.core.api.ApiError) { emptyList() }
-    val conflicts = rows("bookings?problem=conflict").map(::Bk)
-    val open = rows("bookings?stage=draft&date_from=$t&date_to=$t&order=schedule").map(::Bk)
-    val stuck = rows("problems/stuck-uploads")
-    val pdf = rows("problems/reports")
-    val types = rows("bookings?problem=type_change").map(::Bk)
+    // all five at once: on a weak signal the wait is the slowest one, not the sum
+    val (c, o, st, pd, ty) = kotlinx.coroutines.coroutineScope {
+        listOf("bookings?problem=conflict", "bookings?stage=draft&date_from=$t&date_to=$t&order=schedule", "problems/stuck-uploads",
+            "problems/reports", "bookings?problem=type_change").map { async { rows(it) } }.awaitAll()
+    }
+    val conflicts = c.map(::Bk); val open = o.map(::Bk); val stuck = st; val pdf = pd; val types = ty.map(::Bk)
     return conflicts.map { Need("c" + it.id, it.id, Tone.BAD, "Two experts inspected ${it.code}", "${it.customer} · choose which counts") } +
         open.map { Need("a" + it.id, it.id, Tone.WARN, "${it.code} has no expert", "Today at ${time12(it.time)} · ${it.customer}") } +
-        stuck.map { Need("s" + it.s("id"), it.s("booking"), Tone.BAD, "Photos stuck: ${it.s("booking_id")}", "${it.s("expert")} · ${it.s("field_key")}") } +
+        stuck.map { Need("s" + it.s("id"), it.s("booking"), Tone.BAD, "Photos stuck: ${it.s("booking_id")}",
+            "${env.labels.byUsername(it.s("expert"))} · ${it.s("field_key").replace('_', ' ').replaceFirstChar { c -> c.uppercase() }}") } +
         pdf.map { Need("p" + it.s("booking"), it.s("booking"), if (it.s("stale") == "true") Tone.WARN else Tone.BAD,
             if (it.s("stale") == "true") "Report out of date: ${it.s("booking_id")}" else "Report failed for ${it.s("booking_id")}",
             it.s("error").ifBlank { "Answers changed after the PDF was made" }) } +
-        types.map { Need("t" + it.id, it.id, Tone.WARN, "Your type change wasn't applied", "${it.code} · ${it.typeRejected ?: "the expert started another type"}") }
+        types.map { Need("t" + it.id, it.id, Tone.WARN, "Your type change wasn't applied", "${it.code} · ${it.typeRejected?.let(env.labels::typeRejected) ?: "The expert started another type"}") }
 }

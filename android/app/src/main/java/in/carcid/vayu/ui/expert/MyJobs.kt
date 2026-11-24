@@ -127,6 +127,12 @@ fun time12(hhmm: String): String {
     return "${(h + 11) % 12 + 1}:${m.toString().padStart(2, '0')} ${if (h >= 12) "pm" else "am"}"
 }
 
+/** A server time in words, on this phone's clock: "Today, 2:14 pm", "Mon 23 Nov, 9:15 am". */
+fun whenStamp(iso: String, today: java.time.LocalDate): String = runCatching {
+    val t = java.time.OffsetDateTime.parse(iso).atZoneSameInstant(java.time.ZoneId.systemDefault())
+    "${dayLabel(t.toLocalDate().toString(), today)}, ${time12("%02d:%02d".format(t.hour, t.minute))}"
+}.getOrDefault(iso)
+
 /** What the expert's home needs beyond the job list: drafts, notices, and the inspection screens. */
 class ExpertExtras(
     val drafts: Map<String, Draft> = emptyMap(),

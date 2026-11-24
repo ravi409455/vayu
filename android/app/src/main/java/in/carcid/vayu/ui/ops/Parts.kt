@@ -1,5 +1,12 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.ui.expert.whenStamp
+import `in`.carcid.vayu.ui.expert.time12
+import `in`.carcid.vayu.ui.expert.dayLabel
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.onGloballyPositioned
+import `in`.carcid.vayu.ui.components.VayuSheet
 import android.content.Intent
 import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
@@ -89,6 +96,7 @@ import `in`.carcid.vayu.ui.theme.Vayu
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -153,7 +161,7 @@ fun AnswersScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
             Text("Tap an answer to change it. Ratings and Key Checks update when you save.", color = Vayu.colors.muted, fontSize = 13.sp,
                 modifier = Modifier.padding(vertical = 16.dp))
         }
-        if (pages) ModalBottomSheet(onDismissRequest = { pages = false }, containerColor = Vayu.colors.bg) {
+        if (pages) VayuSheet({ pages = false }) {
             steps.forEachIndexed { i, (_, p) ->
                 Text("${i + 1}. ${p.title}", color = Vayu.colors.ink, fontWeight = if (i == page) FontWeight.Bold else FontWeight.Normal,
                     modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { page = i; pages = false }.padding(horizontal = 20.dp, vertical = 14.dp))
@@ -163,7 +171,7 @@ fun AnswersScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
         editing?.let { (p, f) ->
             var value by remember(f.key) { mutableStateOf(data.answers[p]?.get(f.key)) }
             var error by remember(f.key) { mutableStateOf<String?>(null) }
-            ModalBottomSheet(onDismissRequest = { editing = null }, containerColor = Vayu.colors.bg) {
+            VayuSheet({ editing = null }) {
                 Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
                     Text(pg.title, fontSize = 13.sp, color = Vayu.colors.muted)
                     Question(f, value, filled.required(p, f.key), false, error ?: answerProblem(f, value), false, opsFieldEnv(env)) { value = it; error = null }
@@ -215,6 +223,11 @@ private fun answerText(f: Field, v: Any?, env: OpsEnv): String = when (f.type) {
     "user_picker" -> (v as? Number)?.let { env.labels.person(it.toInt()) } ?: "—"
     "number" -> shown(v) + ((f.config["unit"] as? String)?.let { " $it" } ?: "")
     "currency" -> if (v == null) "—" else "₹" + shown(v)
+    "datetime" -> (v as? String)?.let { whenStamp(it, env.today()) } ?: "—"
+    "date" -> (v as? String)?.let { dayLabel(it, env.today()).ifBlank { it } } ?: "—"
+    "time" -> (v as? String)?.let { time12(it).ifBlank { it } } ?: "—"
+    "photo", "video", "file" -> (v as? List<*>)?.size?.let { n -> "$n ${if (f.type == "file") "file" else f.type}${if (n == 1) "" else "s"}" } ?: "—"
+    "signature" -> if (v == null) "—" else "Signed"
     else -> shown(v)
 }
 
@@ -302,12 +315,20 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             OfflineNote(list.value)
             Text("${items.count { it.s("kind") == "photo" }} photos · ${items.count { it.s("kind") == "video" }} videos", color = Vayu.colors.muted)
+            val filled = data?.filled(env.today().toString())
             fields.groupBy { it.second }.forEach { (section, fs) ->
                 val here = items.filter { m -> fs.any { it.third.key == m.s("field_key") } }
+                val canAdd = env.can("media.manage") && online && data?.insp != null && fs.any { (p, _, f) ->
+                    f.config["ops_upload"] != false && filled?.visible(p, f.key) != false && here.count { it.s("field_key") == f.key } < f.maxCount }
+                // a section with nothing to show or add is left out
+                if (here.isEmpty() && !canAdd) return@forEach
                 Section(section)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     here.forEach { m -> MediaTile(env, m) { open = m } }
-                    if (env.can("media.manage") && online && data?.insp != null) fs.forEach { (p, _, f) ->
+                    // an add tile only where Ops may add, the field shows in this inspection, and it has room
+                    if (env.can("media.manage") && online && data?.insp != null) fs.filter { (p, _, f) ->
+                        f.config["ops_upload"] != false && filled?.visible(p, f.key) != false && here.count { it.s("field_key") == f.key } < f.maxCount
+                    }.forEach { (p, _, f) ->
                         Box(Modifier.size(76.dp).clip(RoundedCornerShape(12.dp)).background(Vayu.colors.soft)
                             .clickable(role = Role.Button) { adding = p to f; picker.launch(arrayOf(if (f.type == "video") "video/*" else "image/*", "application/pdf")) }
                             .semantics { contentDescription = "Add to ${f.label}" }, contentAlignment = Alignment.Center) {
@@ -394,31 +415,41 @@ fun RatingsScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             if (data.offline) OfflineNote(rememberLoad(env, "bookings/$id").value)
             val overall = s.o("overall")
-            Section("Overall · ${overall.s("word").ifBlank { "—" }}" + if (overall.s("overridden") == "true") " (set by you)" else "")
-            ChoiceRow(listOf("Excellent", "Good", "Average", "Bad").map { it to false },
-                overall.s("word").takeIf { overall.s("overridden") == "true" }?.replaceFirstChar { it.uppercase() }) { w ->
+            // the current value is always the one picked; "Use suggested" drops your override
+            @Composable fun Reset(text: String, body: () -> JsonObject) {
+                if (edit) Text(text, color = Vayu.colors.brand, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { send(body()) }.padding(vertical = 6.dp))
+            }
+            Section("Overall")
+            ChoiceRow(listOf("Excellent", "Good", "Average", "Bad").map { it to false }, overall.s("word").replaceFirstChar { it.uppercase() }) { w ->
                 if (edit) send(buildJsonObject { put("overall", w.lowercase()) })
             }
-            Text("Suggested: ${overall.s("suggested_word").ifBlank { "—" }}", color = Vayu.colors.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+            val suggested = overall.s("suggested_word").replaceFirstChar { it.uppercase() }.ifBlank { "—" }
+            if (overall.s("overridden") == "true") Reset("Set by you · use suggested ($suggested)") { buildJsonObject { put("overall", JsonNull) } }
+            else Text("Suggested: $suggested", color = Vayu.colors.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
             val cats = data.raw["inspection"]?.o("rating_config")?.a("categories").orEmpty().map { it as JsonObject }
             if (cats.isNotEmpty()) Section("Ratings")
             cats.forEach { c ->
                 val r = s.o("ratings").o(c.s("key"))
-                Text(c.s("label") + if (r.s("overridden") == "true") " · set by you" else "  (suggested ${r.s("suggested").ifBlank { "—" }})",
+                val mine = r.s("overridden") == "true"
+                Text(c.s("label") + if (mine) " · set by you" else "  (suggested ${r.s("suggested").ifBlank { "—" }})",
                     fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp))
                 ChoiceRow((1..5).map { "$it" to false }, r.s("value").takeIf { it.isNotBlank() }?.substringBefore(".")) { n ->
                     if (edit) send(buildJsonObject { put("ratings", buildJsonObject { put(c.s("key"), n.toInt()) }) })
                 }
+                if (mine) Reset("Use suggested (${r.s("suggested").ifBlank { "—" }})") { buildJsonObject { put("ratings", buildJsonObject { put(c.s("key"), JsonNull) }) } }
             }
             val checks = data.trees["inspection"]?.fields.orEmpty().filter { it.type == "derived" }
             if (checks.isNotEmpty()) Section("Key Checks")
             checks.forEach { f ->
                 val yes = f.config["true_label"] as? String ?: "Yes"; val no = f.config["false_label"] as? String ?: "No"
                 val now = s.o("derived").s(f.key) == "true"
-                Text("${f.label} · now ${if (now) yes else no}", fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp))
-                ChoiceRow(listOf(yes to false, no to false), insp.o("overrides").o("derived").s(f.key).takeIf { it.isNotBlank() }?.let { if (it == "true") yes else no }) { v ->
+                val mine = insp.o("overrides").o("derived").s(f.key).isNotBlank()
+                Text(f.label + if (mine) " · set by you" else "", fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp))
+                ChoiceRow(listOf(yes to false, no to false), if (now) yes else no) { v ->
                     if (edit) send(buildJsonObject { put("derived", buildJsonObject { put(f.key, v == yes) }) })
                 }
+                if (mine) Reset("Use the answers' result") { buildJsonObject { put("derived", buildJsonObject { put(f.key, JsonNull) }) } }
             }
             Section("Payment")
             val end = data.answers["end"].orEmpty()
@@ -463,7 +494,7 @@ fun ReportScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
                 rep == null -> Text(if (b?.stage == "completed") "The report is being made." else "It's made automatically when the booking is Completed.",
                     color = Vayu.colors.muted)
                 else -> {
-                    Text(when (rep.s("status")) { "ready" -> "Ready" + (rep.s("generated_at").takeIf { it.isNotBlank() }?.let { " · made ${shortStamp(it)}" } ?: "")
+                    Text(when (rep.s("status")) { "ready" -> "Ready" + (rep.s("generated_at").takeIf { it.isNotBlank() }?.let { " · made ${whenStamp(it, env.today()).replaceFirstChar { c -> c.lowercase() }}" } ?: "")
                         else -> rep.s("status").replaceFirstChar { it.uppercase() } }, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Vayu.colors.ink)
                     if (rep.s("stale") == "true") Banner("Out of date: answers changed after this PDF was made. Make it again to include them.", Tone.WARN, {})
                     if (rep.s("error").isNotBlank()) Banner("Problem: ${rep.s("error")}", Tone.BAD, {})
@@ -498,7 +529,7 @@ fun HistoryScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
             rows.forEach { r ->
                 Column(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 8.dp)) {
                     Text(activityText(r, env), color = Vayu.colors.ink)
-                    Text(r.s("at").take(16).replace('T', ' '), fontSize = 13.sp, color = Vayu.colors.muted)
+                    Text(whenStamp(r.s("at"), env.today()), fontSize = 13.sp, color = Vayu.colors.muted)
                 }
                 HorizontalDivider(color = Vayu.colors.line)
             }
@@ -520,7 +551,8 @@ fun activityText(r: JsonObject, env: OpsEnv): String {
         new("stage") == "completed" -> "Completed: every file uploaded"
         new("stage") == "submitted" -> "Submitted by $by"
         new("stage") == "in_progress" -> "Started by $by"
-        new("stage") == "cancelled" -> "Cancelled by $by"
+        new("stage") == "cancelled" -> "Cancelled by $by" + (new("cancel_reason")?.takeIf { it != "null" && it.isNotBlank() }
+            ?.let { " · " + it.replace('_', ' ').replaceFirstChar { c -> c.uppercase() } } ?: "")
         new("stage") == "assigned" && old("stage") == "in_progress" -> "Force-released by $by"
         c["assigned_expert"] != null -> "${if (old("assigned_expert") != null && old("assigned_expert") != "null") "Reassigned" else "Assigned"} to ${env.labels.person(new("assigned_expert")?.toIntOrNull())} by $by"
         c["inspection_date"] != null || c["inspection_time"] != null -> "Rescheduled by $by"
@@ -545,6 +577,9 @@ fun BookingFormScreen(env: OpsEnv, id: String?, onBack: () -> Unit, onSaved: (St
     var changed by remember(existing?.rowVersion) { mutableStateOf(setOf<String>()) }
     var errors by remember { mutableStateOf(mapOf<String, String>()) }
     var busy by remember { mutableStateOf(false) }
+    val scroll = rememberScrollState()
+    val where = remember { mutableMapOf<String, Int>() }
+    var refused by remember { mutableStateOf(0) }
     BackHandler(onBack = onBack)
     fun save(assign: Boolean) = scope.launch {
         busy = true
@@ -556,6 +591,7 @@ fun BookingFormScreen(env: OpsEnv, id: String?, onBack: () -> Unit, onSaved: (St
         } catch (e: ApiError) {
             errors = (e.extra["errors"] as? JsonObject)?.mapValues { (it.value as? JsonPrimitive)?.content ?: "Check this." } ?: emptyMap()
             if (e.code == "DUPLICATE_BOOKING_ID") errors = errors + ("booking_id" to e.message)
+            refused++
             if (e.code.startsWith("STALE")) { env.refresh(); env.say("Someone else saved this booking meanwhile; their version is loaded.") }
             else if (errors.isEmpty()) env.say(e.message)
         } finally { busy = false }
@@ -565,24 +601,40 @@ fun BookingFormScreen(env: OpsEnv, id: String?, onBack: () -> Unit, onSaved: (St
         if (tree == null) { Text("Loading the booking form…", color = Vayu.colors.muted, modifier = Modifier.padding(20.dp)); return }
         // the booking form's own answers are "booking" in its rules
         val filled = Filled(mapOf("booking" to tree), emptyMap(), values, env.today().toString())
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+        // after a refused save: say so and bring the first marked question into view
+        LaunchedEffect(refused) {
+            if (refused == 0 || errors.isEmpty()) return@LaunchedEffect
+            env.say(if (errors.size == 1) "Fix the question marked in red." else "Fix the ${errors.size} questions marked in red.")
+            errors.keys.mapNotNull { where[it] }.minOrNull()?.let { scroll.animateScrollTo(it) }
+        }
+        Column(Modifier.weight(1f).verticalScroll(scroll).padding(horizontal = 20.dp)) {
             val fe = opsFieldEnv(env, lists)
-            tree.pages.forEach { p -> p.sections.forEach { s ->
-                val fs = s.fields.filter { it.answerable && filled.visible("booking", it.key) && it.key != "assigned_expert" && !(id != null && it.key == "inspection_type") }
-                if (fs.isNotEmpty()) Section(s.title)
+            val shown = tree.pages.flatMap { it.sections }.map { s ->
+                s to s.fields.filter { it.answerable && filled.visible("booking", it.key) && it.key != "assigned_expert" && !(id != null && it.key == "inspection_type") }
+            }.filter { it.second.isNotEmpty() }
+            shown.forEach { (s, fs) ->
+                // a lone section needs no heading ("Section 1")
+                if (shown.size > 1) Section(s.title)
                 fs.forEach { f ->
-                    Question(f, values[f.key], filled.required("booking", f.key), false,
-                        errors[f.key]?.let { refusalText(it) } ?: answerProblem(f, values[f.key]), false, fe) { v ->
-                        values = values + (f.key to v); changed = changed + f.key; errors = errors - f.key
+                    Box(Modifier.onGloballyPositioned { where[f.key] = it.positionInParent().y.toInt() }) {
+                        Question(f, values[f.key], filled.required("booking", f.key), false,
+                            errors[f.key]?.let { refusalText(it) } ?: answerProblem(f, values[f.key]), false, fe) { v ->
+                            values = values + (f.key to v); changed = changed + f.key; errors = errors - f.key
+                        }
                     }
                 }
-            } }
+            }
             Spacer(Modifier.height(16.dp))
         }
         Row(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            SoftButton("Save", { save(false) }, Modifier.weight(1f))
-            if (id == null && env.can("bookings.assign")) PrimaryButton(if (busy) "Saving…" else "Save and assign", { save(true) }, Modifier.weight(1f), enabled = !busy)
-            else if (id != null) PrimaryButton(if (busy) "Saving…" else "Save changes", { save(false) }, Modifier.weight(1f), enabled = !busy && changed.isNotEmpty())
+            when {
+                id != null -> PrimaryButton(if (busy) "Saving…" else "Save changes", { save(false) }, Modifier.weight(1f), enabled = !busy && changed.isNotEmpty())
+                env.can("bookings.assign") -> {
+                    SoftButton("Save", { save(false) }, Modifier.weight(1f))
+                    PrimaryButton(if (busy) "Saving…" else "Save and assign", { save(true) }, Modifier.weight(1f), enabled = !busy)
+                }
+                else -> PrimaryButton(if (busy) "Saving…" else "Save", { save(false) }, Modifier.weight(1f), enabled = !busy)
+            }
         }
     }
 }
