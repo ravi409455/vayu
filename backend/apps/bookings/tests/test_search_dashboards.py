@@ -137,6 +137,35 @@ def test_csv_export_matches_the_table(many):
     assert r.status_code == 200 and r["Content-Type"].startswith("text/csv")
     parsed = list(csv.DictReader(io.StringIO(r.content.decode())))
     assert [{"period": p["period"], "key": p["key"], "count": int(p["count"])} for p in parsed] == rows
+    assert {p["key"]: p["label"] for p in parsed} == {"ev": "EV", "pdi": "PDI", "used_car": "USED_CAR"}
+    assert r["Content-Disposition"] == 'attachment; filename="bookings-by-type.csv"'
+
+
+def test_csv_names_the_range_and_says_who_or_where(many):
+    r = many.ops.get("/api/v1/dashboards/volume?group=month&by=lead_owner&export=csv"
+                     "&date_from=2026-10-01&date_to=2026-10-31")
+    assert r["Content-Disposition"] == (
+        'attachment; filename="bookings-by-lead-owner_2026-10-01_to_2026-10-31.csv"')
+    assert {p["label"] for p in csv.DictReader(io.StringIO(r.content.decode()))} == {"Not set"}
+    r = many.ops.get("/api/v1/dashboards/volume?group=day&by=city&export=csv&date_to=2026-10-14")
+    assert r["Content-Disposition"].endswith('filename="bookings-by-city_to_2026-10-14.csv"')
+    assert {p["label"] for p in csv.DictReader(io.StringIO(r.content.decode()))} == {"Delhi"}
+
+
+def test_key_labels_for_every_split(many):
+    from apps.accounts.models import User
+    from apps.bookings.dashboards import key_labels
+
+    ops = User.objects.order_by("pk").first()
+    assert ops is not None
+    assert key_labels("stage", {"draft", "odd", ""}) == {"draft": "Not assigned", "odd": "odd"}
+    assert key_labels("type", {"ev", "gone"}) == {"ev": "EV", "gone": "gone"}
+    assert key_labels("city", {"delhi", "atlantis"}) == {"delhi": "Delhi", "atlantis": "atlantis"}
+    assert key_labels("expert", {str(ops.pk), "abc", "99999"}) == {
+        str(ops.pk): ops.name or ops.username, "abc": "abc", "99999": "99999"}
+    ops.name = ""
+    ops.save()
+    assert key_labels("lead_owner", {str(ops.pk)}) == {str(ops.pk): ops.username}
 
 
 def test_dashboards_need_permissions_and_csv_needs_export(many):
@@ -237,6 +266,13 @@ def _visit(b, started, submitted, stage):
     Inspection.objects.create(booking=booking, expert=booking.assigned_expert or _expert(),
                               form_version=FormVersion.objects.filter(status="published")[0],
                               status="submitted", client_started_at=started, submitted_at=submitted)
+    from apps.bookings import timing
+
+    booking.refresh_from_db()
+    booking.started_at = started               # the server clock, as Start would stamp it
+    timing.stamp_late(booking)
+    timing.stamp_duration(booking, submitted)
+    booking.save()
 
 
 def _expert():
@@ -264,7 +300,8 @@ def test_summary_counts_rates_time_on_site_and_on_time(many):
     assert r.status_code == 200, r.json()
     p = r.json()["period"]
     assert p == {"bookings": 3, "completed": 2, "cancelled": 1, "completion_rate": 100.0,
-                 "avg_minutes": 60, "on_time": 50}
+                 "avg_minutes": 60, "on_time": 50, "late": 1, "late_pct": 50,
+                 "quick": 1, "quick_pct": 50}       # VI20002 (EV): 30 min < 40
     prev = r.json()["previous"]                                         # September: nothing
     assert prev["bookings"] == 0 and prev["completion_rate"] is None and prev["avg_minutes"] is None
     row = r.json()["by_expert"][0]
@@ -283,8 +320,8 @@ def test_summary_defaults_to_the_last_30_days_and_checks_dates(many):
 
 
 def test_a_booking_without_a_time_is_left_out_of_on_time(many):
-    from apps.bookings.dashboards import _slot
     from apps.bookings.models import Booking
+    from apps.bookings.timing import slot as _slot
 
     b = Booking.objects.get(booking_id="SA10001")
     b.answers = {**b.answers, "inspection_time": None}

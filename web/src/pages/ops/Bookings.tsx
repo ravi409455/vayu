@@ -1,5 +1,5 @@
 import { LayoutGrid, List, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type Page } from "../../api/client";
@@ -9,6 +9,7 @@ import type { Booking, MasterListItem, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { addDays, fmtSlot, today } from "../../lib/format";
 import { loadJSON, saveJSON } from "../../lib/store";
+import { fmtMinutes } from "../../lib/timing";
 import { ExpertCell } from "../../ui/ExpertCell";
 import { Confirm, Empty, PageHeader, Pill, useToast } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
@@ -19,7 +20,7 @@ export function canDelete(role: string, stage: string): boolean {
   return role === "admin" || stage === "draft";
 }
 
-export type View = "today" | "unassigned" | "in_progress" | "uploading" | "upcoming" | "completed" | "all";
+export type View = "today" | "unassigned" | "in_progress" | "uploading" | "upcoming" | "completed" | "late" | "quick" | "all";
 export type Filters = { search: string; city: string; expert: string; type: string; stage: string; date_from: string; date_to: string };
 export const EMPTY: Filters = { search: "", city: "", expert: "", type: "", stage: "", date_from: "", date_to: "" };
 
@@ -33,27 +34,36 @@ export function viewQuery(view: View, now = new Date()): Record<string, string> 
     case "uploading": return { stage: "submitted" };
     case "upcoming": return { date_from: addDays(t, 1), order: "schedule" };
     case "completed": return { stage: "completed" };
+    case "late": return { timing: "late" };           // Admin / Ops only (the limits are on the Settings page)
+    case "quick": return { timing: "quick" };
     default: return {};
   }
 }
 
-const VIEWS: { id: View; label: string; counted?: boolean }[] = [
+const VIEWS: { id: View; label: string; counted?: boolean; perm?: string }[] = [
   { id: "today", label: "Today", counted: true }, { id: "unassigned", label: "Unassigned", counted: true },
   { id: "in_progress", label: "In progress", counted: true }, { id: "uploading", label: "Uploading", counted: true },
-  { id: "upcoming", label: "Upcoming" }, { id: "completed", label: "Completed" }, { id: "all", label: "All" },
+  { id: "upcoming", label: "Upcoming" }, { id: "completed", label: "Completed" },
+  { id: "late", label: "Started late", counted: true, perm: "bookings.review_timing" },
+  { id: "quick", label: "Too quick", counted: true, perm: "bookings.review_timing" }, { id: "all", label: "All" },
 ];
+/** The red pills a row gets for a late start or a too-quick job ("Late 40 min", "Too quick 25 min"). */
+export function timingPills(b: Booking): string[] {
+  const t = b.timing;
+  return t ? [...(t.late ? [`Late ${fmtMinutes(t.late_minutes)}`] : []), ...(t.quick ? [`Too quick ${fmtMinutes(t.duration_minutes)}`] : [])] : [];
+}
 const BOARD: string[] = ["draft", "assigned", "in_progress", "submitted", "completed"];
 
 /** How many bookings a query matches: the same question the list asks, so a number and its list agree. */
-export function useCount(query: Record<string, string>) {
-  return useQuery({ queryKey: ["bookings-page", "count", query], staleTime: 30_000, queryFn: () => api<Page<Booking>>("bookings", { query }) }).data?.count;
+export function useCount(query: Record<string, string>, enabled = true) {
+  return useQuery({ queryKey: ["bookings-page", "count", query], enabled, staleTime: 30_000, queryFn: () => api<Page<Booking>>("bookings", { query }) }).data?.count;
 }
 
 function ViewTab({ v, on, onPick, own }: { v: (typeof VIEWS)[number]; on: boolean; onPick: () => void; own: Record<string, string> }) {
   const n = useCount({ ...own, ...viewQuery(v.id) });          // the person's filters apply to the numbers too
   return (
     <button role="tab" aria-selected={on} className={on ? "on" : ""} onClick={onPick}>
-      {v.label}{v.counted && n !== undefined && <span className={`count-pill${v.id === "unassigned" && n > 0 ? " warn" : ""}`}>{n}</span>}
+      {v.label}{v.counted && n !== undefined && <span className={`count-pill${(v.id === "unassigned" || v.id === "late" || v.id === "quick") && n > 0 ? " warn" : ""}`}>{n}</span>}
     </button>
   );
 }
@@ -68,7 +78,7 @@ export function Bookings() {
   const view = (sp.get("view") as View | null) ?? (sp.get("search") ? "all" : "today");
   const key = `vayu:bookings:${me?.id}`;
   // Arriving from a number on Today (?all=1) shows exactly what that number counted: saved filters are set aside.
-  const [f, setF] = useState<Filters>(() => ({ ...(sp.get("all") ? EMPTY : loadJSON<Filters>(key, EMPTY)), search: sp.get("search") ?? "", ...(sp.get("stage") ? { stage: sp.get("stage")! } : {}) }));
+  const [f, setF] = useState<Filters>(() => ({ ...(sp.get("all") ? EMPTY : loadJSON<Filters>(key, EMPTY)), search: sp.get("search") ?? "", ...Object.fromEntries((["stage", "date_from", "date_to"] as const).filter((k) => sp.get(k)).map((k) => [k, sp.get(k)!])) }));
   const [layout, setLayout] = useState<"list" | "board">(() => loadJSON(`${key}:layout`, "list"));
   const [page, setPage] = useState(1);
   const [acting, setActing] = useState<{ kind: "assign" | "reschedule" | "cancel"; b: Booking } | null>(null);
@@ -118,7 +128,7 @@ export function Bookings() {
         {can("bookings.create") && <button className="primary" onClick={() => nav("/booking/new")}><Plus size={15} aria-hidden /> New booking</button>}
       </PageHeader>
       <div className="tabs" role="tablist" aria-label="Views">
-        {VIEWS.map((v) => <ViewTab key={v.id} v={v} on={view === v.id} onPick={() => pick(v.id)} own={own} />)}
+        {VIEWS.filter((v) => !v.perm || can(v.perm)).map((v) => <ViewTab key={v.id} v={v} on={view === v.id} onPick={() => pick(v.id)} own={own} />)}
       </div>
       <div className="filters">
         <input aria-label="Filter bookings" className="filter-search" placeholder="Filter: booking ID, customer, phone, chassis" value={f.search} onChange={(e) => { set({ search: e.target.value }); if (e.target.value && view !== "all") setSp({ view: "all" }); }} />
@@ -126,7 +136,7 @@ export function Bookings() {
         <select aria-label="Type" className={f.type ? "set" : ""} value={f.type} onChange={(e) => set({ type: e.target.value })}><option value="">Type</option>{types.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select>
         <select aria-label="Expert" className={f.expert ? "set" : ""} value={f.expert} onChange={(e) => set({ expert: e.target.value })}><option value="">Expert</option>{(experts.data ?? []).map((u) => <option key={u.id} value={u.id}>{u.name || u.username}</option>)}</select>
         {view === "all" && <select aria-label="Stage" className={f.stage ? "set" : ""} value={f.stage} onChange={(e) => set({ stage: e.target.value })}><option value="">Stage</option>{Object.entries(STAGE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
-        {(view === "all" || view === "completed") && <label className="date-range"><span>From</span><input aria-label="From" type="date" value={f.date_from} onChange={(e) => set({ date_from: e.target.value })} /><span>to</span><input aria-label="To" type="date" value={f.date_to} onChange={(e) => set({ date_to: e.target.value })} /></label>}
+        {(view === "all" || view === "completed" || view === "late" || view === "quick") && <label className="date-range"><span>From</span><input aria-label="From" type="date" value={f.date_from} onChange={(e) => set({ date_from: e.target.value })} /><span>to</span><input aria-label="To" type="date" value={f.date_to} onChange={(e) => set({ date_to: e.target.value })} /></label>}
         {filtered && <button className="link" onClick={() => setF({ ...EMPTY, search: f.search })}>Clear filters</button>}
       </div>
       {layout === "list" ? (
@@ -140,7 +150,7 @@ export function Bookings() {
                 <td className="nowrap">{fmtSlot(b.answers.inspection_date, b.answers.inspection_time) || "—"}</td>
                 <td className="opt">{city(b.answers.city)}</td>
                 <td>{assignBtn(b)}</td>
-                <td><Pill tone={STAGE_TONE[b.stage]}>{STAGE_LABEL[b.stage] ?? b.stage}</Pill>{b.conflict && <> <Pill tone="bad">Conflict</Pill></>}</td>
+                <td><Pill tone={STAGE_TONE[b.stage]}>{STAGE_LABEL[b.stage] ?? b.stage}</Pill>{b.conflict && <> <Pill tone="bad">Conflict</Pill></>}{timingPills(b).map((t) => <Fragment key={t}> <Pill tone="bad">{t}</Pill></Fragment>)}</td>
                 <td style={{ textAlign: "right" }}><MoreMenu label={`Actions for ${b.booking_id}`} items={menu(b)} /></td>
               </tr>))}</tbody>
           </table>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { api } from "../../api/client";
 import { useList } from "../../api/hooks";
 import { STAGE_LABEL, useLabels, useTypeLabels } from "../../api/labels";
@@ -11,7 +12,8 @@ import { Empty, PageHeader } from "../../ui/kit";
 import { StackedBars } from "../../ui/StackedBars";
 
 type Row = { period: string; key: string; count: number };
-type Stats = { bookings: number; completed: number; cancelled: number; completion_rate: number | null; avg_minutes: number | null; on_time: number | null };
+type Stats = { bookings: number; completed: number; cancelled: number; completion_rate: number | null; avg_minutes: number | null; on_time: number | null;
+  late: number; late_pct: number | null; quick: number; quick_pct: number | null };
 type Summary = { date_from: string; date_to: string; period: Stats; previous: Stats; by_expert: (Stats & { expert: number })[] };
 const BY = { type: "Type", city: "City", expert: "Expert", stage: "Stage", lead_owner: "Lead owner" } as const;
 type Preset = "today" | "7" | "30" | "month" | "custom";
@@ -55,10 +57,13 @@ export function delta(now: number | null, before: number | null, kind: "count" |
   return { text: `${d >= 0 ? "+" : "−"}${Math.abs(d)}%`, good: d === 0 ? null : (d > 0) === higherIsBetter };
 }
 
+/** "3 (12%)": how many, and the share of the jobs that could be measured. */
+const flagged = (n: number, pct: number | null) => (pct === null ? String(n) : `${n} (${pct}%)`);
 const mins = (m: number | null) => (m === null ? "—" : m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} m` : `${m} m`);
 
 export function Dashboards() {
   const { can } = useAuth();
+  const seesTiming = can("bookings.review_timing");
   const [preset, setPreset] = useState<Preset>("30");
   const [custom, setCustom] = useState<[string, string]>(presetRange("30"));
   const [by, setBy] = useState<keyof typeof BY>("type");
@@ -85,6 +90,10 @@ export function Dashboards() {
     { label: "Average time on site", value: mins(s.period.avg_minutes), d: delta(s.period.avg_minutes, s.previous.avg_minutes, "minutes", false) },
     { label: "Started on time", value: s.period.on_time === null ? "—" : `${s.period.on_time}%`, d: delta(s.period.on_time, s.previous.on_time, "pct") },
     { label: "Cancelled", value: String(s.period.cancelled), d: delta(s.period.cancelled, s.previous.cancelled, "count", false) },
+    ...(seesTiming ? [
+      { label: "Started late", value: flagged(s.period.late, s.period.late_pct), d: delta(s.period.late, s.previous.late, "count", false), to: `/bookings?view=late&date_from=${from}&date_to=${to}&all=1` },
+      { label: "Too quick", value: flagged(s.period.quick, s.period.quick_pct), d: delta(s.period.quick, s.previous.quick, "count", false), to: `/bookings?view=quick&date_from=${from}&date_to=${to}&all=1` },
+    ] : []),
   ] : [];
   const periodLabel = (p: string, short = false) => group === "day"
     ? (short ? new Date(`${p}T00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : fmtDay(p))
@@ -100,12 +109,14 @@ export function Dashboards() {
       </PageHeader>
       {preset === "custom" && <div className="filters"><label className="date-range"><span>From</span><input aria-label="From" type="date" value={custom[0]} onChange={(e) => setCustom([e.target.value, custom[1]])} /><span>to</span><input aria-label="To" type="date" value={custom[1]} onChange={(e) => setCustom([custom[0], e.target.value])} /></label></div>}
       <section className="kpis" aria-label="Key numbers">
-        {kpis.map((k) => (
-          <div key={k.label} className="card kpi" style={{ display: "flex", flexDirection: "column", gap: 2, margin: 0 }}>
+        {kpis.map((k) => {
+          const body = <>
             <span className="kpi-label">{k.label}</span>
             <span className="kpi-value">{k.value}</span>
-            <span className={`kpi-sub ${k.d.good === true ? "ok" : k.d.good === false ? "warn-text" : ""}`}>{k.d.text}{k.d.text && <span className="muted"> vs before</span>}</span>
-          </div>))}
+            <span className={`kpi-sub ${k.d.good === true ? "ok" : k.d.good === false ? "warn-text" : ""}`}>{k.d.text}{k.d.text && <span className="muted"> vs before</span>}</span></>;
+          const style = { display: "flex", flexDirection: "column", gap: 2, margin: 0 } as const;
+          return "to" in k && k.to ? <Link key={k.label} to={k.to} className="card kpi" style={style}>{body}</Link> : <div key={k.label} className="card kpi" style={style}>{body}</div>;
+        })}
       </section>
       <div className="today-cols">
         <section className="card schedule" aria-label="Bookings over time">
@@ -120,11 +131,12 @@ export function Dashboards() {
         <section className="card needs" aria-label="By expert" style={{ padding: "16px 0 6px" }}>
           <h3 style={{ margin: "0 18px 8px" }}>By expert</h3>
           {(s?.by_expert.length ?? 0) === 0 ? <p className="muted small" style={{ margin: "0 18px" }}>No assigned jobs in this range.</p> : (
-            <table className="rows"><thead><tr><th>Expert</th><th className="num">Jobs</th><th className="num">Avg time</th><th className="num">On time</th></tr></thead>
+            <table className="rows"><thead><tr><th>Expert</th><th className="num">Jobs</th><th className="num">Avg time</th><th className="num">On time</th>{seesTiming && <><th className="num">Late</th><th className="num">Too quick</th></>}</tr></thead>
               <tbody>{s!.by_expert.map((r) => { const u = who(r.expert); return (
                 <tr key={r.expert}><td><span className="who-avatar"><Avatar who={u ?? { id: r.expert }} size={22} />{u?.name || u?.username || `#${r.expert}`}</span></td>
                   <td className="num">{r.bookings}</td><td className="num">{mins(r.avg_minutes)}</td>
-                  <td className={`num ${r.on_time !== null && r.on_time < 90 ? "warn-text" : ""}`}>{r.on_time === null ? "—" : `${r.on_time}%`}</td></tr>); })}</tbody></table>)}
+                  <td className={`num ${r.on_time !== null && r.on_time < 90 ? "warn-text" : ""}`}>{r.on_time === null ? "—" : `${r.on_time}%`}</td>
+                  {seesTiming && <><td className={`num ${r.late ? "warn-text" : ""}`}>{r.late}</td><td className={`num ${r.quick ? "warn-text" : ""}`}>{r.quick}</td></>}</tr>); })}</tbody></table>)}
         </section>
       </div>
       {rows.length > 0 && (

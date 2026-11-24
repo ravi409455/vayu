@@ -15,7 +15,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from apps.accounts.models import Role, User
-from apps.bookings import services, submissions
+from apps.bookings import services, submissions, timing
 from apps.bookings.models import Booking
 from apps.forms import services as form_services
 from apps.forms.models import (
@@ -428,18 +428,19 @@ class Command(BaseCommand):
     # ---------------------------------------------------------------- today's schedule
 
     # (expert number or None, type, booked hour from now, state, minutes late, minutes taken)
+    # two finish too quickly for the default limits (EV 25 < 40, Used car 30 < 45)
     TODAY: list[tuple[Any, ...]] = [
         (3, "used_car", -6, "done", 0, 55), (3, "ev", -4.5, "done", 25, 70),
         (3, "pdi", 1.5, "planned"),
         (4, "used_car", -5, "done", 0, 80), (4, "pdi", -1.2, "running", 0),
         (5, "ev", -3, "done", 40, 90), (5, "used_car", 2, "planned"),
         (6, "pdi", -0.5, "running", 20),
-        (7, "used_car", -7, "done", 5, 60), (7, "ev", -5.5, "done", 0, 45),
+        (7, "used_car", -7, "done", 5, 60), (7, "ev", -5.5, "done", 0, 25),
         (8, "pdi", -0.8, "running", 0), (8, "used_car", -0.3, "planned"),
         (9, "ev", 1, "planned"), (9, "pdi", 3, "planned"),
         (10, "used_car", -2, "done", 10, 100), (10, "ev", 0.2, "planned"),
         (11, "pdi", -2, "running", 10),
-        (12, "ev", -8, "done", 0, 50), (12, "used_car", -6, "done", 0, 60),
+        (12, "ev", -8, "done", 0, 50), (12, "used_car", -6, "done", 0, 30),
         (12, "ev", -4, "done", 15, 70),
         (13, "pdi", 4, "planned"), (14, "ev", -1, "running", 35),
         (None, "pdi", 0.5, "planned"), (None, "used_car", -1, "planned"),
@@ -498,7 +499,12 @@ class Command(BaseCommand):
                 check_completion(b.id)
                 Inspection.objects.filter(booking=b, status="submitted").update(
                     submitted_at=at(began + rest[1] / 60))
-            Booking.objects.filter(pk=b.pk).update(started_at=at(began))   # when it really began
+            b.refresh_from_db()
+            b.started_at = at(began)                                     # when it really began
+            timing.stamp_late(b)
+            if state == "done":
+                timing.stamp_duration(b, at(began + rest[1] / 60))
+            b.save(update_fields=["started_at", "late_minutes", "duration_minutes"])
 
     # ---------------------------------------------------------------- integrations
 

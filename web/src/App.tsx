@@ -10,6 +10,7 @@ import { Profile } from "./pages/Profile";
 const Users = lazy(() => import("./pages/admin/Users").then((m) => ({ default: m.Users })));
 const Roles = lazy(() => import("./pages/admin/Roles").then((m) => ({ default: m.Roles })));
 const MasterLists = lazy(() => import("./pages/admin/MasterLists").then((m) => ({ default: m.MasterLists })));
+const Settings = lazy(() => import("./pages/admin/Settings").then((m) => ({ default: m.Settings })));
 const Audit = lazy(() => import("./pages/admin/Audit").then((m) => ({ default: m.Audit })));
 const Forms = lazy(() => import("./pages/admin/Forms").then((m) => ({ default: m.Forms })));
 const Library = lazy(() => import("./pages/admin/Library").then((m) => ({ default: m.Library })));
@@ -58,6 +59,7 @@ export function App() {
           <Route path="/users" element={<RequireAuth adminOnly perm="users.view"><Users /></RequireAuth>} />
           <Route path="/roles" element={<RequireAuth adminOnly perm="roles.manage"><Roles /></RequireAuth>} />
           <Route path="/lists" element={<RequireAuth adminOnly perm="forms.view"><MasterLists /></RequireAuth>} />
+          <Route path="/settings" element={<RequireAuth perm="settings.view" not="expert"><Settings /></RequireAuth>} />
           <Route path="/audit" element={<RequireAuth adminOnly perm="audit.view"><Audit /></RequireAuth>} />
           <Route path="/library" element={<RequireAuth adminOnly perm="library.view"><Library /></RequireAuth>} />
           <Route path="/library/:id" element={<RequireAuth adminOnly perm="library.view"><LibraryEditor /></RequireAuth>} />

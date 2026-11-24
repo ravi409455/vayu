@@ -208,11 +208,25 @@ def force_release(actor, b: Booking) -> Booking:
     b = _lock(b)
     if b.stage != "in_progress":
         raise err("NOT_STARTED", "Only a started job can be force-released.", 409)
-    b.stage, b.started_at = "assigned", None
+    b.stage, b.started_at, b.late_minutes = "assigned", None, None
+    b.late_reviewed_by = b.late_reviewed_at = None     # the next start is judged afresh
     b.released_by, b.released_at, b.released_draft_expected = actor, timezone.now(), True
     audit.record(actor, "booking.force_release", "booking", b.id,
                  f"Force-released {b.booking_id} from expert {b.assigned_expert_id}")
     _changed(actor, b, {"stage": ["in_progress", "assigned"]})
+    return b
+
+
+@transaction.atomic
+def review_timing(actor, b: Booking, flag) -> Booking:
+    """Mark one flag ("late" or "quick") as looked at; the other stays open."""
+    if flag not in ("late", "quick"):
+        raise err("INVALID_FLAG", "Say which flag: late or quick.")
+    b = _lock(b)
+    setattr(b, f"{flag}_reviewed_by", actor)
+    setattr(b, f"{flag}_reviewed_at", timezone.now())
+    b.save(update_fields=[f"{flag}_reviewed_by", f"{flag}_reviewed_at"])
+    activity.log(b, actor, f"{flag}_reviewed")
     return b
 
 

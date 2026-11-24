@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from apps.accounts.permissions import perm, scope_for
 from apps.forms.access import hidden_inspection_forms
 
-from . import services, submissions, sync
+from . import services, submissions, sync, timing
 from .models import Booking, Inspection
 from .serializers import BookingSerializer, InspectionSerializer
 
@@ -25,7 +25,7 @@ ACTION_PERMISSIONS = {
     "force_release": "bookings.force_release", "destroy": "bookings.delete",
     "resolve_conflict": "bookings.edit", "activity": "bookings.view",
     "start": "submissions.fill", "forms": "submissions.fill", "submit": "submissions.fill",
-    "inspections": "submissions.view",
+    "inspections": "submissions.view", "timing_review": "bookings.review_timing",
 }
 
 
@@ -44,8 +44,9 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         return [perm(key)()] if key else [perm("bookings.view")()]
 
     def get_queryset(self):
-        qs = Booking.objects.select_related("last_edited_by", "released_by").prefetch_related(
-            "reschedules__by")
+        qs = Booking.objects.select_related(
+            "last_edited_by", "released_by", "late_reviewed_by", "quick_reviewed_by",
+        ).prefetch_related("reschedules__by")
         key = ACTION_PERMISSIONS.get(self.action, "bookings.view")
         scoped = ("bookings.view", "bookings.edit", "submissions.fill", "submissions.view")
         if key in scoped and scope_for(self.request.user, key, self.request) == "own":
@@ -79,6 +80,18 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
             qs = qs.filter(alerts__contains=[{"code": "TYPE_CHANGE_REJECTED"}])
         elif problem:
             raise ValidationError({"problem": "Use conflict or type_change."})
+        if p.get("timing") or p.get("reviewed"):          # started late / finished too quickly
+            if scope_for(self.request.user, "bookings.review_timing", self.request) is None:
+                raise PermissionDenied("You may not see timing flags.")
+            cfg = timing.config()
+            flag = p.get("timing")
+            if flag not in ("late", "quick"):
+                raise ValidationError({"timing": "Use late or quick."})
+            qs = qs.filter(timing.late_q(cfg) if flag == "late" else timing.quick_q(cfg))
+            if p.get("reviewed") in ("0", "1"):
+                qs = qs.filter(**{f"{flag}_reviewed_at__isnull": p["reviewed"] == "0"})
+            elif p.get("reviewed"):
+                raise ValidationError({"reviewed": "Use 0 or 1."})
         for param, lookup in (("date_from", "inspection_date__gte"),
                               ("date_to", "inspection_date__lte")):
             if p.get(param):
@@ -147,6 +160,12 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
             raise PermissionDenied("Resolving a conflict also needs the assign permission.")
         return self._out(submissions.resolve_conflict(request.user, self.get_object(),
                                                       request.data.get("inspection")))
+
+    @action(detail=True, methods=["post"], url_path="timing-review")
+    def timing_review(self, request, pk=None):
+        """Mark one flag ({"flag": "late"} or "quick") as looked at: it leaves "Needs you"."""
+        return self._out(services.review_timing(request.user, self.get_object(),
+                                                request.data.get("flag")))
 
     @action(detail=True, methods=["post"], url_path="change-type")
     def change_type(self, request, pk=None):

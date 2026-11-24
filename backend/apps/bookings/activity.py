@@ -7,6 +7,7 @@ from .models import BookingActivity
 SAFE_KEYS = {"stage", "assigned_expert", "inspection_date", "inspection_time", "inspection_type",
              "conflict"}
 COLUMNS = {"stage", "conflict"}       # booking columns, not form answers: always visible
+TIMING_KINDS = ("late_reviewed", "quick_reviewed")   # Admin / Ops only, never Experts
 
 
 def log(b, actor, kind: str, changes: dict | None = None, keys: list[str] | None = None,
@@ -45,8 +46,12 @@ def for_user(b, user, since=None) -> list[dict]:
             insp_levels[cache_key] = levels_for(version, role, b.stage) if version else {}
         return insp_levels[cache_key].get(field, "hidden") != "hidden"
 
+    from apps.accounts.permissions import scope_for
+
     rows = b.activity.select_related("actor", "inspection__form_version",
                                      "inspection__start_version", "inspection__end_version")
+    if scope_for(user, "bookings.review_timing") is None:
+        rows = rows.exclude(kind__in=TIMING_KINDS)
     if since is not None:
         rows = rows.filter(at__gt=since).exclude(actor=user)
     out = []

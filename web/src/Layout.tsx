@@ -1,6 +1,6 @@
 import {
   AlertTriangle, BarChart3, BookOpen, Briefcase, ChevronsLeft, ChevronsRight, FileOutput, FileText, KeyRound,
-  ClipboardList, Home, List, Rocket, ScrollText, Shield, Users, Webhook, type LucideIcon,
+  ClipboardList, Home, List, Rocket, ScrollText, Shield, SlidersHorizontal, Users, Webhook, type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
@@ -32,13 +32,14 @@ const GROUPS: { title: string; items: Item[] }[] = [
     { to: "/integrations", label: "Integrations", icon: Webhook, perm: "integrations.manage" },
     { to: "/api-keys", label: "API keys", icon: KeyRound, perm: "api_keys.manage" },
     { to: "/promote", label: "Promote", icon: Rocket, perm: "forms.promote" },
+    { to: "/settings", label: "Settings", icon: SlidersHorizontal, perm: "settings.view", role: "ops-admin" },
     { to: "/audit", label: "Audit log", icon: ScrollText, perm: "audit.view" },
   ] },
 ];
 
 /** Ops only ever work with bookings: these pages and nothing else (no templates, lists,
- *  users or settings), whatever permissions their role has behind the scenes. */
-export const OPS_PAGES = ["/today", "/bookings", "/problems", "/dashboards"];
+ *  users), whatever permissions their role has behind the scenes. */
+export const OPS_PAGES = ["/today", "/bookings", "/problems", "/dashboards", "/settings"];
 
 /** Which links a person sees: by permission, and by role (the expert has a different home). */
 export function visibleNav(role: string, can: (p: string) => boolean): { title: string; items: Item[] }[] {

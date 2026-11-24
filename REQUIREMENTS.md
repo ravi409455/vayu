@@ -173,9 +173,13 @@ Reference report: `SA37926PDI.pdf` (PDI, 35 pp). Clappia (garuda) was reviewed r
 - **Job board:**
   - Today / date-range views with stage + Ops status.
   - Filters for city, expert, type and stage.
-  - **Problem queue:** stuck uploads, conflicts, rejected type changes, unverified payments, pay-later outstanding, edited but not regenerated, unverified times.
+  - **Problem queue:** stuck uploads, conflicts, rejected type changes, unverified payments, pay-later outstanding, edited but not regenerated, unverified times, late starts and too-quick jobs not yet reviewed.
   - **Global search:** Booking ID, customer name/phone, chassis no., car.
 - **Dashboards:** volume by day/week/month × type, city, expert, lead owner; **CSV export**.
+- **Inspection timing (Admin and Ops only, never Experts; see `docs/plan-timing.md`):**
+  - **Settings page** (`/settings`): Admin sets the late-start grace (one number, default 15 min) and the minimum inspection time per inspection type (PDI 30, Used car 45, EV 40, others the default 30). Ops can see the page but not change it. Every change is in the audit log.
+  - **Started late:** the server got Start more than the grace after the booked date + time. **Too quick:** the server got Submit less than the type's minimum after Start. Server clock only; a job whose Start never reached the server is never flagged. A changed limit re-flags old jobs at once.
+  - Shown as: two **Today** cards, two **Bookings** tabs ("Started late", "Too quick") with the usual filters, **Dashboard** counts and % (vs the previous period, and per expert), a badge on the **job page**, and **Needs you** (jobs from the last 7 days) until someone clicks **Mark reviewed**. The two are separate problems: each has its own tab, card, Needs-you group and Mark reviewed (who and when go in the timeline); reviewing one leaves the other open.
 
 ## 10. Stack & ops
 - **Backend:** Django + DRF, Postgres, Celery + Redis (PDF rendering with headless Chromium, webhooks, ZIPs, media processing, push).

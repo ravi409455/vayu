@@ -4,7 +4,7 @@ import type { Booking } from "../api/types";
 import { fmtTime, isoDay } from "./format";
 
 export const PLANNED_HOURS = 1;            // a job that has not started: booked time, one hour
-export const LATE_AFTER_HOURS = 15 / 60;   // started more than 15 minutes after the booked time
+export const LATE_GRACE_MINUTES = 15;     // default; Admin sets the real one on the Settings page
 const MIN_HOURS = 0.25;                    // a job that just started is still a box you can see
 
 export type Span = {
@@ -28,7 +28,7 @@ function clock(iso: string | null | undefined, day: string): number | null {
 
 type Job = Pick<Booking, "stage" | "answers" | "started_at"> & { finished_at?: string | null };
 
-export function jobSpan(b: Job, now: Date): Span {
+export function jobSpan(b: Job, now: Date, graceMinutes = LATE_GRACE_MINUTES): Span {
   const day = isoDay(now);
   const booked = hoursOf(b.answers.inspection_time);
   const started = clock(b.started_at, day);
@@ -37,7 +37,7 @@ export function jobSpan(b: Job, now: Date): Span {
     const s = booked ?? 8;
     return { start: s, end: s + PLANNED_HOURS, kind: "planned", late: 0 };
   }
-  const late = booked !== null && started - booked > LATE_AFTER_HOURS ? Math.round((started - booked) * 60) : 0;
+  const late = booked !== null && started - booked > graceMinutes / 60 ? Math.round((started - booked) * 60) : 0;
   if (running) return { start: started, end: Math.max(now.getHours() + now.getMinutes() / 60, started + MIN_HOURS), kind: "running", late };
   const finished = clock(b.finished_at, day) ?? started + PLANNED_HOURS;
   return { start: started, end: Math.max(finished, started + MIN_HOURS), kind: "finished", late };

@@ -17,6 +17,7 @@ import { Avatar } from "../../ui/Avatar";
 import { useMediaUrl, Thumb } from "../../ui/MediaThumb";
 import { MoreMenu } from "../../ui/Menu";
 import { fmtPhone, fmtSlot, fmtStamp, mapsUrl } from "../../lib/format";
+import { FLAG_NAME, timingFlags } from "../../lib/timing";
 import { missingFields } from "../../lib/formSpec";
 import { StaleDialog, type Stale } from "../../ui/StaleDialog";
 import type { Answers } from "../../lib/formSpec";
@@ -94,6 +95,7 @@ function Detail({ id }: { id: string }) {
           <div className="chips">
             <Pill tone={STAGE_TONE[booking.stage]}>{STAGE_LABEL[booking.stage] ?? booking.stage}</Pill>
             {booking.conflict && <Pill tone="bad">Conflict: two experts</Pill>}
+            {timingFlags(booking.timing).map((f) => <Pill key={f.flag} tone="bad">{f.words}</Pill>)}
             {fmtSlot(a.inspection_date, a.inspection_time) && <span className="chip">{fmtSlot(a.inspection_date, a.inspection_time)}</span>}
             {a.city ? <span className="chip">{city(a.city)}</span> : null}
             {expert ? <span className="chip who-avatar"><Avatar who={expert} size={18} />Expert: {expert.name || expert.username}</span> : null}
@@ -110,6 +112,13 @@ function Detail({ id }: { id: string }) {
         </div>
       </header>
       {booking.alerts?.map((x, i) => <div key={i} className="banner warn" role="alert">{x.detail} <span className="muted small">{fmtStamp(x.at)}</span></div>)}
+      {timingFlags(booking.timing).map((f) => (
+        <div key={f.flag} className="banner warn" role="status" aria-label={FLAG_NAME[f.flag]} style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <span className="grow">{f.words}.{" "}
+            {f.reviewedAt ? <span className="muted small">Reviewed by {f.reviewedBy} · {fmtStamp(f.reviewedAt)}</span>
+              : <span className="muted small">{f.flag === "late" ? `Limit: start within ${booking.timing?.grace_minutes} min of the booked time.` : `Limit: take at least ${booking.timing?.min_minutes} min.`}</span>}</span>
+          {!f.reviewedAt && can("bookings.review_timing") && <button className="sm" onClick={async () => { try { await api(`bookings/${booking.id}/timing-review`, { body: { flag: f.flag } }); say("Marked reviewed."); void reload(); void refresh("problems"); } catch (e) { fail(e); } }}>Mark reviewed</button>}
+        </div>))}
       {booking.conflict && <ConflictBanner booking={booking} insps={insps.data ?? []} experts={experts.data ?? []} onResolved={reload} />}
       <Tabs value={current} onChange={setTab} tabs={[{ id: "booking", label: "Booking" }, { id: "inspection", label: "Inspection" }, { id: "media", label: mediaCount ? `Media ${mediaCount}` : "Media" }, { id: "ratings", label: "Ratings" }, { id: "report", label: "Report" }]} />
       <div className="record-body">
@@ -155,6 +164,8 @@ export function activityText(r: Activity, expertName: (id: unknown) => string, l
   if (r.kind === "created") return `Created by ${by}`;
   if (r.kind === "inspection_edited") return `${by} changed ${r.keys.length} answer${r.keys.length === 1 ? "" : "s"}`;
   if (r.kind === "ratings_changed") return `${by} changed the ratings`;
+  if (r.kind === "late_reviewed") return `Late start reviewed by ${by}`;
+  if (r.kind === "quick_reviewed") return `Quick finish reviewed by ${by}`;
   const stage = c.stage?.[1];
   if (stage === "completed") return "Completed: every file uploaded";
   if (stage === "submitted") return `Submitted by ${by}`;

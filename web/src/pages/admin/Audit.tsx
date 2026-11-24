@@ -22,12 +22,13 @@ export function targetLink(r: Pick<Row, "target_type" | "target_id" | "action">)
     case "role": return "/roles";
     case "integration": return "/integrations";
     case "api_key": return "/api-keys";
+    case "setting": return "/settings";
     case "master_list": case "master_list_item": return "/lists";
     default: return null;
   }
 }
 const AREAS: [string, string][] = [["", "Everything"], ["form", "Forms"], ["library", "Library"], ["pdf_template", "PDF templates"], ["user", "Users"],
-  ["role", "Roles"], ["integration", "Integrations"], ["api_key", "API keys"], ["booking", "Bookings"], ["master_list", "Master lists"]];
+  ["role", "Roles"], ["integration", "Integrations"], ["api_key", "API keys"], ["booking", "Bookings"], ["master_list", "Master lists"], ["setting", "Settings"]];
 
 export function Audit() {
   const [f, setF] = useState({ action: "", actor: "", from: "", to: "" });

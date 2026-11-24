@@ -1,7 +1,7 @@
 """Volume dashboards: bookings per period x dimension, with CSV export."""
 import csv
 from collections import Counter, defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from django.http import HttpResponse
 from django.utils import timezone
@@ -11,7 +11,8 @@ from rest_framework.views import APIView
 
 from apps.accounts.permissions import perm, scope_for
 
-from .models import Booking, Inspection
+from . import timing
+from .models import Booking
 
 GROUPS = ("day", "week", "month")
 DIMENSIONS = {"type": "inspection_type", "city": "city", "expert": "assigned_expert_id",
@@ -30,6 +31,41 @@ def period_label(d: date, group: str) -> str:
         return f"{d.year}-{d.month:02d}"
     iso = d.isocalendar()
     return f"{iso.year}-W{iso.week:02d}"
+
+
+STAGE_LABELS = {"draft": "Not assigned", "assigned": "Assigned", "in_progress": "In progress",
+                "submitted": "Uploading", "completed": "Completed", "cancelled": "Cancelled"}
+
+
+def key_labels(by: str, keys: set[str]) -> dict[str, str]:
+    """What a person calls each key (the screen shows the same names): the form's name for a
+    type, the city's label, a person's name. A key with no name stays as it is."""
+    keys = {k for k in keys if k}
+    if by == "stage":
+        found: dict[str, str] = {k: STAGE_LABELS[k] for k in keys if k in STAGE_LABELS}
+    elif by == "type":
+        from apps.forms.models import Form
+
+        found = dict(Form.objects.filter(type="custom", inspection_type__in=keys)
+                     .values_list("inspection_type", "name"))
+    elif by == "city":
+        from apps.forms.models import MasterListItem
+
+        found = dict(MasterListItem.objects.filter(list__key="city", key__in=keys)
+                     .values_list("key", "label"))
+    else:                                                       # expert, lead_owner: user ids
+        from apps.accounts.models import User
+
+        ids = [int(k) for k in keys if k.isdigit()]
+        found = {str(u.pk): u.name or u.username for u in User.objects.filter(pk__in=ids)}
+    return {k: found.get(k, k) for k in keys}
+
+
+def csv_filename(by: str, date_from: date | None, date_to: date | None) -> str:
+    """bookings-by-type_2026-10-26_to_2026-11-24.csv: says what is inside, and for when."""
+    span = "_".join(x for x in (date_from and date_from.isoformat(), date_to and
+                                f"to_{date_to.isoformat()}") if x)
+    return f"bookings-by-{by.replace('_', '-')}{'_' + span if span else ''}.csv"
 
 
 def volume_rows(group: str, by: str, date_from: date | None, date_to: date | None) -> list[dict]:
@@ -64,15 +100,15 @@ class DashboardVolume(APIView):
             if scope_for(request.user, "dashboards.export", request) is None:
                 raise PermissionDenied("You may not export dashboard data.")
             response = HttpResponse(content_type="text/csv")
-            response["Content-Disposition"] = 'attachment; filename="volume.csv"'
-            writer = csv.DictWriter(response, fieldnames=["period", "key", "count"])
+            name = csv_filename(q["by"], *bounds)
+            response["Content-Disposition"] = f'attachment; filename="{name}"'
+            labels = key_labels(q["by"], {r["key"] for r in rows})
+            writer = csv.DictWriter(response, fieldnames=["period", "key", "label", "count"])
             writer.writeheader()
-            writer.writerows({**r, "key": csv_safe(r["key"])} for r in rows)
+            writer.writerows({**r, "key": csv_safe(r["key"]),
+                              "label": csv_safe(labels.get(r["key"], "Not set"))} for r in rows)
             return response
         return Response({"rows": rows})
-
-
-ON_TIME_GRACE = timedelta(minutes=15)   # started up to 15 minutes after the slot counts as on time
 
 
 def _bounds(q) -> tuple[date, date]:
@@ -88,55 +124,44 @@ def _bounds(q) -> tuple[date, date]:
     return start, end
 
 
-def _slot(b: Booking) -> datetime | None:
-    """The booked start as an aware datetime (local time), or None when it is not set."""
-    t = b.answers.get("inspection_time")
-    if b.inspection_date is None or not isinstance(t, str) or ":" not in t:
-        return None
-    h, m = (int(x) for x in t.split(":")[:2])
-    naive = datetime(b.inspection_date.year, b.inspection_date.month, b.inspection_date.day, h, m)
-    return timezone.make_aware(naive)
+def _pct(n: int, of: int) -> int | None:
+    return round(100 * n / of) if of else None
 
 
-def _stats(bookings: list[Booking], visits: dict) -> dict:
-    """Headline numbers for one set of bookings. visits: booking id -> (started, submitted)."""
+def _stats(bookings: list[Booking], cfg: dict) -> dict:
+    """Headline numbers for one set of bookings (server-clock minutes, see timing.py)."""
     total = len(bookings)
     done = sum(b.stage == "completed" for b in bookings)
     cancelled = sum(b.stage == "cancelled" for b in bookings)
-    minutes, on_time, timed = [], 0, 0
-    for b in bookings:
-        started, submitted = visits.get(b.pk, (None, None))
-        if started and submitted:
-            minutes.append((submitted - started).total_seconds() / 60)
-        slot = _slot(b)
-        if started and slot:
-            timed += 1
-            on_time += started <= slot + ON_TIME_GRACE
+    minutes = [b.duration_minutes for b in bookings if b.duration_minutes is not None]
+    started = [b for b in bookings if b.late_minutes is not None]
+    flags = [timing.flags(b, cfg) for b in bookings]
+    late, quick = sum(f["late"] for f in flags), sum(f["quick"] for f in flags)
     live = total - cancelled
     return {"bookings": total, "completed": done, "cancelled": cancelled,
             "completion_rate": round(100 * done / live, 1) if live else None,
             "avg_minutes": round(sum(minutes) / len(minutes)) if minutes else None,
-            "on_time": round(100 * on_time / timed) if timed else None}
+            "on_time": _pct(len(started) - late, len(started)),
+            "late": late, "late_pct": _pct(late, len(started)),
+            "quick": quick, "quick_pct": _pct(quick, len(minutes))}
 
 
 def summary(start: date, end: date) -> dict:
     days = (end - start).days + 1
     prev_start = start - timedelta(days=days)
-    qs = list(Booking.objects.filter(inspection_date__gte=prev_start, inspection_date__lte=end))
-    visits: dict = {}
-    insps = Inspection.objects.filter(booking__in=qs).exclude(status="superseded")
-    for i in insps.order_by("created_at"):
-        visits[i.booking_id] = (i.client_started_at or i.created_at, i.submitted_at)
+    qs = list(Booking.objects.filter(inspection_date__gte=prev_start, inspection_date__lte=end)
+              .select_related("late_reviewed_by", "quick_reviewed_by"))
+    cfg = timing.config()
     now = [b for b in qs if b.inspection_date and b.inspection_date >= start]
     before = [b for b in qs if b.inspection_date and b.inspection_date < start]
     by_expert: dict = defaultdict(list)
     for b in now:
         if b.assigned_expert_id and b.stage != "cancelled":
             by_expert[b.assigned_expert_id].append(b)
-    experts = [{"expert": eid, **_stats(rows, visits)} for eid, rows in by_expert.items()]
+    experts = [{"expert": eid, **_stats(rows, cfg)} for eid, rows in by_expert.items()]
     experts.sort(key=lambda r: -r["bookings"])
     return {"date_from": start.isoformat(), "date_to": end.isoformat(),
-            "period": _stats(now, visits), "previous": _stats(before, visits),
+            "period": _stats(now, cfg), "previous": _stats(before, cfg),
             "by_expert": experts}
 
 

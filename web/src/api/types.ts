@@ -53,6 +53,9 @@ export type Booking = {
   assigned_expert: number | null; answers: Record<string, unknown>; row_version: number;
   started_at: string | null; finished_at?: string | null; cancel_reason: string; last_edited_by: string | null;
   last_edited_at: string | null; created_at: string; conflict?: string; alerts?: { code: string; detail: string; at: string }[];
+  /** Admin / Ops only: started late, finished too quickly (server clock, minutes). */
+  timing?: { late_minutes: number | null; duration_minutes: number | null; late: boolean; quick: boolean; min_minutes: number; grace_minutes: number;
+    late_reviewed_by: string | null; late_reviewed_at: string | null; quick_reviewed_by: string | null; quick_reviewed_at: string | null };
 };
 export type Inspection = {
   id: string; booking: string; expert: number; status: string; answers: { inspection?: Record<string, unknown>; start?: Record<string, unknown>; end?: Record<string, unknown> };

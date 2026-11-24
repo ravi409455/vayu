@@ -10,7 +10,7 @@ import { useAuth } from "../../auth";
 import { fmtTime, today } from "../../lib/format";
 import { loadJSON, saveJSON } from "../../lib/store";
 import { clampStart, DAY_END, DAY_START, dayWindow, hm, hoursOf, jobSpan, rangeLabel, spanFacts, spanTitle, stackRows, WINDOW_HOURS, windowStarts, type Span } from "../../lib/schedule";
-import { useNeeds } from "../../lib/problems";
+import { useTiming } from "../../lib/timing";
 import { Avatar } from "../../ui/Avatar";
 import { Empty, PageHeader, useToast } from "../../ui/kit";
 import { Actions } from "./Booking";
@@ -27,7 +27,7 @@ export { dayWindow };
 const STAGE_NAME: Record<string, string> = { draft: "Not assigned", assigned: "Assigned", in_progress: "In progress", submitted: "Uploading files", completed: "Completed" };
 const KIND: Record<string, string> = { draft: "open", assigned: "next", in_progress: "prog", submitted: "prog", completed: "done", cancelled: "off" };
 
-/** Ops' home: what today looks like, who is where, and what needs a person now. */
+/** Ops' home: what today looks like and who is where. What needs a person is in the bell and the "Needs you" menu. */
 export function Today() {
   const { can } = useAuth();
   const nav = useNavigate();
@@ -37,7 +37,6 @@ export function Today() {
   const q = useQuery({ queryKey: ["bookings-page", "today-home", t], refetchInterval: 60_000,
     queryFn: () => api<Page<Booking>>("bookings", { query: { date_from: t, date_to: t, order: "schedule" } }) });
   const experts = useList<User>("experts", "users", { role: "expert" });
-  const { needs } = useNeeds();
   const scroller = useRef<HTMLDivElement>(null);
   const car = useLabels("car_make_model");
   const city = useLabels("city");
@@ -51,18 +50,25 @@ export function Today() {
   const inProgress = useCount(viewQuery("in_progress"));
   const uploading = useCount(viewQuery("uploading"));
   const cancelled = (q.data?.results ?? []).length - all.length;
+  const grace = useTiming().late_grace_minutes;
+  const seesTiming = can("bookings.review_timing");
+  const lateToday = useCount({ ...viewQuery("today", new Date()), ...viewQuery("late") }, seesTiming);
+  const quickToday = useCount({ ...viewQuery("today", new Date()), ...viewQuery("quick") }, seesTiming);
   const kpis = [
     { label: "Today's jobs", value: todayN ?? "—", sub: `${by("completed")} done · ${by("in_progress")} in progress${cancelled ? ` · ${cancelled} cancelled` : ""}`, to: "/bookings?all=1" },
     { label: "Unassigned", value: unassigned ?? "—", sub: unassigned ? "on any day, need an expert" : "all assigned", to: "/bookings?view=unassigned&all=1", tone: unassigned ? "warn" : "" },
     { label: "In progress", value: inProgress ?? "—", sub: "experts on site", to: "/bookings?view=in_progress&all=1", tone: "info" },
     { label: "Uploading", value: uploading ?? "—", sub: "files still coming", to: "/bookings?view=uploading&all=1" },
     { label: "Completed", value: doneToday ?? "—", sub: "today", to: "/bookings?view=today&stage=completed&all=1", tone: "ok" },
-    { label: "Needs you", value: needs.length, sub: needs.length ? "open the list" : "all clear", to: "/problems", tone: needs.length ? "bad" : "" },
+    ...(seesTiming ? [
+      { label: "Started late", value: lateToday ?? "—", sub: `over ${grace} min after booked`, to: `/bookings?view=late&date_from=${t}&date_to=${t}&all=1`, tone: lateToday ? "warn" : "" },
+      { label: "Too quick", value: quickToday ?? "—", sub: "under the minimum time", to: `/bookings?view=quick&date_from=${t}&date_to=${t}&all=1`, tone: quickToday ? "warn" : "" },
+    ] : []),
   ];
   const [, tick] = useState(0);
   useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 60_000); return () => clearInterval(id); }, []);
   const now = new Date();
-  const spans = new Map(all.map((b) => [b.id, jobSpan(b, now)]));
+  const spans = new Map(all.map((b) => [b.id, jobSpan(b, now, grace)]));
   const [lo, hi] = dayWindow([...spans.values()]);
   const slots = (hi - lo) * 2;                          // one column per 30 minutes
   const nowAt = now.getHours() + now.getMinutes() / 60;
@@ -126,7 +132,7 @@ export function Today() {
         <button onClick={() => nav("/bookings")}>All bookings</button>
         {can("bookings.create") && <button className="primary" onClick={() => nav("/booking/new")}><Plus size={15} aria-hidden /> New booking</button>}
       </PageHeader>
-      <section className="kpis" aria-label="Today in numbers">
+      <section className="kpis one-line" aria-label="Today in numbers">
         {kpis.map((k) => (
           <Link key={k.label} to={k.to} className="card kpi">
             <span className="kpi-label">{k.label}</span>

@@ -12,7 +12,7 @@ from apps.forms.rules import validate_answers
 from apps.forms.serializers import VersionTreeSerializer
 from apps.scoring import service as scoring
 
-from . import activity
+from . import activity, timing
 from .models import Booking, Inspection
 from .services import (
     _changed,
@@ -145,6 +145,7 @@ def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, ap
         check_shape({"start": start_answers})
         _clean_all(b, {**pinned, "inspection": None, "end": None}, {"start": start_answers or {}})
     b.stage, b.started_at = "in_progress", timezone.now()
+    timing.stamp_late(b)
     insp = Inspection.objects.create(booking=b, expert=actor, form_version=pinned["inspection"],
                                      start_version=pinned["start"], end_version=pinned["end"],
                                      client_start_uuid=client_uuid,
@@ -278,6 +279,7 @@ def _advance(actor, b: Booking, insp: Inspection) -> None:
         b.released_draft_expected = False
         changes = {"stage": [b.stage, "submitted"]}
         b.stage = "submitted"
+        timing.stamp_duration(b, insp.submitted_at)
     b.chassis_no = (insp.answers.get("inspection") or {}).get("chassis_no", "")
     _changed(actor, b, changes or {"inspection": [None, str(insp.id)]})
 

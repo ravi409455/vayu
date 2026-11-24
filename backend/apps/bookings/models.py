@@ -30,6 +30,16 @@ class Booking(models.Model):
                                        on_delete=models.PROTECT, related_name="+")
     last_edited_at = models.DateTimeField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
+    # server-clock minutes, stamped at Start / Submit (see timing.py); compared to the settings
+    late_minutes = models.IntegerField(null=True, blank=True)       # started after the booked time
+    duration_minutes = models.IntegerField(null=True, blank=True)   # Start -> Submit
+    # who looked at each flag, and when (two different problems, reviewed apart)
+    late_reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                         on_delete=models.PROTECT, related_name="+")
+    late_reviewed_at = models.DateTimeField(null=True, blank=True)
+    quick_reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                          on_delete=models.PROTECT, related_name="+")
+    quick_reviewed_at = models.DateTimeField(null=True, blank=True)
     released_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                     on_delete=models.PROTECT, related_name="+")
     released_at = models.DateTimeField(null=True, blank=True)

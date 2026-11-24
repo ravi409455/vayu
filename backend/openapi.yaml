@@ -727,6 +727,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/Booking'
           description: ''
+  /api/v1/bookings/{id}/timing-review:
+    post:
+      operationId: bookings_timing_review_create
+      description: 'Mark one flag ({"flag": "late"} or "quick") as looked at: it leaves
+        "Needs you".'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this booking.
+        required: true
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Booking'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
   /api/v1/checks/{id}:
     get:
       operationId: checks_retrieve
@@ -1665,7 +1701,8 @@ paths:
   /api/v1/integrations/catalogue:
     get:
       operationId: integrations_catalogue_retrieve
-      description: The picker's list of values for a form and an event.
+      description: 'The picker''s list of values for a form and an event (without
+        an event: all of them).'
       tags:
       - integrations
       security:
@@ -2814,6 +2851,41 @@ paths:
         required: true
       tags:
       - sections
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/settings/{key}:
+    get:
+      operationId: settings_retrieve
+      description: GET / PUT one settings group (only "timing" today). Ops may read,
+        only Admin may change.
+      parameters:
+      - in: path
+        name: key
+        schema:
+          type: string
+        required: true
+      tags:
+      - settings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+    put:
+      operationId: settings_update
+      description: GET / PUT one settings group (only "timing" today). Ops may read,
+        only Admin may change.
+      parameters:
+      - in: path
+        name: key
+        schema:
+          type: string
+        required: true
+      tags:
+      - settings
       security:
       - cookieAuth: []
       responses:
