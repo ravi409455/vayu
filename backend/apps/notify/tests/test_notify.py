@@ -142,6 +142,8 @@ def test_push_sends_to_live_phones_and_forgets_dead_tokens(env, booking, setting
     Device.objects.create(user=env.expert_user, push_token="handed-on",
                           push_token_at=timezone.now() - timedelta(days=1))
     Device.objects.create(user=env.ops_user, push_token="handed-on", push_token_at=timezone.now())
+    Device.objects.create(user=env.expert_user, push_token="untimed")    # saved before the time field
+    Device.objects.create(user=env.ops_user, push_token="untimed", push_token_at=timezone.now())
     Device.objects.create(user=env.expert_user, push_token="old", revoked_at=timezone.now())
     sent = []
     with mock.patch.object(fcm, "credential", return_value={"project_id": "p"}), \
