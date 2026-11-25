@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import zipfile
+from datetime import timedelta
 
 from celery import shared_task
 from django.conf import settings
@@ -90,8 +91,18 @@ def zip_from_token(token: str) -> MediaZip | None:
     return MediaZip.objects.filter(pk=zip_id).first()
 
 
+# a build still "building" after this was killed (a restart, a lost task): it counts as failed
+BUILD_STUCK = timedelta(minutes=30)
+
+
 def fresh(z: MediaZip) -> bool:
     return (timezone.now() - z.created_at).days < settings.ZIP_LINK_DAYS
+
+
+def failed(z: MediaZip) -> bool:
+    """F-080 / F-108: a failed or abandoned build is shown as failed and made again on request."""
+    return z.status == "failed" or (z.status == "building"
+                                    and timezone.now() - z.created_at > BUILD_STUCK)
 
 
 def request_zip(booking, kind: str, excluded: list[str] | None = None,
@@ -102,7 +113,7 @@ def request_zip(booking, kind: str, excluded: list[str] | None = None,
     excluded, only = sorted(excluded or []), sorted(only or [])
     z = MediaZip.objects.filter(booking=booking, kind=kind, excluded=excluded,
                                 only=only).order_by("-created_at").first()
-    if z is not None and z.status != "failed" and fresh(z):
+    if z is not None and not failed(z) and fresh(z):
         return z
     z = MediaZip.objects.create(booking=booking, kind=kind, excluded=excluded, only=only)
     build_zip.delay(str(z.id))
@@ -126,16 +137,24 @@ def build_zip(zip_id: str) -> None:
     fd, path = tempfile.mkstemp(suffix=".zip")
     os.close(fd)
     try:
-        with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as archive:
-            for n, (a, name) in enumerate(zip(assets, names, strict=True), start=1):
-                with archive.open(name, "w") as out:
-                    for chunk in storage.stream(a.key):
-                        out.write(chunk)
-                z.progress = int(100 * n / len(assets))
-                z.save(update_fields=["progress"])
-        z.key = f"zips/{z.id}.zip"
-        storage.upload_file(path, z.key, "application/zip")
-        z.status, z.built_at, z.progress = "ready", timezone.now(), 100
-        z.save()
+        _write(z, assets, names, path)
+    except Exception:
+        z.status = "failed"                   # never "Preparing..." for 7 days (F-108)
+        z.save(update_fields=["status"])
+        raise
     finally:
         os.unlink(path)
+
+
+def _write(z: MediaZip, assets: list, names: list[str], path: str) -> None:
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as archive:
+        for n, (a, name) in enumerate(zip(assets, names, strict=True), start=1):
+            with archive.open(name, "w") as out:
+                for chunk in storage.stream(a.key):
+                    out.write(chunk)
+            z.progress = int(100 * n / len(assets))
+            z.save(update_fields=["progress"])
+    z.key = f"zips/{z.id}.zip"
+    storage.upload_file(path, z.key, "application/zip")
+    z.status, z.built_at, z.progress = "ready", timezone.now(), 100
+    z.save()
