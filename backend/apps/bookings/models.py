@@ -5,7 +5,7 @@ from django.db import models
 from django.db.models.functions import Lower
 from django.utils import timezone
 
-from .stages import STAGES
+from .stages import STAGES, InspectionStatus
 
 
 class Booking(models.Model):
@@ -106,9 +106,8 @@ class Inspection(models.Model):
                                       on_delete=models.PROTECT, related_name="+")
     end_version = models.ForeignKey("forms.FormVersion", null=True, blank=True,
                                     on_delete=models.PROTECT, related_name="+")
-    # draft | submitted | superseded (Ops kept the other in a conflict) | released (Ops
-    # force-released the job while it was a draft: it may still arrive from the phone)
-    status = models.CharField(max_length=10, default="draft")
+    status = models.CharField(max_length=10, choices=InspectionStatus.choices,
+                              default=InspectionStatus.DRAFT)
     # {"inspection": {...}, "start": {...}, "end": {...}} (cleaned)
     answers = models.JSONField(default=dict)
     scores = models.JSONField(default=dict)     # computed: Key Checks, ratings, overall

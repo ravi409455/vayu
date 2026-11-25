@@ -391,3 +391,17 @@ def test_a_key_creates_with_an_expert_only_when_it_may_assign(env):
     ok = client(new_key(env, allowed_actions=["assign"])).post("/api/v1/ext/bookings", body,
                                                                format="json")
     assert ok.status_code == 201 and ok.json()["stage"] == "assigned"
+
+
+def test_a_key_action_also_needs_the_fields_it_writes_in_scope(env, booking):
+    key = new_key(env, {"forms": {"booking": ["customer_name"]}}, allowed_actions=["change_type"])
+    r = client(key).post(f"/api/v1/ext/bookings/{booking['id']}/change-type",
+                         {"inspection_type": "pdi"}, format="json")
+    assert r.status_code == 403 and r.json()["keys"] == ["inspection_type"]
+
+
+def test_a_plain_edit_cannot_move_the_booking_without_the_reschedule_flag(env, booking):
+    c = client(new_key(env))
+    r = c.patch(f"/api/v1/ext/bookings/{booking['id']}", {"answers": {"inspection_time": "09:00"}},
+                format="json")
+    assert r.status_code == 403 and r.json()["code"] == "ACTION_NOT_ALLOWED"

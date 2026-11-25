@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from celery import shared_task
@@ -30,6 +31,8 @@ def push(ids: list[int]) -> int:
                 sent += 1
             else:
                 Device.objects.filter(pk=d.pk).update(push_token="")
+    logging.getLogger(__name__).info("pushes sent", extra={"notifications": len(ids),
+                                                           "sent": sent})
     return sent
 
 

@@ -38,3 +38,13 @@ def test_scrub_keeps_only_the_method_and_the_path():
     assert out["request"] == {"method": "POST", "url": "https://x/api/v1/bookings"}
     assert out["exception"]["values"][0]["stacktrace"]["frames"] == [{}]
     assert scrub({"message": "x"}) == {"message": "x"}
+
+
+def test_an_event_nobody_declared_is_refused():
+    """F-044: one list of events; a typo never goes out silently."""
+    import pytest
+
+    from apps.core import events
+
+    with pytest.raises(ValueError, match="Unknown event"):
+        events.emit("booking.udpated", booking="x")

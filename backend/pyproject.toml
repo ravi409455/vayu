@@ -26,6 +26,7 @@ dependencies = [
   "cryptography>=44",
   "pillow-heif>=1.9.0",
   "pypdf>=7.1.1",
+  "pyjwt>=2.8",
 ]
 
 [dependency-groups]
@@ -33,7 +34,6 @@ dev = [
   "pytest~=8.3",
   "pytest-django~=4.10",
   "pytest-cov~=6.0",
-  "factory-boy~=3.3",
   "freezegun~=1.5",
   "hypothesis~=6.120",
   "ruff~=0.9",

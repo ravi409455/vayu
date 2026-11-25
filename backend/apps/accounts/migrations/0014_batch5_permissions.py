@@ -22,8 +22,16 @@ def sign_out_off(apps, schema_editor):
 
 
 def sign_out_on(apps, schema_editor):
-    apps.get_model("accounts", "RolePermission").objects.get_or_create(
-        role="ops", permission="users.sign_out_devices", defaults={"scope": "all"})
+    from django.core.management.color import no_style
+
+    RolePermission = apps.get_model("accounts", "RolePermission")
+    # rows written with their own ids (the seed, a test going back) leave the id sequence
+    # behind: move it past them before adding one
+    with schema_editor.connection.cursor() as c:
+        for sql in schema_editor.connection.ops.sequence_reset_sql(no_style(), [RolePermission]):
+            c.execute(sql)
+    RolePermission.objects.get_or_create(role="ops", permission="users.sign_out_devices",
+                                         defaults={"scope": "all"})
 
 
 def drop_submissions_delete(apps, schema_editor):

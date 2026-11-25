@@ -61,6 +61,12 @@ def new_token() -> str:
     return secrets.token_urlsafe(24)      # 192 bits: unguessable, stable across revisions
 
 
+class ReportStatus(models.TextChoices):
+    PENDING = "pending"
+    READY = "ready"          # a PDF exists, even if a later render failed (see error)
+    FAILED = "failed"        # no PDF yet: the render failed
+
+
 def mark_out_of_date(reports) -> None:
     """Something these reports show changed: out of date (Ops regenerate), since the first
     change that made them so."""
@@ -75,8 +81,8 @@ class Report(models.Model):
                                    related_name="report")
     token = models.CharField(max_length=64, unique=True, default=new_token)
     revision = models.PositiveIntegerField(default=0)
-    # pending | ready (a PDF exists, even if a later render failed: see error) | failed (none yet)
-    status = models.CharField(max_length=10, default="pending")
+    status = models.CharField(max_length=10, choices=ReportStatus.choices,
+                              default=ReportStatus.PENDING)
     key = models.CharField(max_length=200, blank=True)
     filename = models.CharField(max_length=200, blank=True)
     template_version = models.ForeignKey(PdfTemplateVersion, null=True, blank=True,
