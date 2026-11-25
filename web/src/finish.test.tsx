@@ -4,7 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Booking } from "./api/types";
-import { WaitingFiles, activityText } from "./pages/ops/Booking";
+import { activityText } from "./pages/ops/booking/ActivityCard";
+import { WaitingFiles } from "./pages/ops/booking/WaitingFiles";
 import { ToastProvider } from "./ui/kit";
 
 afterEach(() => vi.restoreAllMocks());

@@ -11,6 +11,7 @@ import { addDays, fmtDay, today } from "../../lib/format";
 import { Avatar } from "../../ui/Avatar";
 import { Empty, PageHeader } from "../../ui/kit";
 import { StackedBars } from "../../ui/StackedBars";
+import { keys } from "../../api/keys";
 
 type Row = { period: string; key: string; count: number };
 type Stats = { bookings: number; completed: number; cancelled: number; completion_rate: number | null; avg_minutes: number | null; on_time: number | null;
@@ -158,14 +159,14 @@ export function Dashboards() {
   const [from, to] = preset === "custom" ? custom : presetRange(preset);
   const [prevFrom, prevTo] = previousRange(from, to);
   const group = groupFor(from, to);
-  const users = useList<User>("users-all", "users");
+  const users = useList<User>(keys.users(), "users");
   const typeLabel = useTypeLabels();
   const cityLabel = useLabels("city");
-  const sum = useQuery({ queryKey: ["dash-summary", from, to], queryFn: () => api<Summary>("dashboards/summary", { query: { date_from: from, date_to: to } }) });
-  const vol = useQuery({ queryKey: ["volume", group, by, from, to], queryFn: () => api<{ rows: Row[] }>("dashboards/volume", { query: { group, by, date_from: from, date_to: to } }) });
+  const sum = useQuery({ queryKey: keys.dashboards("summary", from, to), queryFn: ({ signal }) => api<Summary>("dashboards/summary", { query: { date_from: from, date_to: to }, signal }) });
+  const vol = useQuery({ queryKey: keys.dashboards("volume", group, by, from, to), queryFn: ({ signal }) => api<{ rows: Row[] }>("dashboards/volume", { query: { group, by, date_from: from, date_to: to }, signal }) });
   const rows = vol.data?.rows ?? [];
   const piv = pivot(rows);
-  const { keys, cell } = piv;
+  const { keys: series, cell } = piv;
   // every day of the range gets a bar (an empty day is a gap, not missing); weeks and months as given
   const periods = group === "day" && rows.length ? daysBetween(from, to) : piv.periods;
   const total = rows.reduce((n, r) => n + r.count, 0);
@@ -233,12 +234,14 @@ export function Dashboards() {
         </div>
         {rows.length === 0 ? <Empty title="No bookings in this range" /> : asTable ? (
           <div className="dash-table-wrap">
-            <table className="rows dash-table" aria-label="Bookings volume"><thead><tr><th>{group === "day" ? "Day" : group === "week" ? "Week" : "Month"}</th>{keys.map((k) => <th key={k} className="num">{name(k)}</th>)}<th className="num">Total</th></tr></thead>
-              <tbody>{[...periods].reverse().filter((p) => keys.some((k) => cell(p, k) > 0)).map((p) => <tr key={p}><td>{periodLabel(p)}</td>{keys.map((k) => <td key={k} className="num">{cell(p, k) || <Dash />}</td>)}<td className="num"><strong>{keys.reduce((n, k) => n + cell(p, k), 0)}</strong></td></tr>)}</tbody></table>
+            <table className="rows dash-table" aria-label="Bookings volume"><thead><tr><th>{group === "day" ? "Day" : group === "week" ? "Week" : "Month"}</th>{series.map((k) => <th key={k} className="num">{name(k)}</th>)}<th className="num">Total</th></tr></thead>
+              <tbody>{[...periods].reverse().filter((p) => series.some((k) => cell(p, k) > 0)).map((p) => <tr key={p}>
+                <td>{periodLabel(p)}</td>{series.map((k) => <td key={k} className="num">{cell(p, k) || <Dash />}</td>)}<td className="num">
+                <strong>{series.reduce((n, k) => n + cell(p, k), 0)}</strong></td></tr>)}</tbody></table>
           </div>
         ) : (
-          <StackedBars series={keys.map((k) => ({ key: k, name: name(k) }))}
-            cols={periods.map((p) => ({ key: p, label: periodLabel(p, true), long: periodLabel(p), values: Object.fromEntries(keys.map((k) => [k, cell(p, k)])) }))} />)}
+          <StackedBars series={series.map((k) => ({ key: k, name: name(k) }))}
+            cols={periods.map((p) => ({ key: p, label: periodLabel(p, true), long: periodLabel(p), values: Object.fromEntries(series.map((k) => [k, cell(p, k)])) }))} />)}
       </section>
 
       <section className="card dash-card flush" aria-label="By expert">

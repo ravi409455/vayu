@@ -7,7 +7,7 @@ import { AuthProvider } from "./auth";
 import type { FormSummary } from "./api/types";
 import { Library } from "./pages/admin/Library";
 import { LibraryEditor } from "./pages/admin/LibraryEditor";
-import { DuplicateDialog, ImportDialog } from "./pages/admin/ImportForm";
+import { DuplicateDialog, ImportDialog } from "./pages/admin/builder/ImportForm";
 import { describeChange, PushReview } from "./pages/admin/library/PushReview";
 
 afterEach(() => vi.restoreAllMocks());

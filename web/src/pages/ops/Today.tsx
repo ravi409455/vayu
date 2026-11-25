@@ -2,19 +2,19 @@ import { ChevronDown, ChevronLeft, ChevronRight, Plus, Users } from "lucide-reac
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { api, type Page } from "../../api/client";
 import { fetchAll, useList, useRefresh } from "../../api/hooks";
-import { useLabels } from "../../api/labels";
+import { STAGE_LABEL, useLabels } from "../../api/labels";
 import type { Booking, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { fmtTime, ist, today } from "../../lib/format";
+import { useCount, viewQuery } from "../../lib/bookingViews";
 import { loadJSON, saveJSON } from "../../lib/store";
 import { clampStart, DAY_END, DAY_START, dayWindow, hm, hoursOf, jobSpan, rangeLabel, spanFacts, spanTitle, stackRows, WINDOW_HOURS, windowStarts, type Span } from "../../lib/schedule";
 import { useTiming } from "../../lib/timing";
 import { Avatar } from "../../ui/Avatar";
 import { Empty, LoadError, PageHeader, useToast } from "../../ui/kit";
-import { Actions } from "./Booking";
-import { useCount, viewQuery } from "./Bookings";
+import { Actions } from "./booking/Actions";
+import { keys } from "../../api/keys";
 
 const SLOT_PX = 76;                // width of 30 minutes; the day scrolls sideways
 const LANE_W = 200;                // the expert column, kept in view while scrolling
@@ -22,9 +22,7 @@ const GUTTER = 36;                 // room at each end of the grid so a time lab
 const CHOSEN = "vayu:today-experts";  // the experts picked in the Experts menu, kept per browser
 
 const LANE_H = 76;                 // height of one row of boxes; a lane with overlapping jobs gets more rows
-export { dayWindow };
 
-const STAGE_NAME: Record<string, string> = { draft: "Unassigned", assigned: "Assigned", in_progress: "In progress", submitted: "Uploading", completed: "Completed" };
 const KIND: Record<string, string> = { draft: "open", assigned: "next", in_progress: "prog", submitted: "prog", completed: "done", cancelled: "off" };
 
 /** Ops' home: what today looks like and who is where. What needs a person is in the bell and the "Needs you" menu. */
@@ -34,9 +32,9 @@ export function Today() {
   const { say, fail } = useToast();
   const refresh = useRefresh();
   const t = today();
-  const q = useQuery({ queryKey: ["bookings-page", "today-home", t], refetchInterval: 60_000,      // the whole day, every page
-    queryFn: () => fetchAll<Booking>("bookings", { date_from: t, date_to: t, order: "schedule" }) });
-  const experts = useList<User>("experts", "users", { role: "expert" });
+  const q = useQuery({ queryKey: keys.bookings("today-home", t), refetchInterval: 60_000,      // the whole day, every page
+    queryFn: ({ signal }) => fetchAll<Booking>("bookings", { date_from: t, date_to: t, order: "schedule" }, signal) });
+  const experts = useList<User>(keys.users(), "users", { role: "expert" });
   const scroller = useRef<HTMLDivElement>(null);
   const car = useLabels("car_make_model");
   const city = useLabels("city");
@@ -117,7 +115,7 @@ export function Today() {
     const el = scroller.current;
     if (el) el.scrollTo({ left: Math.max(0, (clampStart(start, lo, hi) - lo) * 2 * slotPx), behavior: smooth ? "smooth" : "auto" });
   };
-  useEffect(() => { goTo(want.current ?? left.current ?? nowAt - 1, false); want.current = null; }, [slotPx, hasJobs]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { goTo(want.current ?? left.current ?? nowAt - 1, false); want.current = null; }, [slotPx, hasJobs]); // eslint-disable-line react-hooks/exhaustive-deps -- scrolls only when the slot width or the lanes change; goTo reads the latest values
   const onScroll = (el: HTMLDivElement) => { const h = lo + el.scrollLeft / (2 * slotPx); left.current = h; setLeftH(h); };
   const pick = (start: number) => { if (mode === "day") { want.current = start; setMode("3h"); } else goTo(start); };
   const step = (dir: number) => goTo(Math.round(leftH) + dir);
@@ -236,7 +234,7 @@ export function Today() {
       </section>
       {tip && (
         <div className="job-tip" role="tooltip" style={{ left: tip.x, top: tip.y, transform: tip.up ? "translateY(-100%)" : undefined }}>
-          <div className="job-tip-head"><b>{tip.b.booking_id}</b><span className={`job-tip-pill ${KIND[tip.b.stage]}`}>{STAGE_NAME[tip.b.stage] ?? tip.b.stage}</span></div>
+          <div className="job-tip-head"><b>{tip.b.booking_id}</b><span className={`job-tip-pill ${KIND[tip.b.stage]}`}>{STAGE_LABEL[tip.b.stage] ?? tip.b.stage}</span></div>
           <div className="job-tip-name">{String(tip.b.answers.customer_name ?? "")}</div>
           <div className="job-tip-sub">{car(tip.b.answers.car_make_model)} · {city(tip.b.answers.city)}</div>
           <dl>
@@ -244,7 +242,7 @@ export function Today() {
             {spanFacts(tip.sp, hoursOf(tip.b.answers.inspection_time), nowAt).map((f) => <Fragment key={f.label}><dt>{f.label}</dt><dd className={f.bad ? "bad" : ""}>{f.value}</dd></Fragment>)}
           </dl>
         </div>)}
-      {assigning && <Actions kind="assign" booking={assigning} experts={experts.data ?? []} onClose={() => setAssigning(null)} fail={fail} onDone={() => { setAssigning(null); say("Assigned."); void refresh("bookings-page"); }} />}
+      {assigning && <Actions kind="assign" booking={assigning} experts={experts.data ?? []} onClose={() => setAssigning(null)} fail={fail} onDone={() => { setAssigning(null); say("Assigned."); void refresh(keys.bookings()); }} />}
     </>
   );
 }

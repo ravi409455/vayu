@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Booking } from "../api/types";
 import { visibleNav } from "../Layout";
-import { timingPills, viewQuery } from "../pages/ops/Bookings";
+import { timingPills } from "../pages/ops/Bookings";
+import { viewQuery } from "./bookingViews";
 import { jobSpan } from "./schedule";
 import { fmtMinutes, timingFlags } from "./timing";
 

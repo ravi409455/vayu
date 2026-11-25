@@ -7,8 +7,8 @@ import type { Delivery, FormSummary, Integration } from "../../api/types";
 import { eventWord } from "../../lib/integrationDef";
 import { Confirm, Empty, LoadError, Modal, PageHeader, Pill, useToast, when } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
+import { keys } from "../../api/keys";
 
-export { eventWord };
 const ERROR_WORD: Record<string, string> = {
   integration_disabled: "Integration switched off", request_failed: "The request could not be built", missing_path_value: "A value in the URL path was empty",
   timeout: "No answer in time", blocked_address: "Address not allowed (private network)", connection_error: "Could not connect",
@@ -26,8 +26,8 @@ export function Integrations() {
   const { say, fail } = useToast();
   const refresh = useRefresh();
   const nav = useNavigate();
-  const list = useList<Integration>("integrations", "integrations");
-  const forms = useList<FormSummary>("forms", "forms");
+  const list = useList<Integration>(keys.integrations(), "integrations");
+  const forms = useList<FormSummary>(keys.forms(), "forms");
   const [log, setLog] = useState<Integration | null>(null);
   const [deleting, setDeleting] = useState<Integration | null>(null);
   const eligible = (forms.data ?? []).filter((f) => f.type === "booking" || f.type === "custom");
@@ -37,7 +37,7 @@ export function Integrations() {
     onSuccess: (d) => say(d.status === "success" ? `Test sent: ${d.response_status}` : `Test failed: ${errorWord(d.error)}`, d.status !== "success"),
     onError: fail,
   });
-  const remove = useMutation({ mutationFn: (i: Integration) => api(`integrations/${i.id}`, { method: "DELETE" }), onSuccess: () => void refresh("integrations"), onError: fail });
+  const remove = useMutation({ mutationFn: (i: Integration) => api(`integrations/${i.id}`, { method: "DELETE" }), onSuccess: () => void refresh(keys.integrations()), onError: fail });
 
   return (
     <>
@@ -72,8 +72,8 @@ function DeliveryLog({ integration, onClose }: { integration: Integration; onClo
   const { say, fail } = useToast();
   const refresh = useRefresh();
   const [status, setStatus] = useState("");
-  const q = useQuery({ queryKey: ["deliveries", integration.id, status], queryFn: () => api<Page<Delivery>>(`integrations/${integration.id}/deliveries`, { query: { status } }) });
-  const resend = useMutation({ mutationFn: (d: Delivery) => api(`deliveries/${d.id}/resend`, { body: {} }), onSuccess: () => { say("Re-sent."); void refresh("deliveries"); }, onError: fail });
+  const q = useQuery({ queryKey: keys.deliveries(integration.id, status), queryFn: ({ signal }) => api<Page<Delivery>>(`integrations/${integration.id}/deliveries`, { query: { status }, signal }) });
+  const resend = useMutation({ mutationFn: (d: Delivery) => api(`deliveries/${d.id}/resend`, { body: {} }), onSuccess: () => { say("Re-sent."); void refresh(keys.deliveries()); }, onError: fail });
   return (
     <Modal wide title={`Deliveries: ${integration.name}`} onClose={onClose}>
       <div className="bar">
@@ -87,7 +87,9 @@ function DeliveryLog({ integration, onClose }: { integration: Integration; onClo
           <tbody>{q.data.results.map((d) => (
             <tr key={d.id}><td className="nowrap">{when(d.created_at)}</td><td>{eventWord(d.event)}</td><td>{d.booking_id || "—"}</td>
               <td><Pill tone={tone(d.status)}>{STATUS_WORD[d.status] ?? d.status}</Pill>
-                <div className="cell-sub">{[d.response_status && !/^http_/.test(d.error) ? `HTTP ${d.response_status}` : "", d.error ? errorWord(d.error) : "", d.attempts > 1 ? `${d.attempts} tries` : "", d.status === "retrying" && d.next_retry_at ? `next try ${when(d.next_retry_at)}` : ""].filter(Boolean).join(" · ")}</div></td>
+                <div className="cell-sub">{[d.response_status && !/^http_/.test(d.error) ? `HTTP ${d.response_status}` : "", d.error ? errorWord(d.error) : "",
+                  d.attempts > 1 ? `${d.attempts} tries` : "", d.status === "retrying" && d.next_retry_at ? `next try ${when(d.next_retry_at)}` : ""].filter(Boolean).join(" · ")}</div>
+                  </td>
               <td style={{ textAlign: "right" }}><button className="sm" onClick={() => resend.mutate(d)}>Re-send</button></td></tr>))}</tbody></table></div>)}
       {q.data && q.data.results.length === 0 && <Empty>{status ? "No deliveries with this result." : "No deliveries yet. Use Test to send one."}</Empty>}
     </Modal>

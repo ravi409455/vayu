@@ -8,47 +8,32 @@ import { STAGE_LABEL, STAGE_TONE, useInspectionTypes, useLabels, useTypeLabels }
 import type { Booking, MasterListItem, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { allowedActions } from "../../lib/actions";
+import { useCount, viewQuery, type View } from "../../lib/bookingViews";
 import { useDebounced } from "../../lib/useDebounced";
-import { addDays, fmtSlot, today } from "../../lib/format";
+import { fmtSlot } from "../../lib/format";
 import { loadJSON, saveJSON } from "../../lib/store";
 import { fmtMinutes } from "../../lib/timing";
 import { ExpertCell } from "../../ui/ExpertCell";
 import { Confirm, Empty, LoadError, PageHeader, Pill, useToast } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
-import { Actions } from "./Booking";
+import { Actions } from "./booking/Actions";
+import { keys } from "../../api/keys";
 
 /** Admin may delete any booking; Ops only one that is still an untouched draft. */
 export function canDelete(role: string, stage: string): boolean {
   return role === "admin" || stage === "draft";
 }
 
-export type View = "today" | "unassigned" | "in_progress" | "uploading" | "upcoming" | "completed" | "late" | "quick" | "all";
 export type Filters = { search: string; city: string; expert: string; type: string; stage: string; date_from: string; date_to: string; answer: string; value: string };
 export const EMPTY: Filters = { search: "", city: "", expert: "", type: "", stage: "", date_from: "", date_to: "", answer: "", value: "" };
 /** A field Bookings can be filtered by (server: bookings/answer-fields). */
 export type AnswerField = { field: string; label: string; type: string; form: string; options: { value: string; label: string }[] };
 export const NOT_FILLED = "__none__";
 
-/** What each saved view asks the server for (on top of the person's own filters). */
-export function viewQuery(view: View, now = new Date()): Record<string, string> {
-  const t = today(now);
-  switch (view) {
-    case "today": return { date_from: t, date_to: t, order: "schedule" };
-    case "unassigned": return { stage: "draft", order: "schedule" };
-    case "in_progress": return { stage: "in_progress", order: "schedule" };
-    case "uploading": return { stage: "submitted" };
-    case "upcoming": return { date_from: addDays(t, 1), order: "schedule" };
-    case "completed": return { stage: "completed" };
-    case "late": return { timing: "late" };           // Admin / Ops only (the limits are on the Settings page)
-    case "quick": return { timing: "quick" };
-    default: return {};
-  }
-}
-
 const VIEWS: { id: View; label: string; counted?: boolean; perm?: string }[] = [
-  { id: "today", label: "Today", counted: true }, { id: "unassigned", label: "Unassigned", counted: true },
-  { id: "in_progress", label: "In progress", counted: true }, { id: "uploading", label: "Uploading", counted: true },
-  { id: "upcoming", label: "Upcoming" }, { id: "completed", label: "Completed" },
+  { id: "today", label: "Today", counted: true }, { id: "unassigned", label: STAGE_LABEL.draft!, counted: true },
+  { id: "in_progress", label: STAGE_LABEL.in_progress!, counted: true }, { id: "uploading", label: STAGE_LABEL.submitted!, counted: true },
+  { id: "upcoming", label: "Upcoming" }, { id: "completed", label: STAGE_LABEL.completed! },
   { id: "late", label: "Started late", counted: true, perm: "bookings.review_timing" },
   { id: "quick", label: "Too quick", counted: true, perm: "bookings.review_timing" }, { id: "all", label: "All" },
 ];
@@ -58,11 +43,6 @@ export function timingPills(b: Booking): string[] {
   return t ? [...(t.late ? [`Late ${fmtMinutes(t.late_minutes)}`] : []), ...(t.quick ? [`Too quick ${fmtMinutes(t.duration_minutes)}`] : [])] : [];
 }
 const BOARD: string[] = ["draft", "assigned", "in_progress", "submitted", "completed"];
-
-/** How many bookings a query matches: the same question the list asks, so a number and its list agree. */
-export function useCount(query: Record<string, string>, enabled = true) {
-  return useQuery({ queryKey: ["bookings-page", "count", query], enabled, staleTime: 30_000, queryFn: () => api<Page<Booking>>("bookings", { query }) }).data?.count;
-}
 
 function ViewTab({ v, on, onPick, own }: { v: (typeof VIEWS)[number]; on: boolean; onPick: () => void; own: Record<string, string> }) {
   const n = useCount({ ...own, ...viewQuery(v.id) });          // the person's filters apply to the numbers too
@@ -100,20 +80,20 @@ export function Bookings() {
   const own = Object.fromEntries(Object.entries({ ...f, search }).filter(([k, v]) => v !== "" && !((k === "answer" || k === "value") && !(f.type && f.answer && f.value))));
   const query = { ...own, ...viewQuery(view), page };
   // a new filter keeps the rows on screen until its answer arrives (no flash, an open menu stays put)
-  const q = useQuery({ queryKey: ["bookings-page", query], queryFn: () => api<Page<Booking>>("bookings", { query }), placeholderData: keepPreviousData });
-  const experts = useList<User>("experts", "users", { role: "expert" });
-  const cities = useQuery({ queryKey: ["list-items", "city"], queryFn: () => fetchAll<MasterListItem>("master-lists/city/items") });
+  const q = useQuery({ queryKey: keys.bookings("page", query), queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query, signal }), placeholderData: keepPreviousData });
+  const experts = useList<User>(keys.users(), "users", { role: "expert" });
+  const cities = useQuery({ queryKey: keys.listItems("city"), queryFn: ({ signal }) => fetchAll<MasterListItem>("master-lists/city/items", undefined, signal) });
   const types = useInspectionTypes();
   // an answer is picked once a type is: only that type's questions (plus check-in and wrap-up)
-  const answerFields = useQuery({ queryKey: ["answer-fields", f.type], enabled: can("submissions.view") && !!f.type,
-    queryFn: () => api<AnswerField[]>("bookings/answer-fields", { query: { type: f.type } }) });
+  const answerFields = useQuery({ queryKey: keys.answerFields(f.type), enabled: can("submissions.view") && !!f.type,
+    queryFn: ({ signal }) => api<AnswerField[]>("bookings/answer-fields", { query: { type: f.type }, signal }) });
   const picked = f.type ? (answerFields.data ?? []).find((a) => a.field === f.answer) : undefined;
   const car = useLabels("car_make_model");
   const city = useLabels("city");
   const type = useTypeLabels();
   const remove = useMutation({
     mutationFn: (b: Booking) => api(`bookings/${b.id}`, { method: "DELETE" }),
-    onSuccess: () => { setDeleting(null); say("Booking deleted."); void refresh("bookings-page"); },
+    onSuccess: () => { setDeleting(null); say("Booking deleted."); void refresh(keys.bookings()); },
     onError: (e) => { setDeleting(null); fail(e); },
   });
   const rows = q.data?.results ?? [];
@@ -151,7 +131,9 @@ export function Bookings() {
         <select aria-label="Type" className={f.type ? "set" : ""} value={f.type} onChange={(e) => set({ type: e.target.value, answer: "", value: "" })}><option value="">Type</option>{types.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select>
         <select aria-label="Expert" className={f.expert ? "set" : ""} value={f.expert} onChange={(e) => set({ expert: e.target.value })}><option value="">Expert</option>{(experts.data ?? []).map((u) => <option key={u.id} value={u.id}>{u.name || u.username}</option>)}</select>
         {view === "all" && <select aria-label="Stage" className={f.stage ? "set" : ""} value={f.stage} onChange={(e) => set({ stage: e.target.value })}><option value="">Stage</option>{Object.entries(STAGE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
-        {(view === "all" || view === "completed" || view === "late" || view === "quick") && <label className="date-range"><span>From</span><input aria-label="From" type="date" value={f.date_from} onChange={(e) => set({ date_from: e.target.value })} /><span>to</span><input aria-label="To" type="date" value={f.date_to} onChange={(e) => set({ date_to: e.target.value })} /></label>}
+        {(view === "all" || view === "completed" || view === "late" || view === "quick") && <label className="date-range"><span>From</span>
+          <input aria-label="From" type="date" value={f.date_from} onChange={(e) => set({ date_from: e.target.value })} /><span>to</span>
+          <input aria-label="To" type="date" value={f.date_to} onChange={(e) => set({ date_to: e.target.value })} /></label>}
         {f.type && (answerFields.data ?? []).length > 0 && <select aria-label="Answer" className={f.answer ? "set" : ""} value={f.answer} onChange={(e) => set({ answer: e.target.value, value: "" })}>
           <option value="">Answer</option>{(answerFields.data ?? []).map((a) => <option key={a.field} value={a.field}>{a.label}</option>)}</select>}
         {picked && <select aria-label="Answer value" className={f.value ? "set" : ""} value={f.value} onChange={(e) => set({ value: e.target.value })}>
@@ -199,7 +181,7 @@ export function Bookings() {
           })}
         </div>
       )}
-      {acting && <Actions kind={acting.kind} booking={acting.b} experts={experts.data ?? []} onClose={() => setActing(null)} fail={fail} onDone={() => { setActing(null); say("Done."); void refresh("bookings-page"); }} />}
+      {acting && <Actions kind={acting.kind} booking={acting.b} experts={experts.data ?? []} onClose={() => setActing(null)} fail={fail} onDone={() => { setActing(null); say("Done."); void refresh(keys.bookings()); }} />}
       {deleting && (
         <Confirm title={`Delete ${deleting.booking_id}?`} danger confirmLabel="Delete booking" busy={remove.isPending} onCancel={() => setDeleting(null)} onConfirm={() => remove.mutate(deleting)}>
           <p>The booking{deleting.stage === "draft" ? "" : " and everything recorded on it"} is removed for good. This cannot be undone and is written to the audit log.</p>

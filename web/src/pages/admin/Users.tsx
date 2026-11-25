@@ -8,6 +8,7 @@ import { Avatar } from "../../ui/Avatar";
 import { Confirm, Empty, Field, LoadError, Modal, PageHeader, Pill, useToast } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
 import { fmtStamp } from "../../lib/format";
+import { keys } from "../../api/keys";
 
 const ROLE: Record<string, string> = { admin: "Admin", ops: "Ops", expert: "Expert" };
 
@@ -15,7 +16,7 @@ export function Users() {
   const { can } = useAuth();
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const users = useList<User>("users", "users");
+  const users = useList<User>(keys.users(), "users");
   const [form, setForm] = useState<Partial<User> & { password?: string } | null>(null);
   const [reset, setReset] = useState<User | null>(null);
   const [pw, setPw] = useState("");
@@ -33,12 +34,12 @@ export function Users() {
     mutationFn: (u: Partial<User> & { password?: string }) =>
       u.id ? api(`users/${u.id}`, { method: "PATCH", body: { name: u.name, email: u.email, role: u.role, phone: u.phone ?? "" } })
            : api("users", { body: u }),
-    onSuccess: () => { setForm(null); say("Saved."); void refresh("users"); },
+    onSuccess: () => { setForm(null); say("Saved."); void refresh(keys.users()); },
     onError: fail,
   });
   const toggle = useMutation({
     mutationFn: (u: User) => api(`users/${u.id}`, { method: "PATCH", body: { is_active: !u.is_active } }),
-    onSuccess: () => { setDeactivate(null); say("Done."); void refresh("users"); },
+    onSuccess: () => { setDeactivate(null); say("Done."); void refresh(keys.users()); },
     onError: (e) => { setDeactivate(null); fail(e); },
   });
   const resetPw = useMutation({
@@ -48,7 +49,7 @@ export function Users() {
   });
   const removePicture = useMutation({
     mutationFn: (u: User) => api(`users/${u.id}/picture`, { method: "DELETE" }),
-    onSuccess: () => { setForm((f) => (f ? { ...f, avatar_url: null } : f)); say("Picture removed. Their initials show instead."); void refresh("users"); },
+    onSuccess: () => { setForm((f) => (f ? { ...f, avatar_url: null } : f)); say("Picture removed. Their initials show instead."); void refresh(keys.users()); },
     onError: fail,
   });
   const out = useMutation({

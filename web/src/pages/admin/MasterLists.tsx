@@ -6,28 +6,29 @@ import type { MasterList, MasterListItem } from "../../api/types";
 import { useAuth } from "../../auth";
 import { Empty, LoadError, PageHeader, Pill, useToast } from "../../ui/kit";
 import { slugKey } from "../../lib/fieldTypes";
+import { keys } from "../../api/keys";
 
 export function MasterLists() {
   const { can } = useAuth();
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const lists = useList<MasterList>("master-lists", "master-lists");
+  const lists = useList<MasterList>(keys.masterLists(), "master-lists");
   const [open, setOpen] = useState<MasterList | null>(null);
   const [item, setItem] = useState({ key: "", label: "", keyTouched: false });
   const manage = can("master_lists.manage");
   const items = useQuery({
-    queryKey: ["master-list-items", (open ?? lists.data?.[0])?.key],
+    queryKey: keys.listItems((open ?? lists.data?.[0])?.key, true),
     enabled: !!(open ?? lists.data?.[0]),
-    queryFn: () => fetchAll<MasterListItem>(`master-lists/${(open ?? lists.data![0])!.key}/items`, { include_archived: 1 }),
+    queryFn: ({ signal }) => fetchAll<MasterListItem>(`master-lists/${(open ?? lists.data![0])!.key}/items`, { include_archived: 1 }, signal),
   });
   const add = useMutation({
     mutationFn: () => api(`master-lists/${(open ?? lists.data![0])!.key}/items`, { body: { key: item.key, label: item.label } }),
-    onSuccess: () => { setItem({ key: "", label: "", keyTouched: false }); say("Added."); void refresh("master-list-items"); },
+    onSuccess: () => { setItem({ key: "", label: "", keyTouched: false }); say("Added."); void refresh(keys.listItems()); },
     onError: fail,
   });
   const patch = useMutation({
     mutationFn: (v: { id: number; body: Record<string, unknown> }) => api(`master-list-items/${v.id}`, { method: "PATCH", body: v.body }),
-    onSuccess: () => { say("Saved."); void refresh("master-list-items"); },
+    onSuccess: () => { say("Saved."); void refresh(keys.listItems()); },
     onError: fail,
   });
   const current = open ?? (lists.data ?? [])[0] ?? null;

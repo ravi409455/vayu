@@ -7,8 +7,7 @@ import { EyeOff, FileText, GitBranch, GripVertical, Link2, Lock, PanelLeftClose,
 import { useState } from "react";
 import type { FormField, FormPage, FormSection } from "../../../api/types";
 import type { Ref } from "../../../lib/tree";
-import { iconFor } from "../../../lib/typeIcons";
-import { typeSummary } from "../../../lib/fieldTypes";
+import { iconFor, typeSummary } from "../../../lib/fieldTypes";
 import { Pill } from "../../../ui/kit";
 
 export type Sel = Ref | null;

@@ -7,6 +7,7 @@ import { useAuth } from "../../auth";
 import { slugKey } from "../../lib/fieldTypes";
 import { newFieldDef } from "../../lib/libraryDef";
 import { Empty, Field, LoadError, Modal, PageHeader, Pill, useToast } from "../../ui/kit";
+import { keys } from "../../api/keys";
 
 type Item = { id: number; kind: "field" | "section"; key: string; name: string; revision: number; archived: boolean; used_in: number };
 
@@ -18,12 +19,12 @@ export function Library() {
   const [q, setQ] = useState("");
   const [kind, setKind] = useState("");
   const [archived, setArchived] = useState(false);
-  const items = useList<Item>("library", "library", { q: q || undefined, kind: kind || undefined, include_archived: archived ? 1 : undefined });
+  const items = useList<Item>(keys.library(), "library", { q: q || undefined, kind: kind || undefined, include_archived: archived ? 1 : undefined });
   const [creating, setCreating] = useState(false);
   const [n, setN] = useState({ kind: "section", name: "", key: "" });
   const create = useMutation({
     mutationFn: () => api<Item>("library", { body: { kind: n.kind, key: n.key, name: n.name, definition: n.kind === "field" ? newFieldDef(n.key, n.name, "short_text") : { title: n.name, visible: true, fields: [newFieldDef("first_field", "First field", "short_text")] } } }),
-    onSuccess: (r) => { void refresh("library"); nav(`/library/${r.id}`); },
+    onSuccess: (r) => { void refresh(keys.library()); nav(`/library/${r.id}`); },
     onError: fail,
   });
   const rows = items.data ?? [];

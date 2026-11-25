@@ -5,11 +5,11 @@ import { Field, Modal } from "../../../ui/kit";
 import { fillGrid, LINKS, PART_LABEL, type Box, type Cell, type Look, type Part, type ReportPage, type Row, type Source, type StyleRule } from "./model";
 import { RichText, ValuePicker } from "./RichText";
 import { ShareForm, snippetContent, type SharedItem } from "./sharing";
+import { NO_TEXT_TYPES } from "../../../lib/fieldTypes";
 
 export type SectionChoice = { value: string; label: string; fields: { key: string; label: string; type: string }[] };
 export type Ctx = { sections: SectionChoice[]; fields: { value: string; label: string; type: string }[]; readOnly: boolean; snippets?: SharedItem[] };
 
-const MEDIA = ["photo", "video", "file", "signature", "image"];
 
 /** A row of buttons for a small set of choices. */
 function Seg<T extends string | number>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void }) {
@@ -34,16 +34,43 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   return <label className="check"><input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} /> {label}</label>;
 }
 
-export function PageSettings({ page, onChange, onDelete, fields }: { page: ReportPage; onChange: (p: Partial<ReportPage>) => void; onDelete: () => void; fields: Ctx["fields"] }) {
+export function PageSettings({ page, onChange, onDelete, fields }: { page: ReportPage; onChange: (p: Partial<ReportPage>) => void; onDelete?: () => void; fields: Ctx["fields"] }) {
   return (
     <div className="rd-settings-body">
-      <Field label="Page name" help="Shown in the pages list and in a contents list."><input value={page.title} onChange={(e) => onChange({ title: e.target.value })} /></Field>
-      <Field label="Page style">
-        <Seg label="Page style" value={page.style ?? "normal"} options={[["normal", "Normal"], ["cover", "Cover"], ["full", "Full page"]]} onChange={(style) => onChange({ style })} />
+      <Field label="Page name" help="Shown in the pages list and in a contents list.">
+        <input value={page.title} onChange={(e) => onChange({ title: e.target.value })} />
       </Field>
-      <p className="muted small">{page.style === "full" ? "No header or footer: for a divider or a full-page design." : page.style === "cover" ? "Uses the cover header and footer (Report settings)." : "Uses the normal header and footer (Report settings)."} Each page starts on a new sheet; long pages carry on over several.</p>
-      <ConditionBuilder label="Show this page only if" value={page.show_if ?? null} onChange={(r) => onChange({ show_if: r ?? undefined })} fields={fields} />
-      <button type="button" className="danger" onClick={onDelete}><Trash2 size={14} aria-hidden /> Delete page</button>
+      <Field label="Page style">
+        <Seg
+          label="Page style"
+          value={page.style ?? "normal"}
+          options={[
+            ["normal", "Normal"],
+            ["cover", "Cover"],
+            ["full", "Full page"],
+          ]}
+          onChange={(style) => onChange({ style })}
+        />
+      </Field>
+      <p className="muted small">
+        {page.style === "full"
+          ? "No header or footer: for a divider or a full-page design."
+          : page.style === "cover"
+            ? "Uses the cover header and footer (Report settings)."
+            : "Uses the normal header and footer (Report settings)."}{" "}
+        Each page starts on a new sheet; long pages carry on over several.
+      </p>
+      <ConditionBuilder
+        label="Show this page only if"
+        value={page.show_if ?? null}
+        onChange={(r) => onChange({ show_if: r ?? undefined })}
+        fields={fields}
+      />
+      {onDelete && (
+        <button type="button" className="danger" onClick={onDelete}>
+          <Trash2 size={14} aria-hidden /> Delete page
+        </button>
+      )}
     </div>
   );
 }
@@ -72,7 +99,7 @@ export function PartSettings({ part, onChange, onDelete, onDuplicate, onMove, ct
         {t === "photos" && <PhotoSettings part={part} set={set} ctx={ctx} />}
         {t === "text" && (
           <>
-            <RichText label="Text" value={part.html} onChange={(html) => set({ html })} choices={ctx.fields.filter((f) => !MEDIA.includes(f.type))} />
+            <RichText label="Text" value={part.html} onChange={(html) => set({ html })} choices={ctx.fields.filter((f) => !NO_TEXT_TYPES.includes(f.type))} />
             <Field label="Columns"><Seg label="Text columns" value={part.columns ?? 1} options={[[1, "1"], [2, "2"]]} onChange={(columns) => set({ columns })} /></Field>
             <Field label="Size"><Seg label="Text size" value={part.size ?? "normal"} options={[["fine", "Fine print"], ["small", "Small"], ["normal", "Normal"], ["large", "Large"], ["title", "Title"]]} onChange={(size) => set({ size })} /></Field>
             <Field label="Align"><Seg label="Align" value={part.align ?? "left"} options={[["left", "Left"], ["center", "Centre"], ["right", "Right"], ["justify", "Justify"]]} onChange={(align) => set({ align })} /></Field>
@@ -100,7 +127,8 @@ export function PartSettings({ part, onChange, onDelete, onDuplicate, onMove, ct
               {LINKS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
             <Field label="Button text"><input value={part.label} onChange={(e) => set({ label: e.target.value })} /></Field>
             <Field label="Align"><Seg label="Align" value={part.align ?? "center"} options={[["left", "Left"], ["center", "Centre"], ["right", "Right"]]} onChange={(align) => set({ align })} /></Field>
-            <p className="muted small">{part.link === "verify" ? "Opens the page that proves the report is genuine." : `One tap downloads a ZIP of every ${part.link === "photos" ? "photo" : "video"} of the inspection, in folders by section. The link keeps working for as long as the report does. Hidden when there are none.`}</p>
+            <p className="muted small">{part.link === "verify" ? "Opens the page that proves the report is genuine." :
+              `One tap downloads a ZIP of every ${part.link === "photos" ? "photo" : "video"} of the inspection, in folders by section. The link keeps working for as long as the report does. Hidden when there are none.`}</p>
           </>)}
         {t === "verify" && <Field label="Code size (mm)"><input type="number" min={15} max={120} value={part.size ?? 40} onChange={(e) => set({ size: Number(e.target.value) })} /></Field>}
         {t === "contents" && <Field label="Columns"><Seg label="Contents columns" value={part.columns ?? 1} options={[[1, "1"], [2, "2"]]} onChange={(columns) => set({ columns })} /></Field>}
@@ -110,7 +138,9 @@ export function PartSettings({ part, onChange, onDelete, onDuplicate, onMove, ct
           <ConditionBuilder label="Show only if" value={part.show_if ?? null} onChange={(r) => set({ show_if: r ?? undefined })} fields={ctx.fields} />
         </More>
         {t !== "page_break" && t !== "spacer" && (
-          <More title="Page breaks" summary={[("new_page" in part && part.new_page) ? "new page" : "", ("keep_together" in part && part.keep_together) ? "kept together" : "", ("keep_title" in part ? part.keep_title : undefined) !== false ? "title kept with rows" : ""].filter(Boolean).join(" · ") || "none"}>
+          <More title="Page breaks" summary={[
+            ("new_page" in part && part.new_page) ? "new page" : "", ("keep_together" in part && part.keep_together) ? "kept together" : "",
+            ("keep_title" in part ? part.keep_title : undefined) !== false ? "title kept with rows" : ""].filter(Boolean).join(" · ") || "none"}>
             <Toggle label="Start on a new page" checked={!!("new_page" in part && part.new_page)} onChange={(v) => set({ new_page: v || undefined })} />
             <Toggle label="Keep together on one page" checked={!!("keep_together" in part && part.keep_together)} onChange={(v) => set({ keep_together: v || undefined })} />
             <Toggle label="Keep the title with the first rows" checked={("keep_title" in part ? part.keep_title : undefined) !== false} onChange={(v) => set({ keep_title: v })} />
@@ -121,7 +151,9 @@ export function PartSettings({ part, onChange, onDelete, onDuplicate, onMove, ct
               <Field label="Space above (mm)"><input type="number" min={0} max={60} value={box.space_above ?? 0} onChange={(e) => setBox({ space_above: Number(e.target.value) })} /></Field>
               <Field label="Space below (mm)"><input type="number" min={0} max={60} value={box.space_below ?? 3} onChange={(e) => setBox({ space_below: Number(e.target.value) })} /></Field>
               <Field label="Padding (mm)"><input type="number" min={0} max={20} value={box.padding ?? 0} onChange={(e) => setBox({ padding: Number(e.target.value) })} /></Field>
-              <Field label="Border"><select value={box.border ?? "none"} onChange={(e) => setBox({ border: e.target.value as Box["border"] })}><option value="none">None</option><option value="all">All sides</option><option value="bottom">Bottom</option><option value="left">Left</option></select></Field>
+              <Field label="Border"><select value={box.border ?? "none"} onChange={(e) => setBox({ border: e.target.value as Box["border"] })}>
+                <option value="none">None</option><option value="all">All sides</option><option value="bottom">Bottom</option><option value="left">Left</option></select>
+                </Field>
               <Field label="Border colour"><select value={box.border_color ?? "muted"} onChange={(e) => setBox({ border_color: e.target.value })}>{TONES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
               <Field label="Background"><select value={box.background ?? "none"} onChange={(e) => setBox({ background: e.target.value })}><option value="none">None</option>{TONES.filter(([v]) => v !== "text").map(([v, l]) => <option key={v} value={v}>{l} tint</option>)}</select></Field>
             </div>
@@ -143,7 +175,7 @@ function TableSettings({ part, set, ctx }: { part: Extract<Part, { type: "table"
   const look: Look = part.look ?? {};
   const setLook = (l: Partial<Look>) => set({ look: { ...look, ...l } });
   const setSrc = (s: Source) => set({ source: s });
-  const fields = ctx.fields.filter((f) => !MEDIA.includes(f.type));
+  const fields = ctx.fields.filter((f) => !NO_TEXT_TYPES.includes(f.type));
   const kind = src.kind;
   const sec = kind === "section" ? ctx.sections.find((s) => s.value === src.section) : undefined;
   return (
@@ -175,7 +207,7 @@ function TableSettings({ part, set, ctx }: { part: Extract<Part, { type: "table"
                   {sec.fields.find((f) => f.key === k)?.label ?? k} ✕</button>))}
                 <select aria-label="Leave out a check" value="" onChange={(e) => e.target.value && setSrc({ ...src, exclude: [...(src.exclude ?? []), e.target.value] })} style={{ width: "auto" }}>
                   <option value="">+ Leave out…</option>
-                  {sec.fields.filter((f) => !MEDIA.includes(f.type) && !(src.exclude ?? []).includes(f.key)).map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}</select>
+                  {sec.fields.filter((f) => !NO_TEXT_TYPES.includes(f.type) && !(src.exclude ?? []).includes(f.key)).map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}</select>
               </div>
             </Field>)}
           <Field label="When a check has no answer" help="Leave empty to hide the row."><input placeholder="e.g. Not mentioned" value={src.fallback ?? ""} onChange={(e) => setSrc({ ...src, fallback: e.target.value || undefined })} /></Field>
@@ -217,7 +249,7 @@ function RowsEditor({ rows, onChange, fields, sections }: { rows: Row[]; onChang
         <button type="button" className="link" onClick={() => onChange([...rows, { field: "" }])}>+ Add row</button>
         <select aria-label="Add all checks of a section" value="" style={{ width: "auto" }} onChange={(e) => {
           const s = sections.find((x) => x.value === e.target.value);
-          if (s) onChange([...rows, ...s.fields.filter((f) => !MEDIA.includes(f.type)).map((f) => ({ field: `inspection.${f.key}` }))]);
+          if (s) onChange([...rows, ...s.fields.filter((f) => !NO_TEXT_TYPES.includes(f.type)).map((f) => ({ field: `inspection.${f.key}` }))]);
         }}><option value="">+ Add all from a section…</option>{sections.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
       </div>
     </div>
@@ -256,7 +288,10 @@ function GridEditor({ src, onChange, fields }: { src: Extract<Source, { kind: "g
             <tr key={i}>
               <th><input aria-label={`Row ${i + 1} name`} value={r.label} onChange={(e) => onChange({ ...src, rows: src.rows.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} /></th>
               {src.columns.map((_, c) => (
-                <td key={c}><select aria-label={`Row ${i + 1} column ${c + 1}`} value={cellValue(r.cells[c])} onChange={(e) => onChange({ ...src, rows: src.rows.map((x, j) => (j === i ? { ...x, cells: src.columns.map((__, k) => (k === c ? (e.target.value ? { field: e.target.value } : { text: "" }) : (x.cells[k] ?? { text: "" }))) } : x)) })}>
+                <td key={c}>
+                  <select aria-label={`Row ${i + 1} column ${c + 1}`} value={cellValue(r.cells[c])} onChange={(e) =>
+                    onChange({ ...src, rows: src.rows.map((x, j) => (j === i ?
+                    { ...x, cells: src.columns.map((__, k) => (k === c ? (e.target.value ? { field: e.target.value } : { text: "" }) : (x.cells[k] ?? { text: "" }))) } : x)) })}>
                   <option value="">—</option>{fields.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}</select></td>))}
               <td><button type="button" className="link" aria-label={`Remove row ${i + 1}`} onClick={() => onChange({ ...src, rows: src.rows.filter((_, j) => j !== i) })}>✕</button></td>
             </tr>))}</tbody>
@@ -297,7 +332,8 @@ function PhotoSettings({ part, set, ctx }: { part: Extract<Part, { type: "photos
         </Field>)}
       {src.kind !== "issues" && <Field label="Which photos"><Seg label="Which photos" value={part.which ?? "all"} options={[["all", "All"], ["issues", "Only issue photos"], ["first", "First of each"]]} onChange={(which) => set({ which })} /></Field>}
       <Field label="Photos per row"><Seg label="Photos per row" value={part.per_row ?? 2} options={[[1, "1"], [2, "2"], [3, "3"], [4, "4"]]} onChange={(per_row) => set({ per_row })} /></Field>
-      <More title="Photo shape and caption" summary={`${part.shape ?? "4:3"} · ${({ fill: "fill and crop", whole: "whole photo", top: "crop, keep top" } as const)[part.fit ?? "fill"]} · caption: ${({ label: "photo name", check: "check and answer", custom: "own text", none: "none" } as const)[part.caption ?? "label"]}`}>
+      <More title="Photo shape and caption" summary={`${part.shape ?? "4:3"} · ${({ fill: "fill and crop", whole: "whole photo", top: "crop, keep top" } as const)[part.fit ?? "fill"]} · caption:
+        ${({ label: "photo name", check: "check and answer", custom: "own text", none: "none" } as const)[part.caption ?? "label"]}`}>
         <Field label="Box shape"><Seg label="Box shape" value={part.shape ?? "4:3"} options={[["4:3", "4:3"], ["16:9", "16:9"], ["1:1", "Square"], ["original", "As taken"]]} onChange={(shape) => set({ shape })} /></Field>
         <Field label="When the photo does not fit"><Seg label="Fit" value={part.fit ?? "fill"} options={[["fill", "Fill and crop"], ["whole", "Show whole"], ["top", "Crop, keep top"]]} onChange={(fit) => set({ fit })} /></Field>
         <Field label="Caption"><Seg label="Caption" value={part.caption ?? "label"} options={[["label", "Photo name"], ["check", "Check + answer"], ["custom", "Own text"], ["none", "None"]]} onChange={(caption) => set({ caption })} /></Field>
@@ -359,7 +395,7 @@ function HtmlSettings({ part, set, ctx }: { part: Extract<Part, { type: "html" }
     <>
       <p className="muted small">For what the other parts cannot do. Plain HTML and CSS with values like {"{{ inspection.colour }}"}. No scripts, links or pictures; the CSS only styles this part. Colours: var(--brand), var(--ok), var(--bad)…</p>
       <Field label="HTML">
-        <div className="bar" style={{ margin: "0 0 4px" }}><ValuePicker choices={ctx.fields.filter((f) => !MEDIA.includes(f.type))} onPick={insert} /></div>
+        <div className="bar" style={{ margin: "0 0 4px" }}><ValuePicker choices={ctx.fields.filter((f) => !NO_TEXT_TYPES.includes(f.type))} onPick={insert} /></div>
         <textarea ref={area} aria-label="HTML" className="mono" rows={10} spellCheck={false} value={part.html} onChange={(e) => set({ html: e.target.value })} />
       </Field>
       <Field label="CSS" help="e.g. .note { color: var(--brand) }">

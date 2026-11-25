@@ -2,7 +2,7 @@
 // custom form's pages, then the end form's pages, then the review. A form with nothing visible is
 // skipped. Pure, so the order and the skipping can be tested without a browser.
 import type { FormPage, FormVersion } from "../api/types";
-import { maxFiles } from "./fieldTypes";
+import { maxFiles, MEDIA_TYPES } from "./fieldTypes";
 import { visiblePages, type Answers, type Ctx } from "./formSpec";
 
 export type Part = "start" | "inspection" | "end";
@@ -38,7 +38,6 @@ export function unvisited(steps: Step[], visited: string[]): Step[] {
 /** A file the server holds for this job (from `bookings/{id}/media`). */
 export type ServerMedia = { id: string; field_key: string; kind: string; status: string };
 export type MediaAdd = { part: Part; key: string; id: string; single: boolean };
-const MEDIA_TYPES = ["photo", "video", "file", "signature"];
 
 /** A phone that lost its draft (another device, cleared storage) must not lose the files already
  *  on the server: finished files go back into the answers. Files that have not finished are left

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { FileText, ImageOff } from "lucide-react";
 import { api, ApiError } from "../api/client";
+import { keys } from "../api/keys";
 
 /** `removed`: deleted after the storage time Admin set (Settings); no links then. */
 export type MediaLinks = { url: string; preview_url: string | null; content_type?: string; removed?: boolean };
@@ -16,7 +17,7 @@ export const LINK_REFRESH_MS = 50 * 60_000;
 /** The signed links of one uploaded file (shared cache: a gallery and a sheet ask once). */
 export function useMediaUrl(id: string) {
   // a file still being checked has no link yet: ask again every 3 s for a minute
-  return useQuery({ queryKey: ["media-url", id], staleTime: 600_000, queryFn: () => mediaUrl(id),
+  return useQuery({ queryKey: keys.mediaUrl(id), staleTime: 600_000, queryFn: () => mediaUrl(id),
     refetchInterval: (q) => (!q.state.data ? (q.state.dataUpdateCount < 20 ? 3000 : false) : LINK_REFRESH_MS) }).data;
 }
 

@@ -1,14 +1,13 @@
 import { Link2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { Access, Check as Validation, FormField, Option } from "../../api/types";
-import { uploadFile } from "../../api/client";
-import { iconFor } from "../../lib/typeIcons";
-import { AccessEditor } from "../../ui/AccessEditor";
-import { ConditionBuilder, type FieldChoice } from "../../ui/ConditionBuilder";
-import { Check, Field, Pill, Tabs, useToast } from "../../ui/kit";
-import { InfoTip } from "../../ui/InfoTip";
-import { MoreMenu } from "../../ui/Menu";
-import { CHOICE_TYPES, FIELD_TYPES, slugKey, SYSTEM_TYPE_LABELS } from "../../lib/fieldTypes";
+import type { Access, Check as Validation, FormField, Option } from "../../../api/types";
+import { uploadFile } from "../../../api/client";
+import { AccessEditor } from "../../../ui/AccessEditor";
+import { ConditionBuilder, type FieldChoice } from "../../../ui/ConditionBuilder";
+import { Check, Field, Pill, Tabs, useToast } from "../../../ui/kit";
+import { InfoTip } from "../../../ui/InfoTip";
+import { MoreMenu } from "../../../ui/Menu";
+import { CHOICE_TYPES, iconFor, NO_TEXT_TYPES, slugKey, typeLabel, UPLOAD_TYPES } from "../../../lib/fieldTypes";
 
 export type FieldDraft = Pick<FormField, "label" | "helper_text" | "type" | "config" | "required" | "required_if" | "show_if" | "visible" | "access">;
 /** A validation being edited: one saved (has an id) or new. */
@@ -21,7 +20,7 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
   field: FormField; choices: FieldChoice[]; lists: { key: string; name: string }[]; categories: string[];
   /** the other fields of this field's section (a photo can show one of them) */
   siblings?: { key: string; label: string; type: string }[];
-  onSave: (d: FieldDraft, validations?: ValidationDraft[]) => void; onDelete: () => void; readOnly: boolean; kind?: string;
+  onSave: (d: FieldDraft, validations?: ValidationDraft[]) => void; onDelete?: () => void; readOnly: boolean; kind?: string;
   /** this field's validations (answer rules that point at it); given: the Logic tab edits them */
   checks?: Validation[];
   parents?: { section?: Access; page?: Access }; extra?: React.ReactNode; outside?: React.ReactNode;
@@ -32,14 +31,14 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
   const savedVals = (checks ?? []).map(({ id, rule, message, fields }) => ({ id, rule, message, fields }));
   const [vals, setVals] = useState<ValidationDraft[]>(savedVals);
   useEffect(() => setD(field), [field]);
-  useEffect(() => setVals(savedVals), [JSON.stringify(savedVals)]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setVals(savedVals), [JSON.stringify(savedVals)]); // eslint-disable-line react-hooks/exhaustive-deps -- compares the checks by value; the list is a new array each render
   const set = (p: Partial<FieldDraft>) => setD({ ...d, ...p });
   const cfg = d.config as Record<string, unknown>;
   const setCfg = (p: Record<string, unknown>) => set({ config: { ...cfg, ...p } });
   const valsDirty = JSON.stringify(vals) !== JSON.stringify(savedVals);
   const dirty = JSON.stringify(d) !== JSON.stringify({ ...field, level: undefined }) || valsDirty;
   const ref = `${kind === "custom" ? "inspection" : kind}.${field.key}`;
-  const type = FIELD_TYPES.find((t) => t.id === field.type)?.label ?? SYSTEM_TYPE_LABELS[field.type] ?? field.type;
+  const type = typeLabel(field.type);
   const locked = field.locked || field.is_system;
   const Icon = iconFor(field.type);
   const media = field.type === "photo" || field.type === "video";
@@ -128,7 +127,7 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
               <Check label="Upload by Ops allowed" checked={cfg.ops_upload !== false} onChange={(e) => setCfg({ ops_upload: e.target.checked ? undefined : false })}
                 tip={`After the expert submits, Ops and Admin can add or replace these ${field.type}s from their computer or phone. Turn off when only the expert's own upload counts.`} />
             )}
-            {!locked && ["photo", "video", "file"].includes(field.type) && (
+            {!locked && UPLOAD_TYPES.includes(field.type) && (
               <div className="grid2">
                 {field.type !== "file" && <Field label="At least"><input type="number" min={0} value={String(cfg.min_count ?? 0)} onChange={(e) => setCfg({ min_count: Number(e.target.value) })} /></Field>}
                 <Field label="At most"><input type="number" min={1} value={String(cfg.max_count ?? 1)} onChange={(e) => setCfg({ max_count: Number(e.target.value) })} /></Field>
@@ -146,7 +145,7 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
                   <Field label="Photo of" tip="The check this photo shows. The report can caption it with that check and its answer, and counts it as an issue photo when the answer is a problem.">
                     <select aria-label="Photo of" value={String(cfg.photo_of ?? "")} onChange={(e) => setCfg({ photo_of: e.target.value || undefined })}>
                       <option value="">No particular check</option>
-                      {siblings.filter((x) => !["photo", "video", "file", "signature", "image"].includes(x.type)).map((x) => <option key={x.key} value={x.key}>{x.label || x.key}</option>)}
+                      {siblings.filter((x) => !NO_TEXT_TYPES.includes(x.type)).map((x) => <option key={x.key} value={x.key}>{x.label || x.key}</option>)}
                     </select>
                   </Field>)}
               </>
@@ -201,7 +200,7 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
       {outside}
       {!readOnly && (
         <div className="insp-foot">
-          {!field.is_system && <button className="link danger-link" onClick={onDelete}><Trash2 size={14} aria-hidden /> Delete field</button>}
+          {!field.is_system && onDelete && <button className="link danger-link" onClick={onDelete}><Trash2 size={14} aria-hidden /> Delete field</button>}
           <span className="grow muted small" style={{ textAlign: "right" }}>{dirty ? "Unsaved changes" : ""}</span>
           <button className="primary" disabled={!dirty || vals.some((v) => !v.message.trim() || !v.rule)}
             title={vals.some((v) => !v.rule) ? "Finish the validation's condition" : vals.some((v) => !v.message.trim()) ? "Every validation needs a message" : undefined}

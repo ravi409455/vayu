@@ -40,7 +40,7 @@ export function CameraCapture({ kind, label, onDone, onClose, onFallback }: {
     }
   }, [shot]);
   const stop = () => { stream.current?.getTracks().forEach((t) => t.stop()); stream.current = null; window.clearInterval(timer.current); };
-  useEffect(() => { void open(); return stop; }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void open(); return stop; }, []); // eslint-disable-line react-hooks/exhaustive-deps -- the camera opens once on mount and stops on unmount
 
   function snap() {
     const v = video.current;

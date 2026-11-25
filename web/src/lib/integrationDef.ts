@@ -62,7 +62,6 @@ export function pickerHint(formType: string, event: string): string {
 }
 export const METHODS = ["POST", "PUT", "PATCH", "GET", "DELETE"];
 export const hasBody = (method: string) => ["POST", "PUT", "PATCH"].includes(method);
-export const MAX_DEPTH = 6;
 
 // ---------------------------------------------------------------- the JSON body
 

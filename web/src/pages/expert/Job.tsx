@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { api, ApiError, explain } from "../../api/client";
 import { STAGE_LABEL, STAGE_TONE, useLabels, useTypeLabels } from "../../api/labels";
 import type { Booking } from "../../api/types";
@@ -14,6 +14,7 @@ import { Confirm, Pill } from "../../ui/kit";
 import { useCrumb } from "../../ui/crumb";
 import { MapPin, Phone } from "lucide-react";
 import { fmtPhone, fmtSlot, mapsUrl } from "../../lib/format";
+import { keys } from "../../api/keys";
 
 type Session = { startUuid: string; submitUuid: string; inspectionId: string; form: Tree; startForm: Tree | null; endForm: Tree | null; versionId: number; started?: boolean };   // started: false until the check-in is done (the job is not "in progress" before)
 type Forms = { form: Tree; start_form: Tree | null; end_form: Tree | null };
@@ -34,7 +35,7 @@ function swapLocal(d: Draft): Draft {
 export function Job() {
   const id = useParams().id!;
   const refresh = useRefresh();
-  const booking = useQuery({ queryKey: ["job", id], queryFn: () => api<Booking>(`bookings/${id}`), refetchInterval: (q) => (q.state.data?.stage === "submitted" ? 4000 : false) });
+  const booking = useQuery({ queryKey: keys.booking(id), queryFn: ({ signal }) => api<Booking>(`bookings/${id}`, { signal }), refetchInterval: (q) => (q.state.data?.stage === "submitted" ? 4000 : false) });
   useCrumb(booking.data?.booking_id);
   const [session, setSession] = useState<Session | null>(() => loadJSON<Session | null>(sKey(id), null));
   const b = booking.data;
@@ -54,7 +55,7 @@ export function Job() {
       saveJSON(sKey(id), s);
       return s;
     },
-    onSuccess: (s) => { setSession(s); setError(""); void refresh("job"); },
+    onSuccess: (s) => { setSession(s); setError(""); void refresh(keys.booking(id)); },
     onError: (e) => setError(explain(e)),
   });
   /** Opens the forms on this phone without starting the job; a form with no check-in starts at once. */
@@ -98,7 +99,7 @@ export function Job() {
           {error && <p className="error" role="alert">{error}</p>}
         </>
       )}
-      {session && canWork && <Wizard booking={b} session={session} onStart={(a) => start.mutate(a)} starting={start.isPending} startError={error} onSubmitted={() => { removeKey(dKey(id)); removeKey(sKey(id)); setSession(null); void refresh("job"); }} />}
+      {session && canWork && <Wizard booking={b} session={session} onStart={(a) => start.mutate(a)} starting={start.isPending} startError={error} onSubmitted={() => { removeKey(dKey(id)); removeKey(sKey(id)); setSession(null); void refresh(keys.booking(id)); }} />}
     </div>
   );
 }
@@ -152,7 +153,7 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
   const ctx = { booking: booking.answers, inspection: draft.inspection, start: draft.start, end: draft.end };
   const steps = useMemo(
     () => wizardSteps(trees, { inspection: draft.inspection, start: draft.start, end: draft.end }, ctx),
-    [trees, draft.inspection, draft.start, draft.end, booking.answers]); // eslint-disable-line react-hooks/exhaustive-deps
+    [trees, draft.inspection, draft.start, draft.end, booking.answers]); // eslint-disable-line react-hooks/exhaustive-deps -- ctx is rebuilt each render from the listed answers
   // A phone that lost its draft (another device, cleared storage): pick up the files the server already holds.
   useEffect(() => {
     let off = false;
@@ -164,7 +165,7 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
       if (add.length > 0) setDraft((d) => applyMedia(d, add));
     })();
     return () => { off = true; };
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps -- merges the server's files once per lead; the draft is read from its ref
 
   // The job only becomes "in progress" once the check-in is complete.
   const unstarted = session.started === false;
@@ -173,7 +174,7 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
   const checkinKey = JSON.stringify(draft.start);
   useEffect(() => {
     if (unstarted && checkinDone && !starting && tried.current !== checkinKey) { tried.current = checkinKey; onStart(draftRef.current.start); }
-  }, [unstarted, checkinDone, starting, checkinKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [unstarted, checkinDone, starting, checkinKey]); // eslint-disable-line react-hooks/exhaustive-deps -- starts once per check-in answer set; onStart and the draft are read when it fires
   const step = Math.min(draft.step, steps.length - 1);
   const cur = steps[step]!;
   const set = (kind: Part) => (key: string, v: unknown) => setDraft((d) => ({ ...d, [kind]: { ...d[kind], [key]: v } }));
@@ -182,7 +183,7 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
   const stepId = steps[Math.min(draft.step, steps.length - 1)]?.id;
   useEffect(() => {                                   // remember which pages the expert has opened
     if (stepId && !(draft.visited ?? []).includes(stepId)) setDraft((d) => ({ ...d, visited: [...(d.visited ?? []), stepId] }));
-  }, [stepId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [stepId]); // eslint-disable-line react-hooks/exhaustive-deps -- records a page only when the expert moves to it
   const go = (n: number) => { setMsg(""); setBlocked([]); setDraft((d) => ({ ...d, step: Math.max(0, Math.min(steps.length - 1, n)) })); window.scrollTo?.(0, 0); };
   /** Next: a page the Admin marked "must be finished" holds the person until its required fields are filled. */
   function next() {
@@ -196,7 +197,7 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
   // worked out once per change of the answers, not on every upload progress tick (F-086)
   const gaps = useMemo(() => (["start", "inspection", "end"] as const).flatMap((part) =>
     trees[part] ? missingFields(part, trees[part]!, draft[part], ctx).map((g) => ({ ...g, kind: part })) : []),
-  [trees, draft.inspection, draft.start, draft.end, booking.answers]); // eslint-disable-line react-hooks/exhaustive-deps
+  [trees, draft.inspection, draft.start, draft.end, booking.answers]); // eslint-disable-line react-hooks/exhaustive-deps -- ctx is rebuilt each render from the listed answers
   const stepOf = (g: (typeof gaps)[number]) => steps.findIndex((s) => s.kind === g.kind && s.page && trees[g.kind]!.pages[g.page]?.id === s.page.id);
 
   const waiting = localIds(draft).length;
@@ -228,7 +229,7 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
   const { done, total } = summary(ups);
   const progress = Math.round((step / (steps.length - 1)) * 100);
   const missCount = useMemo(() => new Map(steps.map((s) => [s, s.kind !== "review" && s.page ? pageGaps(s.kind, trees[s.kind]!, s.page, draft[s.kind], ctx).length : 0])),
-    [steps, trees, draft.inspection, draft.start, draft.end, booking.answers]); // eslint-disable-line react-hooks/exhaustive-deps
+    [steps, trees, draft.inspection, draft.start, draft.end, booking.answers]); // eslint-disable-line react-hooks/exhaustive-deps -- ctx is rebuilt each render from the listed answers
   const missingOn = (s: (typeof steps)[number]) => missCount.get(s) ?? 0;
   const lock = lockedFrom(steps, missingOn);
   const gateTitle = steps[lock - 1]?.title ?? "";

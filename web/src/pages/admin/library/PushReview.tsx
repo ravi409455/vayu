@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "../../../api/client";
 import { Modal, Pill, useToast } from "../../../ui/kit";
+import { keys } from "../../../api/keys";
 
 export type PushChange = { target: string; setting: string; from: unknown; to: unknown };
 export type PushForm = { form: string; type: string; state: "draft" | "published_only"; changes: PushChange[]; problems: { form: string; path: string; code: string; message: string }[] };
@@ -19,7 +20,7 @@ export function PushReview({ itemId, itemName, revision, onClose, onDone }: { it
   const [publish, setPublish] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [result, setResult] = useState<PushReport | null>(null);
-  const preview = useQuery({ queryKey: ["push-preview", itemId, revision], queryFn: () => api<PushReport>(`library/${itemId}/push-preview`, { method: "POST" }) });
+  const preview = useQuery({ queryKey: keys.pushPreview(itemId, revision), queryFn: ({ signal }) => api<PushReport>(`library/${itemId}/push-preview`, { method: "POST", signal }) });
   const run = useMutation({
     mutationFn: () => api<PushReport>(`library/${itemId}/push`, { body: { revision, publish, confirm: publish && confirmed } }),
     onSuccess: (r) => { setResult(r); onDone(); },

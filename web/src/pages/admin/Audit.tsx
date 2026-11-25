@@ -6,6 +6,7 @@ import { useList } from "../../api/hooks";
 import type { User } from "../../api/types";
 import { fmtStamp } from "../../lib/format";
 import { Empty, LoadError, PageHeader } from "../../ui/kit";
+import { keys } from "../../api/keys";
 
 type Row = { id: number; actor_username: string | null; actor_name: string | null; action: string; target_type: string; target_id: string; summary: string; created_at: string };
 
@@ -34,8 +35,8 @@ export function Audit() {
   const [f, setF] = useState({ action: "", actor: "", from: "", to: "" });
   const [page, setPage] = useState(1);
   const set = (p: Partial<typeof f>) => { setF({ ...f, ...p }); setPage(1); };
-  const users = useList<User>("users-all", "users");
-  const q = useQuery({ queryKey: ["audit", f, page], queryFn: () => api<Page<Row>>("audit-logs", { query: { ...f, page } }) });
+  const users = useList<User>(keys.users(), "users");
+  const q = useQuery({ queryKey: keys.audit(f, page), queryFn: ({ signal }) => api<Page<Row>>("audit-logs", { query: { ...f, page }, signal }) });
   const rows = q.data?.results ?? [];
   return (
     <>
@@ -49,7 +50,9 @@ export function Audit() {
       <div className="table-card">
         <table className="rows"><thead><tr><th>When</th><th>Who</th><th>What happened</th><th>Action</th></tr></thead>
           <tbody>{rows.map((r) => (
-            <tr key={r.id}><td className="nowrap">{fmtStamp(r.created_at)}</td><td>{r.actor_name ?? "system"}{r.actor_username && r.actor_username !== r.actor_name && <div className="muted small mono">{r.actor_username}</div>}</td><td>{targetLink(r) ? <Link to={targetLink(r)!}>{r.summary}</Link> : r.summary}</td><td className="mono small muted">{r.action}</td></tr>))}</tbody></table>
+            <tr key={r.id}><td className="nowrap">{fmtStamp(r.created_at)}</td>
+              <td>{r.actor_name ?? "system"}{r.actor_username && r.actor_username !== r.actor_name && <div className="muted small mono">{r.actor_username}</div>}</td>
+              <td>{targetLink(r) ? <Link to={targetLink(r)!}>{r.summary}</Link> : r.summary}</td><td className="mono small muted">{r.action}</td></tr>))}</tbody></table>
         {q.data && rows.length === 0 && <Empty>Nothing matches these filters.</Empty>}
         {q.data && (q.data.next || q.data.previous) && <div className="table-foot"><span className="grow muted">{q.data.count} entries</span>
           <button className="sm" disabled={!q.data.previous} onClick={() => setPage(page - 1)}>Newer</button>

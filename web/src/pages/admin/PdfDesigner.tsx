@@ -1,24 +1,25 @@
 import { AlertTriangle, ChevronsLeft, ChevronsRight, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { api, ApiError, type Page } from "../../api/client";
+import { api, ApiError } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
-import type { Booking, FormSummary, FormVersion } from "../../api/types";
+import type { FormSummary } from "../../api/types";
 import { useAuth } from "../../auth";
 import { fmtDay } from "../../lib/format";
 import { useRefChoices } from "../../lib/useChoices";
 import { Confirm, Empty, LoadError, PageHeader, Pill, useToast } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
-import { findPart, locate, partName, removePart, replaceRef, sharedPart, shiftPart, unlinkShared, updatePage, updatePart, withIds, type Definition, type Part } from "./report/model";
+import { findPart, freshCopies, locate, partNames, removePart, replaceRef, sharedPart, shiftPart, unlinkShared, updatePage, updatePart, withIds, type Definition, type Part, type Template, type TVersion } from "./report/model";
+import { useFormSections, useSampleBookings } from "./report/hooks";
+import { useDebounced } from "../../lib/useDebounced";
 import { PagesPanel, type Sel } from "./report/PagesPanel";
-import { PageSettings, PartSettings, type SectionChoice } from "./report/PartSettings";
+import { PageSettings, PartSettings } from "./report/PartSettings";
 import { Preview, type LayoutPage } from "./report/Preview";
 import { ReportSettings } from "./report/ReportSettings";
 import { useShared, type SharedItem } from "./report/sharing";
 import { SharedLibrary } from "./report/SharedLibrary";
+import { keys } from "../../api/keys";
 
-type Template = { id: number; form: number; form_key: string; versions: { id: number; number: number; status: string }[] };
-type TVersion = { id: number; template: number; number: number; status: string; definition: Definition; row_version: number };
 type Issue = { code: string; message: string; part?: string | null; ref?: string; suggestion?: string | null };
 type Unused = { key: string; label: string; section: string };
 
@@ -26,15 +27,15 @@ export function PdfDesigner() {
   const { can } = useAuth();
   const { fail } = useToast();
   const refresh = useRefresh();
-  const templates = useList<Template>("pdf-templates", "pdf-templates");
-  const forms = useList<FormSummary>("forms", "forms");
+  const templates = useList<Template>(keys.pdfTemplates(), "pdf-templates");
+  const forms = useList<FormSummary>(keys.forms(), "forms");
   const [tid, setTid] = useState<number | "library" | null>(null);
   const library = tid === "library";
   const t = library ? null : (templates.data ?? []).find((x) => x.id === tid) ?? (templates.data ?? [])[0] ?? null;
   const formName = (x: Template) => (forms.data ?? []).find((f) => f.id === x.form)?.name ?? x.form_key;
   const editable = can("pdf_templates.edit");
   const withoutTemplate = (forms.data ?? []).filter((f) => f.type === "custom" && !(templates.data ?? []).some((x) => x.form === f.id));
-  const make = useMutation({ mutationFn: (form: number) => api<Template>("pdf-templates", { body: { form } }), onSuccess: (r) => { void refresh("pdf-templates"); setTid(r.id); }, onError: fail });
+  const make = useMutation({ mutationFn: (form: number) => api<Template>("pdf-templates", { body: { form } }), onSuccess: (r) => { void refresh(keys.pdfTemplates()); setTid(r.id); }, onError: fail });
   return (
     <>
       <PageHeader title="PDF templates">
@@ -47,25 +48,11 @@ export function PdfDesigner() {
         <button key={x.id} role="tab" aria-selected={(t?.id ?? null) === x.id} className={t?.id === x.id ? "on" : ""} onClick={() => setTid(x.id)}>{formName(x)}</button>))}
         <button role="tab" aria-selected={library} className={`rd-libtab${library ? " on" : ""}`} onClick={() => setTid("library")}>Shared library</button></div>
       {library ? <SharedLibrary templates={templates.data ?? []} forms={forms.data ?? []} editable={editable} />
-        : t ? <Designer key={t.id} template={t} form={(forms.data ?? []).find((f) => f.id === t.form)} editable={editable} refresh={() => refresh("pdf-templates")}
+        : t ? <Designer key={t.id} template={t} form={(forms.data ?? []).find((f) => f.id === t.form)} editable={editable} refresh={() => refresh(keys.pdfTemplates())}
         copyTargets={withoutTemplate} onOpen={setTid} />
         : <Empty title="No PDF templates yet">Create one for an inspection form with “New template for…”.</Empty>}
     </>
   );
-}
-
-/** Every part of the definition with its name (for the preview's outlines). */
-function names(d: Definition, sections: Record<string, string>, shared: Record<string, string>): Record<string, string> {
-  const out: Record<string, string> = {};
-  const walk = (parts: Part[]) => parts.forEach((p) => { out[p.id!] = partName(p, sections, shared); if (p.type === "columns") p.columns.forEach((c) => walk(c.parts)); });
-  d.pages.forEach((pg) => walk(pg.parts));
-  return out;
-}
-
-function useDebounced<T>(value: T, ms: number): T {
-  const [v, setV] = useState(value);
-  useEffect(() => { const h = setTimeout(() => setV(value), ms); return () => clearTimeout(h); }, [value, ms]);
-  return v;
 }
 
 function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
@@ -85,12 +72,11 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
   const draftMeta = template.versions.find((v) => v.status === "draft");
   const latest = template.versions[template.versions.length - 1];
   const vid = (draftMeta ?? latest)?.id;
-  const ver = useQuery({ queryKey: ["pdf-version", vid], enabled: !!vid, queryFn: () => api<TVersion>(`pdf-template-versions/${vid}`) });
+  const ver = useQuery({ queryKey: keys.pdfVersion(vid), enabled: !!vid, queryFn: ({ signal }) => api<TVersion>(`pdf-template-versions/${vid}`, { signal }) });
   const formVersionId = form?.draft_version?.id ?? form?.published_version?.id;
-  const tree = useQuery({ queryKey: ["form-version", formVersionId], enabled: !!formVersionId, queryFn: () => api<FormVersion>(`form-versions/${formVersionId}`) });
+  const { tree, sections, sectionNames } = useFormSections(formVersionId);
   const choices = useRefChoices(template.form);
-  const sample = useQuery({ queryKey: ["pdf-sample", form?.inspection_type], enabled: !!form?.inspection_type,
-    queryFn: async () => (await Promise.all(["completed", "submitted"].map((stage) => api<Page<Booking>>("bookings", { query: { type: form!.inspection_type, stage } })))).flatMap((r) => r.results) });
+  const sample = useSampleBookings(form?.inspection_type);
   const [def, setDef] = useState<Definition | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState<"saved" | "saving" | "error">("saved");
@@ -110,9 +96,6 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
 
   useEffect(() => { if (v) { setDef(withIds({ ...v.definition, pages: v.definition.pages ?? [] })); rowVersion.current = v.row_version; setDirty(false); setSaving("saved"); } }, [v]);
 
-  const sections: SectionChoice[] = useMemo(() => (tree.data?.pages ?? []).flatMap((p) => p.sections.filter((s) => s.key).map((s) => ({
-    value: `inspection.${s.key}`, label: `${p.title} → ${s.title} (${s.fields.length})`, fields: s.fields.map((f) => ({ key: f.key, label: f.label || f.key, type: f.type })) }))), [tree.data]);
-  const sectionNames = useMemo(() => Object.fromEntries((tree.data?.pages ?? []).flatMap((p) => p.sections.map((s) => [`inspection.${s.key}`, s.title]))), [tree.data]);
   const fieldChoices = useMemo(() => choices.map((c) => ({ value: c.value, label: c.label, type: c.type })), [choices]);
 
   const edit = (d: Definition) => { setDef(d); setDirty(true); };
@@ -135,7 +118,7 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
     });
     return saveChain.current;
   };
-  useEffect(() => { if (ok && dirty && saved) { setDirty(false); void save(saved); } }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (ok && dirty && saved) { setDirty(false); void save(saved); } }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps -- saves when the debounced definition changes, not on every keystroke's dirty/ok change
   // leaving (another template, the library, another page) with an edit not sent yet: send it now (F-015)
   const pending = useRef<Definition | null>(null);
   pending.current = ok && dirty ? def : null;
@@ -161,18 +144,18 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
       .then((r) => { if (n === ticket.current) setPreview(r); })
       .catch((e) => { if (n === ticket.current) fail(e); })
       .finally(() => { if (n === ticket.current) setRendering(false); });
-  }, [shown, chosen, v?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [shown, chosen, v?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- re-renders the preview only for a new definition, booking or version; fail is a fresh function each render
 
   async function publish() {
     if (!def || !v) return;
     await save(def);
     try {
       await api(`pdf-template-versions/${v.id}/publish`, { body: { row_version: rowVersion.current } });
-      say("Published. New and re-made reports use this layout."); await reload("pdf-version"); void refresh();
+      say("Published. New and re-made reports use this layout."); await reload(keys.pdfVersion()); void refresh();
     } catch (e) { fail(e); setShowWarnings(true); }
   }
   async function discardDraft() {
-    try { await api(`pdf-template-versions/${v!.id}`, { method: "DELETE" }); setDiscard(false); say("Draft discarded. The live layout is unchanged."); await reload("pdf-version"); await refresh(); }
+    try { await api(`pdf-template-versions/${v!.id}`, { method: "DELETE" }); setDiscard(false); say("Draft discarded. The live layout is unchanged."); await reload(keys.pdfVersion()); await refresh(); }
     catch (e) { setDiscard(false); fail(e); }
   }
   async function exportFile() {
@@ -192,7 +175,7 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
     setImporting(null);
     try {
       const r = await api<TVersion & { issues: Issue[]; notes: string[] }>(`pdf-templates/${template.id}/import`, { body: file });
-      await refresh(); await reload("pdf-version", "pdf-shared", "pdf-pictures");
+      await refresh(); await reload(keys.pdfVersion(), keys.pdfShared(), keys.pdfPictures());
       say([`Imported into draft v${r.number}.`, ...r.notes, r.issues.length ? `${r.issues.length} thing${r.issues.length === 1 ? "" : "s"} to fix: see warnings.` : ""].filter(Boolean).join(" "));
       if (r.issues.length) setShowWarnings(true);
     } catch (e) { fail(e); }
@@ -215,7 +198,7 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
   if (!def || !v) return <p className="muted">Loading…</p>;
   const part = sel?.kind === "part" ? findPart(def, sel.id) : null;
   const page = sel?.kind === "page" ? def.pages.find((p) => p.id === sel.id) : null;
-  const nameMap = names(def, sectionNames, sharedNames);
+  const nameMap = partNames(def, sectionNames, sharedNames);
   const bad = new Set(checks.issues.map((i) => i.part).filter((x): x is string => !!x));
   const layoutChecks = preview?.checks ?? [];
   const warnCount = checks.issues.length + checks.unused.length + layoutChecks.length;
@@ -302,7 +285,7 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
               onChange={(p) => edit(updatePart(def, sel.id, p))}
               onDelete={() => { edit(removePart(def, sel.id)); setSel(null); }}
               onMove={(by) => edit(shiftPart(def, sel.id, by))}
-              onDuplicate={() => { const w = locate(def, sel.id); if (!w) return; const copy = withIds({ schema: 2, pages: [{ title: "", parts: [JSON.parse(JSON.stringify(part, (k, val) => (k === "id" ? undefined : val)))] }] }).pages[0]!.parts[0]!; edit(w.set([...w.list.slice(0, w.index + 1), copy, ...w.list.slice(w.index + 1)])); setSel({ kind: "part", id: copy.id! }); }} />
+              onDuplicate={() => { const w = locate(def, sel.id); if (!w) return; const copy = freshCopies([part])[0]!; edit(w.set([...w.list.slice(0, w.index + 1), copy, ...w.list.slice(w.index + 1)])); setSel({ kind: "part", id: copy.id! }); }} />
           ) : page && sel?.kind === "page" ? (
             <fieldset disabled={!ok} className="rd-fieldset">
               <PageSettings page={page} fields={fieldChoices} onChange={(p) => edit(updatePage(def, sel.id, p))} onDelete={() => { edit({ ...def, pages: def.pages.filter((p) => p.id !== sel.id) }); setSel(null); }} />

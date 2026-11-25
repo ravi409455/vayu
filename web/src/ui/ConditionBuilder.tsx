@@ -17,7 +17,7 @@ export function ConditionBuilder({ value, onChange, fields, label, tip, onClear 
   const [cond, setCond] = useState<Cond>(parsedProp ?? { join: "and", rows: [] });
   useEffect(() => {
     if (parsedProp && JSON.stringify(toRule(cond)) !== JSON.stringify(value ?? null)) setCond(parsedProp);
-  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps -- only a new rule from outside resets the rows; the half-typed rows are this builder's own
   const parsed = parsedProp === null ? null : cond;
   const [raw, setRaw] = useState(parsedProp === null);
   const [text, setText] = useState(() => JSON.stringify(value ?? null, null, 1));

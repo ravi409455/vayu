@@ -4,20 +4,19 @@ import type { Booking } from "../api/types";
 import { useAuth } from "../auth";
 import { addDays, fmtSlot, fmtStamp, today } from "./format";
 import { FLAG_NAME, timingFlags, type Flag } from "./timing";
+import { keys } from "../api/keys";
 
 export type Stuck = { id: string; booking: string; booking_id: string; field_key: string; status: string; expert: string; created_at: string };
 export type PdfProblem = { booking: string; booking_id: string; status: string; error: string };
 /** A report something changed under since it was made (Ops press Regenerate, F-219). */
 export type StaleReport = { booking: string; booking_id: string; since: string };
-type ReportProblems = (PdfProblem & { out_of_date?: boolean; since?: string })[] | { failed?: PdfProblem[]; out_of_date?: StaleReport[] };
+/** One row of problems/reports: a failed or stuck render, or a PDF that changed under itself. */
+type ReportRow = PdfProblem & { problem: "failed" | "stuck" | "out_of_date"; out_of_date_since: string | null };
 
-/** problems/reports, failed and out of date apart. ponytail: reads both shapes the server may send
- *  (a list with out_of_date rows, or { failed, out_of_date }) until the backend field is final. */
-export function reportProblems(raw: ReportProblems | undefined): { failed: PdfProblem[]; outOfDate: StaleReport[] } {
-  if (!raw) return { failed: [], outOfDate: [] };
-  if (!Array.isArray(raw)) return { failed: raw.failed ?? [], outOfDate: raw.out_of_date ?? [] };
-  return { failed: raw.filter((r) => !r.out_of_date || r.error),
-    outOfDate: raw.filter((r) => r.out_of_date).map((r) => ({ booking: r.booking, booking_id: r.booking_id, since: r.since ?? "" })) };
+/** problems/reports, failed and out of date apart. */
+export function reportProblems(rows: ReportRow[] | undefined): { failed: PdfProblem[]; outOfDate: StaleReport[] } {
+  return { failed: (rows ?? []).filter((r) => r.problem !== "out_of_date"),
+    outOfDate: (rows ?? []).filter((r) => r.problem === "out_of_date").map((r) => ({ booking: r.booking, booking_id: r.booking_id, since: r.out_of_date_since ?? "" })) };
 }
 
 /** Everything that needs a person, from the four problem queues. Shared by the Problems page,
@@ -26,14 +25,14 @@ export function useProblems() {
   const { me, can } = useAuth();
   const on = !!me && me.role !== "expert" && can("bookings.view");
   const opts = { enabled: on, staleTime: 30_000, refetchInterval: 60_000 } as const;
-  const stuck = useQuery({ ...opts, queryKey: ["problems", "stuck"], queryFn: () => api<Stuck[]>("problems/stuck-uploads") });
-  const pdf = useQuery({ ...opts, queryKey: ["problems", "pdf"], queryFn: () => api<ReportProblems>("problems/reports") });
-  const conflicts = useQuery({ ...opts, queryKey: ["problems", "conflict"], queryFn: () => api<Page<Booking>>("bookings", { query: { problem: "conflict" } }) });
-  const types = useQuery({ ...opts, queryKey: ["problems", "type"], queryFn: () => api<Page<Booking>>("bookings", { query: { problem: "type_change" } }) });
+  const stuck = useQuery({ ...opts, queryKey: keys.problems("stuck"), queryFn: ({ signal }) => api<Stuck[]>("problems/stuck-uploads", { signal }) });
+  const pdf = useQuery({ ...opts, queryKey: keys.problems("pdf"), queryFn: ({ signal }) => api<ReportRow[]>("problems/reports", { signal }) });
+  const conflicts = useQuery({ ...opts, queryKey: keys.problems("conflict"), queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query: { problem: "conflict" }, signal }) });
+  const types = useQuery({ ...opts, queryKey: keys.problems("type"), queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query: { problem: "type_change" }, signal }) });
   // started late, and finished too quickly: two separate lists (last 7 days), each until someone marks it reviewed
   const t = today();
-  const flagged = (flag: Flag) => ({ ...opts, enabled: on && can("bookings.review_timing"), queryKey: ["problems", flag, t],
-    queryFn: () => api<Page<Booking>>("bookings", { query: { timing: flag, reviewed: "0", date_from: addDays(t, -6), date_to: t, order: "schedule" } }) });
+  const flagged = (flag: Flag) => ({ ...opts, enabled: on && can("bookings.review_timing"), queryKey: keys.problems(flag, t),
+    queryFn: ({ signal }: { signal: AbortSignal }) => api<Page<Booking>>("bookings", { query: { timing: flag, reviewed: "0", date_from: addDays(t, -6), date_to: t, order: "schedule" }, signal }) });
   const late = useQuery(flagged("late"));
   const quick = useQuery(flagged("quick"));
   const reports = reportProblems(pdf.data);
@@ -57,10 +56,12 @@ export function useNeeds(): { needs: Need[]; total: number; loading: boolean; er
   const { me, can } = useAuth();
   const day = today();
   const open = useQuery({ enabled: !!me && me.role !== "expert" && can("bookings.view"), staleTime: 30_000, refetchInterval: 60_000,
-    queryKey: ["bookings-page", "unassigned-today", day], queryFn: () => api<Page<Booking>>("bookings", { query: { stage: "draft", date_from: day, date_to: day, order: "schedule" } }) });
+    queryKey: keys.bookings("unassigned-today", day), queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query: { stage: "draft", date_from: day, date_to: day, order: "schedule" }, signal }) });
   const needs: Need[] = [
     ...p.conflicts.map((b) => ({ key: `c${b.id}`, kind: "conflict" as const, tone: "bad" as const, title: `${b.booking_id}: two experts submitted`, meta: "Choose which inspection counts", to: `/booking/${b.id}`, action: "Resolve" })),
-    ...(open.data?.results ?? []).map((b) => ({ key: `a${b.id}`, kind: "unassigned" as const, tone: "warn" as const, title: `${b.booking_id} has no expert`, meta: `Today at ${String(b.answers.inspection_time ?? "")} · ${String(b.answers.customer_name ?? "")}`, to: `/booking/${b.id}`, action: "Assign" })),
+    ...(open.data?.results ?? []).map((b) => ({ key: `a${b.id}`, kind: "unassigned" as const, tone: "warn" as const,
+      title: `${b.booking_id} has no expert`,
+      meta: `Today at ${String(b.answers.inspection_time ?? "")} · ${String(b.answers.customer_name ?? "")}`, to: `/booking/${b.id}`, action: "Assign" })),
     ...p.stuck.map((s) => ({ key: `s${s.id}`, kind: "upload" as const, tone: "bad" as const, title: `Upload stuck: ${s.booking_id}`, meta: `${s.expert} · ${s.field_key} · ${s.status}`, to: `/booking/${s.booking}`, action: "Open", at: s.created_at })),
     // a failed render is tried again by itself; an out-of-date one waits for Ops to press Regenerate (F-219)
     ...p.out_of_date.map((r) => ({ key: `o${r.booking}`, kind: "report" as const, tone: "warn" as const, title: `Report out of date: ${r.booking_id}`,

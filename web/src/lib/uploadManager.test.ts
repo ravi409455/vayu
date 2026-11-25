@@ -27,7 +27,7 @@ vi.mock("./monitor", () => ({ report: (...a: unknown[]) => reported(...a) }));
 const api = vi.fn(async (_path: string, _o?: unknown): Promise<unknown> => ({ status: "verified" }));
 vi.mock("../api/client", async (orig) => ({ ...(await orig<typeof import("../api/client")>()), api: (p: string, o?: unknown) => api(p, o) }));
 
-import { _reset, addFile, realId, resumeUploads, retryFailed, RETRY_MS, uploadFor, useUploads } from "./uploadManager";
+import { addFile, realId, resumeUploads, retryFailed, reset, RETRY_MS, uploadFor, useUploads } from "./uploadManager";
 import { renderHook } from "@testing-library/react";
 
 const add = (extra: Record<string, unknown> = {}) =>
@@ -35,7 +35,7 @@ const add = (extra: Record<string, unknown> = {}) =>
 const flush = () => vi.advanceTimersByTimeAsync(0);
 const states = () => renderHook(() => useUploads("b1")).result.current;
 
-beforeEach(() => { vi.useFakeTimers(); _reset(); db.clear(); plans.length = 0; transfer.mockClear(); api.mockClear(); putFails = false; initiateFails = null; });
+beforeEach(() => { vi.useFakeTimers(); reset(); db.clear(); plans.length = 0; transfer.mockClear(); api.mockClear(); putFails = false; initiateFails = null; });
 afterEach(() => vi.useRealTimers());
 
 describe("upload queue", () => {
@@ -148,7 +148,7 @@ describe("sign-out (F-072) and resume (H-15)", () => {
   it("sign-out stops the queue and forgets every file", async () => {
     plans.push(() => new Promise(() => {}), () => new Promise(() => {}));
     for (let i = 0; i < 3; i++) await add();
-    _reset();
+    reset();
     await flush();
     expect(states()).toEqual([]);
     expect(transfer).toHaveBeenCalledTimes(2);              // the third never starts under the next person
@@ -159,7 +159,7 @@ describe("sign-out (F-072) and resume (H-15)", () => {
     initiateFails = null;
     const gate = new Promise<void>((r) => { release = r; });
     const pending = addFile({ bookingId: "b1", fieldKey: "door", kind: "file", file: { size: 1, type: "image/jpeg", slice: () => ({ arrayBuffer: () => gate.then(() => new ArrayBuffer(1)) }) } as unknown as Blob, name: "a", source: "camera" });
-    _reset();
+    reset();
     release();
     await expect(pending).rejects.toThrow("Signed out.");
     expect(db.size).toBe(0);
@@ -167,7 +167,7 @@ describe("sign-out (F-072) and resume (H-15)", () => {
   });
 
   it("a sign-out while the file is being stored leaves nothing behind", async () => {
-    putHook = () => _reset();                                // the person signs out during the save
+    putHook = () => reset();                                // the person signs out during the save
     await expect(add()).rejects.toThrow("Signed out.");
     putHook = null;
     expect(db.size).toBe(0);

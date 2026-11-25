@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import { api } from "../api/client";
 import { LoadError, PageHeader } from "../ui/kit";
+import { keys } from "../api/keys";
 
 type Latest = { version_code: number | null; version_name?: string; size?: number; sha256?: string; notes?: string[]; min_version: number };
 
@@ -10,7 +11,7 @@ const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 /** The Android app for experts and Ops: the newest build, straight from our server (signed in only,
  *  REQUIREMENTS §10), with its checksum so it can be checked before installing. */
 export function AppDownload() {
-  const q = useQuery({ queryKey: ["app-latest"], queryFn: () => api<Latest>("app/latest") });
+  const q = useQuery({ queryKey: keys.appLatest(), queryFn: ({ signal }) => api<Latest>("app/latest", { signal }) });
   const r = q.data;
   return (
     <div style={{ maxWidth: 680 }}>
