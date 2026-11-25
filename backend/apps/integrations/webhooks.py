@@ -307,6 +307,8 @@ def _finish(d: Delivery, status: str, error: str = "", http: int | None = None) 
     d.status, d.error, d.response_status = status, error, http
     d.next_retry_at = None
     d.save()
+    logger.info("webhook %s", status, extra={"booking": d.booking_uuid, "delivery": str(d.id),
+                                             "event": d.event, "error": error, "http": http})
 
 
 def attempt(d: Delivery) -> Delivery:

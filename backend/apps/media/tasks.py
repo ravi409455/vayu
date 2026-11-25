@@ -1,5 +1,6 @@
 import hashlib
 import io
+import logging
 
 from celery import shared_task
 from django.utils import timezone
@@ -10,6 +11,7 @@ from . import storage
 from .models import MediaAsset
 
 register_heif_opener()       # Pillow opens iPhone HEIC photos
+logger = logging.getLogger(__name__)
 MAX_EDGE = 2048
 PREVIEW_EDGE = 480
 # the first box of an MP4 / MOV file (QuickTime files may begin with any of these)
@@ -72,6 +74,7 @@ def _check(asset: MediaAsset) -> bool:
     # a video must really be one: its first box names an MP4 / MOV container (F-244)
     not_video = asset.kind == "video" and head[4:8] not in VIDEO_BOXES
     if digest.hexdigest() != asset.sha256 or total != asset.size or not_video:
+        _failed(asset, "not_a_video" if not_video else "checksum")
         return False
     # a file that is a picture gets a preview too, but its original is kept as sent (a document)
     picture_file = asset.kind == "file" and asset.content_type in ("image/jpeg", "image/png")
@@ -87,8 +90,16 @@ def _check(asset: MediaAsset) -> bool:
         asset.preview_key = f"previews/{asset.id}.jpg"
         storage.put(asset.preview_key, _jpeg(_shrink(image, PREVIEW_EDGE), 75), "image/jpeg")
     except (OSError, ValueError, Image.DecompressionBombError):   # not a readable image
+        _failed(asset, "unreadable_image")
         return False
     return True
+
+
+def _failed(asset: MediaAsset, reason: str) -> None:
+    """Why a file failed, findable by booking in the logs (F-212)."""
+    logger.warning("upload failed verification", extra={
+        "booking": str(asset.booking_id), "media": str(asset.id), "field": asset.field_key,
+        "reason": reason})
 
 
 @shared_task

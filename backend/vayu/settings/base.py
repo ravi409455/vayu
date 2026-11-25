@@ -123,6 +123,7 @@ CELERY_TASK_ROUTES = {
 # no task runs for ever (F-210): a hung R2 stream is stopped; the PDF render has its own
 CELERY_TASK_SOFT_TIME_LIMIT, CELERY_TASK_TIME_LIMIT = 900, 960
 CELERY_TASK_ACKS_LATE = True                 # a restart puts the running task back
+CELERY_WORKER_HIJACK_ROOT_LOGGER = False     # workers log JSON like the API (F-212)
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 STUCK_UPLOAD_HOURS = int(env("STUCK_UPLOAD_HOURS", "6"))
 

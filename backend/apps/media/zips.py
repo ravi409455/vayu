@@ -1,5 +1,6 @@
 """ZIP of a booking's media: built once in the background, cached 7 days, opened through a
 signed link that shows 'Preparing...' until it is ready."""
+import logging
 import os
 import re
 import tempfile
@@ -141,6 +142,8 @@ def build_zip(zip_id: str) -> None:
     except Exception:
         z.status = "failed"                   # never "Preparing..." for 7 days (F-108)
         z.save(update_fields=["status"])
+        logging.getLogger(__name__).exception("ZIP build failed", extra={
+            "booking": str(z.booking_id), "zip": str(z.id), "kind": z.kind})
         raise
     finally:
         os.unlink(path)

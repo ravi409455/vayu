@@ -109,3 +109,37 @@ def test_a_build_abandoned_by_a_restart_counts_as_failed(job):
     MediaZip.objects.filter(pk=z.pk).update(created_at=timezone.now() - timedelta(minutes=31))
     z.refresh_from_db()
     assert zips.failed(z)
+
+
+def test_why_a_file_failed_is_in_the_logs_with_its_booking(job, settings, caplog):
+    """F-212."""
+    import logging
+
+    from apps.media.tests.conftest import initiate_body, put_parts
+
+    env, b = job
+    init = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),
+                           format="json").json()
+    parts = put_parts(init, jpeg(color=(1, 2, 3)), settings)
+    with caplog.at_level(logging.WARNING, logger="apps.media.tasks"):
+        env.expert.post(f"/api/v1/media/{init['id']}/complete", {"parts": parts}, format="json")
+    (rec,) = [r for r in caplog.records if r.message == "upload failed verification"]
+    assert rec.booking == b["id"] and rec.reason == "checksum"
+
+
+def test_a_task_logs_with_the_request_id_that_queued_it():
+    from types import SimpleNamespace
+
+    from apps.core.logging import request_id_var
+    from vayu.celery import _carry_request_id, _restore_request_id
+
+    request_id_var.set("req-42")
+    headers: dict = {}
+    _carry_request_id(headers=headers)
+    assert headers == {"request_id": "req-42"}
+    _carry_request_id(headers=None)                                     # nothing to carry it in
+    request_id_var.set("-")
+    _restore_request_id(task=SimpleNamespace(request=SimpleNamespace(request_id="req-42")))
+    assert request_id_var.get() == "req-42"
+    _restore_request_id(task=SimpleNamespace(request=SimpleNamespace()))
+    assert request_id_var.get() == "-"
