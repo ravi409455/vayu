@@ -219,8 +219,13 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
         Booking.objects.select_for_update().get(pk=booking.pk)   # two uploads must not both fit
         # an expert's limit counts their own uploads: two experts on one job (a conflict for Ops)
         # never use up each other's places
+        # a failed upload holds no place (the retake replaces it), nor one left unfinished past
+        # the stuck limit (a closed tab, cleared storage: no device resumes it any more)
+        stale = timezone.now() - timedelta(hours=settings.STUCK_UPLOAD_HOURS)
         if not manager and MediaAsset.objects.filter(
-                booking=booking, field_key=field.key, uploaded_by=user).count() >= max_count(field):
+                booking=booking, field_key=field.key, uploaded_by=user).exclude(
+                status="failed").exclude(status="pending", created_at__lt=stale).count() \
+                >= max_count(field):
             raise err("TOO_MANY", f"'{field.key}' takes at most {max_count(field)}.", 409)
         asset = MediaAsset(client_uuid=client_uuid, booking=booking, uploaded_by=user,
                            field_key=field.key, kind=kind, content_type=ctype, size=size,
@@ -258,7 +263,8 @@ def live_asset(booking: Booking, field_key: str, asset_id) -> MediaAsset | None:
         return None
 
 
-NEVER_ARRIVED = ("pending", "uploaded", "failed")   # never checked in: not verified or purged
+# never checked in: not verified or purged
+NEVER_ARRIVED = ("pending", "uploaded", "verifying", "failed")
 
 
 def unarrived(booking: Booking, ids: list[str]) -> list[str]:
@@ -289,7 +295,8 @@ def attach(request, new: MediaAsset, replaces=None) -> None:
         check_ops_upload(booking, field, user)
         if new.uploaded_by_id != user.pk or new.replaced_at is not None or new.status == "failed":
             raise err("UNKNOWN_MEDIA", "Upload the file first.")
-        if new.status not in ("uploaded", "verified"):   # half-sent: must not push out a good one
+        # half-sent: must not push out a good one
+        if new.status not in ("uploaded", "verifying", "verified"):
             raise err("UPLOAD_NOT_FINISHED", "The file is still uploading.", 409)
         insp, part, ids = submitted_answer(booking, field, lock=True)
         answers = dict(insp.answers.get(part) or {})
@@ -331,10 +338,12 @@ def attach(request, new: MediaAsset, replaces=None) -> None:
     check_completion(booking.id)     # a submitted booking now also waits for this file
 
 
-def rebuild_report(booking_id) -> None:
-    from apps.reports.tasks import render_report
+def report_out_of_date(booking_id) -> None:
+    """Something the report shows changed: its PDF is marked out of date (Ops press Regenerate;
+    nothing is made again by itself)."""
+    from apps.reports.models import Report
 
-    core_tasks.after_commit(lambda: render_report.delay(str(booking_id)))
+    Report.objects.filter(booking_id=booking_id).update(stale=True)
 
 
 def progress(asset: MediaAsset) -> dict:
@@ -347,7 +356,7 @@ def progress(asset: MediaAsset) -> dict:
 def complete(asset: MediaAsset, parts: list[dict]) -> MediaAsset:
     from .tasks import verify_asset
 
-    if asset.status in ("uploaded", "verified"):
+    if asset.status in ("uploaded", "verifying", "verified"):
         return asset
     if not asset.upload_id:
         raise err("NOT_UPLOADING", "Start the upload again.", 409)
@@ -362,15 +371,15 @@ def complete(asset: MediaAsset, parts: list[dict]) -> MediaAsset:
         if e.response.get("Error", {}).get("Code") != "NoSuchUpload":
             raise
         asset.refresh_from_db()          # a parallel request finished it first
-        if asset.status in ("uploaded", "verified"):
+        if asset.status in ("uploaded", "verifying", "verified"):
             return asset
         raise err("NOT_UPLOADING", "Start the upload again.", 409) from e
     asset.upload_id, asset.status = "", "uploaded"
     asset.save()
+    # checked in the background (F-162): the phone and web read "verified" or "failed" from
+    # GET media/<id> and send the file again when it failed
     verify_asset.delay(str(asset.id))
     asset.refresh_from_db()
-    if asset.status == "failed":
-        raise err("CHECKSUM_MISMATCH", "The upload was corrupted; upload it again.", 409)
     return asset
 
 
@@ -414,9 +423,9 @@ def check_completion(booking_id) -> bool:
     """Submitted -> Completed once every referenced file is verified. Exactly once."""
     with transaction.atomic():
         b = Booking.objects.select_for_update().get(pk=booking_id)
-        if b.stage != "submitted":
+        if b.stage != "submitted" or b.conflict:      # a conflict waits for Ops to choose
             return False
-        insp = b.inspections.filter(status="submitted").order_by("-submitted_at").first()
+        insp = b.counted_inspection()
         if insp is None:
             return False
         ids = expected_media(insp)
@@ -429,6 +438,10 @@ def check_completion(booking_id) -> bool:
         b.last_change = {"by": "system", "at": timezone.now().isoformat(), "keys": ["stage"]}
         b.save()
         activity.log(b, None, "changed", {"stage": ["submitted", "completed"]})
+    # a stage change is a booking.updated like any other (H-13); before inspection.completed so
+    # the report made for the completion is not marked out of date by it
+    events.emit("booking.updated", booking=str(b.id), booking_id=b.booking_id,
+                changes={"stage": ["submitted", "completed"]}, by=None)
     events.emit("inspection.completed", booking=str(b.id), booking_id=b.booking_id,
                 inspection=str(insp.id))
     events.emit("media.completed", booking=str(b.id), booking_id=b.booking_id)
@@ -478,7 +491,8 @@ def delete_asset(actor, asset: MediaAsset) -> None:
                 insp.save()
                 scoring.recompute(insp)
         MediaZip.objects.filter(booking=asset.booking).delete()   # cached ZIPs no longer match
-        keys, upload = [k for k in (asset.key, asset.preview_key) if k], asset.upload_id
+        keys = [k for k in (asset.key, asset.preview_key, asset.jpeg_key) if k]
+        upload = asset.upload_id
         asset.delete()
 
         def clean_storage():                  # only once the database change is really saved
@@ -493,9 +507,12 @@ def delete_asset(actor, asset: MediaAsset) -> None:
 
 
 def stuck_uploads(hours: int | None = None):
+    """Files still not arrived after the limit that someone waits for: not on a finished or
+    cancelled job, not failed (the phone sends a new one) and not replaced by Ops (F-149)."""
     cutoff = timezone.now() - timedelta(hours=hours or settings.STUCK_UPLOAD_HOURS)
-    return MediaAsset.objects.exclude(status__in=("verified", "purged")) \
-        .filter(created_at__lt=cutoff)
+    return MediaAsset.objects.exclude(status__in=("verified", "purged", "failed")) \
+        .filter(created_at__lt=cutoff, replaced_at__isnull=True) \
+        .exclude(booking__stage__in=("completed", "cancelled"))
 
 
 def missing_files(booking: Booking) -> list[dict]:
@@ -503,7 +520,7 @@ def missing_files(booking: Booking) -> list[dict]:
     that have not arrived, and whether the field is required (Ops upload those before finishing)."""
     from apps.forms.rules import evaluate_form, spec_from_version
 
-    insp = booking.inspections.filter(status="submitted").order_by("-submitted_at").first()
+    insp = booking.counted_inspection()
     if booking.stage != "submitted" or insp is None:
         return []
     arrived = set(map(str, MediaAsset.objects.filter(booking=booking, status="verified")
@@ -535,13 +552,15 @@ def finish_without_missing(actor, booking: Booking) -> Booking:
         b = Booking.objects.select_for_update().get(pk=booking.pk)
         if b.stage != "submitted":
             raise err("INVALID_STAGE", "Only a booking waiting for its files can be finished.", 409)
+        if b.conflict:
+            raise err("CONFLICT_OPEN", "Choose which inspection counts first.", 409)
         rows = missing_files(b)
         need = [r for r in rows if r["required"]]
         if need:
             raise err("REQUIRED_FILES_MISSING", "Upload the required files first: "
                       + ", ".join(r["label"] for r in need) + ".", 409,
                       keys=[f"{r['part']}.{r['key']}" for r in need])
-        insp = b.inspections.filter(status="submitted").order_by("-submitted_at").first()
+        insp = b.counted_inspection()
         b.stage = "completed"
         b.row_version += 1
         b.last_change = {"by": actor.shown_name, "at": timezone.now().isoformat(),
@@ -551,6 +570,8 @@ def finish_without_missing(actor, booking: Booking) -> Booking:
         activity.log(b, actor, "finished_without_files",
                      {"stage": ["submitted", "completed"], "missing": left},
                      keys=["stage", *(f"{r['part']}.{r['key']}" for r in rows)], inspection=insp)
+    events.emit("booking.updated", booking=str(b.id), booking_id=b.booking_id,
+                changes={"stage": ["submitted", "completed"]}, by=actor.pk)
     events.emit("inspection.completed", booking=str(b.id), booking_id=b.booking_id,
                 inspection=str(insp.id) if insp else "")
     return b

@@ -13,7 +13,7 @@ from apps.forms.models import Field, Form, FormType, FormVersion, MasterListItem
 from apps.forms.rules import validate_answers
 
 from . import activity
-from .models import Booking, RescheduleLog
+from .models import Booking, Inspection, RescheduleLog
 from .stages import can_transition
 
 COLUMNS = {"customer_name": "customer_name", "customer_phone": "customer_phone", "city": "city",
@@ -49,8 +49,8 @@ def active_inspection_type(key: str) -> bool:
                                versions__status=VersionStatus.PUBLISHED).exists()
 
 
-def clean(version: FormVersion, answers: dict) -> dict:
-    cleaned, errors = validate_answers(version, {"booking": answers}, today())
+def clean(version: FormVersion, answers: dict, kept: dict | None = None) -> dict:
+    cleaned, errors = validate_answers(version, {"booking": answers}, today(), kept=kept)
     if errors:
         raise err("INVALID_ANSWERS", "Some answers are invalid.", errors=errors)
     return cleaned
@@ -122,7 +122,7 @@ def edit(actor, b: Booking, new_answers: dict, row_version: int) -> Booking:
     if locked:  # checked before validation
         raise err("FIELD_ACCESS", "You cannot change these fields at this stage.", 403, keys=locked)
     merged = {**b.answers, **new_answers}
-    cleaned = clean(version, merged)
+    cleaned = clean(version, merged, kept=b.answers)
     changes = {k: [b.answers.get(k), cleaned.get(k)] for k in set(cleaned) | set(b.answers)
                if b.answers.get(k) != cleaned.get(k)}
     if "booking_id" in changes:
@@ -157,6 +157,8 @@ def assign(actor, b: Booking, expert_id) -> Booking:
     expert = User.objects.filter(pk=expert_id, role=Role.EXPERT, is_active=True).first()
     if expert is None:
         raise err("INVALID_EXPERT", "Choose an active expert.")
+    if b.stage == "assigned" and b.assigned_expert_id == expert.id:
+        return b                    # a double click: no second "New lead", no new timeline row
     if b.stage == "in_progress":
         raise err("ALREADY_STARTED", "The expert has started; force-release the booking first.",
                   409)
@@ -214,6 +216,9 @@ def force_release(actor, b: Booking) -> Booking:
     b.stage, b.started_at, b.late_minutes = "assigned", None, None
     b.late_reviewed_by = b.late_reviewed_at = None     # the next start is judged afresh
     b.released_by, b.released_at, b.released_draft_expected = actor, timezone.now(), True
+    # the expert's draft is closed: a new start opens a new one; the old one may still arrive
+    Inspection.objects.filter(booking=b, expert_id=b.assigned_expert_id, status="draft").update(
+        status="released")
     audit.record(actor, "booking.force_release", "booking", b.id,
                  f"Force-released {b.booking_id} from expert {b.assigned_expert_id}")
     _changed(actor, b, {"stage": ["in_progress", "assigned"]})
@@ -230,6 +235,18 @@ def review_timing(actor, b: Booking, flag) -> Booking:
     setattr(b, f"{flag}_reviewed_at", timezone.now())
     b.save(update_fields=[f"{flag}_reviewed_by", f"{flag}_reviewed_at"])
     activity.log(b, actor, f"{flag}_reviewed")
+    return b
+
+
+@transaction.atomic
+def clear_alert(actor, b: Booking, code) -> Booking:
+    b = _lock(b)
+    kept = [a for a in b.alerts if a.get("code") != code]
+    if len(kept) == len(b.alerts):
+        raise err("NO_ALERT", "This booking has no such alert.", 409)
+    b.alerts = kept
+    b.save(update_fields=["alerts"])
+    activity.log(b, actor, "alert_cleared", {"alert": [code, None]})
     return b
 
 

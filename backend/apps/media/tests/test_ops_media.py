@@ -42,7 +42,7 @@ def test_ops_replace_swaps_the_file_and_keeps_the_old_one_for_admin(job, setting
     gone = MediaAsset.objects.get(pk=old)
     assert str(gone.replaced_by_id) == new and gone.replaced_at is not None   # kept, not deleted
     assert MediaZip.objects.count() == 0
-    render.assert_called_once_with(b["id"])                   # completed: the PDF is remade
+    render.assert_not_called()          # completed: the PDF is only marked out of date (F-219)
     assert env.admin.get(f"/api/v1/media/{old}/url").status_code == 200
     assert env.ops.get(f"/api/v1/media/{old}/url").status_code == 404        # history: Admin
     row = BookingActivity.objects.get(kind="media_replaced")

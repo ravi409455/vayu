@@ -57,7 +57,8 @@ def test_a_timeout_is_recorded_and_not_retried(report_env):
         assert tasks.render_report(b["id"]) == "failed"
     assert m.call_count == 1
     r = Report.objects.get(booking_id=b["id"])
-    assert r.status == "failed" and r.error == "timeout" and r.render_started_at is None
+    # the PDF made at completion stays the customer's (H-18); the failure is kept beside it
+    assert r.status == "ready" and r.key and r.error == "timeout" and r.render_started_at is None
     assert tasks.SOFT_LIMIT >= 300 and tasks.HARD_LIMIT > tasks.SOFT_LIMIT
 
 

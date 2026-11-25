@@ -59,7 +59,8 @@ def entry_names(places: dict, assets: list) -> list[str]:
     for a in assets:
         seen[a.field_key] = seen.get(a.field_key, 0) + 1
         k = seen[a.field_key]
-        ext = {"image/jpeg": "jpg", "image/png": "png", "application/pdf": "pdf",
+        ext = {"image/jpeg": "jpg", "image/png": "png", "image/heic": "heic",
+               "application/pdf": "pdf",
                "video/mp4": "mp4", "video/quicktime": "mov"}.get(a.content_type, "bin")
         if a.field_key in places:
             _, section, label = places[a.field_key]
@@ -93,15 +94,17 @@ def fresh(z: MediaZip) -> bool:
     return (timezone.now() - z.created_at).days < settings.ZIP_LINK_DAYS
 
 
-def request_zip(booking, kind: str, excluded: list[str] | None = None) -> MediaZip:
-    """The cached ZIP if there is a fresh one with the same left-out fields, else start building.
-    Fields the requester may not see never go into their ZIP."""
-    excluded = sorted(excluded or [])
-    z = MediaZip.objects.filter(booking=booking, kind=kind,
-                                excluded=excluded).order_by("-created_at").first()
+def request_zip(booking, kind: str, excluded: list[str] | None = None,
+                only: list[str] | None = None) -> MediaZip:
+    """The cached ZIP if there is a fresh one with the same left-out fields and files, else start
+    building. Fields the requester may not see never go into their ZIP; [only]: the files it may
+    hold (none given: every file)."""
+    excluded, only = sorted(excluded or []), sorted(only or [])
+    z = MediaZip.objects.filter(booking=booking, kind=kind, excluded=excluded,
+                                only=only).order_by("-created_at").first()
     if z is not None and z.status != "failed" and fresh(z):
         return z
-    z = MediaZip.objects.create(booking=booking, kind=kind, excluded=excluded)
+    z = MediaZip.objects.create(booking=booking, kind=kind, excluded=excluded, only=only)
     build_zip.delay(str(z.id))
     z.refresh_from_db()
     return z
@@ -110,10 +113,9 @@ def request_zip(booking, kind: str, excluded: list[str] | None = None) -> MediaZ
 @shared_task
 def build_zip(zip_id: str) -> None:
     z = MediaZip.objects.select_related("booking").get(pk=zip_id)
-    assets = list(MediaAsset.objects.filter(booking=z.booking, status="verified",
-                                            replaced_at__isnull=True,
-                                            kind__in=KIND_TYPES[z.kind])
-                  .exclude(field_key__in=z.excluded).order_by("created_at"))
+    qs = MediaAsset.objects.filter(booking=z.booking, status="verified", replaced_at__isnull=True,
+                                   kind__in=KIND_TYPES[z.kind]).exclude(field_key__in=z.excluded)
+    assets = list((qs.filter(pk__in=z.only) if z.only else qs).order_by("created_at"))
     if not assets:
         z.status = "failed"
         z.save()

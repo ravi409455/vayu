@@ -7,7 +7,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from apps.core.errors import CodedError
-from apps.forms.models import Form, MasterList
+from apps.forms.models import Form, FormType, FormVersion, MasterList, VersionStatus
 
 from . import activity
 from .models import Booking
@@ -31,8 +31,13 @@ def jobs_for(user):
             .select_related("report").distinct().order_by("inspection_date", "created_at"))
 
 
-def payload(user, have: set[int], since, context) -> dict:
-    jobs, versions = [], {}
+def payload(user, have: set[int], since, context, drafts: set[int] | None = None) -> dict:
+    """[drafts]: form versions the phone's open drafts are pinned to. They are sent too (when the
+    phone lacks them), even once no listed job uses them: the phone keeps every one of them."""
+    jobs = []
+    versions = {v.id: v for v in FormVersion.objects.filter(
+        pk__in=(drafts or set()) - have, status=VersionStatus.PUBLISHED,
+        form__type__in=(FormType.CUSTOM, FormType.START, FormType.END))}
     bookings = list(jobs_for(user))
     for b in bookings:
         try:
@@ -42,7 +47,9 @@ def payload(user, have: set[int], since, context) -> dict:
         for v in pinned.values():
             if v is not None and v.id not in have:
                 versions[v.id] = v
-        draft = b.inspections.filter(expert=user, status="draft").first()
+        # a draft Ops force-released still counts: the phone may yet send it
+        draft = b.inspections.filter(expert=user, status__in=("draft", "released")).order_by(
+            "-created_at").first()
         report = getattr(b, "report", None)
         jobs.append({**BookingSerializer(b, context=context).data,
                      # the finished job's PDF, in a word (no link: experts don't open it)

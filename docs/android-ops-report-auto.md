@@ -1,4 +1,11 @@
-# Android Ops: reports update by themselves (to do)
+# Android Ops: reports update by themselves (superseded)
+
+> **Superseded by plan batch 2 (2026-11-25, `docs/plan-fixes.md` §2):** the PDF renders by itself
+> only once, at completion. Changes mark it out of date (`out_of_date: true` on
+> `GET bookings/{id}/report`), and Ops press Regenerate (`POST bookings/{id}/report/regenerate`,
+> needs `reports.view` + `submissions.edit`). `regenerate: {allowed, reason}` says when it can't
+> be pressed (conflict open, photos purged, a render running, not completed). `updating` is true
+> only while a render runs. The notes below describe the old behaviour.
 
 The web and the server no longer have a "regenerate" step. Bring the Ops app in line.
 

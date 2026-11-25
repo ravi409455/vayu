@@ -30,11 +30,12 @@ EVENTS = ["booking.created", "booking.updated", "booking.deleted", "inspection.s
           "alert.stuck_upload"]
 # internal event name -> the public event it becomes
 PUBLIC = {"booking.created": "booking.created", "booking.updated": "booking.updated",
-          "booking.assigned": "booking.updated", "booking.deleted": "booking.deleted",
+          # booking.assigned is for the bell only: its booking.updated already went (F-207)
+          "booking.deleted": "booking.deleted",
           "inspection.started": "inspection.started",
           "inspection.submitted": "inspection.submitted", "media.completed": "media.completed",
           "pdf.ready": "pdf.ready", "alert.conflict": "alert.conflict",
-          "alert.type_change_rejected": "alert.conflict",
+          "alert.type_change_rejected": "alert.conflict", "alert.late_work": "alert.conflict",
           "alert.stuck_upload": "alert.stuck_upload"}
 MAX_BODY = 1_000_000
 METHODS = ["POST", "PUT", "PATCH", "GET", "DELETE"]
@@ -126,8 +127,6 @@ def _context(public: str, payload: dict) -> dict:
         ctx["changed_keys"] = sorted(changes)
         if "booking_id" in changes:
             ctx["booking_id_change"] = changes["booking_id"]
-    if payload.get("expert") is not None:
-        ctx["changed_keys"] = sorted({*ctx.get("changed_keys", []), "assigned_expert"})
     for key in ("inspection", "revision", "media", "reason"):
         if payload.get(key) is not None:
             ctx[key] = payload[key]
@@ -202,7 +201,7 @@ def build_payload(d: Delivery, preview: bool = False) -> dict:
     if booking is None or d.event == "booking.deleted":     # nothing of a deleted booking leaves
         return body
     body["booking"]["booking_id"] = booking.booking_id
-    insp = booking.inspections.filter(status="submitted").order_by("-submitted_at").first()
+    insp = booking.counted_inspection()
     if integ.include_data:
         body["data"] = {"booking": _scoped(booking.answers, integ.fields),
                         "inspection": _scoped(((insp.answers.get("inspection") or {})

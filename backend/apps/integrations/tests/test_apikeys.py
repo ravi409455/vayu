@@ -316,3 +316,24 @@ def test_a_booking_type_without_an_active_form_cannot_be_reached_through_the_api
     Form.objects.filter(type="custom").update(is_active=False)
     c = client(new_key(ienv, {"forms": {"booking": ["*"]}}))
     assert c.get(f"/api/v1/ext/bookings/{booking['id']}/inspection").status_code == 403
+
+
+def test_an_inspection_patch_writes_only_to_the_inspection_that_counts(ienv, booking):
+    """F-109: never a draft (the expert's submit would overwrite it), never a superseded one."""
+    from apps.bookings.models import Inspection
+
+    assign(ienv, booking)
+    start(ienv.expert, booking)
+    c = client(new_key(ienv, {"forms": {"booking": ["*"], "pdi": ["odometer"]}}))
+    draft = c.patch(f"/api/v1/ext/bookings/{booking['id']}/inspection",
+                    {"answers": {"odometer": 7}}, format="json")
+    assert draft.status_code == 409 and draft.json()["code"] == "NOT_SUBMITTED"
+    submit(ienv.expert, booking)
+    kept = Inspection.objects.get(booking_id=booking["id"])
+    Inspection.objects.create(booking_id=booking["id"], expert=ienv.expert_user,
+                              form_version=kept.form_version, status="superseded",
+                              answers=kept.answers)                     # newer, but set aside
+    r = c.patch(f"/api/v1/ext/bookings/{booking['id']}/inspection",
+                {"answers": {"odometer": 99}}, format="json")
+    assert r.status_code == 200 and r.json()["id"] == str(kept.id)
+    assert Inspection.objects.get(pk=kept.pk).answers["inspection"]["odometer"] == 99

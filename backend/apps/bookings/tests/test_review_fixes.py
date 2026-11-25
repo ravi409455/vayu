@@ -151,9 +151,7 @@ def test_ops_keep_one_inspection_and_the_other_is_set_aside_not_deleted(conflict
     assert b.stage == "completed"                                   # no media: nothing to wait for
     assert Inspection.objects.get(booking_id=booking["id"], expert=b_user).status == "superseded"
     assert Inspection.objects.filter(booking_id=booking["id"]).count() == 2     # nothing deleted
-    from apps.reports.context import latest_inspection
-
-    latest = latest_inspection(b)
+    latest = b.counted_inspection()
     assert latest is not None and latest.id == a_insp.id
 
 

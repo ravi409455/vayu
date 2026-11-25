@@ -141,7 +141,7 @@ def pdf_text(booking_id) -> tuple[str, pypdf.PdfReader]:
 
 def source(b, revision=1, token="tok"):
     booking = Booking.objects.get(pk=b["id"])
-    insp = context.latest_inspection(booking)
+    insp = booking.counted_inspection()
     assert insp is not None
     return context.Source(booking, insp, revision=revision, token=token)
 
@@ -629,7 +629,7 @@ def test_no_template_means_no_report_but_the_booking_still_completes(env, settin
     assert env.ops.get(f"/api/v1/bookings/{b['id']}/report").status_code == 404
 
 
-def test_an_edit_remakes_the_report_by_itself_keeping_one_pdf_and_the_token(renv, settings):
+def test_an_edit_marks_the_report_out_of_date_and_regenerate_makes_it_once(renv, settings):
     set_template(renv)
     b = complete_job(renv, settings=settings)
     first = Report.objects.get(booking_id=b["id"])
@@ -637,20 +637,28 @@ def test_an_edit_remakes_the_report_by_itself_keeping_one_pdf_and_the_token(renv
     from apps.bookings.models import Inspection
 
     insp = Inspection.objects.get(booking_id=b["id"])
-    r = renv.ops.patch(f"/api/v1/inspections/{insp.id}", {
-        "answers": {"inspection": {"odometer": 99}}, "row_version": 0}, format="json")
-    assert r.status_code == 200
+    with events.capture() as seen:
+        r = renv.ops.patch(f"/api/v1/inspections/{insp.id}", {
+            "answers": {"inspection": {"odometer": 99}}, "row_version": 0}, format="json")
+        assert r.status_code == 200
+        now = Report.objects.get(booking_id=b["id"])
+        assert now.revision == 1 and now.stale is True        # nothing made again by itself
+        info = renv.ops.get(f"/api/v1/bookings/{b['id']}/report").json()
+        assert info["out_of_date"] is True and info["regenerate"] == {"allowed": True,
+                                                                     "reason": None}
+        assert renv.ops.post(f"/api/v1/bookings/{b['id']}/report/regenerate").status_code == 202
+    assert [n for n, _ in seen].count("pdf.ready") == 1        # one press, one new PDF
     now = Report.objects.get(booking_id=b["id"])
-    assert now.revision == 2 and now.stale is False and now.token == token    # nobody asked
+    assert now.revision == 2 and now.stale is False and now.token == token
     assert not storage.exists(old_key) and storage.exists(now.key)    # only the latest is kept
     text, _ = pdf_text(b["id"])
     assert "99 km" in text and "rev 2" in text
     assert renv.ops.get("/api/v1/problems/reports").json() == []
     info = renv.ops.get(f"/api/v1/bookings/{b['id']}/report").json()
-    assert info["updating"] is False and info["filename"] == "SA37926PDI.pdf"
+    assert info["updating"] is False and info["out_of_date"] is False
+    assert info["filename"] == "SA37926PDI.pdf"
     assert info["url"] == f"/api/v1/bookings/{b['id']}/report/download"
     assert info["preview_url"].startswith("https://") and "attachment" not in info["preview_url"]
-    assert renv.ops.post(f"/api/v1/bookings/{b['id']}/report/regenerate").status_code == 404
 
 
 def test_downloads_and_shares_are_logged_with_who_and_when(renv, settings):
@@ -679,7 +687,7 @@ def test_no_download_before_the_report_is_ready(renv, settings):
     assert renv.ops.get(f"/api/v1/bookings/{b['id']}/report/download").status_code == 404
 
 
-def test_a_change_during_a_render_makes_it_once_more(renv, settings, monkeypatch):
+def test_a_change_during_a_render_leaves_the_new_pdf_out_of_date(renv, settings, monkeypatch):
     set_template(renv)
     b = complete_job(renv, settings=settings)
     real, calls = render.render_pdf, []
@@ -695,7 +703,7 @@ def test_a_change_during_a_render_makes_it_once_more(renv, settings, monkeypatch
 
     render_report(b["id"])
     r = Report.objects.get(booking_id=b["id"])
-    assert len(calls) == 2 and r.revision == 3 and r.stale is False
+    assert len(calls) == 1 and r.revision == 2 and r.stale is True     # no second render
 
 
 def test_a_failing_render_is_retried_then_recorded_alerted_once_and_swept(renv, settings,

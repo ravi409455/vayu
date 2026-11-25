@@ -15,11 +15,10 @@ from . import placeholders
 from .definition import field_ref
 
 MEDIA = {"photo", "video", "file", "signature", "image"}
+# the option keys that mean "Not able to check": the demo option sets' and the real (Clappia)
+# forms', where the answer "Not Able to Check" becomes not_able_to_check (C-02)
+NOT_CHECKED = {"not_checked", "not_able_to_check"}
 NOT_ROWS = MEDIA | {"form_choice"}          # never a row of a table
-
-
-def latest_inspection(booking: Booking) -> Inspection | None:
-    return booking.inspections.filter(status="submitted").order_by("-submitted_at").first()
 
 
 def _label(list_key: str, item_key: str) -> str:
@@ -183,8 +182,7 @@ class Source:
                   if f.type in ("single_choice", "multi_choice")]
         answered = self.answers["inspection"]
         checks = [(f, c) for f, c in checks if c.text and c.tone]      # answered checks only
-        # "Not able to check" is the answer keyed not_checked (the option sets' convention)
-        unsure = [f.label for f, _ in checks if answered.get(f.key) == "not_checked"]
+        unsure = [f.label for f, _ in checks if answered.get(f.key) in NOT_CHECKED]
         out["sys"].update(checks=str(len(checks)), not_checked=str(len(unsure)),
                           not_checked_list=", ".join(unsure))
         from . import media_links
@@ -231,7 +229,7 @@ def flags(src: Source, ref: str, c: Cell) -> list[str]:
         worst = [SEVERITY.index(opts[k]["severity"]) for k in keys
                  if opts.get(k, {}).get("severity") in SEVERITY]
         out += [SEVERITY[max(worst)]] if worst else []
-        out += ["not_checked"] if "not_checked" in keys else []
+        out += ["not_checked"] if NOT_CHECKED.intersection(map(str, keys)) else []
     return out
 
 

@@ -261,7 +261,7 @@ def test_edge_cases_stay_quiet_or_summarise(env, booking):
     env.ops_user.save()
     events.emit("inspection.started", booking=booking["id"])          # no Ops left to tell
     assert not Notification.objects.exists()
-    assert handlers._changed({"a_b": [1, 2], "c": [[1], [2]]}) == "A b, C"
+    assert handlers._changed({"a_b": [1, 2], "c": [[1], [2]]}, {}) == "A b, C"
     Device.objects.create(user=env.expert_user, push_token="live", push_token_at=timezone.now())
     with mock.patch.object(fcm, "credential", return_value={"project_id": "p"}), \
             mock.patch.object(fcm, "send", return_value=True):

@@ -477,6 +477,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/Booking'
           description: ''
+  /api/v1/bookings/{id}/clear-alert:
+    post:
+      operationId: bookings_clear_alert_create
+      description: |-
+        Ops looked at an alert ({"code": "TYPE_CHANGE_REJECTED"}): it leaves "Needs you" and
+        the timeline says who cleared it (F-221).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Booking'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
   /api/v1/bookings/{id}/finish:
     post:
       operationId: bookings_finish_create
@@ -662,6 +697,24 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/bookings/{id}/report/regenerate:
+    post:
+      operationId: bookings_report_regenerate_create
+      description: Ops make the report again after changes (one new PDF, one pdf.ready).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/bookings/{id}/report/shared:
     post:
       operationId: bookings_report_shared_create
@@ -751,6 +804,11 @@ paths:
   /api/v1/bookings/{id}/start:
     post:
       operationId: bookings_start_create
+      description: |-
+        Start a lead with its check-in. ``form_version``, ``start_version``, ``end_version``:
+        the versions the phone pinned when the expert started, kept if each was the latest
+        published one at ``client_started_at`` (give or take 10 minutes); an older one is refused
+        (409 ``FORM_VERSION_OLD``, Ops alerted). Left out: the latest published versions.
       parameters:
       - in: path
         name: id
@@ -853,6 +911,23 @@ paths:
       operationId: bookings_answer_fields_retrieve
       description: Fields Bookings can be filtered by (choice and yes/no answers this
         person may see).
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+  /api/v1/bookings/count:
+    get:
+      operationId: bookings_count_retrieve
+      description: |-
+        How many bookings the list would give for the same filters, without loading them (the
+        Bookings filter's counts, F-085).
       tags:
       - bookings
       security:
@@ -3108,8 +3183,9 @@ paths:
       operationId: sync_jobs_retrieve
       description: |-
         The expert's jobs and everything needed to inspect them offline (see apps/bookings/sync.py).
-        ``have`` lists form version ids the phone already holds; ``since`` is the last sync's
-        ``server_time`` (returns what Ops changed after it).
+        ``have`` lists form version ids the phone already holds; ``drafts`` the ones its open drafts
+        are pinned to (sent when missing, even if no listed job uses them); ``since`` is the last
+        sync's ``server_time`` (returns what Ops changed after it).
       tags:
       - sync
       security:

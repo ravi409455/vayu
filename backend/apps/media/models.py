@@ -23,9 +23,13 @@ class MediaAsset(models.Model):
     size = models.BigIntegerField()
     sha256 = models.CharField(max_length=64)
     source = models.CharField(max_length=10, default="camera")  # camera | gallery (internal only)
-    status = models.CharField(max_length=10, default="pending")  # pending | verified
+    # pending | uploaded | verifying | verified | failed | purged
+    status = models.CharField(max_length=10, default="pending")
     key = models.CharField(max_length=200)
     preview_key = models.CharField(max_length=200, blank=True)
+    # a JPEG copy (at most 2048 px) for the PDF when the original is HEIC or bigger; the
+    # original is never rewritten
+    jpeg_key = models.CharField(max_length=200, blank=True)
     upload_id = models.TextField(blank=True)   # R2 ids are ~343 characters
     stuck_alerted = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
@@ -47,6 +51,8 @@ class MediaZip(models.Model):
                                 related_name="zips")
     kind = models.CharField(max_length=10)             # image | video
     excluded = models.JSONField(default=list)          # field keys left out (hidden from them)
+    # asset ids it may hold, empty = any (the customer's links: only the counted inspection's)
+    only = models.JSONField(default=list, blank=True)
     status = models.CharField(max_length=10, default="building")  # building | ready | failed
     progress = models.PositiveSmallIntegerField(default=0)
     key = models.CharField(max_length=200, blank=True)

@@ -4,12 +4,14 @@ from apps.forms.access import levels_for
 from .models import BookingActivity
 
 # values worth keeping for the timeline (still shown only to people who may see the field)
-SAFE_KEYS = {"stage", "assigned_expert", "inspection_date", "inspection_time", "inspection_type",
-             "conflict", "media", "revision", "how", "missing"}
+SAFE_KEYS = {"alert", "stage", "assigned_expert", "inspection_date", "inspection_time",
+             "inspection_type", "conflict", "media", "revision", "how", "missing"}
 # not form answers: always visible ("missing": how many files a job was finished without)
-COLUMNS = {"stage", "conflict", "revision", "how", "missing"}
+COLUMNS = {"alert", "stage", "conflict", "revision", "how", "missing"}
 TIMING_KINDS = ("late_reviewed", "quick_reviewed")   # Admin / Ops only, never Experts
 REPORT_KINDS = ("report_downloaded", "report_shared")   # who passed the report on: not Experts
+# Ops' review of an inspection: experts never see or set ratings (REQUIREMENTS §5.4, F-237)
+REVIEW_KINDS = ("ratings_changed", "key_checks_changed", "alert_cleared")
 
 
 def log(b, actor, kind: str, changes: dict | None = None, keys: list[str] | None = None,
@@ -57,7 +59,7 @@ def for_user(b, user, since=None) -> list[dict]:
     if scope_for(user, "bookings.review_timing") is None:
         rows = rows.exclude(kind__in=TIMING_KINDS)
     if role == "expert":
-        rows = rows.exclude(kind__in=REPORT_KINDS)
+        rows = rows.exclude(kind__in=REPORT_KINDS + REVIEW_KINDS)
     if since is not None:
         rows = rows.filter(at__gt=since).exclude(actor=user)
     out = []

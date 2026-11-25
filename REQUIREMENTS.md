@@ -61,6 +61,7 @@ Reference report: `SA37926PDI.pdf` (PDI, 35 pp). Clappia (garuda) was reviewed r
   - **Forms are built and tested on the staging server**, then **"Promote to production"**. Promotion carries the form version, linked library items, referenced master lists (matched by key) and the PDF template.
   - Production keeps draft → **PDF preview** → publish. No test mode in production.
   - An inspection's version is **frozen at Start**. Jobs not yet started move to the latest version on sync.
+  - The expert never chooses a version: the phone pins the **latest published** version when the lead is started (offline too) and sends it with the start. The server keeps it if it really was the latest published version at the phone's start time (10-minute clock allowance; a start time before the booking existed counts from the booking), even if the Admin published a newer one before the start arrived (Ops alerted); an older one is refused and Ops are alerted. The phone keeps every form version its open drafts use (sync sends them again when missing).
   - v1.1: change diff vs live, one-click rollback.
 - **Field settings:**
   - Stable machine key: **never editable**, unique within its form and in the library.
@@ -81,8 +82,8 @@ Reference report: `SA37926PDI.pdf` (PDI, 35 pp). Clappia (garuda) was reviewed r
 ## 5. Inspection flow (expert, Android)
 ### 5.1 App basics
 - Kotlin / Jetpack Compose, **Android 11+**, English, distributed as an **APK download link** with an in-app self-update.
-- **Forced minimum app version:** an outdated app can't start new jobs but can finish a job already in progress.
-- **Visible push notifications** (Firebase) for: new job assigned, rescheduled, cancelled / reassigned away, booking details changed. Each push also triggers an immediate sync. Pull-to-refresh is also available.
+- **Forced minimum app version:** an outdated app can't start new jobs but can finish a job already in progress, including one started offline before its version became too old (accepted; Ops alerted). Work on a form the Admin switched off after the start is accepted too (Ops alerted).
+- **Visible push notifications** (Firebase) for: new job assigned, rescheduled, cancelled / reassigned away, force-released by Ops, booking details changed (with field and option labels; never a field the booking form hides from experts, and no customer name when that is hidden). Ops' review (ratings, Key Checks, cleared alerts) is never shown to experts. The check-in answers are kept from Start, so Ops see the arrival selfie and GPS of a running job. Each push also triggers an immediate sync. Pull-to-refresh is also available.
 - **My Jobs** list → **booking summary confirmation** → Start.
 - **Check-in** on Start:
   - GPS and **server-corrected time** captured automatically (no distance check).
@@ -106,9 +107,9 @@ forms at the end of the day; the app keeps its generic nature").
   yes/no field the person may see and a value, or "not filled".
 
 ### 5.3 Media
-- Photo/video fields: the expert taps the camera repeatedly up to the configured count. Camera and gallery are both allowed.
+- Photo/video fields: the expert taps the camera repeatedly up to the configured count (a field without its own maximum takes **1 file**). Camera and gallery are both allowed.
 - **In-app camera photos get a burned-in stamp** (booking ID, expert, server time, GPS, or **"GPS unavailable"**). Gallery photos aren't stamped. The source is tagged internally and never shown in the PDF.
-- Stored at **~2048px / ~500 KB** plus a preview copy. Videos are clips of up to 60 s at 720p, compressed on the phone.
+- Stored as sent, plus a preview copy and, for an iPhone **HEIC** photo or one larger than 2048 px, a **separate JPEG copy** (≤ 2048 px) used for previews and the PDF. Videos are clips of up to 60 s at 720p, compressed on the phone. The server checks each video really is an MP4 / MOV file. A failed upload, or one left unfinished longer than the stuck-upload limit (6 h), does not use up a place on its field.
 - Expert can **delete/retake** and review full-screen before submit.
 - **Upload as you go** on any network: background, resumable, chunked, checksum-verified, **sent directly from the phone to R2** via pre-signed URLs (never through the API server).
 - **Local copies:** cleared manually only; **unuploaded files can never be cleared**. Low-storage warning below 2 GB, and starting a job is blocked below 500 MB.
@@ -139,7 +140,9 @@ forms at the end of the day; the app keeps its generic nature").
 - **Concurrent web edits:** a save is stopped if someone else saved since the form was opened ("Priya changed this 2 min ago – reload"). On retry only the fields you changed are applied.
 - **Ops changes while the expert is offline:** push notification + banner on the next sync (old → new).
 - **Cancelled while the expert has a draft:** the draft still syncs and is kept on the cancelled booking.
-- **Reassigned while the expert has a draft:** the job **stays in that expert's list** as "Reassigned – submit or discard". If submitted, **the submission is accepted** and the booking is flagged "Conflict: two experts". If the new expert hasn't started, their job is withdrawn; otherwise Ops choose which inspection to keep.
+- **Reassigned while the expert has a draft:** the job **stays in that expert's list** as "Reassigned – submit or discard". If submitted, **the submission is accepted** and the booking is flagged "Conflict: two experts". If the new expert hasn't started, their job is withdrawn; otherwise Ops choose which inspection to keep. Nothing completes and no report is made from the late work until Ops choose.
+- **Force-release** closes the expert's draft (released): a new start opens a new draft (one open draft per expert per booking); the released one is still accepted if it arrives, as a conflict.
+- **A second submit** by the same expert on a lead they already submitted is **refused** ("Already submitted; Ops can edit it"); the same request id still returns the first result.
 - **Logout is blocked while data is unsynced.** If Admin disables an account with unsynced data, the Admin sees a data-loss warning.
 - **Time:** server-corrected using the offset from the last sync. If there's been no sync that day, the last known offset is used and the time is **flagged "unverified"**.
 
@@ -160,7 +163,11 @@ forms at the end of the day; the app keeps its generic nature").
   - **Verification QR** linking to a verify page on your own subdomain. The page shows a summary only: booking ID, car, type, date, overall rating, current revision.
   - Admin-set filename pattern.
 - **No PDF size limit.** Videos are internal only.
-- **Generation:** automatic once media is complete. After Ops edits, regenerated with a **"Regenerate PDF" button**. **Only the latest PDF is kept** (no old revisions). Renders run one at a time, with a memory limit and timeout.
+- **Generation:** automatic **once**, when the booking completes. After that nothing re-renders by itself: Ops edits, files Ops add or replace and booking changes only mark the PDF **"out of date"**; Ops press **"Regenerate PDF"** (one new PDF, one `pdf.ready`). The every-few-minutes sweep only retries failed or killed renders. **Only the latest PDF is kept** (no old revisions). Renders run one at a time, with a memory limit and timeout. A later render that fails keeps the last PDF (the verify page keeps working); the failure is listed for Ops.
+- **Which inspection the report uses:** the one that counts. During a two-expert conflict the customer **keeps the old report** and Regenerate is disabled; when Ops pick the inspection that counts, the PDF renders once automatically. If the first completion is already in conflict, there is no report until Ops resolve it.
+- **Retention:** once the retention setting has purged a booking's photos, its **last PDF is kept** and Regenerate is disabled with the reason.
+- **Photo / video ZIP links** in the report hold only the files the counted inspection uses, and **expire 30 days after the booking's first PDF**; a PDF regenerated after that leaves those links out. The verify page (QR) keeps working.
+- An inspection on an older form version keeps the **layout made for that version** (the newest template version published before the next form version). "Not able to check" counts the option keys `not_checked` and `not_able_to_check`.
 - **Access:** Ops + Admin (web), plus the webhook link.
 
 ## 8. Integrations
@@ -182,7 +189,7 @@ forms at the end of the day; the app keeps its generic nature").
 - **Job board:**
   - Today / date-range views with stage + Ops status.
   - Filters for city, expert, type and stage.
-  - **Problem queue:** stuck uploads, conflicts, rejected type changes, unverified payments, pay-later outstanding, edited but not regenerated, unverified times, late starts and too-quick jobs not yet reviewed.
+  - **Problem queue:** stuck uploads (checked every hour; files on finished or cancelled jobs, failed or replaced ones drop out; bell, push and webhook once per booking, the bell at most daily), conflicts, rejected type changes (Ops clear each alert once looked at), unverified payments, pay-later outstanding, edited but not regenerated, unverified times, late starts and too-quick jobs not yet reviewed.
   - **Global search:** Booking ID, customer name/phone, chassis no., car.
 - **Dashboards:** volume by day/week/month × type, city, expert, lead owner; **CSV export**.
 - **Inspection timing (Admin and Ops only, never Experts; see `docs/plan-timing.md`):**

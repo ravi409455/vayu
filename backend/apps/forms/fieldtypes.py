@@ -24,10 +24,13 @@ SEVERITIES = ("minor", "major", "critical")
 ROLES = ("expert", "ops", "admin")
 REGEX_TIMEOUT_S = 0.1
 DEFAULT_MAX_LENGTH = {"short_text": 200, "long_text": 5000}
+# system fields copied into a booking column: never longer than the column (F-120)
+COLUMN_LIMITS = {"booking_id": 64, "chassis_no": 64, "customer_name": 200}
 CAPTURE_MODES = ("both", "camera", "upload")   # how an expert may add a photo or video
 CAMERAS = ("back", "front")                     # which camera the Android app opens first
 TONES = ("ok", "warn", "bad", "muted")           # print colour of a choice: green, amber, red, grey
-DEFAULT_MAX_COUNT = {"photo": 10, "video": 3, "file": 5}
+# a field without its own maximum takes one file (plan batch 4, F-010: the same everywhere)
+DEFAULT_MAX_COUNT = {"photo": 1, "video": 1, "file": 1}
 
 ALLOWED_KEYS: dict[str, set[str]] = {
     "single_choice": {"options", "display"},
@@ -212,7 +215,9 @@ def _number(value: Any, *, decimals: int, lo=None, hi=None) -> int | float:
     if isinstance(exponent, int) and -exponent > decimals:
         raise AnswerError("TOO_MANY_DECIMALS", f"Use at most {decimals} decimal places.")
     if (lo is not None and d < Decimal(str(lo))) or (hi is not None and d > Decimal(str(hi))):
-        raise AnswerError("OUT_OF_RANGE", f"Must be between {lo} and {hi}.")
+        words = (f"Must be between {lo} and {hi}." if lo is not None and hi is not None
+                 else f"Must be at least {lo}." if hi is None else f"Must be at most {hi}.")
+        raise AnswerError("OUT_OF_RANGE", words)
     return int(d) if d == d.to_integral_value() else float(d)
 
 
@@ -302,8 +307,10 @@ def clean_answer(field, value: Any, *, override: bool = False) -> Any:
         if not isinstance(value, str):
             raise AnswerError("INVALID_TYPE", "Enter text.")
         text = value.strip() if t == "short_text" else value
-        if len(text) > c.get("max_length", DEFAULT_MAX_LENGTH[t]):
-            raise AnswerError("TOO_LONG", "Too long.")
+        limit = min(c.get("max_length", DEFAULT_MAX_LENGTH[t]),
+                    COLUMN_LIMITS.get(field.key, DEFAULT_MAX_LENGTH[t]))
+        if len(text) > limit:
+            raise AnswerError("TOO_LONG", f"Use at most {limit} characters.")
         if c.get("pattern"):
             try:
                 matched = regex.fullmatch(c["pattern"], text, timeout=REGEX_TIMEOUT_S)

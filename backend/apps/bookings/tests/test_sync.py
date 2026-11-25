@@ -66,6 +66,8 @@ def test_a_job_taken_away_while_i_hold_a_draft_stays_with_my_draft(ienv, booking
     started = start(ienv.expert, booking).json()
     ienv.ops.post(f"/api/v1/bookings/{booking['id']}/force-release")
     assign(ienv, booking, ienv.make_user("expert", username="e6"))
+    # listed for 2 days as a job moved away (its released draft alone no longer lists it, H-08)
+    Booking.objects.filter(pk=booking["id"]).update(inspection_date=timezone.localdate())
     (job,) = sync(ienv.expert).json()["jobs"]
     assert job["assigned_to_me"] is False and job["my_draft"] == started["inspection"]["id"]
 

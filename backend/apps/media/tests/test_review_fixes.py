@@ -192,7 +192,7 @@ def test_a_file_that_is_not_an_image_fails_verification_cleanly(job, settings):
     init = r.json()
     parts = put_parts(init, junk, settings)
     done = env.expert.post(f"/api/v1/media/{init['id']}/complete", {"parts": parts}, format="json")
-    assert done.status_code == 409 and done.json()["code"] == "CHECKSUM_MISMATCH"
+    assert done.status_code == 200 and done.json()["status"] == "failed"
     a = MediaAsset.objects.get(pk=init["id"])
     assert a.status == "failed" and not storage.exists(a.key)
     assert verify_asset is not None and sha(junk) == a.sha256
