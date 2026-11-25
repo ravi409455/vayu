@@ -105,6 +105,7 @@ function Detail({ id }: { id: string }) {
           <div className="chips">
             <Pill tone={STAGE_TONE[booking.stage]}>{STAGE_LABEL[booking.stage] ?? booking.stage}</Pill>
             {booking.conflict && <Pill tone="bad">Conflict: two experts</Pill>}
+            {booking.unverified_time && <span title="The phone's clock was not checked with the server that day, so the times it stamped may be off."><Pill tone="warn">Time not verified</Pill></span>}
             {report.data?.out_of_date && <Pill tone="warn">PDF out of date</Pill>}
             {timingFlags(booking.timing).map((f) => <Pill key={f.flag} tone="warn">{f.words}</Pill>)}
             {fmtSlot(a.inspection_date, a.inspection_time) && <span className="chip">{fmtSlot(a.inspection_date, a.inspection_time)}</span>}

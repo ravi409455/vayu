@@ -81,4 +81,20 @@ describe("problem queue", () => {
     render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><AuthProvider><Problems /></AuthProvider></MemoryRouter></QueryClientProvider>);
     await waitFor(() => expect(screen.getByRole("heading", { name: /Needs you/ })).toHaveTextContent("60"));
   });
+  it("lists this week's bookings stamped on an unchecked phone clock as Unverified times (F-222)", async () => {
+    const asked: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const u = String(url);
+      asked.push(u);
+      const body = u.includes("auth/me") ? { id: 1, username: "o", name: "O", role: "ops", permissions: { "bookings.view": "all" } }
+        : u.includes("problem=unverified_time") ? { count: 1, next: null, previous: null, results: [{ id: "b9", booking_id: "B9", stage: "completed", unverified_time: true, alerts: [], answers: { inspection_date: "2026-11-24", inspection_time: "10:00" } }] }
+        : u.includes("problem=") || u.includes("bookings?") ? { count: 0, next: null, previous: null, results: [] } : [];
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><AuthProvider><Problems /></AuthProvider></MemoryRouter></QueryClientProvider>);
+    const list = await screen.findByRole("list", { name: "Needs you" });
+    await waitFor(() => expect(list).toHaveTextContent("B9: time not verified"));
+    expect(screen.getByRole("button", { name: "Unverified times 1" })).toBeInTheDocument();
+    expect(asked.find((u) => u.includes("problem=unverified_time"))).toMatch(/date_from=.*date_to=/);   // this week only: the mark never clears
+  });
 });
