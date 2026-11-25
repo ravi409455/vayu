@@ -157,6 +157,10 @@ fun firstCameraIsBack(field: Field): Boolean = when (field.config["camera"]) {
     else -> true
 }
 
+/** 720p at about 2.5 Mbps (the agreed size: ~19 MB a minute, the same on every phone). */
+fun videoRecorder(): Recorder = Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.HD))
+    .setTargetVideoEncodingBitRate(2_500_000).build()
+
 @Composable
 fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () -> Instant, verified: Boolean,
                  dir: File, onTaken: (File, String) -> Unit, onDone: () -> Unit) {
@@ -183,7 +187,7 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
     LaunchedEffect(Unit) { while (true) { clock = now(); kotlinx.coroutines.delay(1000) } }
     val preview = remember { Preview.Builder().build() }
     val capture = remember { ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build() }
-    val recorder = remember { Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.HD)).build() }
+    val recorder = remember { videoRecorder() }
     val videoCapture = remember { VideoCapture.withOutput(recorder) }
     val canFlip = provider?.let { runCatching { it.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) }.getOrDefault(false) } == true
     LaunchedEffect(provider, back) {

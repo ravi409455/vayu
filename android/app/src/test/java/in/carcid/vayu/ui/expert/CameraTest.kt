@@ -40,4 +40,9 @@ class CameraTest {
         show("video")
         compose.onNodeWithText("No sound: the microphone isn't allowed.").assertExists()
     }
+
+    /** F-088: recorded videos are 720p at about 2.5 Mbps on every phone, not the phone's own (often much higher) rate. */
+    @Test fun videosAre720pAtAbout2Point5Mbps() {
+        assertEquals(2_500_000, videoRecorder().targetVideoEncodingBitRate)
+    }
 }

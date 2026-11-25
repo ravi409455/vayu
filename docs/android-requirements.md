@@ -60,6 +60,11 @@ prototype of every screen below is approved.**
      refused, drafts of leads no longer on the list with Send / Discard).
   7a. A file the server refuses (too large, wrong type) shows its reason in Uploads and can be
      removed, also after Submit; the rest of the inspection is sent without it.
+  7b. After a sign-out nothing of that person stays: their drafts (answers, photos), notices, reminders
+     and saved copies are deleted. Signed out without signal, the server's sign-in for that phone is
+     ended at the next sign-in. Signed out by the server: sent drafts are deleted, unsent ones wait.
+     Sign-in tokens are sealed with a key in the Android Keystore; an update moves tokens saved by an
+     older version, so nobody is signed out by it. Ops' saved copies keep the latest 300.
   8. An app below the minimum version can't start new leads but can finish the current one.
   9. Times are corrected by the server clock; with no sync that day, or the phone restarted or its
      clock changed since the last sync, the time is marked "unverified".
@@ -76,7 +81,8 @@ prototype of every screen below is approved.**
    "GPS unavailable".
 2. Gallery allowed unless the Admin set the field to camera-only (e.g. selfie); gallery photos are
    not stamped.
-3. Photos ~2048 px / ~500 KB plus a preview; video up to 60 s at 720p, compressed on the phone.
+3. Photos ~2048 px / ~500 KB plus a preview; video up to 60 s at 720p, about 2.5 Mbps (~19 MB a minute)
+   on every phone. Gallery videos go up as picked, within the server's 300 MB limit.
 4. Tap the camera repeatedly up to the field's limit; full-screen review; delete and retake.
 5. Photos start uploading the moment they are taken.
 6. Local copies are cleared manually from Uploads; files the server has not yet received **and
