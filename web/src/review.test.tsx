@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "./auth";
-import { ReviewTab } from "./pages/ops/Booking";
+import { ReviewTab } from "./pages/ops/booking/ReviewTab";
 
 afterEach(() => vi.restoreAllMocks());
 

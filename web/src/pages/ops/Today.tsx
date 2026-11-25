@@ -2,7 +2,6 @@ import { ChevronDown, ChevronLeft, ChevronRight, Plus, Users } from "lucide-reac
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { api, type Page } from "../../api/client";
 import { fetchAll, useList, useRefresh } from "../../api/hooks";
 import { STAGE_LABEL, useLabels } from "../../api/labels";
 import type { Booking, User } from "../../api/types";
@@ -13,7 +12,7 @@ import { clampStart, DAY_END, DAY_START, dayWindow, hm, hoursOf, jobSpan, rangeL
 import { useTiming } from "../../lib/timing";
 import { Avatar } from "../../ui/Avatar";
 import { Empty, LoadError, PageHeader, useToast } from "../../ui/kit";
-import { Actions } from "./Booking";
+import { Actions } from "./booking/Actions";
 import { useCount, viewQuery } from "./Bookings";
 import { keys } from "../../api/keys";
 

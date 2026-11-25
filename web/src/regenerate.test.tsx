@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "./auth";
 import { reportProblems } from "./lib/problems";
-import { ReportTab } from "./pages/ops/Booking";
+import { ReportTab } from "./pages/ops/booking/ReportTab";
 import { ToastProvider } from "./ui/kit";
 
 afterEach(() => vi.restoreAllMocks());

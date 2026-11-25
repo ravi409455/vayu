@@ -15,7 +15,7 @@ import { fmtMinutes } from "../../lib/timing";
 import { ExpertCell } from "../../ui/ExpertCell";
 import { Confirm, Empty, LoadError, PageHeader, Pill, useToast } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
-import { Actions } from "./Booking";
+import { Actions } from "./booking/Actions";
 import { keys } from "../../api/keys";
 
 /** Admin may delete any booking; Ops only one that is still an untouched draft. */

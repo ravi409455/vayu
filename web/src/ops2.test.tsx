@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FormField } from "./api/types";
 import { addDays, fmtDay, fmtPhone, fmtSlot, fmtStamp, fmtTime } from "./lib/format";
-import { activityText } from "./pages/ops/Booking";
+import { activityText } from "./pages/ops/booking/ActivityCard";
 import { viewQuery } from "./pages/ops/Bookings";
 import { dayWindow } from "./pages/ops/Today";
 import { defectOf } from "./ui/AnswerSheet";

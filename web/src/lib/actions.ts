@@ -14,3 +14,6 @@ export function allowedActions(b: Pick<Booking, "stage">, can: (perm: string) =>
   if (can("bookings.edit") && (s === "draft" || s === "assigned")) out.add("type");
   return out;
 }
+
+/** Ops change an expert's files and Key Checks only once the expert has submitted (uploading or done). */
+export const opsMayEdit = (b: Pick<Booking, "stage">) => b.stage === "submitted" || b.stage === "completed";
