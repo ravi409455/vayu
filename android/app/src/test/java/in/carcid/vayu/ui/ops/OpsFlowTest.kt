@@ -187,6 +187,19 @@ class OpsFlowTest {
         }
     } }
 
+    /** Ops pass on the PDF only: the check link is printed in it, so the card has no button for it; one row of buttons. */
+    @Test fun theReportCardHasOpenShareAndRegenerateInOneRow() {
+        server.on("GET bookings/$B6/report", report(outOfDate = false, allowed = true))
+        showReport()
+        waitFor("Ready")
+        compose.onNodeWithText("Open").assertExists()
+        compose.onNodeWithText("Share").assertExists()
+        compose.onNodeWithText("Check link").assertDoesNotExist()
+        // the three buttons share one row, to save space
+        val tops = listOf("Open", "Share", "Regenerate").map { compose.onNodeWithText(it).fetchSemanticsNode().boundsInRoot.top }
+        assertEquals(1, tops.distinct().size)
+    }
+
     /** F-219: a report out of date says so, and one tap on Regenerate sends one request, then shows the new state. */
     @Test fun anOutOfDateReportIsRegeneratedWithOneTap() {
         server.on("GET bookings/$B6/report", report(outOfDate = true, allowed = true))
@@ -320,6 +333,16 @@ class OpsFlowTest {
         assertTrue(server.bodiesOf("POST bookings/$B14/resolve-conflict").single().contains("aaaaaaaa-0000-0000-0000-000000000001"))
     }
 
+    /** Payment is ordinary wrap-up answers (REQUIREMENTS 5.2): the booking screen has no payment section of its own. */
+    @Test fun theBookingScreenHasNoPaymentSection() {
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("Inspection Data"); waitFor("2 Key Checks")
+        compose.onNodeWithText("PAYMENT").assertDoesNotExist()
+        compose.onNodeWithText("Not answered yet").assertDoesNotExist()
+    }
+
     @Test fun anAnswerIsChangedWithItsRowVersion() {
         server.on("PATCH inspections/aaaaaaaa-0000-0000-0000-000000000001", "{}")
         show()
@@ -335,6 +358,31 @@ class OpsFlowTest {
         val body = Json.parseToJsonElement(server.bodiesOf("PATCH inspections/aaaaaaaa-0000-0000-0000-000000000001").single()).jsonObject
         assertEquals(2, body["row_version"]!!.jsonPrimitive.int)
         assertEquals(12400, body["answers"]!!.jsonObject["inspection"]!!.jsonObject["odometer"]!!.jsonPrimitive.int)
+    }
+
+    /** The page list names every page of Check-in, Inspection and Wrap-up, numbered across all three; a page in another tab opens that tab. */
+    @Test fun thePageListCoversCheckInInspectionAndWrapUp() {
+        server.on("GET bookings/$B14/inspections", """[{"id":"aaaaaaaa-0000-0000-0000-000000000001","expert":4,"status":"submitted",
+            "submitted_at":"2026-11-24T10:40:00Z","created_at":"2026-11-24T09:00:00Z","row_version":2,"form_version":7,"start_version":1,"end_version":9,
+            "overrides":{},"scores":{},"answers":{"start":{"travel":"bike"},"inspection":{"chassis_no":"MA3","odometer":12400,"bonnet":"ok","door":"minor"},"end":{}}}]""")
+        server.on("GET form-versions/1", Fixtures.START)
+        server.on("GET form-versions/9", Fixtures.END)
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("Inspection Data"); compose.onNodeWithText("Inspection Data").performScrollTo().performClick()
+        waitFor("Chassis number")
+        compose.onNodeWithText("page 2 of 4").assertExists()          // Vehicle: the second page of the whole inspection
+        compose.onNodeWithText("Only problems · 1").assertExists()
+        compose.onNodeWithContentDescription("Jump to a page").performClick()
+        waitFor("Pages")
+        listOf("1. Check-in", "2. Vehicle", "3. Exterior", "4. Wrap-up").forEach { compose.onNodeWithText(it).assertExists() }
+        compose.onNodeWithText("Not filled yet").assertExists()      // only Wrap-up has no answers
+        compose.onNodeWithText("4. Wrap-up").performClick()
+        waitFor("Taking payment?")
+        compose.onNodeWithText("page 4 of 4").assertExists()
+        // "Only problems" is one switch for the whole inspection: the count stays on a tab with no problems
+        compose.onNodeWithText("Only problems · 1").assertExists()
     }
 
     @Test fun keyChecksAreTypedOverAndResetOnReview() {

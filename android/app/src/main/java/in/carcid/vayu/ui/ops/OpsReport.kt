@@ -52,8 +52,9 @@ import java.io.File
 
 /**
  * The PDF report on the booking screen. It updates by itself after any change (the card says
- * "Updating…" and checks again until it's done); Open · Share · Check link. Opening downloads it
- * through the server (logged); sharing the PDF or the check link is logged too.
+ * "Updating…" and checks again until it's done); Open · Share · Regenerate in one row. Opening downloads it through the
+ * server (logged); sharing the PDF is logged too. The check link is printed in the PDF, so there
+ * is no button for it here.
  */
 @Composable
 fun ReportCard(env: OpsEnv, id: String, b: Bk) {
@@ -95,9 +96,9 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
         }
     }
     fun uriOf(f: File) = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
-    // who passed it on, and how, goes on the booking's history first; no record, no share
-    suspend fun logShared(how: String): Boolean = try {
-        env.data.act("POST", "bookings/$id/report/shared", buildJsonObject { put("how", how) }); true
+    // who passed the PDF on goes on the booking's history first; no record, no share
+    suspend fun logShared(): Boolean = try {
+        env.data.act("POST", "bookings/$id/report/shared", buildJsonObject { put("how", "pdf") }); true
     } catch (e: ApiError) { env.say("Couldn't record the share. Check the signal and try again."); false }
     Column(Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Vayu.colors.soft).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -112,31 +113,28 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
         }, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
         if (failed && rep?.error?.isNotBlank() == true) Note(rep!!.error, Vayu.colors.badTint)
         if (outOfDate && !updating) Note("Something it shows changed since it was made. Regenerate it when you're done.", Vayu.colors.warnTint)
-        if (rep?.url?.isNotBlank() == true) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CardButton("Open", Modifier.weight(1f), online) { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }
-            CardButton("Share", Modifier.weight(1f), online) { scope.launch {
+        // one row, to save space: Open · Share · Regenerate (each only when it applies)
+        val hasFile = rep?.url?.isNotBlank() == true
+        val canRegenerate = rep != null && env.can("submissions.edit")
+        val allowed = regen?.allowed == true
+        if (hasFile || canRegenerate) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (hasFile) CardButton("Open", Modifier.weight(1f), online) { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }
+            if (hasFile) CardButton("Share", Modifier.weight(1f), online) { scope.launch {
                 file()?.let {
-                    if (!logShared("pdf")) return@launch
+                    if (!logShared()) return@launch
                     ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/pdf")
                         .putExtra(Intent.EXTRA_STREAM, uriOf(it)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Share the report"))
                 } ?: env.say("Couldn't download the report.")
             } }
-            if (rep!!.verifyUrl.isNotBlank()) CardButton("Check link", Modifier.weight(1f), online) { scope.launch {
-                if (!logShared("check_link")) return@launch
-                ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, rep!!.verifyUrl), "Share the check link"))
-            } }
-        }
-        // F-219: reports are made again only when Ops press Regenerate (one tap, one request)
-        if (rep != null && env.can("submissions.edit")) {
-            val allowed = regen?.allowed == true
-            CardButton(if (sending) "Regenerating…" else "Regenerate", Modifier.fillMaxWidth(), online && allowed && !sending) {
+            // F-219: reports are made again only when Ops press Regenerate (one tap, one request)
+            if (canRegenerate) CardButton(if (sending) "Regenerating…" else "Regenerate", Modifier.weight(1f), online && allowed && !sending) {
                 sending = true
                 env.actions.send("POST", "bookings/$id/report/regenerate", refused = { e -> env.say(e.message); sending = false }) {
                     scope.launch { try { rep = Report.from(env.data.api.get("bookings/$id/report")) ?: rep } catch (e: ApiError) { } finally { sending = false } }
                 }
             }
-            if (!allowed && regen?.reason?.isNotBlank() == true) Text(regen.reason, fontSize = 13.sp, color = Vayu.colors.muted)
         }
+        if (canRegenerate && !allowed && regen?.reason?.isNotBlank() == true) Text(regen.reason, fontSize = 13.sp, color = Vayu.colors.muted)
     }
 }
 
