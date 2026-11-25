@@ -7,9 +7,9 @@ import type { FormField, FormPage, FormSection, FormVersion, Option, User } from
 import { evaluateTree, type Answers, type Ctx, type Kind } from "../lib/formSpec";
 import { fmtDay, fmtPhone, fmtStamp, fmtTime, mapsUrl } from "../lib/format";
 import { Thumb } from "./MediaThumb";
+import { MEDIA_TYPES } from "../lib/fieldTypes";
 
 export type SheetFilter = "all" | "defects" | "edited" | "empty";
-const MEDIA = ["photo", "video", "file", "signature"];
 const SKIP = ["derived", "rating", "image"];          // shown on the Ratings tab, or nothing to read
 
 const empty = (v: unknown) => v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
@@ -70,7 +70,7 @@ export function AnswerValue({ f, v }: { f: FormField; v: unknown }) {
       return <a href={mapsUrl(`${g.lat},${g.lng}`)} target="_blank" rel="noreferrer">Open in Maps</a>;
     }
     default:
-      if (MEDIA.includes(f.type)) {
+      if (MEDIA_TYPES.includes(f.type)) {
         const ids = Array.isArray(v) ? (v as string[]) : [String(v)];
         return (
           <span className="sheet-thumbs">

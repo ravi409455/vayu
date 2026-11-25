@@ -15,11 +15,18 @@ export const FIELD_TYPES: { id: string; label: string; group: string }[] = [
 /** Types the system makes (not offered when adding a field) with the name to show for them. */
 export const SYSTEM_TYPE_LABELS: Record<string, string> = { form_choice: "Pick of a custom form" };
 export const CHOICE_TYPES = ["single_choice", "multi_choice"];
+/** Answers that are files (their value is a list of file ids). */
 export const MEDIA_TYPES = ["photo", "video", "file", "signature"];
+/** Media the person adds (or Ops adds for them) with a "most files" limit; a signature is drawn. */
+export const UPLOAD_TYPES = ["photo", "video", "file"];
+/** Fields with no text value to show or pick: the file answers and the builder's own pictures. */
+export const NO_TEXT_TYPES = [...MEDIA_TYPES, "image"];
+/** Fields nobody types into: the system works them out (derived, rating) or only shows them (image). */
+export const NOT_ASKED_TYPES = ["derived", "rating", "image"];
 
 /** What a new photo shows: the nearest check above it in its section (not a remark or another photo). */
 export function photoOfDefault(fields: { key: string; type: string }[]): string | undefined {
-  return [...fields].reverse().find((f) => ![...MEDIA_TYPES, "image", "short_text", "long_text"].includes(f.type))?.key;
+  return [...fields].reverse().find((f) => ![...NO_TEXT_TYPES, "short_text", "long_text"].includes(f.type))?.key;
 }
 
 /** How many files a media field takes. Without its own maximum: 1, the same on the server, the phone

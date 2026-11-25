@@ -5,11 +5,11 @@ import { Field, Modal } from "../../../ui/kit";
 import { fillGrid, LINKS, PART_LABEL, type Box, type Cell, type Look, type Part, type ReportPage, type Row, type Source, type StyleRule } from "./model";
 import { RichText, ValuePicker } from "./RichText";
 import { ShareForm, snippetContent, type SharedItem } from "./sharing";
+import { NO_TEXT_TYPES } from "../../../lib/fieldTypes";
 
 export type SectionChoice = { value: string; label: string; fields: { key: string; label: string; type: string }[] };
 export type Ctx = { sections: SectionChoice[]; fields: { value: string; label: string; type: string }[]; readOnly: boolean; snippets?: SharedItem[] };
 
-const MEDIA = ["photo", "video", "file", "signature", "image"];
 
 /** A row of buttons for a small set of choices. */
 function Seg<T extends string | number>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void }) {
@@ -72,7 +72,7 @@ export function PartSettings({ part, onChange, onDelete, onDuplicate, onMove, ct
         {t === "photos" && <PhotoSettings part={part} set={set} ctx={ctx} />}
         {t === "text" && (
           <>
-            <RichText label="Text" value={part.html} onChange={(html) => set({ html })} choices={ctx.fields.filter((f) => !MEDIA.includes(f.type))} />
+            <RichText label="Text" value={part.html} onChange={(html) => set({ html })} choices={ctx.fields.filter((f) => !NO_TEXT_TYPES.includes(f.type))} />
             <Field label="Columns"><Seg label="Text columns" value={part.columns ?? 1} options={[[1, "1"], [2, "2"]]} onChange={(columns) => set({ columns })} /></Field>
             <Field label="Size"><Seg label="Text size" value={part.size ?? "normal"} options={[["fine", "Fine print"], ["small", "Small"], ["normal", "Normal"], ["large", "Large"], ["title", "Title"]]} onChange={(size) => set({ size })} /></Field>
             <Field label="Align"><Seg label="Align" value={part.align ?? "left"} options={[["left", "Left"], ["center", "Centre"], ["right", "Right"], ["justify", "Justify"]]} onChange={(align) => set({ align })} /></Field>
@@ -143,7 +143,7 @@ function TableSettings({ part, set, ctx }: { part: Extract<Part, { type: "table"
   const look: Look = part.look ?? {};
   const setLook = (l: Partial<Look>) => set({ look: { ...look, ...l } });
   const setSrc = (s: Source) => set({ source: s });
-  const fields = ctx.fields.filter((f) => !MEDIA.includes(f.type));
+  const fields = ctx.fields.filter((f) => !NO_TEXT_TYPES.includes(f.type));
   const kind = src.kind;
   const sec = kind === "section" ? ctx.sections.find((s) => s.value === src.section) : undefined;
   return (
@@ -175,7 +175,7 @@ function TableSettings({ part, set, ctx }: { part: Extract<Part, { type: "table"
                   {sec.fields.find((f) => f.key === k)?.label ?? k} ✕</button>))}
                 <select aria-label="Leave out a check" value="" onChange={(e) => e.target.value && setSrc({ ...src, exclude: [...(src.exclude ?? []), e.target.value] })} style={{ width: "auto" }}>
                   <option value="">+ Leave out…</option>
-                  {sec.fields.filter((f) => !MEDIA.includes(f.type) && !(src.exclude ?? []).includes(f.key)).map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}</select>
+                  {sec.fields.filter((f) => !NO_TEXT_TYPES.includes(f.type) && !(src.exclude ?? []).includes(f.key)).map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}</select>
               </div>
             </Field>)}
           <Field label="When a check has no answer" help="Leave empty to hide the row."><input placeholder="e.g. Not mentioned" value={src.fallback ?? ""} onChange={(e) => setSrc({ ...src, fallback: e.target.value || undefined })} /></Field>
@@ -217,7 +217,7 @@ function RowsEditor({ rows, onChange, fields, sections }: { rows: Row[]; onChang
         <button type="button" className="link" onClick={() => onChange([...rows, { field: "" }])}>+ Add row</button>
         <select aria-label="Add all checks of a section" value="" style={{ width: "auto" }} onChange={(e) => {
           const s = sections.find((x) => x.value === e.target.value);
-          if (s) onChange([...rows, ...s.fields.filter((f) => !MEDIA.includes(f.type)).map((f) => ({ field: `inspection.${f.key}` }))]);
+          if (s) onChange([...rows, ...s.fields.filter((f) => !NO_TEXT_TYPES.includes(f.type)).map((f) => ({ field: `inspection.${f.key}` }))]);
         }}><option value="">+ Add all from a section…</option>{sections.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
       </div>
     </div>
@@ -359,7 +359,7 @@ function HtmlSettings({ part, set, ctx }: { part: Extract<Part, { type: "html" }
     <>
       <p className="muted small">For what the other parts cannot do. Plain HTML and CSS with values like {"{{ inspection.colour }}"}. No scripts, links or pictures; the CSS only styles this part. Colours: var(--brand), var(--ok), var(--bad)…</p>
       <Field label="HTML">
-        <div className="bar" style={{ margin: "0 0 4px" }}><ValuePicker choices={ctx.fields.filter((f) => !MEDIA.includes(f.type))} onPick={insert} /></div>
+        <div className="bar" style={{ margin: "0 0 4px" }}><ValuePicker choices={ctx.fields.filter((f) => !NO_TEXT_TYPES.includes(f.type))} onPick={insert} /></div>
         <textarea ref={area} aria-label="HTML" className="mono" rows={10} spellCheck={false} value={part.html} onChange={(e) => set({ html: e.target.value })} />
       </Field>
       <Field label="CSS" help="e.g. .note { color: var(--brand) }">

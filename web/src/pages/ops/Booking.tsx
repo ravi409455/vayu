@@ -1,5 +1,5 @@
 import { Download, FileText, ImageOff, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, ZoomIn, ZoomOut } from "lucide-react";
-import { maxFiles } from "../../lib/fieldTypes";
+import { maxFiles, MEDIA_TYPES, UPLOAD_TYPES } from "../../lib/fieldTypes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
@@ -438,12 +438,12 @@ const acceptFor = (f: { type: string; config: Record<string, unknown> }) => f.ty
 
 const toMediaField = (f: FormPage["sections"][number]["fields"][number], part: Part, section: string): MediaField => ({ key: f.key, label: f.label || f.key, type: f.type, part, section,
   max: maxFiles(f), accept: acceptFor(f),
-  opsOk: ["photo", "video", "file"].includes(f.type) && f.config.ops_upload !== false });
+  opsOk: UPLOAD_TYPES.includes(f.type) && f.config.ops_upload !== false });
 
 function mediaFields(trees: Trees): MediaField[] {
   const out: MediaField[] = [];
   for (const part of PART_ORDER) trees[part]?.pages.forEach((p) => p.sections.forEach((s) => s.fields.forEach((f) => {
-    if (["photo", "video", "file", "signature"].includes(f.type)) out.push(toMediaField(f, part, s.title || p.title));
+    if (MEDIA_TYPES.includes(f.type)) out.push(toMediaField(f, part, s.title || p.title));
   })));
   return out;
 }

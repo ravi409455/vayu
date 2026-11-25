@@ -1,6 +1,7 @@
 /** The report template (schema 2) as the designer edits it: pages holding parts. Pure functions,
  *  so every change is easy to test. The backend's apps/reports/schema.json is the full contract. */
 import type { FormPage } from "../../../api/types";
+import { NO_TEXT_TYPES } from "../../../lib/fieldTypes";
 
 export type Row = { field: string; label?: string; show_if?: unknown; fallback?: string };
 export type Cell = { field: string; fallback?: string } | { text: string };
@@ -188,7 +189,7 @@ export function pageFromForm(page: FormPage): ReportPage {
   for (const s of page.sections) {
     const ref = `inspection.${s.key}`;
     const multi = page.sections.length > 1;
-    const hasChecks = s.fields.some((f) => !["photo", "video", "file", "signature", "image"].includes(f.type));
+    const hasChecks = s.fields.some((f) => !NO_TEXT_TYPES.includes(f.type));
     const hasPhotos = s.fields.some((f) => f.type === "photo");
     if (hasChecks) parts.push({ id: uid(), type: "table", title: multi ? s.title : "", look: { header: true }, source: { kind: "section", section: ref } });
     if (hasPhotos) parts.push({ id: uid(), type: "photos", title: "", per_row: 3, caption: "check", which: hasChecks ? "issues" : "all", source: { kind: "section", section: ref } });

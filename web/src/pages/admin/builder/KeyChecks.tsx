@@ -2,7 +2,7 @@ import { Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../../api/client";
 import type { FormVersion, KeyCheck, KeyCheckType } from "../../../api/types";
-import { slugKey } from "../../../lib/fieldTypes";
+import { NO_TEXT_TYPES, NOT_ASKED_TYPES, slugKey } from "../../../lib/fieldTypes";
 import { ConditionBuilder, type FieldChoice } from "../../../ui/ConditionBuilder";
 import { Check, Empty, Field } from "../../../ui/kit";
 import { MoreMenu } from "../../../ui/Menu";
@@ -14,7 +14,7 @@ const TYPES: { id: KeyCheckType; label: string; tip: string }[] = [
   { id: "number", label: "Number", tip: "Ops type it in; sent to integrations as a number when it reads as one." },
   { id: "date", label: "Date", tip: "Ops type it in, e.g. 24-11-2026." },
 ];
-const MEDIA = new Set(["photo", "video", "file", "signature", "image", "derived", "rating"]);
+const MEDIA = new Set([...NO_TEXT_TYPES, ...NOT_ASKED_TYPES]);
 const typeLabel = (t: KeyCheckType) => TYPES.find((x) => x.id === t)?.label ?? t;
 /** The short name a template uses: an inspection field by its key, others with their form. */
 const short = (ref: string) => (ref.startsWith("inspection.") ? ref.slice(11) : ref);
