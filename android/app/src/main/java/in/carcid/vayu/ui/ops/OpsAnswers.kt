@@ -211,14 +211,14 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
                     Text(pageOf[f.key].orEmpty(), fontSize = 13.sp, color = Vayu.colors.muted)
                     Question(f, value, filled.required(p, f.key), false, error ?: answerProblem(f, value), false, opsFieldEnv(env)) { value = it; error = null }
                     Text("Was ${answerText(f, data.answers[p]?.get(f.key), env)}" +
-                        (data.insp.int("expert")?.let { ", answered by ${env.labels.person(it)}." } ?: "."), fontSize = 13.sp, color = Vayu.colors.muted)
+                        (data.insp.expert?.let { ", answered by ${env.labels.person(it)}." } ?: "."), fontSize = 13.sp, color = Vayu.colors.muted)
                     Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         SoftButton("Cancel", { editing = null }, Modifier.weight(1f))
                         PrimaryButton("Save", {
                             scope.launch {
                                 try {
-                                    env.data.act("PATCH", "inspections/${data.insp.s("id")}", buildJsonObject {
-                                        put("row_version", data.insp.int("row_version") ?: 0)
+                                    env.data.act("PATCH", "inspections/${data.insp.id}", buildJsonObject {
+                                        put("row_version", data.insp.rowVersion)
                                         put("answers", buildJsonObject { put(p, buildJsonObject { put(f.key, JsonLogic.toJson(value)) }) })
                                     })
                                     editing = null; env.say("Saved."); env.refresh()

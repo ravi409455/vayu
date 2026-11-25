@@ -68,14 +68,14 @@ fun ReviewScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val data = rememberBooking(env, id)
     // unsaved choices: "overall" -> word, "r:<key>" -> 1..5, "k:<key>" -> text; null means back to suggested / automatic
-    var pending by remember(data?.insp?.int("row_version")) { mutableStateOf(mapOf<String, Any?>()) }
+    var pending by remember(data?.insp?.rowVersion) { mutableStateOf(mapOf<String, Any?>()) }
     var saving by remember { mutableStateOf(false) }
     BackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         SubHeader("Review", data?.let { "${it.b.code} · ${it.b.customer}" }, onBack)
         val insp = data?.insp
         if (insp == null) { Text(if (data == null) "Loading…" else "Key Checks and ratings are worked out once the expert submits.", color = Vayu.colors.muted, modifier = Modifier.padding(20.dp)); return }
-        val s = insp.o("scores")
+        val s = insp.scores
         val edit = env.can("ratings.override") && !data.offline && !saving
         fun pick(k: String, v: Any?) { if (edit) pending = pending + (k to v) }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
@@ -138,9 +138,9 @@ fun ReviewScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
                             val rs = pending.filterKeys { it.startsWith("r:") }; val ks = pending.filterKeys { it.startsWith("k:") }
                             if (rs.isNotEmpty()) put("ratings", buildJsonObject { rs.forEach { (k, v) -> put(k.drop(2), (v as Int?)?.let { JsonPrimitive(it) } ?: JsonNull) } })
                             if (ks.isNotEmpty()) put("key_checks", buildJsonObject { ks.forEach { (k, v) -> put(k.drop(2), (v as String?)?.let { JsonPrimitive(it) } ?: JsonNull) } })
-                            put("row_version", insp.int("row_version") ?: 0)
+                            put("row_version", insp.rowVersion)
                         }
-                        try { env.data.act("PATCH", "inspections/${insp.s("id")}/overrides", body); env.say("Saved."); env.refresh() }
+                        try { env.data.act("PATCH", "inspections/${insp.id}/overrides", body); env.say("Saved."); env.refresh() }
                         catch (e: ApiError) { env.say(if (e.code == "STALE_INSPECTION") "Someone else changed it meanwhile; loaded their version." else e.message); env.refresh() }
                         finally { saving = false }
                     }

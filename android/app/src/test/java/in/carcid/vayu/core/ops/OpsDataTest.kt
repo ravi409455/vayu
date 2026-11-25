@@ -56,4 +56,15 @@ class OpsDataTest {
         assertEquals(40, b.timing!!.lateMinutes); assertEquals("Priya Ops", b.timing!!.lateReviewedBy)
         assertEquals("Vikram Singh", (b.answers["customer_name"] as kotlinx.serialization.json.JsonPrimitive).content)
     }
+
+    @Test fun inspectionsAreReadIntoTypedModels() {
+        val rows = kotlinx.serialization.json.Json.parseToJsonElement("""[
+            {"id":"i1","expert":4,"status":"submitted","submitted_at":"2026-11-24T10:40:00Z","row_version":2,"form_version":7,
+             "start_version":null,"end_version":9,"scores":{"overall":{"word":"good"}},"overrides":{},"answers":{"inspection":{"odometer":12400}}},
+            "not an inspection"]""") as kotlinx.serialization.json.JsonArray
+        val list = Inspection.list(rows.mapNotNull { it as? kotlinx.serialization.json.JsonObject })
+        val i = list.single()
+        assertEquals(4, i.expert); assertEquals(7, i.formVersion); assertNull(i.startVersion); assertEquals(9, i.endVersion)
+        assertEquals(2, i.rowVersion); assertEquals("submitted", i.status)
+    }
 }

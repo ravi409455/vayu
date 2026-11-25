@@ -78,3 +78,31 @@ data class Booking(
         fun from(e: JsonElement?): Booking? = (e as? JsonObject)?.let { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
     }
 }
+
+/**
+ * One expert's inspection of a booking (GET bookings/{id}/inspections). [answers] (per part), [scores]
+ * and [overrides] follow the form the Admin built, so they stay JSON objects.
+ */
+@Serializable
+data class Inspection(
+    val id: String = "",
+    val expert: Int? = null,
+    /** "draft" or "submitted". */
+    val status: String = "",
+    @SerialName("submitted_at") val submittedAt: String = "",
+    @SerialName("created_at") val createdAt: String = "",
+    @SerialName("row_version") val rowVersion: Int = 0,
+    @SerialName("form_version") val formVersion: Int? = null,
+    @SerialName("start_version") val startVersion: Int? = null,
+    @SerialName("end_version") val endVersion: Int? = null,
+    val answers: JsonObject = JsonObject(emptyMap()),
+    val scores: JsonObject = JsonObject(emptyMap()),
+    val overrides: JsonObject = JsonObject(emptyMap()),
+    @SerialName("unverified_time") val unverifiedTime: Boolean = false,
+) {
+    companion object {
+        fun from(e: JsonElement?): Inspection? = (e as? JsonObject)?.let { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
+        /** A list reply as inspections (rows that aren't one are left out). */
+        fun list(rows: List<JsonObject>): List<Inspection> = rows.mapNotNull(::from)
+    }
+}

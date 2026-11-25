@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.Inspection
 import `in`.carcid.vayu.core.api.initials
 
 import `in`.carcid.vayu.core.ARRIVED
@@ -96,9 +97,9 @@ import java.time.LocalTime
 enum class Part { ANSWERS, MEDIA, REVIEW, HISTORY }
 
 /** The inspection that counts on a booking: the latest submitted one, else the latest draft. */
-fun currentInspection(list: List<JsonObject>): JsonObject? =
-    list.filter { it.s("status") == "submitted" }.maxByOrNull { it.s("submitted_at") }
-        ?: list.filter { it.s("status") == "draft" }.maxByOrNull { it.s("created_at") }
+fun currentInspection(list: List<Inspection>): Inspection? =
+    list.filter { it.status == "submitted" }.maxByOrNull { it.submittedAt }
+        ?: list.filter { it.status == "draft" }.maxByOrNull { it.createdAt }
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
@@ -107,7 +108,7 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
     val scope = rememberCoroutineScope()
     val t = env.today()
     val load = rememberLoad(env, "bookings/$id")
-    val insps = rememberLoad(env, "bookings/$id/inspections").value?.data?.rows().orEmpty()
+    val insps = Inspection.list(rememberLoad(env, "bookings/$id/inspections").value?.data?.rows().orEmpty())
     val report = rememberLoad(env, "bookings/$id/report")
     val b = load.value?.data?.let { Bk(it as JsonObject) }
     var menu by remember { mutableStateOf(false) }
@@ -180,8 +181,8 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
             }
             OfflineNote(load.value)
             if (b.conflict.isNotEmpty()) {
-                val subs = insps.filter { it.s("status") == "submitted" }
-                Attention("Two experts inspected this car", subs.joinToString(". ") { "${env.labels.person(it.int("expert"))} submitted ${whenStamp(it.s("submitted_at"), env.today()).replaceFirstChar { c -> c.lowercase() }}" } +
+                val subs = insps.filter { it.status == "submitted" }
+                Attention("Two experts inspected this car", subs.joinToString(". ") { "${env.labels.person(it.expert)} submitted ${whenStamp(it.submittedAt, env.today()).replaceFirstChar { c -> c.lowercase() }}" } +
                     ". Choose which one counts.", "Compare and choose", online && env.can("bookings.edit")) { compare = true }
             }
             // the expert's files won't come (a lost phone): Ops upload the required ones, then finish
@@ -229,11 +230,11 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
             val photos = media.count { it.s("kind") == "photo" }; val videos = media.count { it.s("kind") == "video" }
             NavRow("Photos and videos", listOfNotNull("$photos photo${if (photos == 1) "" else "s"}", "$videos video${if (videos == 1) "" else "s"}".takeIf { videos > 0 }).joinToString(" · ")) { onPart(Part.MEDIA) }
             if (insp != null) {
-                val sc = insp.o("scores")
+                val sc = insp.scores
                 val word = sc.o("overall").s("word").replaceFirstChar { it.uppercase() }
                 Section("Review")
                 val nRatings = sc.o("ratings").size; val nChecks = sc.o("key_checks").size
-                val ov = insp.o("overrides"); val changed = ov.o("ratings").size + (if (ov["overall"] != null) 1 else 0) +
+                val ov = insp.overrides; val changed = ov.o("ratings").size + (if (ov["overall"] != null) 1 else 0) +
                     sc.o("key_checks").values.count { (it as? JsonObject)?.s("edited") == "true" }
                 NavRow("Overall: ${word.ifBlank { "—" }}", listOfNotNull("$nChecks Key Check${if (nChecks == 1) "" else "s"}".takeIf { nChecks > 0 },
                     "$nRatings rating${if (nRatings == 1) "" else "s"}".takeIf { nRatings > 0 },
@@ -286,9 +287,9 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
             run("POST", "bookings/$id/finish", JsonObject(emptyMap()), "Finished. The report is being made.")
         }
     }
-    if (compare) CompareSheet(env, insps.filter { it.s("status") == "submitted" }, onClose = { compare = false }) { keep ->
+    if (compare) CompareSheet(env, insps.filter { it.status == "submitted" }, onClose = { compare = false }) { keep ->
         compare = false
-        val who = env.labels.person(insps.firstOrNull { it.s("id") == keep }?.int("expert"))
+        val who = env.labels.person(insps.firstOrNull { it.id == keep }?.expert)
         run("POST", "bookings/$id/resolve-conflict", buildJsonObject { put("inspection", keep) }, "Kept $who's inspection.")
     }
 }
@@ -449,20 +450,20 @@ private fun TypeDialog(env: OpsEnv, b: Bk, onClose: () -> Unit, onDone: (String)
 /** Two experts submitted: see both side by side (who, when, how many answers) and keep one. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CompareSheet(env: OpsEnv, subs: List<JsonObject>, onClose: () -> Unit, onKeep: (String) -> Unit) {
+private fun CompareSheet(env: OpsEnv, subs: List<Inspection>, onClose: () -> Unit, onKeep: (String) -> Unit) {
     var keep by remember { mutableStateOf<String?>(null) }
     VayuSheet(onClose) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Which inspection counts?", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Vayu.colors.ink)
             Text("The other one is kept but set aside.", color = Vayu.colors.muted, fontSize = 14.sp)
             subs.forEach { i ->
-                val n = i.o("answers").values.sumOf { (it as? JsonObject)?.size ?: 0 }
-                val word = i.o("scores").o("overall").s("word")
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (keep == i.s("id")) Vayu.colors.primary else Vayu.colors.soft)
-                    .clickable(role = Role.RadioButton) { keep = i.s("id") }.padding(14.dp)) {
-                    val fg = if (keep == i.s("id")) Vayu.colors.onPrimary else Vayu.colors.ink
-                    Text(env.labels.person(i.int("expert")), fontWeight = FontWeight.Bold, color = fg)
-                    Text("Submitted ${whenStamp(i.s("submitted_at"), env.today()).replaceFirstChar { c -> c.lowercase() }} · $n answers" + if (word.isNotBlank()) " · $word" else "", color = fg, fontSize = 14.sp)
+                val n = i.answers.values.sumOf { (it as? JsonObject)?.size ?: 0 }
+                val word = i.scores.o("overall").s("word")
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (keep == i.id) Vayu.colors.primary else Vayu.colors.soft)
+                    .clickable(role = Role.RadioButton) { keep = i.id }.padding(14.dp)) {
+                    val fg = if (keep == i.id) Vayu.colors.onPrimary else Vayu.colors.ink
+                    Text(env.labels.person(i.expert), fontWeight = FontWeight.Bold, color = fg)
+                    Text("Submitted ${whenStamp(i.submittedAt, env.today()).replaceFirstChar { c -> c.lowercase() }} · $n answers" + if (word.isNotBlank()) " · $word" else "", color = fg, fontSize = 14.sp)
                 }
             }
             PrimaryButton("Keep this one", { keep?.let(onKeep) }, enabled = keep != null)

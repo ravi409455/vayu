@@ -117,7 +117,7 @@ fun rememberOpsUploader(env: OpsEnv, id: String, data: Loaded3?, online: Boolean
     val scope = rememberCoroutineScope()
     var target by remember { mutableStateOf<Triple<String, Field, String?>?>(null) }
     // only once the expert has submitted, and never on a cancelled booking
-    val may = env.can("media.manage") && online && data?.insp?.s("status") == "submitted" && data.b.stage != "cancelled"
+    val may = env.can("media.manage") && online && data?.insp?.status == "submitted" && data.b.stage != "cancelled"
     suspend fun upload(f: Field, file: File, type: String, replaces: String?) {
         var loose: String? = null
         try {
