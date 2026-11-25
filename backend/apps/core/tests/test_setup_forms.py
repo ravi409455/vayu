@@ -155,8 +155,8 @@ def test_a_forced_setup_needs_the_server_name_and_keeps_the_admins_disclaimer(tm
     from django.core.management import call_command
     from django.core.management.base import CommandError
 
-    from apps.reports.models import SharedItem
     from apps.reports import shared
+    from apps.reports.models import SharedItem
 
     staff = tmp_path / "staff.csv"
     staff.write_text("username,name,role,phone,password\nboss,Boss,admin,,Boss-pass-123\n")
