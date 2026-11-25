@@ -1,4 +1,5 @@
 import { Download, FileText, ImageOff, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, Phone, Plus, RefreshCw, ZoomIn, ZoomOut } from "lucide-react";
+import { isEmpty } from "../../rules/rules";
 import { maxFiles, MEDIA_TYPES, UPLOAD_TYPES } from "../../lib/fieldTypes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -364,7 +365,6 @@ function InspectionTab({ booking, insp, trees, activity, onSaved }: { booking: B
   const ctxFor = (part: Part) => ({ booking: booking.answers, ...Object.fromEntries(PART_ORDER.filter((p) => p !== part).map((p) => [p, vals[p]])) });
   const parts = PART_ORDER.filter((p) => trees[p]).map((p) => ({ part: p, tree: trees[p]! }));
   const rows = parts.flatMap(({ part, tree }) => readableFields(part, tree, vals[part], ctxFor(part)).map((r) => ({ ...r, part, v: vals[part][r.f.key] })));
-  const isEmpty = (v: unknown) => v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
   const answered = rows.filter((r) => !isEmpty(r.v)).length;
   const defects = rows.map((r) => defectOf(r.f, r.v)).filter(Boolean) as string[];
   const editedCount = rows.filter((r) => edited[r.part].has(r.f.key)).length;

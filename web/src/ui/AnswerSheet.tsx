@@ -7,12 +7,11 @@ import type { FormField, FormPage, FormSection, FormVersion, Option, User } from
 import { evaluateTree, type Answers, type Ctx, type Kind } from "../lib/formSpec";
 import { fmtDay, fmtPhone, fmtStamp, fmtTime, mapsUrl } from "../lib/format";
 import { Thumb } from "./MediaThumb";
-import { MEDIA_TYPES } from "../lib/fieldTypes";
+import { MEDIA_TYPES, NOT_ASKED_TYPES } from "../lib/fieldTypes";
+import { isEmpty } from "../rules/rules";
 
 export type SheetFilter = "all" | "defects" | "edited" | "empty";
-const SKIP = ["derived", "rating", "image"];          // shown on the Ratings tab, or nothing to read
-
-const empty = (v: unknown) => v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
+const SKIP = NOT_ASKED_TYPES;          // shown on the Ratings tab, or nothing to read
 
 /** Is this answer a defect, and how bad? (choices marked as a defect by the Admin) */
 export function defectOf(f: FormField, v: unknown): string | null {
@@ -49,7 +48,7 @@ function TypeName({ v }: { v: unknown }) {
 export const generic = (title: string) => /^(page|section)\s*\d+$/i.test(title.trim());
 
 export function AnswerValue({ f, v }: { f: FormField; v: unknown }) {
-  if (empty(v)) return <span className="muted">Not answered</span>;
+  if (isEmpty(v)) return <span className="muted">Not answered</span>;
   if (f.key === "inspection_type") return <TypeName v={v} />;
   const opts = (f.config.options as Option[] | undefined) ?? [];
   const opt = (k: unknown) => opts.find((o) => o.key === k)?.label ?? String(k);
@@ -99,7 +98,7 @@ export function AnswerSheet({ part, filter = "all", edited, onEdit, editing, anc
     const v = part.values[f.key];
     if (filter === "defects") return !!defectOf(f, v);
     if (filter === "edited") return !!edited?.has(f.key);
-    if (filter === "empty") return empty(v);
+    if (filter === "empty") return isEmpty(v);
     return true;
   };
   const pages = part.tree.pages.map((p) => ({
@@ -114,7 +113,7 @@ export function AnswerSheet({ part, filter = "all", edited, onEdit, editing, anc
         <div key={page.id} id={anchor?.(page)} className="sheet-page">
           {sections.map(({ s, fields }) => {
             const all = rows.filter((r) => r.section.id === s.id).map((r) => r.f);
-            const answered = all.filter((f) => !empty(part.values[f.key])).length;
+            const answered = all.filter((f) => !isEmpty(part.values[f.key])).length;
             const defects = all.filter((f) => defectOf(f, part.values[f.key])).length;
             const isEditing = editing?.sectionId === s.id;
             return (
