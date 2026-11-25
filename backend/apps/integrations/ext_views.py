@@ -169,12 +169,17 @@ class BookingAction(ExtView):
         "change_type": lambda u, b, d: services.change_type(u, b, d.get("inspection_type")),
     }
 
+    # the booking fields each action writes: the key's field scope must cover them too
+    WRITES = {"assign": ["assigned_expert"], "cancel": [],
+              "reschedule": ["inspection_date", "inspection_time"],
+              "change_type": ["inspection_type"]}
+
     def post(self, request, ref, action):
         name = action.replace("-", "_")
         if name not in self.ACTIONS:
             raise CodedError("UNKNOWN_ACTION", "Use assign, cancel, reschedule or change-type.",
                              404)
-        need_form(request, booking_form())
+        need_keys(need_form(request, booking_form()), self.WRITES[name])
         need_action(request, name)
         b = self.ACTIONS[name](request.user, find(ref), request.data)
         audit.record(request.user, f"api.booking.{name}", "booking", b.id,
