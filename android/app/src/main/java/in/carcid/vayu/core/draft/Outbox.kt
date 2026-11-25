@@ -20,7 +20,7 @@ import java.io.RandomAccessFile
 /** The draft's job is closed on the server: its work can't be sent; the expert discards it. */
 const val JOB_CLOSED = "JOB_CLOSED"
 
-/** The server already had this expert's submission for the lead; this phone's copy is kept until sign-out. */
+/** The server already had this expert's submission for the lead; this phone's copy is kept 7 days (or until sign-out). */
 const val ALREADY_SUBMITTED = "ALREADY_SUBMITTED"
 const val CLOSED_TEXT = "This lead is closed on the server, so this work can't be sent. Discard the draft."
 
@@ -242,7 +242,8 @@ class Outbox(
             // it with a new request id): nothing more to send, so sign-out isn't blocked; the message
             // stays and the code keeps this copy off the tidy-up (it may differ from the server's)
             if (e.code == ALREADY_SUBMITTED) {
-                drafts.update(id) { it.copy(submitSent = true, problem = e.message, problemCode = ALREADY_SUBMITTED, fieldErrors = emptyMap()) }
+                drafts.update(id) { it.copy(submitSent = true, problem = "This lead was already submitted from your account; Ops can edit it on the web.",
+                    problemCode = ALREADY_SUBMITTED, fieldErrors = emptyMap()) }
                 return
             }
             val errors = (e.extra["errors"] as? JsonObject).orEmpty().mapValues { (it.value as? JsonPrimitive)?.contentOrNull ?: "" }

@@ -1,5 +1,6 @@
 package `in`.carcid.vayu
 
+import `in`.carcid.vayu.core.draft.Draft
 import android.app.Application
 import android.content.Context
 import androidx.work.Constraints
@@ -108,11 +109,16 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
     }
 
     /** Finished work the server has in full, for jobs that are done or gone, leaves the phone. */
-    fun prune(userId: Int) {
+    fun prune(userId: Int, now: java.time.Instant = java.time.Instant.now()) {
         val jobs = jobs(userId).jobs().associateBy { it.id }
         val drafts = drafts(userId)
+        // a copy the server said it already had may differ from it: kept 7 days after its submit, then
+        // tidied like the rest (sign-out removes it at once)
+        fun keptAWhile(d: Draft) = d.problemCode == `in`.carcid.vayu.core.draft.ALREADY_SUBMITTED &&
+            d.submittedAt?.let { runCatching { java.time.OffsetDateTime.parse(it).toInstant() }.getOrNull() }
+                ?.let { java.time.Duration.between(it, now) < java.time.Duration.ofDays(7) } != false
         drafts.all().filter { d -> d.submitSent && d.files.all { it.verified } && jobs[d.bookingId].let { it == null || it.stage == "completed" } &&
-            d.problemCode != `in`.carcid.vayu.core.draft.ALREADY_SUBMITTED }      // may differ from the server's copy: only sign-out removes it
+            !keptAWhile(d) }
             .forEach { drafts.discard(it.bookingId) }
     }
 
