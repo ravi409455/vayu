@@ -16,13 +16,20 @@ ITEMS = {"city": [("delhi", "Delhi"), ("pune", "Pune")],
 
 class Command(BaseCommand):
     def handle(self, *args, **options):
+        from apps.core.setup.testdata import WIPEABLE, remember_kind, stored_kind
+
         if settings.SETTINGS_MODULE != "vayu.settings.e2e":
             raise CommandError("e2e_reset only runs with DJANGO_SETTINGS_MODULE=vayu.settings.e2e")
+        # the settings module alone can point at any database (F-213)
+        if "e2e" not in settings.DATABASES["default"]["NAME"] or stored_kind() not in (
+                None, *WIPEABLE):
+            raise CommandError("e2e_reset only wipes an e2e database. Nothing was changed.")
         import boto3
 
         from apps.media import storage
 
         call_command("flush", interactive=False, verbosity=0)
+        remember_kind()
         client = storage.client()
         try:
             client.create_bucket(Bucket=settings.S3_BUCKET)

@@ -4,7 +4,17 @@ from unittest import mock
 import pytest
 from django.db import OperationalError
 
+from apps.core.views import workers_alive as REAL_WORKERS_ALIVE
+
 pytestmark = pytest.mark.django_db
+
+
+@pytest.fixture(autouse=True)
+def _up():
+    """The file store and a worker answer, unless a test says otherwise."""
+    with mock.patch("apps.media.storage.client"), \
+            mock.patch("apps.core.views.workers_alive", return_value=True):
+        yield
 
 
 def test_health_ok(client):
@@ -48,3 +58,20 @@ def test_request_id_in_log_records(client, caplog):
 def test_request_id_from_client_is_sanitised(client):
     r = client.get("/api/v1/health", headers={"X-Request-ID": "bad id\twith spaces"})
     assert r["X-Request-ID"] != "bad id\twith spaces" and len(r["X-Request-ID"]) == 32
+
+
+def test_health_503_when_the_file_store_or_the_workers_are_down(client):
+    """F-210: the API answering is not enough."""
+    with mock.patch("apps.media.storage.client") as c:
+        c.return_value.head_bucket.side_effect = OSError("R2 down")
+        assert client.get("/api/v1/health").status_code == 503
+    with mock.patch("apps.core.views.workers_alive", return_value=False):
+        assert client.get("/api/v1/health").status_code == 503
+
+
+def test_workers_alive_asks_celery_and_never_raises():
+    real = REAL_WORKERS_ALIVE
+    with mock.patch("vayu.celery.app.control.ping", return_value=[{"w@h": {"ok": "pong"}}]):
+        assert real() is True
+    with mock.patch("vayu.celery.app.control.ping", side_effect=OSError("no broker")):
+        assert real() is False

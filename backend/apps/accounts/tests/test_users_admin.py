@@ -87,7 +87,7 @@ def test_deactivate_blocks_login_and_revokes_devices(api_as, make_user, login):
     login(APIClient(), "asha")
     assert admin.patch(f"/api/v1/users/{target.id}", {"is_active": False},
                        format="json").status_code == 200
-    assert login(APIClient(), "asha").status_code == 403
+    assert login(APIClient(), "asha").status_code == 401      # the same answer as any failure
     assert Device.objects.filter(user=target, revoked_at__isnull=True).count() == 0
 
 

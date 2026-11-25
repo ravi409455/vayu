@@ -329,13 +329,29 @@ def attach(request, new: MediaAsset, replaces=None) -> None:
             old.replaced_by, old.replaced_at = new, timezone.now()
             old.save(update_fields=["replaced_by", "replaced_at"])
         scoring.recompute(insp)
-        MediaZip.objects.filter(booking=booking).delete()       # cached ZIPs no longer match
+        drop_zips(MediaZip.objects.filter(booking=booking))      # cached ZIPs no longer match
         activity.log(booking, user, "media_replaced" if old else "media_added",
                      {"media": [str(old.id) if old else None, str(new.id)]},
                      keys=[f"{part}.{field.key}"], inspection=insp)
         events.emit("inspection.updated", booking=str(booking.id), inspection=str(insp.id),
                     keys=[field.key])                     # the report is made again (handlers)
     check_completion(booking.id)     # a submitted booking now also waits for this file
+
+
+def asset_keys(asset: MediaAsset) -> list[str]:
+    """Every object one file has in storage: the original, its preview, JPEG and print copies."""
+    from apps.reports.render import print_keys
+
+    return [k for k in (asset.key, asset.preview_key, asset.jpeg_key, *print_keys(asset.id)) if k]
+
+
+def drop_zips(zips_qs) -> None:
+    """Cached ZIPs that no longer match go, objects included (F-069), once the change is saved."""
+    keys = [k for k in zips_qs.values_list("key", flat=True) if k]
+    zips_qs.delete()
+    from .tasks import delete_files
+
+    core_tasks.after_commit(lambda: delete_files.delay(keys))
 
 
 def report_out_of_date(booking_id) -> None:
@@ -490,8 +506,8 @@ def delete_asset(actor, asset: MediaAsset) -> None:
                                     "keys": [asset.field_key]}
                 insp.save()
                 scoring.recompute(insp)
-        MediaZip.objects.filter(booking=asset.booking).delete()   # cached ZIPs no longer match
-        keys = [k for k in (asset.key, asset.preview_key, asset.jpeg_key) if k]
+        drop_zips(MediaZip.objects.filter(booking=asset.booking))  # cached ZIPs no longer match
+        keys = asset_keys(asset)
         upload = asset.upload_id
         asset.delete()
 

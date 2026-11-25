@@ -340,6 +340,14 @@ def _as_new(b: dict, as_new: dict) -> dict:
 
 
 def import_bundle(actor, b: Any, as_new: dict | None = None) -> dict:
+    """A hand-edited bundle of the wrong shape anywhere is a 400, never a 500 (F-059)."""
+    try:
+        return _import_bundle(actor, b, as_new)
+    except (KeyError, TypeError, AttributeError) as e:
+        raise bad("INVALID_BUNDLE", "This is not a valid Vayu form bundle.") from e
+
+
+def _import_bundle(actor, b: Any, as_new: dict | None) -> dict:
     _check_shape(b)
     if b["schema"] == 1:
         try:

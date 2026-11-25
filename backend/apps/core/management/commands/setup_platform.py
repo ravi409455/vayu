@@ -12,6 +12,7 @@ staff.csv (see apps/core/setup/users.example.csv): username,name,role,phone,pass
 (role: admin | ops | expert; an empty password gets a random one, printed once, to be changed at
 first sign-in)."""
 import csv
+import os
 import secrets
 from pathlib import Path
 
@@ -63,7 +64,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, users=None, **options):
         rows = read_users(users) if users else []
+        from apps.core.setup.testdata import remember_kind
+
         with transaction.atomic():
+            remember_kind()                  # the database says what server it is (F-213)
             made, printed = add_users(rows)
             admin = User.objects.filter(role=Role.ADMIN, is_active=True).order_by("id").first()
             if admin is None:
@@ -79,9 +83,12 @@ class Command(BaseCommand):
                 report[f"{key} report"] = reports.apply(admin, key)
         for k, v in report.items():
             self.stdout.write(f"  {k}: {v}")
-        if printed:
+        if printed:                  # never into logs (F-233): a file only the operator can read
+            path = f"{users}.passwords"
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.writelines(f"{username}  {password}\n" for username, password in printed)
             self.stdout.write(self.style.WARNING(
-                "Passwords made for these users (shown once; they change it at first sign-in):"))
-            for username, password in printed:
-                self.stdout.write(f"  {username}  {password}")
+                f"Passwords made for {len(printed)} user(s) are in {path} (readable by you only; "
+                "they change them at first sign-in). Delete the file once handed out."))
         self.stdout.write(self.style.SUCCESS("Setup done."))

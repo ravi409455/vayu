@@ -5,7 +5,9 @@ from django.utils import timezone
 
 from apps.accounts import audit
 from apps.accounts.models import Role, User
+from apps.accounts.permissions import scope_for
 from apps.core import events
+from apps.core import tasks as core_tasks
 from apps.core.errors import CodedError
 from apps.forms.access import levels_for
 from apps.forms.fieldtypes import AnswerError, clean_answer
@@ -86,10 +88,13 @@ def _touch(b: Booking, actor, keys: list[str]) -> None:
     b.last_change = {"by": actor.shown_name, "at": b.last_edited_at.isoformat(), "keys": keys}
 
 
+@transaction.atomic
 def create(actor, answers: dict) -> Booking:
     version = booking_form_version()
     cleaned = clean(version, answers)
     _ensure_unique(cleaned["booking_id"])
+    if cleaned.get("assigned_expert") and scope_for(actor, "bookings.assign") is None:
+        raise err("FORBIDDEN", "Choosing the expert needs the assign permission.", 403)  # F-057
     b = Booking(answers=cleaned, created_by=actor, last_edited_by=actor,
                 last_edited_at=timezone.now())
     sync_columns(b)
@@ -264,11 +269,23 @@ def change_type(actor, b: Booking, inspection_type) -> Booking:
     return b
 
 
+@transaction.atomic
 def delete(actor, b: Booking) -> None:
-    """Admin may delete any booking; anyone else only a draft that nobody has worked on."""
+    """Admin may delete any booking; anyone else only a draft that nobody has worked on. Its
+    files (originals, previews, copies, the PDF, ZIPs) go from storage once it is gone (H-02)."""
+    from apps.media.models import MediaZip
+    from apps.media.services import asset_keys
+    from apps.media.tasks import delete_files
+    from apps.reports.models import Report
+
+    b = _lock(b)                                       # no assign can slip in meanwhile (F-121)
     if actor.role != Role.ADMIN and (b.stage != "draft" or b.inspections.exists()):
         raise err("DELETE_NOT_ALLOWED", "Only an Admin can delete a booking that has been "
                   "assigned or worked on. Cancel it instead.", 403)
+    keys = [k for a in b.media.all() for k in asset_keys(a)]
+    keys += [k for k in Report.objects.filter(booking=b).values_list("key", flat=True) if k]
+    keys += [k for k in MediaZip.objects.filter(booking=b).values_list("key", flat=True) if k]
     audit.record(actor, "booking.delete", "booking", b.id, f"Deleted booking {b.booking_id}")
     events.emit("booking.deleted", booking=str(b.id), booking_id=b.booking_id)
     b.delete()
+    core_tasks.after_commit(lambda: delete_files.delay(keys))

@@ -111,7 +111,20 @@ MEDIA_URL_TTL = 3600           # pre-signed URL lifetime, seconds
 ZIP_LINK_DAYS = 7
 PDF_RETRY_DELAY = 15           # seconds between render attempts
 VERIFY_BASE_URL = env("VERIFY_BASE_URL", "https://verify.carcid.in")
-CELERY_TASK_ROUTES = {"apps.reports.tasks.render_report": {"queue": "pdf"}}
+# one queue per kind of work (F-084): a pile of ZIPs never holds up upload checks or webhooks
+CELERY_TASK_ROUTES = {
+    "apps.reports.tasks.render_report": {"queue": "pdf"},
+    "apps.media.tasks.verify_asset": {"queue": "uploads"},
+    "apps.media.zips.build_zip": {"queue": "zips"},
+    "apps.media.tasks.purge_expired": {"queue": "purge"},
+    "apps.media.tasks.delete_files": {"queue": "purge"},
+    "apps.integrations.tasks.*": {"queue": "notify"},
+    "apps.notify.tasks.*": {"queue": "notify"},
+}
+# no task runs for ever (F-210): a hung R2 stream is stopped; the PDF render has its own
+CELERY_TASK_SOFT_TIME_LIMIT, CELERY_TASK_TIME_LIMIT = 900, 960
+CELERY_TASK_ACKS_LATE = True                 # a restart puts the running task back
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 STUCK_UPLOAD_HOURS = int(env("STUCK_UPLOAD_HOURS", "6"))
 
 # What kind of server this is. Test data (seed_test_data) wipes the server, so it runs only where
@@ -176,7 +189,9 @@ SENTRY_DSN = env("SENTRY_DSN", "")
 if SENTRY_DSN:
     import sentry_sdk
 
-    sentry_sdk.init(dsn=SENTRY_DSN, send_default_pii=False)
+    from vayu.sentry_scrub import OPTIONS
+
+    sentry_sdk.init(dsn=SENTRY_DSN, **OPTIONS)
 
 SPECTACULAR_SETTINGS = {"TITLE": "Vayu API", "VERSION": "1.0.0", "SERVE_INCLUDE_SCHEMA": False,
                         "SCHEMA_PATH_PREFIX": "/api/v1"}
