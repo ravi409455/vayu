@@ -2,13 +2,12 @@ import { Link2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Access, Check as Validation, FormField, Option } from "../../../api/types";
 import { uploadFile } from "../../../api/client";
-import { iconFor } from "../../../lib/typeIcons";
 import { AccessEditor } from "../../../ui/AccessEditor";
 import { ConditionBuilder, type FieldChoice } from "../../../ui/ConditionBuilder";
 import { Check, Field, Pill, Tabs, useToast } from "../../../ui/kit";
 import { InfoTip } from "../../../ui/InfoTip";
 import { MoreMenu } from "../../../ui/Menu";
-import { CHOICE_TYPES, FIELD_TYPES, NO_TEXT_TYPES, slugKey, SYSTEM_TYPE_LABELS, UPLOAD_TYPES } from "../../../lib/fieldTypes";
+import { CHOICE_TYPES, iconFor, NO_TEXT_TYPES, slugKey, typeLabel, UPLOAD_TYPES } from "../../../lib/fieldTypes";
 
 export type FieldDraft = Pick<FormField, "label" | "helper_text" | "type" | "config" | "required" | "required_if" | "show_if" | "visible" | "access">;
 /** A validation being edited: one saved (has an id) or new. */
@@ -39,7 +38,7 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
   const valsDirty = JSON.stringify(vals) !== JSON.stringify(savedVals);
   const dirty = JSON.stringify(d) !== JSON.stringify({ ...field, level: undefined }) || valsDirty;
   const ref = `${kind === "custom" ? "inspection" : kind}.${field.key}`;
-  const type = FIELD_TYPES.find((t) => t.id === field.type)?.label ?? SYSTEM_TYPE_LABELS[field.type] ?? field.type;
+  const type = typeLabel(field.type);
   const locked = field.locked || field.is_system;
   const Icon = iconFor(field.type);
   const media = field.type === "photo" || field.type === "video";

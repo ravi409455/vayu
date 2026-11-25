@@ -1,8 +1,7 @@
 import { Link2, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useList } from "../../../api/hooks";
-import { FIELD_TYPES, defaultConfig, slugKey } from "../../../lib/fieldTypes";
-import { iconFor } from "../../../lib/typeIcons";
+import { defaultConfig, FIELD_TYPES, iconFor, slugKey, typeLabel } from "../../../lib/fieldTypes";
 import { Field, Modal, Tabs } from "../../../ui/kit";
 import { keys } from "../../../api/keys";
 
@@ -42,7 +41,7 @@ export function AddFieldDialog({ sectionTitle, onClose, onAdd, onLibrary }: {
         <>
           {(lib.data ?? []).filter((i) => !i.archived && match(i.name + i.key)).map((i) => (
             <div className="bar card" key={i.id} style={{ padding: 10, marginBottom: 8 }}>
-              <div className="grow"><strong>{i.name}</strong><div className="muted small">{FIELD_TYPES.find((t) => t.id === i.definition.type)?.label} · r{i.revision}</div></div>
+              <div className="grow"><strong>{i.name}</strong><div className="muted small">{typeLabel(i.definition.type ?? "")} · r{i.revision}</div></div>
               <button title="Stays in sync: changes to the library item reach this form as an update you accept" onClick={() => onLibrary(i.id, true)}><Link2 size={14} aria-hidden /> Link</button>
               <button title="A plain copy you can edit freely" onClick={() => onLibrary(i.id, false)}>Copy</button>
             </div>

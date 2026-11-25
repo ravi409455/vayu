@@ -7,7 +7,7 @@ import type { FormField, FormPage, FormSection, FormVersion, Option, User } from
 import { evaluateTree, type Answers, type Ctx, type Kind } from "../lib/formSpec";
 import { fmtDay, fmtPhone, fmtStamp, fmtTime, mapsUrl } from "../lib/format";
 import { Thumb } from "./MediaThumb";
-import { MEDIA_TYPES, NOT_ASKED_TYPES } from "../lib/fieldTypes";
+import { NOT_ASKED_TYPES } from "../lib/fieldTypes";
 import { isEmpty } from "../rules/rules";
 import { keys } from "../api/keys";
 
@@ -48,40 +48,45 @@ function TypeName({ v }: { v: unknown }) {
 /** Names the Admin never changed ("Page 1", "Section 1") say nothing to a reader. */
 export const generic = (title: string) => /^(page|section)\s*\d+$/i.test(title.trim());
 
+type ReadArgs = { f: FormField; v: unknown; opt: (k: unknown) => string };
+const text = ({ v }: ReadArgs) => <>{String(v)}</>;
+const files = ({ f, v }: ReadArgs) => {
+  const ids = Array.isArray(v) ? (v as string[]) : [String(v)];
+  return (
+    <span className="sheet-thumbs">
+      {ids.slice(0, 4).map((id) => <Thumb key={id} id={id} video={f.type === "video"} size={48} />)}
+      {ids.length > 4 && <span className="muted small">+{ids.length - 4}</span>}
+      {f.type !== "photo" && f.type !== "video" && <span className="muted small">{ids.length} {f.type === "signature" ? "signature" : "file"}{ids.length > 1 ? "s" : ""}</span>}
+    </span>
+  );
+};
+
+/** How an answer of each field type reads (keyed like lib/fieldTypes TYPES; the types skipped on
+ *  the sheet, derived / rating / image, read as text if they ever show). */
+export const READERS: Record<string, (a: ReadArgs) => ReactNode> = {
+  short_text: text, long_text: text, derived: text, rating: text, image: text,
+  single_choice: ({ v, opt }) => <>{opt(v)}</>,
+  form_choice: text,
+  multi_choice: ({ v, opt }) => <>{(v as unknown[]).map(opt).join(", ")}</>,
+  yes_no: ({ v }) => <>{v ? "Yes" : "No"}</>,
+  number: ({ f, v }) => <>{String(v)}{f.config.unit ? ` ${String(f.config.unit)}` : ""}</>,
+  currency: ({ v }) => <>₹{Number(v).toLocaleString("en-IN")}</>,
+  date: ({ v }) => <>{fmtDay(v)}</>,
+  time: ({ v }) => <>{fmtTime(v)}</>,
+  datetime: ({ v }) => <>{fmtStamp(v)}</>,
+  phone: ({ v }) => <>{fmtPhone(v)}</>,
+  master_list: ({ f, v }) => <ListLabel list={String(f.config.list ?? "")} value={v} />,
+  user_picker: ({ f, v }) => <UserName role={String(f.config.role ?? "expert")} id={v} />,
+  gps: ({ v }) => { const g = v as { lat: number; lng: number }; return <a href={mapsUrl(`${g.lat},${g.lng}`)} target="_blank" rel="noreferrer">Open in Maps</a>; },
+  photo: files, video: files, file: files, signature: files,
+};
+
 export function AnswerValue({ f, v }: { f: FormField; v: unknown }) {
   if (isEmpty(v)) return <span className="muted">Not answered</span>;
   if (f.key === "inspection_type") return <TypeName v={v} />;
   const opts = (f.config.options as Option[] | undefined) ?? [];
   const opt = (k: unknown) => opts.find((o) => o.key === k)?.label ?? String(k);
-  switch (f.type) {
-    case "single_choice": return <>{opt(v)}</>;
-    case "multi_choice": return <>{(v as unknown[]).map(opt).join(", ")}</>;
-    case "yes_no": return <>{v ? "Yes" : "No"}</>;
-    case "number": return <>{String(v)}{f.config.unit ? ` ${String(f.config.unit)}` : ""}</>;
-    case "currency": return <>₹{Number(v).toLocaleString("en-IN")}</>;
-    case "date": return <>{fmtDay(v)}</>;
-    case "time": return <>{fmtTime(v)}</>;
-    case "datetime": return <>{fmtStamp(v)}</>;
-    case "phone": return <>{fmtPhone(v)}</>;
-    case "master_list": return <ListLabel list={String(f.config.list ?? "")} value={v} />;
-    case "user_picker": return <UserName role={String(f.config.role ?? "expert")} id={v} />;
-    case "gps": {
-      const g = v as { lat: number; lng: number };
-      return <a href={mapsUrl(`${g.lat},${g.lng}`)} target="_blank" rel="noreferrer">Open in Maps</a>;
-    }
-    default:
-      if (MEDIA_TYPES.includes(f.type)) {
-        const ids = Array.isArray(v) ? (v as string[]) : [String(v)];
-        return (
-          <span className="sheet-thumbs">
-            {ids.slice(0, 4).map((id) => <Thumb key={id} id={id} video={f.type === "video"} size={48} />)}
-            {ids.length > 4 && <span className="muted small">+{ids.length - 4}</span>}
-            {f.type !== "photo" && f.type !== "video" && <span className="muted small">{ids.length} {f.type === "signature" ? "signature" : "file"}{ids.length > 1 ? "s" : ""}</span>}
-          </span>
-        );
-      }
-      return <>{String(v)}</>;
-  }
+  return <>{(READERS[f.type] ?? text)({ f, v, opt })}</>;
 }
 
 export type SheetPart = { kind: Kind; tree: Pick<FormVersion, "pages" | "checks">; values: Answers; ctx?: Ctx };
