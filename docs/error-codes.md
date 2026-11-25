@@ -95,7 +95,7 @@ Regenerate: `uv run python -c "from apps.platform.error_codes import table; prin
 | `INVALID_STAGE` | 409 | A … booking cannot be assigned. |
 | `INVALID_TEMPLATE` | 400 | … |
 | `INVALID_TEMPLATE_FILE` | 400 | This is not a Vayu report template file. |
-| `INVALID_TOGGLE` | 400 | allow_delete must be true or false. |
+| `INVALID_TOGGLE` | 400 | … must be true or false. |
 | `INVALID_TOKEN` | 400 | Send the phone's push token. |
 | `INVALID_TYPE` | 400 | Choose an inspection type from the list. |
 | `INVALID_URL` | 400 | This URL cannot be used (bad_url). |
