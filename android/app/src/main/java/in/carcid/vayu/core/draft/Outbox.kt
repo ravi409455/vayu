@@ -229,7 +229,7 @@ class Outbox(
         val filled = filledOf(d) ?: return
         val parts = PARTS.associateWith { outgoing(d, filled, it) ?: return }
         try {
-            api.submit(id, d.submitUuid, d.versions["inspection"], JsonObject(parts), d.unverifiedTime)
+            api.submit(id, d.submitUuid, d.versions["inspection"], JsonObject(parts), d.unverifiedTime.takeIf { !d.startSent })
             drafts.update(id) { it.copy(submitSent = true, problem = null, problemCode = null, fieldErrors = emptyMap()) }
         } catch (e: ApiError) {
             if (transient(e)) throw e

@@ -100,6 +100,9 @@ class OutboxTest {
         assertFalse(d.startSent)
         assertTrue(d.submitSent)
         assertEquals(null, d.problemCode)                    // the submit went through and cleared it
+        // F-222: the start never reached the server, so the submit says whether the time was checked
+        val submit = Json.parseToJsonElement(server.bodiesOf("POST bookings/$BOOKING/submit").single()).jsonObject
+        assertEquals("false", submit["unverified_time"]!!.jsonPrimitive.content)
     }
 
     @Test fun aJobClosedOnTheServerSaysSoAndStopsTrying() = runBlocking {
@@ -158,6 +161,16 @@ class OutboxTest {
         again.discard(BOOKING)
         assertFalse(File(d.files.single().path).exists())
         assertEquals(null, again.get(BOOKING))
+    }
+
+    /** F-222: the check-in time is judged when it is stamped, not when the draft was first opened. */
+    @Test fun aClockThatStopsBeingCheckedBeforeTheCheckInMarksItUnverified() = runBlocking {
+        ready()
+        drafts.update(BOOKING) { it.copy(startedAt = null, submittedAt = null, unverifiedTime = false) }   // opened while the time was checked
+        `in`.carcid.vayu.ui.expert.InspectionModel(drafts, jobs, BOOKING, { java.time.Instant.now() }, {}, verified = { false }).open()
+        val d = drafts.get(BOOKING)!!
+        assertTrue(d.startedAt != null)
+        assertTrue(d.unverifiedTime)
     }
 
     @Test fun aSentFileRemovedOnThePhoneIsTakenBackOnTheServer() = runBlocking {
@@ -241,14 +254,14 @@ class OutboxTest {
     }
 
     /** F-222: a check-in made on a phone whose clock wasn't checked that day says so to the server. */
-    @Test fun theStartAndSubmitSayWhetherThePhoneTimeWasChecked() = runBlocking {
+    @Test fun theStartSaysWhetherThePhoneTimeWasChecked() = runBlocking {
         ready()
         drafts.update(BOOKING) { it.copy(unverifiedTime = true) }
         outbox.run()
         val start = Json.parseToJsonElement(server.bodiesOf("POST bookings/$BOOKING/start").single()).jsonObject
         val submit = Json.parseToJsonElement(server.bodiesOf("POST bookings/$BOOKING/submit").single()).jsonObject
         assertEquals("true", start["unverified_time"]!!.jsonPrimitive.content)
-        assertEquals("true", submit["unverified_time"]!!.jsonPrimitive.content)
+        assertEquals(null, submit["unverified_time"])                      // the start carried it
     }
 
     @Test fun theStartSendsTheFormVersionsThePhonePinned() = runBlocking {

@@ -43,6 +43,8 @@ class InspectionModel(
     private val now: () -> Instant,
     /** Ask the outbox to send. */
     private val kick: () -> Unit,
+    /** The phone's time is checked right now (synced today, clock not changed since). */
+    private val verified: () -> Boolean = { true },
 ) {
     val draft: Draft get() = drafts.get(bookingId)!!
 
@@ -69,7 +71,7 @@ class InspectionModel(
         if (d.startedAt == null && !d.locked) {
             val f = filled(d)
             if (f != null && checkInDone(d, f)) {
-                drafts.update(bookingId) { it.copy(startedAt = stamp("datetime", now())) }
+                drafts.update(bookingId) { it.copy(startedAt = stamp("datetime", now()), unverifiedTime = it.unverifiedTime || !verified()) }
                 kick()
             }
         }
