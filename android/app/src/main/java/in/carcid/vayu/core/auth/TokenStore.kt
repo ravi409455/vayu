@@ -11,6 +11,9 @@ interface TokenStore {
     /** The signed-in person, kept so the app opens without signal. */
     fun me(): Map<String, String>? = null
     fun saveMe(fields: Map<String, String>) {}
+    /** The refresh token of a sign-out the server never heard of (no signal then); kept through clear(). */
+    fun pendingLogout(): String? = null
+    fun setPendingLogout(refresh: String?) {}
 }
 
 /** App-private storage (other apps can't read it). */
@@ -28,6 +31,9 @@ class PrefsTokenStore(context: Context) : TokenStore {
     override fun saveMe(fields: Map<String, String>) {
         prefs.edit().apply { fields.forEach { (k, v) -> putString("me.$k", v) } }.apply()
     }
+    private val ended = context.getSharedPreferences("vayu.signout", Context.MODE_PRIVATE)
+    override fun pendingLogout() = ended.getString("refresh", null)
+    override fun setPendingLogout(refresh: String?) { ended.edit().putString("refresh", refresh).apply() }
 }
 
 class MemoryTokenStore : TokenStore {
@@ -40,4 +46,7 @@ class MemoryTokenStore : TokenStore {
     override fun refresh() = r
     override fun save(access: String, refresh: String) { a = access; r = refresh }
     override fun clear() { a = null; r = null; m = null }
+    private var ended: String? = null
+    override fun pendingLogout() = ended
+    override fun setPendingLogout(refresh: String?) { ended = refresh }
 }

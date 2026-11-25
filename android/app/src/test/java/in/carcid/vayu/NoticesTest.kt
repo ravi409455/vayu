@@ -27,4 +27,16 @@ class NoticesTest {
         val shown = "${public.getCharSequence(Notification.EXTRA_TITLE)} ${public.getCharSequence(Notification.EXTRA_TEXT)}"
         assertFalse(shown, shown.contains("Farhan") || shown.contains("MG Road") || shown.contains("DEMO-8"))
     }
+
+    /** F-077: after sign-out no reminder rows (customer and address) or stuck-photo marks stay behind. */
+    @Test fun signingOutLeavesNoRemindersOrStuckMarks() {
+        androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(app)
+        val wm = androidx.work.WorkManager.getInstance(app)
+        wm.enqueue(androidx.work.OneTimeWorkRequestBuilder<ReminderWorker>().addTag("remind")
+            .setInitialDelay(1, java.util.concurrent.TimeUnit.HOURS).build()).result.get()
+        app.getSharedPreferences("vayu.stuck", android.content.Context.MODE_PRIVATE).edit().putStringSet("told", setOf("b1")).commit()
+        forgetLeftovers(app)
+        assertEquals(0, wm.getWorkInfosByTag("remind").get().size)
+        assertEquals(null, app.getSharedPreferences("vayu.stuck", android.content.Context.MODE_PRIVATE).getStringSet("told", null))
+    }
 }

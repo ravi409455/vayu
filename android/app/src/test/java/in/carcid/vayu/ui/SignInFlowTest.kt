@@ -44,8 +44,11 @@ class SignInFlowTest {
     private var pushTokens = 0
     private val tokens = MemoryTokenStore()
 
+    private val root = java.nio.file.Files.createTempDirectory("vayu").toFile()
+    private lateinit var graph: `in`.carcid.vayu.Graph
+
     private fun launch() {
-        val graph = `in`.carcid.vayu.Graph(Api(server.url, tokens), tokens, java.nio.file.Files.createTempDirectory("vayu").toFile(), {},
+        graph = `in`.carcid.vayu.Graph(Api(server.url, tokens), tokens, root, {},
             sendPushToken = { pushTokens++ })
         val vm = AppViewModel(graph, "Test phone")
         compose.setContent { AppRoot(vm) }
@@ -75,6 +78,35 @@ class SignInFlowTest {
         compose.onNodeWithContentDescription("Password").assertIsFocused().performTextInput("Vayu-local-1")
         compose.onNodeWithContentDescription("Password").performImeAction()               // Done signs in
         waitFor("My leads")
+    }
+
+    /** F-073: everything is sent (sign-out checks), so this person's drafts, answers and photos leave the phone. */
+    @Test fun signingOutTakesThePersonsDraftsOffThePhone() {
+        signedIn("expert")
+        server.on("POST auth/logout", "", 204)
+        launch(); signIn(); waitFor("My leads")
+        val sent = `in`.carcid.vayu.core.draft.Draft("00000000-0000-0000-0000-000000000001", "DEMO-1", "Farhan Ali", emptyMap(), "pdi", submitSent = true)
+        graph.drafts(3).save(sent)
+        java.io.File(root, "drafts-3/files").apply { mkdirs() }.resolve("old.jpg").writeText("stamped photo")
+        compose.onNodeWithContentDescription("Profile").performClick()
+        compose.onNodeWithText("Sign out").performClick()
+        waitFor("Sign in")
+        compose.waitUntil(5_000) { !java.io.File(root, "drafts-3").exists() }
+    }
+
+    /** F-077: signed out without signal, the server's sign-in for this phone is ended at the next sign-in. */
+    @Test fun aSignOutWithoutSignalIsFinishedAtTheNextSignIn() {
+        signedIn("expert")
+        server.on("POST auth/logout", "", 503)                    // the server can't be reached
+        launch(); signIn(); waitFor("My leads")
+        compose.onNodeWithContentDescription("Profile").performClick()
+        compose.onNodeWithText("Sign out").performClick()
+        waitFor("Sign in")
+        server.on("POST auth/logout", "", 204)
+        server.on("POST auth/refresh", """{"access":"OLD-A","refresh":"R2"}""")
+        signIn(); waitFor("My leads")
+        compose.waitUntil(5_000) { server.bodiesOf("POST auth/refresh").any { "\"R\"" in it } }
+        compose.waitUntil(5_000) { server.bodiesOf("POST auth/logout").size == 2 }
     }
 
     @Test fun anExpertLandsOnMyJobs() {

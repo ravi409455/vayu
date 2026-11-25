@@ -75,6 +75,17 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
             ?.forEach { it.deleteRecursively() }
     }
 
+    /**
+     * This person's drafts leave the phone (customer answers, stamped photos). [all]: everything (sign-out
+     * already checked nothing is unsent); otherwise only fully sent ones (signed out by the server: the
+     * rest stays for their next sign-in).
+     */
+    @Synchronized fun forgetDrafts(userId: Int, all: Boolean) {
+        val store = drafts(userId)
+        store.all().filter { all || !it.unsent }.forEach { store.discard(it.bookingId) }
+        if (all) { draftStores.remove(userId); File(root, "drafts-$userId").deleteRecursively() }
+    }
+
     /** A cleared store never writes again, so a later sign-in needs a fresh one. */
     @Synchronized fun forgetJobs(userId: Int) {
         val keep = pinned(userId)
@@ -141,7 +152,7 @@ class VayuApp : Application() {
         val tokens = PrefsTokenStore(this)
         Graph(Api(BuildConfig.API_URL, tokens), tokens, filesDir, { OutboxWorker.enqueue(this) }, cacheDir,
             onJobs = { Reminders.schedule(this, graph, it) },
-            clearNotices = { androidx.core.app.NotificationManagerCompat.from(this).cancelAll(); Reminders.cancel(this) },
+            clearNotices = { forgetLeftovers(this) },
             writer = java.util.concurrent.Executors.newSingleThreadExecutor(),
             // only that it happened and where in the code (beforeSend drops the text)
             onDamaged = { _, e -> io.sentry.Sentry.captureException(e) },

@@ -160,6 +160,17 @@ object Reminders {
     fun cancel(ctx: Context) { WorkManager.getInstance(ctx).cancelAllWorkByTag(TAG) }
 }
 
+/**
+ * Signed out: nothing of that person's stays (F-077). Notices off the screen, reminders cancelled and
+ * their rows (customer, address) pruned from WorkManager, stuck-photo marks forgotten.
+ */
+fun forgetLeftovers(ctx: Context) {
+    androidx.core.app.NotificationManagerCompat.from(ctx).cancelAll()
+    Reminders.cancel(ctx)
+    WorkManager.getInstance(ctx).pruneWork()
+    ctx.getSharedPreferences("vayu.stuck", Context.MODE_PRIVATE).edit().clear().apply()
+}
+
 class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val job = inputData.getString("job") ?: return Result.success()

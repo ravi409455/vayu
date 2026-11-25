@@ -235,6 +235,22 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         try { call("POST", "auth/logout") } finally { tokens.clear() }
     }
 
+    /**
+     * End a sign-in this phone left behind (signed out without signal): renew it with its own refresh
+     * token, then sign it out. True when done or the server already ended it; false: try again later.
+     */
+    suspend fun endOld(refresh: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val r = send("POST", "auth/refresh", buildJsonObject { put("refresh", refresh) }, auth = false)
+            val access = (r.body["access"] as? JsonPrimitive)?.contentOrNull
+            when {
+                r.status == 200 && access != null ->
+                    send("POST", "auth/logout", null, auth = false, mapOf("Authorization" to "Bearer $access")).status < 500
+                else -> r.status in 400..499              // refused: already ended
+            }
+        } catch (e: ApiError) { false }
+    }
+
     private fun parseMe(o: JsonObject) = Me(
         id = o.getValue("id").jsonPrimitive.intOrNull ?: 0, username = o.str("username"),
         name = o.str("name"), role = o.str("role"),

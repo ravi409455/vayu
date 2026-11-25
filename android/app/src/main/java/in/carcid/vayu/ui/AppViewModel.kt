@@ -76,7 +76,8 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         } catch (e: ApiError) {
             when {
                 e.code == "DEVICE_REVOKED" -> {
-                    tokens.clear(); jobs.forget(savedId); savedId?.let { graph.forgetCopies(it) }; graph.clearNotices(); bell.clear(); _screen.value = Screen.SignIn()
+                    tokens.clear(); jobs.forget(savedId); savedId?.let { graph.forgetCopies(it); graph.forgetDrafts(it, all = false) }
+                    graph.clearNotices(); bell.clear(); _screen.value = Screen.SignIn()
                 }
                 // no signal or the server is down: still signed in, already open on the saved copy
                 JobsModel.unreachable(e) && cached != null -> {}
@@ -123,7 +124,9 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
             "role" to me.role, "theme" to me.theme, "must_change" to me.mustChangePassword.toString(),
             "perms" to me.permissions.joinToString(",")))
         if (me.mustChangePassword) { _screen.value = Screen.ChangePassword(); return }
+        lastPassword = ""                             // only kept for a required password change
         _screen.value = Screen.Home(me)
+        tokens.pendingLogout()?.let { old -> viewModelScope.launch { if (api.endOld(old)) tokens.setPendingLogout(null) } }
         if (me.role == "expert") jobs.open(me.id, offline = false)
         heartbeat(me.id)
         bell.refresh()
@@ -161,7 +164,7 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
 
     /** Signed out from the server (another phone, or an Admin): nothing of theirs stays on this phone. */
     private fun revoked() {
-        signedIn()?.let { graph.forgetCopies(it) }
+        signedIn()?.let { graph.forgetCopies(it); graph.forgetDrafts(it, all = false) }
         graph.clearNotices()                         // even when nobody could be told apart
         tokens.clear(); jobs.forget(); bell.clear(); _screen.value = Screen.SignIn()
     }
@@ -227,8 +230,11 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
             }
         }
         viewModelScope.launch {
-            runCatching { api.logout() }
-            signedIn()?.let { graph.forgetCopies(it) }
+            // no signal: the server still thinks this phone is signed in; end it at the next sign-in
+            val refresh = tokens.refresh()
+            if (runCatching { api.logout() }.isFailure && refresh != null) tokens.setPendingLogout(refresh)
+            // nothing is unsent (checked above), so nothing of theirs needs to stay
+            signedIn()?.let { graph.forgetCopies(it); graph.forgetDrafts(it, all = true) }
             graph.clearNotices()
             tokens.clear()
             jobs.forget()
