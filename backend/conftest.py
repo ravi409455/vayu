@@ -21,3 +21,12 @@ def _fresh_cache():
     from django.core.cache import cache
 
     cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_level_cache():
+    """Field levels of published versions are cached for the process (Q5.1); each test's database
+    starts over, so the cache does too."""
+    from apps.forms import access
+
+    access._published_levels.cache_clear()
