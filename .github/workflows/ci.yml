@@ -1,9 +1,13 @@
 name: ci
 # PRs run CI once (on the pull request); main runs on push. A newer push to the same PR cancels the
 # older run, so the runners only work on the latest commit.
+# Docs-only changes (Markdown anywhere, or anything under docs/) run no checks.
 on:
-  push: {branches: [main]}
+  push:
+    branches: [main]
+    paths-ignore: ["**/*.md", "docs/**"]
   pull_request:
+    paths-ignore: ["**/*.md", "docs/**"]
 permissions: {contents: read}
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
