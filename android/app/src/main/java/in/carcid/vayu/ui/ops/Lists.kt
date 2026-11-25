@@ -345,9 +345,12 @@ suspend fun loadNeeds(env: OpsEnv): List<Need>? {
         c.map(::Bk).map { Need("c" + it.id, it.id, Tone.BAD, "Two experts inspected ${it.code}", "${it.customer} · choose which counts", "Conflicts") } +
         st.map { Need("s" + it.s("id"), it.s("booking"), Tone.BAD, "Photos stuck: ${it.s("booking_id")}",
             "${env.labels.byUsername(it.s("expert"))} · ${it.s("field_key").replace('_', ' ').replaceFirstChar { c -> c.uppercase() }}", "Stuck uploads") } +
-        // reports update by themselves; only a failed one is listed (it is tried again by itself)
-        pd.map { Need("p" + it.s("booking"), it.s("booking"), Tone.BAD, "Report failed for ${it.s("booking_id")}",
-            it.s("error").ifBlank { "It is tried again by itself" }, "Reports") } +
+        // a failed report (tried again by itself), or one out of date: Ops press Regenerate when they are done (F-219)
+        pd.map { if (it.s("error").isBlank() && it.s("out_of_date") == "true")
+                Need("p" + it.s("booking"), it.s("booking"), Tone.WARN, "Report out of date for ${it.s("booking_id")}",
+                    "Regenerate it when you're done", "Reports")
+            else Need("p" + it.s("booking"), it.s("booking"), Tone.BAD, "Report failed for ${it.s("booking_id")}",
+                it.s("error").ifBlank { "It is tried again by itself" }, "Reports") } +
         ty.map(::Bk).map { Need("t" + it.id, it.id, Tone.WARN, "Your type change wasn't applied", "${it.code} · ${it.typeRejected?.let(env.labels::typeRejected) ?: "The expert started another type"}", "Type changes") } +
         timing(lt, "late", "Started late") + timing(qk, "quick", "Too quick")
 }

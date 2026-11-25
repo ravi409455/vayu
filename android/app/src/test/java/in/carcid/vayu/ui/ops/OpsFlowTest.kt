@@ -1,6 +1,9 @@
 package `in`.carcid.vayu.ui.ops
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -169,6 +172,49 @@ class OpsFlowTest {
         allowed.value = true
         compose.onNodeWithContentDescription("More actions").performClick()
         compose.onNodeWithText("Sign out the expert's phone").assertExists()
+    }
+
+    private val B6 = "00000000-0000-0000-0000-000000000006"
+    private fun report(outOfDate: Boolean, allowed: Boolean, reason: String? = null) =
+        """{"revision":2,"status":"ready","updating":false,"out_of_date":$outOfDate,
+            "regenerate":{"allowed":$allowed,"reason":${reason?.let { "\"$it\"" } ?: "null"}},
+            "generated_at":"2026-11-24T09:30:00+05:30","error":"","verify_url":"https://verify.example/x","url":"/api/v1/bookings/$B6/report/download"}"""
+    private fun showReport() = compose.setContent { VayuTheme(ThemeMode.LIGHT) {
+        val env = OpsEnv(me.copy(permissions = me.permissions + "submissions.edit"), data, Labels(), { LocalDate.parse(TODAY) }, 0, {}, {})
+        androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(20.dp)) {
+            ReportCard(env, B6, Bk(Json.parseToJsonElement(day[3]).jsonObject))
+        }
+    } }
+
+    /** F-219: a report out of date says so, and one tap on Regenerate sends one request, then shows the new state. */
+    @Test fun anOutOfDateReportIsRegeneratedWithOneTap() {
+        server.on("GET bookings/$B6/report", report(outOfDate = true, allowed = true))
+        server.on("POST bookings/$B6/report/regenerate", "", 202)
+        showReport()
+        waitFor("Out of date")
+        shot("ops_report_out_of_date")
+        server.on("GET bookings/$B6/report", report(outOfDate = false, allowed = false, reason = "The report is being made.").replace("\"updating\":false", "\"updating\":true"))
+        compose.onNodeWithText("Regenerate").performClick()
+        compose.onAllNodes(hasText("Regenerat", substring = true)).onLast().performClick()   // a second tap while sending does nothing
+        compose.waitUntil(5_000) { server.bodiesOf("POST bookings/$B6/report/regenerate").isNotEmpty() }
+        waitFor("Updating…")
+        assertEquals(1, server.bodiesOf("POST bookings/$B6/report/regenerate").size)
+    }
+
+    @Test fun regenerateSaysWhyWhenItCantBePressed() {
+        server.on("GET bookings/$B6/report", report(outOfDate = true, allowed = false, reason = "Choose which inspection counts first."))
+        showReport()
+        waitFor("Choose which inspection counts first.")
+        compose.onNodeWithText("Regenerate").assertIsNotEnabled()
+    }
+
+    @Test fun needsYouListsAReportOutOfDate() {
+        server.on("GET problems/reports", """[{"booking":"$B6","booking_id":"DEMO-6","status":"ready","error":"","out_of_date":true}]""")
+        server.on("GET bookings", """{"count":0,"results":[]}""")                     // nothing else needs Ops
+        show()
+        compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).performClick()
+        waitFor("Report out of date for DEMO-6")
     }
 
     @Test fun todayStatusChipsNarrowTheDay() {
