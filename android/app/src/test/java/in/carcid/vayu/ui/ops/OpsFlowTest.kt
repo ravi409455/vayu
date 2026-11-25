@@ -108,7 +108,8 @@ class OpsFlowTest {
         VayuTheme(theme) { OpsHome(user, data, { LocalDate.parse(TODAY) }, onProfile = {}) }
     }
 
-    private fun waitFor(text: String) = compose.waitUntil(5_000) { compose.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty() }
+    // 15 s: the first test in a cold test JVM loads much slower than the rest
+    private fun waitFor(text: String) = compose.waitUntil(15_000) { compose.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty() }
     private fun shot(name: String) { settled(); compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/$name.png", roborazziOptions = options) }
 
     /**
@@ -218,6 +219,20 @@ class OpsFlowTest {
         waitFor("Report out of date for DEMO-6")
         waitFor("Since today")                                                    // when it went out of date
         waitFor("Report failed for DEMO-14")                                      // a failed row stays a failure
+    }
+
+    /** F-222: a booking whose phone time wasn't checked says so, and Needs you lists this week's ones. */
+    @Test fun anUnverifiedTimeIsShownOnTheBookingAndInNeedsYou() {
+        val marked = day[2].replace("\"alerts\":[]", "\"alerts\":[],\"unverified_time\":true")
+        server.on("GET bookings", """{"count":1,"results":[$marked]}""")
+        server.on("GET bookings/$B14", marked)
+        show()
+        compose.waitUntil(15_000) { server.queries.any { "problem=unverified_time" in it && "date_from=2026-11-18" in it && "date_to=$TODAY" in it } }
+        compose.waitUntil(15_000) { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).performClick()
+        waitFor("DEMO-14: time not verified")
+        compose.onNodeWithText("DEMO-14: time not verified").performClick()
+        waitFor("Time not verified")
     }
 
     @Test fun todayStatusChipsNarrowTheDay() {
