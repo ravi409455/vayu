@@ -4,7 +4,7 @@ import ast
 from pathlib import Path
 
 APPS = Path(__file__).resolve().parents[1]
-CALLS = {"err", "CodedError", "bad"}        # the helpers that raise a coded error
+CALLS = {"fail", "CodedError"}        # the helpers that raise a coded error
 # raised by DRF and the error handler (apps/core/exceptions.py), not by a call above
 FRAMEWORK = {"INVALID": (400, "A field is invalid; `fields` says which."),
              "PARSE_ERROR": (400, "The body is not valid JSON (or not a JSON object)."),

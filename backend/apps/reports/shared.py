@@ -10,7 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts import audit
-from apps.bookings.services import err
+from apps.core.errors import fail
 
 from .definition import KEY_RE, parts, validate_definition
 from .models import PdfTemplate, PdfTemplateVersion, SharedItem, SharedRevision
@@ -115,13 +115,13 @@ def save(actor, kind: str, key: str, name: str, content) -> tuple[SharedItem, li
     from .service import definition_issues
 
     if kind not in KINDS or not isinstance(key, str) or not KEY_RE.fullmatch(key):
-        raise err("INVALID_SHARED", "A shared item needs a kind and a key (a-z, 0-9, _).")
+        raise fail("INVALID_SHARED", "A shared item needs a kind and a key (a-z, 0-9, _).")
     if not isinstance(name, str) or not name.strip():
-        raise err("INVALID_SHARED", "A shared item needs a name.")
+        raise fail("INVALID_SHARED", "A shared item needs a name.")
     try:
         content = check_content(kind, content)
     except ValueError as e:
-        raise err("INVALID_SHARED", str(e)) from e
+        raise fail("INVALID_SHARED", str(e)) from e
     updated: list[str] = []
     with transaction.atomic():
         item, _ = SharedItem.objects.select_for_update().get_or_create(
@@ -159,8 +159,8 @@ def save(actor, kind: str, key: str, name: str, content) -> tuple[SharedItem, li
             if moved:
                 updated.append(t.form.name)
         if blocked:                                     # raising rolls everything back
-            raise err("SHARED_BLOCKED", "Some templates using this would show fields their form "
-                      "does not have.", issues=blocked)
+            raise fail("SHARED_BLOCKED", "Some templates using this would show fields their form "
+                       "does not have.", issues=blocked)
         audit.record(actor, f"pdf_{kind}.save", "pdf_shared", item.id,
                      f"Saved {kind} {key} v{item.revision}; updated: {', '.join(updated) or '-'}")
     return item, updated
@@ -169,7 +169,7 @@ def save(actor, kind: str, key: str, name: str, content) -> tuple[SharedItem, li
 def rename(actor, item: SharedItem, name) -> SharedItem:
     """Only the name people see; the key templates point at stays, so nothing else moves."""
     if not isinstance(name, str) or not name.strip() or len(name.strip()) > 100:
-        raise err("INVALID_SHARED", "A shared item needs a name (up to 100 characters).")
+        raise fail("INVALID_SHARED", "A shared item needs a name (up to 100 characters).")
     old, item.name = item.name, name.strip()
     item.save(update_fields=["name"])
     audit.record(actor, f"pdf_{item.kind}.rename", "pdf_shared", item.id,
@@ -197,8 +197,8 @@ def delete(actor, item: SharedItem) -> None:
                         .select_related("template__form")
                         if uses(v.definition, item.kind, item.key) is not None})
         if users:
-            raise err("SHARED_IN_USE", f"Still used by {', '.join(users)}. Remove it from those "
-                      "reports first.", 409)
+            raise fail("SHARED_IN_USE", f"Still used by {', '.join(users)}. Remove it from those "
+                       "reports first.", 409)
         audit.record(actor, f"pdf_{item.kind}.delete", "pdf_shared", item.id,
                      f"Deleted {item.kind} {item.key} ({item.name})")
         item.delete()

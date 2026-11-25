@@ -14,6 +14,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from apps.accounts.permissions import perm, scope_for
+from apps.core.errors import fail
 from apps.forms.access import hidden_inspection_forms
 from apps.platform.schema import obj
 
@@ -352,7 +353,7 @@ class SyncJobs(generics.GenericAPIView):
         have, drafts = ([p for p in request.query_params.get(name, "").split(",") if p]
                         for name in ("have", "drafts"))
         if (since_raw and since is None) or not all(p.isdigit() for p in have + drafts):
-            raise services.err("INVALID_QUERY",
-                               "have and drafts must be version ids, since a date-time.")
+            raise fail("INVALID_QUERY",
+                       "have and drafts must be version ids, since a date-time.")
         return Response(sync.payload(request.user, {int(p) for p in have}, since,
                                      self.get_serializer_context(), {int(p) for p in drafts}))

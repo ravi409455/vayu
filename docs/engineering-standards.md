@@ -134,7 +134,7 @@ copy the old pattern.
   (`select_for_update`), and edits carry `row_version`. Stage changes go through the stage rules.
 - Work for after the commit (Celery tasks, events that tasks read) goes through
   `core_tasks.after_commit`. Tasks are safe to run twice and have a time limit.
-- Errors: `err("CODE", "Sentence.", status)` / `CodedError`; a new code is added to the documented
+- Errors: `raise fail("CODE", "Sentence.", status)` (`apps/core/errors.py`); a new code is added to the documented
   list. Use the enums for stages, statuses and event names, never a bare string.
 - Queries: no query per row. A list endpoint gets a query-count test. Filters used in lists have an
   index.

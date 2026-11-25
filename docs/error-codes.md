@@ -83,7 +83,7 @@ Regenerate: `uv run python -c "from apps.platform.error_codes import table; prin
 | `INVALID_OVERRIDES` | 400 | … |
 | `INVALID_PERMISSION` | 400 | Unknown permission '…'. |
 | `INVALID_PERMISSIONS` | 400 | permissions must be an object. |
-| `INVALID_QUERY` | 400 | Query parameters are a list of up to …. |
+| `INVALID_QUERY` | 400 | have and drafts must be version ids, since a date-time. |
 | `INVALID_RATING_CONFIG` | 400 | … |
 | `INVALID_REASON` | 400 | Choose a reschedule reason from the list. |
 | `INVALID_REORDER` | 400 | Send pages, sections and/or fields. |

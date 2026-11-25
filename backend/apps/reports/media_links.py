@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from apps.bookings.services import err
+from apps.core.errors import fail
 from apps.media import zips
 from apps.media.models import MediaAsset
 
@@ -81,10 +81,10 @@ class ReportMedia(APIView):
         r = Report.objects.filter(token=token, status="ready").select_related("booking").first()
         insp = r.booking.counted_inspection() if r else None
         if r is None or insp is None or link not in LINKS:
-            raise err("NOT_FOUND", "No such report.", 404)
+            raise fail("NOT_FOUND", "No such report.", 404)
         if expired(r.booking):
-            raise err("LINK_EXPIRED", f"The {link} link lasted {LINK_DAYS} days after the "
-                      "report was first made.", 410)
+            raise fail("LINK_EXPIRED", f"The {link} link lasted {LINK_DAYS} days after the "
+                       "report was first made.", 410)
         src = context.Source(r.booking, insp, revision=r.revision, token=token)
         ids = named(src, link)
         n = _assets(src, link).count()
@@ -92,9 +92,9 @@ class ReportMedia(APIView):
             purged = MediaAsset.objects.filter(booking=r.booking, kind=LINKS[link][0],
                                                status="purged", pk__in=ids).exists()
             if purged:                     # Admin's retention setting deleted them
-                raise err("MEDIA_REMOVED", f"These {link} are no longer kept on our server.",
-                          410)
-            raise err("NO_MEDIA", f"This report has no {link}.", 404)
+                raise fail("MEDIA_REMOVED", f"These {link} are no longer kept on our server.",
+                           410)
+            raise fail("NO_MEDIA", f"This report has no {link}.", 404)
         z = zips.request_zip(r.booking, LINKS[link][1], only=ids)
         return Response({"booking_id": r.booking.booking_id, "link": link, "count": n,
                          "zip": f"zips/{zips.token_for(z.id)}"})

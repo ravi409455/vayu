@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from apps.accounts.permissions import scope_for
 from apps.bookings.models import Booking
-from apps.bookings.services import err
+from apps.core.errors import fail
 
 from .. import storage
 from ..models import KINDS, MediaAsset
@@ -69,31 +69,31 @@ def initiate(request: Any, data: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     closed = booking.stage == "cancelled" or (booking.stage == "completed" and not manager)
     if closed and (manager or booking.inspections.filter(
             expert=user, status__in=("submitted", "superseded")).exists()):
-        raise err("BOOKING_CLOSED", f"A {booking.stage} {word(user)} takes no new files.", 409)
+        raise fail("BOOKING_CLOSED", f"A {booking.stage} {word(user)} takes no new files.", 409)
     kind, ctype = data.get("kind"), data.get("content_type")
     size, sha = data.get("size"), data.get("sha256")
     if kind not in KINDS:
-        raise err("INVALID_MEDIA", f"kind must be one of {', '.join(KINDS)}.")
+        raise fail("INVALID_MEDIA", f"kind must be one of {', '.join(KINDS)}.")
     limit, types = LIMITS[kind]
     if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
-        raise err("INVALID_MEDIA", "size must be a positive number of bytes.")
+        raise fail("INVALID_MEDIA", "size must be a positive number of bytes.")
     if size > limit:
-        raise err("TOO_LARGE", f"A {kind} may be at most {limit // MB} MB.")
+        raise fail("TOO_LARGE", f"A {kind} may be at most {limit // MB} MB.")
     if ctype not in types:
-        raise err("INVALID_CONTENT_TYPE", f"{ctype} is not allowed for a {kind}.")
+        raise fail("INVALID_CONTENT_TYPE", f"{ctype} is not allowed for a {kind}.")
     if not isinstance(sha, str) or len(sha) != 64:
-        raise err("INVALID_MEDIA", "sha256 must be the file's 64-character hex digest.")
+        raise fail("INVALID_MEDIA", "sha256 must be the file's 64-character hex digest.")
     source = data.get("source", "camera")
     if source not in ("camera", "gallery"):
-        raise err("INVALID_MEDIA", "source must be camera or gallery.")
+        raise fail("INVALID_MEDIA", "source must be camera or gallery.")
     try:
         client_uuid = uuid.UUID(str(data.get("client_uuid")))
     except ValueError as e:
-        raise err("INVALID_MEDIA", "client_uuid must be a UUID.") from e
+        raise fail("INVALID_MEDIA", "client_uuid must be a UUID.") from e
     existing = MediaAsset.objects.filter(client_uuid=client_uuid).first()
     if existing is not None:
         if existing.booking_id != booking.id or existing.uploaded_by_id != user.pk:
-            raise err("UUID_CONFLICT", "That request ID belongs to another request.", 409)
+            raise fail("UUID_CONFLICT", "That request ID belongs to another request.", 409)
         if existing.status == "failed":   # failed checksum: start the upload again
             existing.status, existing.upload_id = "pending", storage.create_multipart(
                 existing.key, existing.content_type)
@@ -102,29 +102,29 @@ def initiate(request: Any, data: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         return _body(existing, existing.status == "pending"), False
     field = field_for(booking, data.get("field_key", ""))
     if field.type != kind:
-        raise err("WRONG_KIND", f"'{field.key}' takes {field.type}, not {kind}.")
+        raise fail("WRONG_KIND", f"'{field.key}' takes {field.type}, not {kind}.")
     if kind == "file" and ctype not in set().union(
             *(FILE_TYPES[a] for a in field.config.get("allowed", ["image", "pdf"]))):
-        raise err("INVALID_CONTENT_TYPE", f"'{field.label}' does not take {ctype}.")
+        raise fail("INVALID_CONTENT_TYPE", f"'{field.label}' does not take {ctype}.")
     replaces = data.get("replaces")
     if manager:      # Ops: the limit is what the submitted answers hold (checked again on attach)
         check_ops_upload(booking, field, user)
         _, _, ids = submitted_answer(booking, field)
         if replaces is not None and str(replaces) not in ids:
-            raise err("UNKNOWN_MEDIA", "The file to replace is not on this field.")
+            raise fail("UNKNOWN_MEDIA", "The file to replace is not on this field.")
         # places held by files that never arrived can be taken over, one upload each
         if replaces is None and len(ids) - len(unarrived(booking, ids)) >= max_count(field):
-            raise err("TOO_MANY", f"'{field.label}' takes at most {max_count(field)}. "
-                      "Replace one instead.", 409)
+            raise fail("TOO_MANY", f"'{field.label}' takes at most {max_count(field)}. "
+                       "Replace one instead.", 409)
         # uploads not (yet) in the answers: a few may be left by closed tabs, never a pile
         loose = MediaAsset.objects.filter(booking=booking, field_key=field.key, uploaded_by=user,
                                           replaced_at__isnull=True).exclude(pk__in=ids) \
             .exclude(status="failed").count()
         if loose >= LOOSE_LIMIT:
-            raise err("TOO_MANY", "Too many uploads on this field are not saved yet. Wait for "
-                      "them to finish, or reload the page.", 409)
+            raise fail("TOO_MANY", "Too many uploads on this field are not saved yet. Wait for "
+                       "them to finish, or reload the page.", 409)
     elif replaces is not None:
-        raise err("UNKNOWN_MEDIA", "Only Ops replace a file.")
+        raise fail("UNKNOWN_MEDIA", "Only Ops replace a file.")
     with transaction.atomic():
         Booking.objects.select_for_update().get(pk=booking.pk)   # two uploads must not both fit
         # an expert's limit counts their own uploads: two experts on one job (a conflict for Ops)
@@ -136,7 +136,7 @@ def initiate(request: Any, data: dict[str, Any]) -> tuple[dict[str, Any], bool]:
                 booking=booking, field_key=field.key, uploaded_by=user).exclude(
                 status="failed").exclude(status="pending", created_at__lt=stale).count() \
                 >= max_count(field):
-            raise err("TOO_MANY", f"'{field.key}' takes at most {max_count(field)}.", 409)
+            raise fail("TOO_MANY", f"'{field.key}' takes at most {max_count(field)}.", 409)
         asset = MediaAsset(client_uuid=client_uuid, booking=booking, uploaded_by=user,
                            field_key=field.key, kind=kind, content_type=ctype, size=size,
                            sha256=sha, source=source)
@@ -161,12 +161,12 @@ def complete(asset: MediaAsset, parts: list[dict[str, Any]]) -> MediaAsset:
     if asset.status in ("uploaded", "verifying", "verified"):
         return asset
     if not asset.upload_id:
-        raise err("NOT_UPLOADING", "Start the upload again.", 409)
+        raise fail("NOT_UPLOADING", "Start the upload again.", 409)
     have = {p["part_number"]: p["etag"] for p in storage.list_parts(asset.key, asset.upload_id)}
     wanted = range(1, math.ceil(asset.size / settings.MEDIA_PART_SIZE) + 1)
     missing = [n for n in wanted if n not in have]
     if missing or {p["part_number"]: p["etag"] for p in parts} != have:
-        raise err("INCOMPLETE_UPLOAD", "Some parts are missing or do not match.", missing=missing)
+        raise fail("INCOMPLETE_UPLOAD", "Some parts are missing or do not match.", missing=missing)
     try:
         storage.complete_multipart(asset.key, asset.upload_id, parts)
     except ClientError as e:
@@ -175,7 +175,7 @@ def complete(asset: MediaAsset, parts: list[dict[str, Any]]) -> MediaAsset:
         asset.refresh_from_db()          # a parallel request finished it first
         if asset.status in ("uploaded", "verifying", "verified"):
             return asset
-        raise err("NOT_UPLOADING", "Start the upload again.", 409) from e
+        raise fail("NOT_UPLOADING", "Start the upload again.", 409) from e
     asset.upload_id, asset.status = "", "uploaded"
     asset.save()
     # checked in the background (F-162): the phone and web read "verified" or "failed" from

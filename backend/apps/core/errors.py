@@ -14,3 +14,10 @@ class CodedError(APIException):
         payload = {"code": code, "detail": detail, **extra}
         super().__init__(payload)
         self.detail = payload
+
+
+def fail(code: str, message: str, status: int = 400, **extra: Any) -> CodedError:
+    """The one way to make a coded API error, e.g.
+    `raise fail("STALE_BOOKING", "Someone changed this booking.", 409, row_version=3)`.
+    The code must be listed in docs/error-codes.md (a test checks)."""
+    return CodedError(code, message, status, **extra)

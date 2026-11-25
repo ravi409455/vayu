@@ -8,8 +8,8 @@ from django.utils import timezone
 from apps.bookings import activity
 from apps.bookings.changes import stamp
 from apps.bookings.models import Booking
-from apps.bookings.services import err
 from apps.core import events
+from apps.core.errors import fail
 from apps.forms.models import Field
 
 from ..models import KINDS, MediaAsset
@@ -80,15 +80,16 @@ def finish_without_missing(actor: Any, booking: Booking) -> Booking:
     with transaction.atomic():
         b = Booking.objects.select_for_update().get(pk=booking.pk)
         if b.stage != "submitted":
-            raise err("INVALID_STAGE", "Only a booking waiting for its files can be finished.", 409)
+            raise fail("INVALID_STAGE", "Only a booking waiting for its files can be finished.",
+                       409)
         if b.conflict:
-            raise err("CONFLICT_OPEN", "Choose which inspection counts first.", 409)
+            raise fail("CONFLICT_OPEN", "Choose which inspection counts first.", 409)
         rows = missing_files(b)
         need = [r for r in rows if r["required"]]
         if need:
-            raise err("REQUIRED_FILES_MISSING", "Upload the required files first: "
-                      + ", ".join(r["label"] for r in need) + ".", 409,
-                      keys=[f"{r['part']}.{r['key']}" for r in need])
+            raise fail("REQUIRED_FILES_MISSING", "Upload the required files first: "
+                       + ", ".join(r["label"] for r in need) + ".", 409,
+                       keys=[f"{r['part']}.{r['key']}" for r in need])
         insp = b.counted_inspection()
         b.stage = "completed"
         stamp(b, actor, ["stage"], edited=False)
