@@ -7,6 +7,7 @@ import { useList, useRefresh } from "../../api/hooks";
 import type { Check, FormField, FormPage, FormSummary, FormVersion, MasterList } from "../../api/types";
 import { useAuth } from "../../auth";
 import { photoOfDefault } from "../../lib/fieldTypes";
+import { nsOf, useFieldChoices } from "../../lib/useChoices";
 import { applyDrag, isEmptyBody, reorderBody, type Ref } from "../../lib/tree";
 import { type FieldChoice } from "../../ui/ConditionBuilder";
 import { Confirm, Field, InfoTip, LoadError, Modal, NameDialog, PageHeader, Pill, Tabs, useToast } from "../../ui/kit";
@@ -262,27 +263,6 @@ export function PublishDialog({ state, onClose, onPublish }: { state: { issues: 
 }
 
 
-/** Field names a condition can point at: this form's fields plus the other forms' (booking, start,
- *  end). A custom form only offers start / end while it begins / ends with them. */
-export function useFieldChoices(f: FormSummary | undefined, v: FormVersion | undefined): FieldChoice[] {
-  const forms = useList<FormSummary>("forms", "forms");
-  const wanted = (x: FormSummary) => x.type !== "custom" && x.type !== f?.type && !!x.published_version
-    && !(f?.type === "custom" && ((x.type === "start" && v?.use_start === false) || (x.type === "end" && v?.use_end === false)));
-  const others = (forms.data ?? []).filter(wanted);
-  const tree = useQuery({
-    queryKey: ["choice-trees", others.map((o) => o.published_version!.id).join(",")],
-    enabled: others.length > 0,
-    queryFn: async () => Promise.all(others.map(async (o) => ({ ns: o.type as string, v: await api<FormVersion>(`form-versions/${o.published_version!.id}`) }))),
-  });
-  return useMemo(() => {
-    const out: FieldChoice[] = [];
-    const add = (ns: string, ver: FormVersion | undefined) => ver?.pages.forEach((p) => p.sections.forEach((s) => s.fields.forEach((fl: FormField) => out.push({ value: `${ns}.${fl.key}`, label: `${ns}: ${fl.label || fl.key}`, type: fl.type }))));
-    add(f ? nsOf(f.type) : "inspection", v);
-    (tree.data ?? []).filter((t) => others.some((o) => o.type === t.ns)).forEach((t) => add(t.ns, t.v));
-    return out;
-  }, [f?.type, v, tree.data, others.length]); // eslint-disable-line react-hooks/exhaustive-deps
-}
-
 /** Saves a field's validations: removed ones are deleted, new ones created, changed ones updated. */
 async function saveValidations(versionId: number, before: Check[], after: ValidationDraft[]) {
   for (const c of before) if (!after.some((a) => a.id === c.id)) await api(`checks/${c.id}`, { method: "DELETE" });
@@ -293,5 +273,3 @@ async function saveValidations(versionId: number, before: Check[], after: Valida
   }
 }
 
-/** The name a form's answers go by in rules: the custom form is "inspection". */
-export const nsOf = (type: string) => (type === "custom" ? "inspection" : type) as "booking" | "start" | "end" | "inspection";
