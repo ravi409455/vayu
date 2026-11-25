@@ -322,8 +322,7 @@ fun NeedsYouScreen(env: OpsEnv, loaded: List<Need>?, onBack: () -> Unit, onOpen:
 /** One thing that needs a person (web: lib/problems.ts); [group] is its heading in the bell. */
 data class Need(val key: String, val booking: String, val tone: Tone, val title: String, val meta: String, val group: String = "")
 
-/** Every problem queue as one list, in groups, most urgent group first. */
-/** Every problem list; null when none could be read (no signal, nothing saved): keep what shows. */
+/** Every problem queue as one list, in groups, most urgent group first; null when none could be read (no signal, nothing saved): keep what shows. */
 suspend fun loadNeeds(env: OpsEnv): List<Need>? {
     val t = env.today()
     val read = java.util.concurrent.atomic.AtomicInteger()

@@ -29,8 +29,7 @@ import `in`.carcid.vayu.ui.theme.Vayu
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
-/** A screen pushed on top of the Ops tabs. */
-/** Saved with the screen (Serializable), so Android closing the app in the background keeps Ops' place. */
+/** A screen pushed on top of the Ops tabs; saved with the screen (Serializable), so Android closing the app in the background keeps Ops' place. */
 sealed interface Route : java.io.Serializable {
     data object Needs : Route
     data class Booking(val id: String) : Route

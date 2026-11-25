@@ -20,10 +20,10 @@ import `in`.carcid.vayu.core.rules.JsonLogic
 import `in`.carcid.vayu.core.writeAtomically
 import java.time.OffsetDateTime
 
-/** One job as My jobs and Job details show it. */
 /** Booking dates and times are India time (the server's zone), whatever zone the phone is set to. */
 val IST: java.time.ZoneId = java.time.ZoneId.of("Asia/Kolkata")
 
+/** One lead as My leads and the lead page show it. */
 data class Job(
     val id: String, val bookingId: String, val stage: String, val customer: String, val phone: String,
     val address: String, val city: String, val car: String, val type: String,
