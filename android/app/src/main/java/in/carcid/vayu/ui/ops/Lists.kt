@@ -335,9 +335,11 @@ suspend fun loadNeeds(env: OpsEnv): List<Need>? {
     // all at once: on a weak signal the wait is the slowest one, not the sum
     val all = kotlinx.coroutines.coroutineScope {
         listOf("bookings?problem=conflict", "bookings?stage=draft&date_from=$t&date_to=$t&order=schedule", "problems/stuck-uploads",
-            "problems/reports", "bookings?problem=type_change", flagged("late"), flagged("quick")).map { async { it?.let { p -> rows(p) }.orEmpty() } }.awaitAll()
+            "problems/reports", "bookings?problem=type_change", flagged("late"), flagged("quick"),
+            // unverified time: this week only (the mark never clears), like the web
+            "bookings?problem=unverified_time&date_from=${t.minusDays(6)}&date_to=$t&order=schedule").map { async { it?.let { p -> rows(p) }.orEmpty() } }.awaitAll()
     }
-    val (c, o, st, pd, ty) = all; val lt = all[5]; val qk = all[6]
+    val (c, o, st, pd, ty) = all; val lt = all[5]; val qk = all[6]; val uv = all[7]
     fun timing(list: List<kotlinx.serialization.json.JsonObject>, f: String, group: String) = list.map(::Bk).mapNotNull { b ->
         b.flags.firstOrNull { it.flag == f }?.let { fl -> Need(f + b.id, b.id, Tone.WARN, "${b.code}: ${fl.words.replaceFirstChar { it.lowercase() }}",
             listOf(slot(b, t), b.customer).filter { it.isNotBlank() }.joinToString(" · "), group) } }
@@ -354,5 +356,8 @@ suspend fun loadNeeds(env: OpsEnv): List<Need>? {
             else Need("p" + it.s("booking"), it.s("booking"), Tone.BAD, "Report failed for ${it.s("booking_id")}",
                 it.s("error").ifBlank { "It is tried again by itself" }, "Reports") } +
         ty.map(::Bk).map { Need("t" + it.id, it.id, Tone.WARN, "Your type change wasn't applied", "${it.code} · ${it.typeRejected?.let(env.labels::typeRejected) ?: "The expert started another type"}", "Type changes") } +
-        timing(lt, "late", "Started late") + timing(qk, "quick", "Too quick")
+        timing(lt, "late", "Started late") + timing(qk, "quick", "Too quick") +
+        uv.map(::Bk).filter { it.unverifiedTime }.map { Need("u" + it.id, it.id, Tone.WARN, "${it.code}: time not verified",
+            listOf(slot(it, t), "the phone's clock was not checked that day, so its times may be off").filter { s -> s.isNotBlank() }.joinToString(" · "),
+            "Unverified times") }
 }

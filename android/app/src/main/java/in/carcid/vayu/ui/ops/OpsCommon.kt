@@ -65,6 +65,8 @@ class Bk(val o: JsonObject) {
     val answers = o.o("answers")
     val rowVersion: Int = (o["row_version"] as? JsonPrimitive)?.intOrNull ?: 0
     val conflict = o.s("conflict")
+    /** The phone's clock wasn't checked against the server that day: the times it stamped may be off (F-222). */
+    val unverifiedTime = o.s("unverified_time") == "true"
     fun a(k: String) = answers.s(k)
     val customer get() = a("customer_name")
     val phone get() = a("customer_phone")

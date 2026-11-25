@@ -169,6 +169,7 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
                 env.labels.type(b.type).takeIf { it.isNotBlank() }?.let { Chip(it) }
                 slot(b, t).takeIf { it.isNotBlank() }?.let { Chip(it) }
                 b.flags.filter { it.reviewedAt.isBlank() }.forEach { Chip(it.words, Tone.WARN) }
+                if (b.unverifiedTime) Chip("Time not verified", Tone.WARN)
             }
             val digits = b.phone.filter { it in '0'..'9' }
             val place = listOf(b.a("address"), env.labels.city(b.a("city"))).filter { it.isNotBlank() }.joinToString(", ")
