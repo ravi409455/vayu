@@ -209,7 +209,7 @@ class Outbox(
         val filled = filledOf(d) ?: return
         val start = outgoing(d, filled, "start") ?: return          // a check-in file not registered yet
         try {
-            api.start(id, d.startUuid, d.startedAt, d.inspectionType, start, appVersion, d.versions)
+            api.start(id, d.startUuid, d.startedAt, d.inspectionType, start, appVersion, d.versions, d.unverifiedTime)
             drafts.update(id) { it.copy(startSent = true, problem = null, problemCode = null) }
         } catch (e: ApiError) {
             if (transient(e)) throw e
@@ -229,7 +229,7 @@ class Outbox(
         val filled = filledOf(d) ?: return
         val parts = PARTS.associateWith { outgoing(d, filled, it) ?: return }
         try {
-            api.submit(id, d.submitUuid, d.versions["inspection"], JsonObject(parts))
+            api.submit(id, d.submitUuid, d.versions["inspection"], JsonObject(parts), d.unverifiedTime.takeIf { !d.startSent })
             drafts.update(id) { it.copy(submitSent = true, problem = null, problemCode = null, fieldErrors = emptyMap()) }
         } catch (e: ApiError) {
             if (transient(e)) throw e

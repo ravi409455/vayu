@@ -114,9 +114,12 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
      * the server keeps them if they were the latest published at [startedAt].
      */
     suspend fun start(bookingId: String, clientUuid: String, startedAt: String?, inspectionType: String,
-                      startAnswers: JsonObject, appVersion: Int, versions: Map<String, Int?> = emptyMap()): JsonObject =
+                      startAnswers: JsonObject, appVersion: Int, versions: Map<String, Int?> = emptyMap(),
+                      /** The phone's clock wasn't checked against the server that day (requirement 9). */
+                      unverifiedTime: Boolean = false): JsonObject =
         call("POST", "bookings/$bookingId/start", buildJsonObject {
             put("client_uuid", clientUuid); put("inspection_type", inspectionType)
+            put("unverified_time", unverifiedTime)
             if (startedAt != null) put("client_started_at", startedAt)
             versions["inspection"]?.let { put("form_version", it) }
             versions["start"]?.let { put("start_version", it) }
@@ -125,9 +128,12 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         }, headers = mapOf("X-App-Version" to appVersion.toString()))
 
     /** Submit the answers (idempotent by [submissionUuid]). */
-    suspend fun submit(bookingId: String, submissionUuid: String, formVersion: Int?, answers: JsonObject): JsonObject =
+    suspend fun submit(bookingId: String, submissionUuid: String, formVersion: Int?, answers: JsonObject,
+                       /** Only when the start never reached the server (it carries it otherwise). */
+                       unverifiedTime: Boolean? = null): JsonObject =
         call("POST", "bookings/$bookingId/submit", buildJsonObject {
             put("client_submission_uuid", submissionUuid)
+            if (unverifiedTime != null) put("unverified_time", unverifiedTime)
             if (formVersion != null) put("form_version", formVersion)
             put("answers", answers)
         })

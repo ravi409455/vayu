@@ -58,6 +58,11 @@ never enter the repo.
    (Settings → Auth Tokens, scope `project:releases`) and set `SENTRY_AUTH_TOKEN` and `SENTRY_ORG`:
    the build then uploads its source maps to Sentry and deletes them, so they are never served.
    Web events carry no request bodies, cookies, headers, query strings, typed text or console output.
+5. Android release builds: the `vayu-android` DSN goes in `SENTRY_DSN_ANDROID` (or
+   `-Pvayu.sentryDsn`). For readable crash stack traces, also set `SENTRY_AUTH_TOKEN` (Settings →
+   Auth Tokens, scope `project:releases`), `SENTRY_ORG` (the organization slug) and, if not
+   `vayu-android`, `SENTRY_PROJECT` on the machine that runs `assembleRelease`: the build then uploads
+   its R8 mapping. Without the token the build works as before and the mapping can't be read later.
 
 ## DNS (at deploy)
 At wherever carcid.in is registered, add `A` records pointing to the DigitalOcean droplets:

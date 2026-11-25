@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.roborazzi)
     alias(libs.plugins.kover)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.sentry.gradle)
 }
 
 roborazzi { outputDir.set(file("src/test/screenshots")) }
@@ -149,4 +150,23 @@ tasks.withType<Test>().configureEach {
     dependsOn(copyRobolectricJars)
     systemProperty("robolectric.offline", "true")
     systemProperty("robolectric.dependency.dir", robolectricDir.get().asFile.absolutePath)
+}
+
+// F-218: release crash reports readable. Every release build carries the ID of its R8 mapping; the
+// mapping itself goes to Sentry only when SENTRY_AUTH_TOKEN (and SENTRY_ORG / SENTRY_PROJECT) are set,
+// so builds without the token (CI, local) work as before. The SDK stays the one above (no auto-install,
+// no instrumentation of app code).
+sentry {
+    includeProguardMapping.set(true)
+    autoUploadProguardMapping.set(System.getenv("SENTRY_AUTH_TOKEN") != null)
+    org.set(System.getenv("SENTRY_ORG"))
+    projectName.set(System.getenv("SENTRY_PROJECT") ?: "vayu-android")
+    authToken.set(System.getenv("SENTRY_AUTH_TOKEN"))
+    includeSourceContext.set(false)
+    includeNativeSources.set(false)
+    uploadNativeSymbols.set(false)
+    autoInstallation { enabled.set(false) }
+    tracingInstrumentation { enabled.set(false) }
+    includeDependenciesReport.set(false)
+    telemetry.set(false)
 }
