@@ -80,4 +80,23 @@ class SharedVectorsTest {
         }
         assertEquals("form cases failing:\n" + failures.joinToString("\n"), 0, failures.size)
     }
+
+    /** F-020: the phone's copy of the server's answer checks gives the server's answer (answer_vectors.json). */
+    @Test fun answerVectors() {
+        fun plain(e: kotlinx.serialization.json.JsonElement): Any? = when (e) {
+            is kotlinx.serialization.json.JsonNull -> null
+            is kotlinx.serialization.json.JsonPrimitive -> if (e.isString) e.content else e.content.toBooleanStrictOrNull() ?: e.content.toLongOrNull() ?: e.content.toDouble()
+            is JsonObject -> e.mapValues { plain(it.value) }
+            is JsonArray -> e.map(::plain)
+        }
+        val failures = load("answer_vectors.json").map { it.jsonObject }.mapNotNull { c ->
+            @Suppress("UNCHECKED_CAST")
+            val f = `in`.carcid.vayu.core.forms.Field("f", "F", c["type"]!!.toString().trim('"'), "", false, null, null, true, "edit",
+                plain(c["config"]!!) as Map<String, Any?>)
+            val got = `in`.carcid.vayu.core.forms.answerCode(f, plain(c["value"]!!))
+            val want = plain(c["expected"]!!)
+            if (got != want) "${c["name"]}: phone $got, server $want" else null
+        }
+        assertTrue(failures.joinToString("\n"), failures.isEmpty())
+    }
 }
