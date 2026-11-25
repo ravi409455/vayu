@@ -165,7 +165,9 @@ data class OpsEnv(val me: Me, val data: OpsData, val labels: Labels, val today: 
              /** Bump to reload every screen (Refresh, after a change). */
              val tick: Int, val refresh: () -> Unit, val say: (String) -> Unit,
              /** Where screens' loads live (OpsModel); null only in tests that draw one screen alone. */
-             val loads: OpsLoads? = null) {
+             val loads: OpsLoads? = null,
+             /** Where changes run (OpsModel's scope); a screen drawn alone in a test gets its own. */
+             val actions: OpsActions = OpsActions(data, kotlinx.coroutines.MainScope(), refresh, say)) {
     fun can(p: String) = me.can(p)
 }
 

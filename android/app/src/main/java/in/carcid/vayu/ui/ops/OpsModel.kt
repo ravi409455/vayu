@@ -66,7 +66,10 @@ class OpsModel(private val data: OpsData, me: Me, private val today: () -> Local
     val loads = OpsLoads(data, viewModelScope)
 
     private val reloadNow = { reload() }
+    private val sayNow0 = { m: String -> say(m) }
+    /** Every change Ops make (F-018). */
+    val actions = OpsActions(data, viewModelScope, reloadNow, sayNow0)
     private val sayNow = { m: String -> say(m) }
     /** What the Ops screens are given; the same lambdas every time, so an unchanged env compares equal. */
-    fun env(me: Me = this.me, labels: Labels = _labels.value, tick: Int = _tick.value) = OpsEnv(me, data, labels, today, tick, reloadNow, sayNow, loads)
+    fun env(me: Me = this.me, labels: Labels = _labels.value, tick: Int = _tick.value) = OpsEnv(me, data, labels, today, tick, reloadNow, sayNow, loads, actions)
 }

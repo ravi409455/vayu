@@ -68,20 +68,18 @@ fun BookingFormScreen(env: OpsEnv, id: String?, onBack: () -> Unit, onSaved: (St
     val where = remember { mutableMapOf<String, Int>() }
     var refused by remember { mutableStateOf(0) }
     BackHandler(onBack = onBack)
-    fun save(assign: Boolean) = scope.launch {
+    fun save(assign: Boolean) {
         busy = true
-        try {
-            val body = if (id == null) buildJsonObject { put("answers", JsonLogic.toJson(values)) }
-                else buildJsonObject { put("row_version", existing!!.rowVersion); put("answers", JsonLogic.toJson(values.filterKeys { it in changed })) }
-            val r = env.data.act(if (id == null) "POST" else "PATCH", if (id == null) "bookings" else "bookings/$id", body) as JsonObject
-            env.say("Saved."); env.refresh(); onSaved(r.s("id"), assign)
-        } catch (e: ApiError) {
+        val body = if (id == null) buildJsonObject { put("answers", JsonLogic.toJson(values)) }
+            else buildJsonObject { put("row_version", existing!!.rowVersion); put("answers", JsonLogic.toJson(values.filterKeys { it in changed })) }
+        env.actions.send(if (id == null) "POST" else "PATCH", if (id == null) "bookings" else "bookings/$id", body, "Saved.", refused = { e ->
             errors = (e.extra["errors"] as? JsonObject)?.mapValues { (it.value as? JsonPrimitive)?.content ?: "Check this." } ?: emptyMap()
             if (e.code == "DUPLICATE_BOOKING_ID") errors = errors + ("booking_id" to e.message)
             refused++
             if (e.code.startsWith("STALE")) { env.refresh(); env.say("Someone else saved this booking meanwhile; their version is loaded.") }
             else if (errors.isEmpty()) env.say(e.message)
-        } finally { busy = false }
+            busy = false
+        }) { r -> busy = false; onSaved((r as? JsonObject)?.s("id").orEmpty(), assign) }
     }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         SubHeader(if (id == null) "New booking" else "Edit booking", existing?.code, onBack)

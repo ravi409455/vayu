@@ -127,10 +127,7 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
     }
     val insp = currentInspection(insps)
     val run: (String, String, JsonObject?, String) -> Unit = { method, path, body, done ->
-        scope.launch {
-            try { env.data.act(method, path, body); action = null; env.say(done); env.refresh() }
-            catch (e: ApiError) { env.say(e.message) }
-        }
+        env.actions.send(method, path, body, done) { action = null }
     }
     val raw = rememberForms(env, insp)
     val data = Loaded3(b, insp, raw.mapValues { it.value?.let(FormTree::parse) }, raw, !online, insps)
@@ -207,11 +204,10 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
                     "", null, false, tone = Tone.NEUTRAL) {}
                 // one tap only: a second tap while it saves does nothing (no double review in History)
                 else Attention(f.words, f.limit, (if (saving == f.flag) "Saving…" else "Mark reviewed").takeIf { env.can("bookings.review_timing") }, online, tone = Tone.WARN) {
-                    if (saving == null) { saving = f.flag; scope.launch {
-                        try { env.data.act("POST", "bookings/$id/timing-review", buildJsonObject { put("flag", f.flag) }); env.say("Marked reviewed."); env.refresh() }
-                        catch (e: ApiError) { env.say(e.message) }
-                        saving = null
-                    } }
+                    if (saving == null) { saving = f.flag
+                        env.actions.send("POST", "bookings/$id/timing-review", buildJsonObject { put("flag", f.flag) }, "Marked reviewed.",
+                            refused = { e -> env.say(e.message); saving = null }) { saving = null }
+                    }
                 }
             }
             b.typeRejected?.let { Attention("Your type change wasn't applied", env.labels.typeRejected(it), null, false) {} }
@@ -278,9 +274,7 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
         "signout" -> Confirm("Sign out ${env.labels.person(b.expert)}'s phone?", "Their phone signs out at once. Work not yet sent from it is refused by the server until they sign in again.",
             "Sign out the phone", { action = null }) { run("POST", "users/${b.expert}/sign-out-devices", JsonObject(emptyMap()), "Their phone is signed out.") }
         "delete" -> Confirm("Delete ${b.code}?", "The booking is removed. This can't be undone.", "Delete booking", { action = null }) {
-            scope.launch {
-                try { env.data.act("DELETE", "bookings/$id"); env.say("Deleted."); env.refresh(); onBack() } catch (e: ApiError) { env.say(e.message) }
-            }
+            env.actions.send("DELETE", "bookings/$id", done = "Deleted.") { onBack() }
         }
     }
     action?.takeIf { it.startsWith("finish:") }?.removePrefix("finish:")?.let { n ->
