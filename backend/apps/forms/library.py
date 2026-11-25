@@ -7,6 +7,7 @@ from django.db import transaction
 from django.db.models import Max
 
 from apps.accounts import audit
+from apps.core.concurrency import check_row_version
 from apps.core.errors import CodedError, fail
 
 from .access import validate_access
@@ -201,9 +202,8 @@ def update_item(actor: Any, item: LibraryItem, *, definition: Any = None,
     if definition is not None:
         if revision is None:
             raise fail("REVISION_REQUIRED", "Send the revision you started from.")
-        if revision != item.revision:
-            raise CodedError("STALE_LIBRARY_ITEM", "Someone saved this item after you opened it; "
-                             "reload to see their changes.", 409, revision=item.revision)
+        check_row_version(item, revision, "STALE_LIBRARY_ITEM", "Someone saved this item after you "
+                          "opened it; reload to see their changes.", field="revision")
         if item.kind == LibraryKind.FIELD:
             if isinstance(definition, dict) and definition.get("key", item.key) != item.key:
                 raise fail("KEY_IMMUTABLE", "A library field's key can never change.")

@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from apps.accounts import audit
+from apps.core.concurrency import check_row_version
 from apps.core.errors import CodedError
 
 from .models import (
@@ -129,9 +130,8 @@ def publish_version(actor: Any, version_id: int, row_version: int) -> FormVersio
             FormVersion.objects.select_for_update().select_related("form"), pk=version_id)
         if version.status == VersionStatus.PUBLISHED:
             raise CodedError("VERSION_PUBLISHED", "This version is already published.", 409)
-        if row_version != version.row_version:
-            raise CodedError("STALE_DRAFT", "The draft changed since you opened it; reload.",
-                             409, row_version=version.row_version)
+        check_row_version(version, row_version, "STALE_DRAFT",
+                          "The draft changed since you opened it; reload.")
         issues = validate_version(version) + system_field_issues(version)
         issues += dependent_issues(version)
         if issues:

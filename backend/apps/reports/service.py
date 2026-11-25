@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounts import audit
+from apps.core.concurrency import check_row_version
 from apps.core.errors import CodedError, fail
 from apps.forms.models import Field, Form, FormType, FormVersion
 
@@ -45,9 +46,7 @@ def save_definition(actor, v: PdfTemplateVersion, definition,
         shared.lock_refs(definition)          # a delete of an item it uses waits for this save
         if v.status == "published":
             raise fail("VERSION_PUBLISHED", "Published templates cannot be changed.", 409)
-        if row_version != v.row_version:
-            raise fail("STALE_DRAFT", "The draft changed since you opened it.", 409,
-                       row_version=v.row_version)
+        check_row_version(v, row_version, "STALE_DRAFT", "The draft changed since you opened it.")
         v.definition, v.row_version = definition, v.row_version + 1
         v.save()
     return v
@@ -152,9 +151,7 @@ def publish(actor, v: PdfTemplateVersion, row_version: int) -> PdfTemplateVersio
             "template__form").get(pk=v.pk)
         if v.status == "published":
             raise fail("VERSION_PUBLISHED", "Already published.", 409)
-        if row_version != v.row_version:
-            raise fail("STALE_DRAFT", "The draft changed since you opened it.", 409,
-                       row_version=v.row_version)
+        check_row_version(v, row_version, "STALE_DRAFT", "The draft changed since you opened it.")
         issues = definition_issues(v.template, v.definition)
         if issues:
             raise fail("PUBLISH_BLOCKED", "Fix these problems before publishing.", issues=issues)

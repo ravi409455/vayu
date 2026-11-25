@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from apps.core import events
 from apps.core import tasks as core_tasks
+from apps.core.concurrency import check_row_version
 from apps.core.errors import CodedError, fail
 from apps.forms.access import STAGES, levels_for, role_may_see_submissions
 from apps.forms.models import PARTS, Field, Form, FormType, FormVersion, VersionStatus
@@ -17,7 +18,7 @@ from apps.forms.serializers import VersionTreeSerializer
 from apps.scoring import service as scoring
 
 from . import activity, timing
-from .changes import check_fresh, stamp
+from .changes import stamp
 from .models import Booking, Inspection
 from .services import (
     _changed,
@@ -496,7 +497,8 @@ def _check_files(actor, b: Booking, pinned, old: dict, new: dict, changed) -> No
 def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) -> Inspection:
     check_shape(answers)
     insp = Inspection.objects.select_for_update().get(pk=insp.pk)
-    check_fresh(insp, row_version, "STALE_INSPECTION", "inspection")
+    check_row_version(insp, row_version, "STALE_INSPECTION",
+                      "Someone changed this inspection since you opened it.", who=True)
     b = insp.booking
     pinned = insp.pinned()
     locked = _locked_keys(actor.role, b.stage, pinned, answers, insp.answers)
@@ -555,7 +557,8 @@ def searchable_stages(role: str) -> dict[str, list[str]]:
 @transaction.atomic
 def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Inspection:
     insp = Inspection.objects.select_for_update().get(pk=insp.pk)
-    check_fresh(insp, row_version, "STALE_INSPECTION", "inspection")
+    check_row_version(insp, row_version, "STALE_INSPECTION",
+                      "Someone changed this inspection since you opened it.", who=True)
     try:
         scoring.validate_overrides(insp.form_version, body)
     except ValueError as e:

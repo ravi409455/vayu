@@ -9,6 +9,7 @@ from apps.accounts.models import Role, User
 from apps.accounts.permissions import scope_for
 from apps.core import events
 from apps.core import tasks as core_tasks
+from apps.core.concurrency import check_row_version
 from apps.core.errors import fail
 from apps.forms.access import levels_for
 from apps.forms.fieldtypes import AnswerError, clean_answer
@@ -16,7 +17,7 @@ from apps.forms.models import Field, Form, FormType, FormVersion, MasterListItem
 from apps.forms.rules import validate_answers
 
 from . import activity
-from .changes import check_fresh, stamp
+from .changes import stamp
 from .models import Booking, Inspection, RescheduleLog
 from .stages import can_transition
 
@@ -110,7 +111,8 @@ def create(actor: Any, answers: dict[str, Any]) -> Booking:
 @transaction.atomic
 def edit(actor: Any, b: Booking, new_answers: dict[str, Any], row_version: int) -> Booking:
     b = Booking.objects.select_for_update().get(pk=b.pk)
-    check_fresh(b, row_version, "STALE_BOOKING", "booking")
+    check_row_version(b, row_version, "STALE_BOOKING",
+                      "Someone changed this booking since you opened it.", who=True)
     forbidden = [k for k in new_answers if k in ACTION_ONLY]
     if forbidden:
         raise fail("USE_ACTION", f"{', '.join(forbidden)} change through their own actions.")
