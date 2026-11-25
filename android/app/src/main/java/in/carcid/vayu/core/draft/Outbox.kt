@@ -235,6 +235,12 @@ class Outbox(
             drafts.update(id) { it.copy(submitSent = true, problem = null, problemCode = null, fieldErrors = emptyMap()) }
         } catch (e: ApiError) {
             if (transient(e)) throw e
+            // the server already holds this expert's submitted inspection (a reinstalled app resends
+            // it with a new request id): the work is on the server, so this draft is sent
+            if (e.code == "ALREADY_SUBMITTED") {
+                drafts.update(id) { it.copy(submitSent = true, problem = null, problemCode = null, fieldErrors = emptyMap()) }
+                return
+            }
             val errors = (e.extra["errors"] as? JsonObject).orEmpty().mapValues { (it.value as? JsonPrimitive)?.contentOrNull ?: "" }
             if (e.code == "INVALID_ANSWERS" || e.code == "FIELD_ACCESS") drafts.update(id) {
                 // back to the expert: the answers open again with the refused ones marked
