@@ -134,28 +134,41 @@ private fun QuickChip(text: String, on: Boolean, description: String, modifier: 
     }
 }
 
+/** The Status quick filter: the chosen status in words; a tap opens [options] (a status, or null for all, and its line in the menu). */
+@Composable
+private fun StatusChip(stage: String?, options: List<Pair<String?, String>>, modifier: Modifier = Modifier, onPick: (String?) -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    val word = stage?.let { STAGE_WORDS[it] }
+    Box(modifier) {
+        QuickChip(word ?: "Status", stage != null, "Status: ${word ?: "any"}", Modifier.fillMaxWidth()) { menu = true }
+        DropdownMenu(menu, { menu = false }, containerColor = Vayu.colors.bg) {
+            options.forEach { (k, label) ->
+                DropdownMenuItem(text = { Text(label, color = Vayu.colors.ink, fontWeight = if (k == stage) FontWeight.SemiBold else FontWeight.Normal) },
+                    trailingIcon = { if (k == stage) Icon(Icons.Outlined.Check, "Chosen", tint = Vayu.colors.ink) },
+                    onClick = { menu = false; onPick(k) })
+            }
+        }
+    }
+}
+
+/** The Experts quick filter: how many are chosen, never their names (they would wrap the row). */
+@Composable
+private fun ExpertsChip(chosen: Set<String>, modifier: Modifier = Modifier, onClick: () -> Unit) =
+    QuickChip(if (chosen.isEmpty()) "Experts" else BookingFilters.expertsWord(chosen.size), chosen.isNotEmpty(),
+        "Experts: ${if (chosen.isEmpty()) "any" else "${chosen.size} chosen"}", modifier, onClick)
+
 /** Status ▾ · Experts ▾ · Filter, always on one line; each change applies at once. */
 @Composable
 fun QuickFilters(f: Map<String, String>, labels: Labels, onChange: (Map<String, String>) -> Unit, onAll: () -> Unit) {
-    var menu by remember { mutableStateOf(false) }
     var experts by remember { mutableStateOf(false) }
     val stage = f["stage"]
     val chosen = BookingFilters.experts(f)
     Row(Modifier.padding(top = 12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         // Status and Experts share the row's width (Status a little more: "In progress"), the Filter button keeps its own
-        Box(Modifier.weight(1.2f)) {
-            QuickChip(stage?.let { STAGE_WORDS[it] } ?: "Status", stage != null, "Status: ${stage?.let { STAGE_WORDS[it] } ?: "any"}", Modifier.fillMaxWidth()) { menu = true }
-            DropdownMenu(menu, { menu = false }, containerColor = Vayu.colors.bg) {
-                (listOf<String?>(null) + STAGE_WORDS.keys).forEach { k ->
-                    DropdownMenuItem(text = { Text(k?.let { STAGE_WORDS[it] } ?: "Any status", color = Vayu.colors.ink,
-                        fontWeight = if (k == stage) FontWeight.SemiBold else FontWeight.Normal) },
-                        trailingIcon = { if (k == stage) Icon(Icons.Outlined.Check, "Chosen", tint = Vayu.colors.ink) },
-                        onClick = { menu = false; onChange(BookingFilters.set(f, "stage", k)) })
-                }
-            }
+        StatusChip(stage, (listOf<String?>(null) + STAGE_WORDS.keys).map { k -> k to (k?.let { STAGE_WORDS[it] } ?: "Any status") }, Modifier.weight(1.2f)) {
+            onChange(BookingFilters.set(f, "stage", it))
         }
-        QuickChip(if (chosen.isEmpty()) "Experts" else BookingFilters.expertsWord(chosen.size), chosen.isNotEmpty(),
-            "Experts: ${if (chosen.isEmpty()) "any" else "${chosen.size} chosen"}", Modifier.weight(1f)) { experts = true }
+        ExpertsChip(chosen, Modifier.weight(1f)) { experts = true }
         val n = BookingFilters.count(f)
         // one width with or without the count, so nothing moves when a filter goes on
         Row(Modifier.heightIn(min = 44.dp).widthIn(min = 60.dp).clip(RoundedCornerShape(12.dp))
@@ -308,25 +321,14 @@ fun FilterSheet(f: Map<String, String>, env: OpsEnv, onDismiss: () -> Unit, onAp
     }
 }
 
-/** Today's status chips: "All 7", "Unassigned 1", …; a second tap goes back to All. */
-@OptIn(ExperimentalLayoutApi::class)
+/** Today's filters, one line as on Bookings: Status ▾ (the day's statuses with their counts) · Experts ▾. */
 @Composable
-fun StatusChips(counts: List<Pair<String?, Int>>, chosen: String?, onPick: (String?) -> Unit) {
-    FlowRow(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        counts.forEach { (k, n) ->
-            val on = k == chosen
-            val label = k?.let { STAGE_WORDS[it] } ?: "All"
-            Row(Modifier.heightIn(min = 40.dp).clip(RoundedCornerShape(20.dp))
-                .background(if (on) Vayu.colors.primary else Vayu.colors.bg)
-                .border(1.dp, if (on) Vayu.colors.primary else Vayu.colors.line2, RoundedCornerShape(20.dp))
-                .clickable(role = Role.Tab) { onPick(if (on) null else k) }.padding(horizontal = 12.dp)
-                .semantics { contentDescription = "$label, $n${if (on) ", chosen" else ""}" },
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(label, fontSize = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1, softWrap = false,
-                    color = if (on) Vayu.colors.onPrimary else Vayu.colors.ink)
-                Text("$n", fontSize = 14.sp, maxLines = 1, softWrap = false, color = if (on) Vayu.colors.onPrimary else Vayu.colors.muted)
-            }
-        }
+fun TodayFilters(counts: List<Pair<String?, Int>>, stage: String?, experts: Set<String>, labels: Labels, onStage: (String?) -> Unit, onExperts: (Set<String>) -> Unit) {
+    var picking by remember { mutableStateOf(false) }
+    Row(Modifier.padding(top = 14.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        StatusChip(stage, counts.map { (k, n) -> k to "${k?.let { STAGE_WORDS[it] } ?: "All"} · $n" }, Modifier.weight(1f), onStage)
+        ExpertsChip(experts, Modifier.weight(1f)) { picking = true }
     }
+    if (picking) ExpertsSheet(expertOptions(labels), experts, { picking = false }, onExperts)
 }
 

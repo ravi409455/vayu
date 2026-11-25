@@ -79,8 +79,9 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
     val day = rememberLoad(env, "bookings?date_from=$t&date_to=$t&order=schedule")
     val all = day.value?.data?.rows().orEmpty().map(::Bk).filter { it.stage != "cancelled" }
     var open by rememberSaveable { mutableStateOf(setOf<Int>()) }
-    var pick by rememberSaveable { mutableStateOf<String?>(null) }      // the status chip: null = All
-    val shown = if (pick == null) all else all.filter { it.stage == pick }
+    var pick by rememberSaveable { mutableStateOf<String?>(null) }      // the Status chip: null = All
+    var experts by rememberSaveable { mutableStateOf(setOf<String>()) } // the Experts chip: empty = everyone
+    val shown = all.filter { (pick == null || it.stage == pick) && (experts.isEmpty() || it.expert?.toString() in experts) }
     val online = day.value?.offline == false
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         VayuTopBar("Today", env.me.initials, bellCount = needs, onBell = onBell, onProfile = onProfile)
@@ -91,8 +92,9 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
                 day.error?.takeIf { day.value == null }?.let { Text(it, color = Vayu.colors.bad, modifier = Modifier.padding(top = 12.dp)) }
                 if (all.isNotEmpty()) {
                     DayCard(all)
-                    StatusChips(listOf<Pair<String?, Int>>(null to all.size) + STAGE_WORDS.keys.filter { it != "cancelled" }
-                        .map { k -> k to all.count { it.stage == k } }.filter { it.second > 0 || it.first == pick }, pick) { pick = it }
+                    TodayFilters(listOf<Pair<String?, Int>>(null to all.size) + STAGE_WORDS.keys.filter { it != "cancelled" }
+                        .map { k -> k to all.count { it.stage == k } }.filter { it.second > 0 || it.first == pick }, pick, experts, env.labels,
+                        onStage = { pick = it }, onExperts = { experts = it })
                 }
             }
             val unassigned = shown.filter { it.stage == "draft" }

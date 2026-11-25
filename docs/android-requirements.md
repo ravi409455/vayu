@@ -122,6 +122,8 @@ prototype of every screen below is approved.**
   wrap-up answers, read under Inspection Data); the report card has Open, Share and Regenerate in one row and no Check link (the
   check link is printed in the PDF); the page list on the answers screen lists every page of
   Check-in, Inspection and Wrap-up, numbered across all three, under the three tabs.
+- Ops Today, changed 2026-11-25 (owner): the status pills (two lines) are replaced by one line,
+  as on Bookings: Status ▾ (the day's statuses with their counts) · Experts ▾ (several).
 - Expert screens, same calm style, tuned for filling big forms fast: one-tap answer buttons the
   full width of the screen; choosing a defect opens its photo and note right under the question;
   after each answer the page scrolls to the next unanswered one; per-section counts ("3 of 6");

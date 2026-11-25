@@ -250,10 +250,13 @@ class OpsFlowTest {
         waitFor("Time not verified")
     }
 
-    @Test fun todayStatusChipsNarrowTheDay() {
+    /** Today's filters are one line, like Bookings: a Status chip that opens the day's statuses with their counts. */
+    @Test fun todayStatusChipNarrowsTheDay() {
         show()
         waitFor("of 5 completed")
-        compose.onNodeWithContentDescription("In progress, 1").performClick()
+        compose.onNodeWithContentDescription("Status: any").performClick()
+        compose.onNodeWithText("Unassigned · 1").assertExists()                       // each status says how many today
+        compose.onNodeWithText("In progress · 1").performClick()
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Rohit Sharma")).fetchSemanticsNodes().isEmpty() }   // unassigned hidden
         waitFor("Ravi Expert")                       // the list reloads after the chip: wait for the row
         compose.onNode(hasText("Ravi Expert", substring = true)).performClick()
@@ -261,7 +264,8 @@ class OpsFlowTest {
         assertTrue(compose.onAllNodes(hasText("Arjun Mehta")).fetchSemanticsNodes().isEmpty())   // assigned: not listed
         assertTrue(compose.onAllNodes(hasText("Meera Expert")).fetchSemanticsNodes().isEmpty())  // nothing in progress
         shot("ops_today_in_progress")
-        compose.onNodeWithContentDescription("In progress, 1, chosen").performClick()  // tap again: All
+        compose.onNodeWithContentDescription("Status: In progress").performClick()
+        compose.onNodeWithText("All · 5").performClick()
         waitFor("Rohit Sharma")
     }
 
@@ -272,6 +276,18 @@ class OpsFlowTest {
         compose.onNodeWithText("Bookings").performClick()
         waitFor("Use a user id.")
         assertEquals(0, compose.onAllNodes(hasText("Loading…")).fetchSemanticsNodes().size)
+    }
+
+    @Test fun todayExpertsChipKeepsOnlyTheChosenExperts() {
+        show()
+        waitFor("of 5 completed")
+        compose.onNodeWithContentDescription("Experts: any").performClick()
+        compose.onAllNodes(hasText("Ravi Expert")).onLast().performClick()             // the row in the sheet, over the list
+        compose.onNodeWithText("Done · 1 chosen").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Meera Expert")).fetchSemanticsNodes().isEmpty() }
+        assertTrue(compose.onAllNodes(hasText("Rohit Sharma")).fetchSemanticsNodes().isEmpty())   // nobody's yet: not this expert's
+        compose.onNodeWithContentDescription("Experts: 1 chosen").assertIsDisplayed()
+        compose.onNode(hasText("Ravi Expert", substring = true)).assertExists()
     }
 
     @Test fun quickFiltersAndTheFilterViewAreOneChoice() {
