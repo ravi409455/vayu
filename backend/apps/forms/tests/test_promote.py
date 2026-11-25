@@ -385,3 +385,14 @@ def test_section_keys_travel_and_an_older_bundle_gets_them_from_titles(admin, st
             s.pop("key")
     assert admin.post("/api/v1/promote/import", bundle, format="json").status_code == 201
     assert sorted(Section.objects.values_list("key", flat=True)) == sorted(keys)
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda b: {**b, "version": {**b["version"], "pages": [{"sections": "x"}]}},
+    lambda b: {**b, "version": {**b["version"], "pages": [{"sections": [{"fields": 5}]}]}},
+])
+def test_a_hand_edited_bundle_of_the_wrong_shape_is_a_400_not_a_500(admin, staging, mutate):
+    """F-059."""
+    bundle = export(admin, staging["version"])
+    r = admin.post("/api/v1/promote/import", mutate(bundle), format="json")
+    assert r.status_code == 400 and r.json()["code"] == "INVALID_BUNDLE", r.content

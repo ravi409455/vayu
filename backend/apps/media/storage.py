@@ -10,7 +10,10 @@ def client():
         "s3", endpoint_url=settings.S3_ENDPOINT_URL or None, region_name=settings.S3_REGION,
         aws_access_key_id=settings.S3_ACCESS_KEY_ID,
         aws_secret_access_key=settings.S3_SECRET_ACCESS_KEY,
-        config=Config(signature_version="s3v4", s3={"addressing_style": "path"}))
+        # short timeouts (F-209): a slow R2 never holds a web worker for minutes
+        config=Config(signature_version="s3v4", s3={"addressing_style": "path"},
+                      connect_timeout=5, read_timeout=30,
+                      retries={"max_attempts": 3, "mode": "standard"}))
 
 
 def create_multipart(key: str, content_type: str) -> str:

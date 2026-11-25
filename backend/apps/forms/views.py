@@ -108,6 +108,15 @@ class FormViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
         form = services.create_form(request.user, key=d["key"], name=d["name"])
         return Response(self.get_serializer(form).data, status=status.HTTP_201_CREATED)
 
+    def perform_update(self, serializer):
+        """Name, active, and who sees its submissions decide access: audited (F-062)."""
+        before = {k: getattr(serializer.instance, k) for k in serializer.validated_data}
+        form = serializer.save()
+        changed = sorted(k for k, v in before.items() if getattr(form, k) != v)
+        if changed:
+            audit.record(self.request.user, "form.update", "form", form.id,
+                         f"Changed {', '.join(changed)} of {form.key}")
+
     @action(detail=True, methods=["delete"], url_path="draft")
     def discard_draft(self, request, pk=None):
         services.discard_draft(request.user, self.get_object())

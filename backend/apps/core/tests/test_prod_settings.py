@@ -25,8 +25,29 @@ def test_prod_refuses_to_start_without_sentry_dsn():
 
 
 def test_prod_starts_with_dsn_and_enables_hsts():
-    r = load_prod(SENTRY_DSN="https://k@o0.ingest.sentry.io/1")
+    r = load_prod(SENTRY_DSN="https://k@o0.ingest.sentry.io/1", PUBLIC_BASE_URL="https://x.in")
     assert r.returncode == 0, r.stderr
+
+
+def test_prod_refuses_to_start_without_its_public_address():
+    """F-216: webhook links would point at localhost."""
+    r = load_prod(SENTRY_DSN="https://k@o0.ingest.sentry.io/1")
+    assert r.returncode != 0 and "PUBLIC_BASE_URL" in r.stderr
+
+
+def test_the_access_log_drops_query_strings_and_token_paths():
+    """F-074 / F-211."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("gconf", BACKEND / "gunicorn.conf.py")
+    assert spec and spec.loader
+    conf = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(conf)
+    assert "%(q)s" not in conf.access_log_format and "%(r)s" not in conf.access_log_format
+    assert conf.TOKEN.sub(r"/\1/<token>", "/api/v1/verify/AbC-123/photos") == \
+        "/api/v1/verify/<token>/photos"
+    assert conf.TOKEN.sub(r"/\1/<token>", "/api/v1/zips/x.y:z") == "/api/v1/zips/<token>"
+    assert conf.TOKEN.sub(r"/\1/<token>", "/api/v1/bookings") == "/api/v1/bookings"
 
 
 def test_coded_error_payload_keeps_json_types():
@@ -40,6 +61,7 @@ def test_coded_error_payload_keeps_json_types():
 def test_prod_requires_storage_settings():
     env = {k: v for k, v in BASE_ENV.items() if k != "S3_BUCKET"}
     r = subprocess.run([sys.executable, "-c", "import django; django.setup()"], cwd=BACKEND,
-                       env={**env, "SENTRY_DSN": "https://k@o0.ingest.sentry.io/1"},
+                       env={**env, "SENTRY_DSN": "https://k@o0.ingest.sentry.io/1",
+                            "PUBLIC_BASE_URL": "https://x.in"},
                        capture_output=True, text=True)
     assert r.returncode != 0 and "S3_BUCKET" in r.stderr

@@ -110,37 +110,57 @@ def flag_stuck_uploads() -> int:
 
 
 @shared_task
+def delete_files(keys: list[str]) -> int:
+    """Objects of rows already deleted (a booking, a file): removed from storage."""
+    for key in keys:
+        storage.delete(key)
+    return len(keys)
+
+
+# which retention setting each kind follows: documents and signatures go with the photos (R-18)
+RETENTION = {"photo": "photo_days", "file": "photo_days", "signature": "photo_days",
+             "video": "video_days"}
+
+
+@shared_task
 def purge_expired(batch: int = 500) -> int:
-    """Admin's retention setting: original photos and videos of completed jobs are deleted for
-    good once they are older than the days set (0 keeps them). Their previews, print copies and
-    any ZIP holding them go too. The asset row stays, marked purged, so reports and links can
-    say the files were removed. Runs every hour, a batch at a time."""
+    """Admin's retention setting: original files of completed jobs (and of cancelled jobs, counted
+    from the cancel date) are deleted for good once older than the days set (0 keeps them).
+    Their previews and copies and any ZIP holding them go too; so do ZIPs past their 7 days. The
+    asset row stays, marked purged, so reports and links can say the files were removed. Runs
+    every hour, a batch at a time."""
     import logging
     from datetime import timedelta
 
+    from django.conf import settings
+    from django.db.models import Q
+
     from apps.core import app_settings
-    from apps.reports.render import print_keys
 
     from .models import MediaZip
+    from .services import asset_keys
 
     days = app_settings.get("media")
     done, bookings = 0, set()
-    for kind in ("photo", "video"):
-        keep = days[f"{kind}_days"]
+    for kind, setting in RETENTION.items():
+        keep = days[setting]
         if not keep:
             continue
-        old = MediaAsset.objects.filter(kind=kind, booking__stage="completed",
-                                        created_at__lt=timezone.now() - timedelta(days=keep)) \
+        cutoff = timezone.now() - timedelta(days=keep)
+        old = MediaAsset.objects.filter(kind=kind).filter(
+            Q(booking__stage="completed", created_at__lt=cutoff)
+            | Q(booking__stage="cancelled", booking__cancelled_at__lt=cutoff)) \
             .exclude(status="purged").order_by("created_at")[:batch]
         for a in old:
-            for key in filter(None, (a.key, a.preview_key, a.jpeg_key, *print_keys(a.id))):
+            for key in asset_keys(a):
                 storage.delete(key)
             a.status = "purged"
             a.save(update_fields=["status"])
             bookings.add(a.booking_id)
             done += 1
-    for z in MediaZip.objects.filter(booking_id__in=bookings):      # ZIPs made before
-        if z.key:
+    stale = timezone.now() - timedelta(days=settings.ZIP_LINK_DAYS)
+    for z in MediaZip.objects.filter(Q(booking_id__in=bookings) | Q(created_at__lt=stale)):
+        if z.key:                       # made before the purge, or past its 7 days (F-081)
             storage.delete(z.key)
         z.delete()
     if done:

@@ -65,6 +65,11 @@ def test_mobile_login_leaves_a_web_session_alone(make_user, login):
 @pytest.mark.parametrize("role", [Role.OPS, Role.ADMIN])
 def test_ops_and_admin_can_sign_out_all_devices(api_as, make_user, login, role):
     client, actor = api_as(role)
+    if role == Role.OPS:                  # off by default for Ops (F-223): an Admin grants it
+        from apps.accounts.models import RolePermission
+
+        RolePermission.objects.create(role="ops", permission="users.sign_out_devices",
+                                      scope="all")
     target = make_user(username="asha")
     tokens = login(APIClient(), "asha").json()
     r = client.post(f"/api/v1/users/{target.id}/sign-out-devices")

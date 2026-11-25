@@ -21,6 +21,16 @@ def redis_client() -> redis.Redis:
     return redis.Redis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
 
 
+def workers_alive() -> bool:
+    """Does at least one Celery worker answer within a second?"""
+    from vayu.celery import app
+
+    try:
+        return bool(app.control.ping(timeout=1.0))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 class HealthView(APIView):
     authentication_classes: list = []
     permission_classes = [AllowAny]
@@ -36,6 +46,16 @@ class HealthView(APIView):
             redis_client().ping()
         except Exception:  # noqa: BLE001
             status["redis"] = "down"
+        # the file store and the background workers too (F-210): a dead one stops uploads,
+        # reports and webhooks while the API still answers
+        try:
+            from apps.media import storage
+
+            storage.client().head_bucket(Bucket=settings.S3_BUCKET)
+            status["storage"] = "ok"
+        except Exception:  # noqa: BLE001
+            status["storage"] = "down"
+        status["workers"] = "ok" if workers_alive() else "down"
         healthy = all(v == "ok" for v in status.values())
         # Dependency detail goes to the logs only; the public body stays bare.
         logger.info("health check", extra={"healthy": healthy, **status})

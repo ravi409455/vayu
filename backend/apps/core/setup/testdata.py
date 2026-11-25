@@ -45,17 +45,39 @@ class Guard(Exception):
 
 # ---------------------------------------------------------------- safety
 
+WIPEABLE = ("local", "test")
+
+
+def stored_kind() -> str | None:
+    """The kind of server this database belongs to, as setup_platform wrote it into it (F-213):
+    a settings flag can be wrong for the database it points at; the database can't."""
+    from apps.core.models import Setting
+
+    value = Setting.objects.filter(key="server").values_list("value", flat=True).first()
+    return (value or {}).get("kind")
+
+
+def remember_kind() -> None:
+    from apps.core.models import Setting
+
+    if stored_kind() is None:
+        Setting.objects.update_or_create(key="server", defaults={"value": {
+            "kind": settings.SERVER_KIND, "name": settings.SERVER_NAME}})
+
+
 def check_can_wipe(confirm: str) -> None:
-    """The three guards: a test or local server, its name typed back, no real bookings."""
-    if settings.SERVER_KIND not in ("local", "test"):
-        raise Guard(f"This server is '{settings.SERVER_KIND}'. Test data only goes on a server "
-                    "set up with VAYU_SERVER_KIND=test (or local). Nothing was changed.")
+    """The guards: a test or local server (by its settings and by what its database says), its
+    name typed back, and no bookings that test data did not make."""
+    kind = stored_kind()
+    if settings.SERVER_KIND not in WIPEABLE or (kind is not None and kind not in WIPEABLE):
+        raise Guard(f"This server is '{kind or settings.SERVER_KIND}'. Test data only goes on a "
+                    "server set up with VAYU_SERVER_KIND=test (or local). Nothing was changed.")
     if not settings.SERVER_NAME or confirm != settings.SERVER_NAME:
         raise Guard("Type this server's name to confirm the wipe: --confirm "
                     f"{settings.SERVER_NAME or '<VAYU_SERVER_NAME is not set>'}. "
                     "Nothing was changed.")
     real = Booking.objects.exclude(booking_id__startswith=PREFIX)
-    if settings.SERVER_KIND == "test" and real.exists():
+    if real.exists():                                     # on every kind of server (F-213)
         example = real.first()
         raise Guard(f"{real.count()} bookings here were not made by the test data "
                     f"(e.g. {example.booking_id if example else '?'}). They may be real: nothing "
@@ -76,6 +98,7 @@ def wipe() -> None:
         for key, scope in grants.items():
             RolePermission.objects.get_or_create(role=role, permission=key,
                                                  defaults={"scope": scope})
+    remember_kind()
 
 
 def make_users(password: str) -> dict[str, User]:

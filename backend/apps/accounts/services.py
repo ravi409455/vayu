@@ -1,4 +1,3 @@
-from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
@@ -22,35 +21,30 @@ def validate_new_password(password: str, username: str) -> None:
         raise ValidationError({"password": list(e.messages)}) from e
 
 
-def authenticate(username: str, password: str) -> User:
-    """Check credentials with lockout. Failure counters are saved before the error is raised
-    (raising inside the transaction would roll them back)."""
-    error: CodedError | None = None
-    now = timezone.now()
-    with transaction.atomic():
-        user = User.objects.select_for_update().filter(username__iexact=username).first()
-        if user is None:
-            error = CodedError("INVALID_CREDENTIALS", "Invalid username or password.", 401)
-        elif not user.is_active:
-            error = CodedError("ACCOUNT_DISABLED", "This account is disabled.", 403)
-        elif user.locked_until and user.locked_until > now:
-            error = CodedError("ACCOUNT_LOCKED", "Too many failed attempts. Try again later.", 403)
-        elif not user.check_password(password):
-            user.failed_attempts += 1
-            if user.failed_attempts >= settings.LOCKOUT_MAX_FAILURES:
-                user.failed_attempts = 0
-                user.locked_until = now + timedelta(minutes=settings.LOCKOUT_MINUTES)
-                error = CodedError("ACCOUNT_LOCKED",
-                                   "Too many failed attempts. Try again later.", 403)
-            else:
-                error = CodedError("INVALID_CREDENTIALS", "Invalid username or password.", 401)
-            user.save(update_fields=["failed_attempts", "locked_until"])
-        elif user.failed_attempts or user.locked_until:
-            user.failed_attempts = 0
-            user.locked_until = None
-            user.save(update_fields=["failed_attempts", "locked_until"])
-    if error:
-        raise error
+def _failures_key(username: str, ip: str, user) -> str:
+    # the password's hash is part of it: a password reset by the Admin ends the lock
+    stamp = user.password[-12:] if user is not None else ""
+    return f"login-failures:{username.strip().lower()}:{ip}:{stamp}"
+
+
+def authenticate(username: str, password: str, ip: str = "") -> User:
+    """Check credentials (F-055). Every failure gets the same answer, so it never says whether a
+    username exists, is disabled or is locked. Five wrong tries lock that username from that
+    address for LOCKOUT_MINUTES; the same username from another address (many phones share one
+    mobile-network IP, so never the whole address) still works."""
+    from django.core.cache import cache
+
+    user = User.objects.filter(username__iexact=username).first()
+    key = _failures_key(username, ip, user)
+    failures = cache.get(key, 0)
+    fail = CodedError("INVALID_CREDENTIALS", "Invalid username or password.", 401)
+    if failures >= settings.LOCKOUT_MAX_FAILURES:
+        raise fail
+    if user is None or not user.check_password(password) or not user.is_active:
+        # ponytail: get + set is not atomic; two tries in the same instant may count once
+        cache.set(key, failures + 1, settings.LOCKOUT_MINUTES * 60)
+        raise fail
+    cache.delete(key)
     # last sign-in, for the Users list (web and phone alike)
     type(user).objects.filter(pk=user.pk).update(last_login=timezone.now())  # type: ignore[union-attr]
     return user  # type: ignore[return-value]

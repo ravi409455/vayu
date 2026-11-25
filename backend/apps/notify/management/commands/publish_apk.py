@@ -31,4 +31,8 @@ class Command(BaseCommand):
         AppRelease.objects.create(version_code=version_code, version_name=version_name,
                                   file_key=key, size=os.path.getsize(apk),
                                   sha256=digest.hexdigest(), notes=notes.replace("\\n", "\n"))
+        from apps.accounts import audit
+
+        audit.record(None, "app.publish", "app_release", version_code,         # F-232
+                     f"Published Vayu {version_name} ({version_code})")
         self.stdout.write(f"Published Vayu {version_name} ({version_code}).")

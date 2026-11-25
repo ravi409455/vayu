@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from apps.accounts import audit
 from apps.accounts.permissions import perm, scope_for
 from apps.bookings.models import Booking
 from apps.bookings.services import err
@@ -93,6 +94,7 @@ class Preview(APIView):
 
     def post(self, request, pk):
         tv = get_object_or_404(PdfTemplateVersion.objects.select_related("template__form"), pk=pk)
+        # template editing is Admin-only now (R-34); kept in case that ever changes
         if scope_for(request.user, "reports.view", request) is None:
             raise err("FORBIDDEN", "Previews use real data, so they need reports.view.", 403)
         booking = _report_booking(request, request.data.get("booking"))
@@ -336,14 +338,18 @@ class Picture(APIView):
         name = str(request.data.get("name", "")).strip()
         if not name:
             raise ValidationError({"name": "Give the picture a name."})
-        a.name = name[:100]
+        old, a.name = a.name, name[:100]
         a.save(update_fields=["name"])
+        audit.record(request.user, "pdf_picture.rename", "form_asset", a.id,
+                     f"Renamed picture {old} to {a.name}")               # F-232
         return Response(_picture(a))
 
     def delete(self, request, pk):
         a = self._get(pk)
         if _in_use(str(a.id)):
             raise err("PICTURE_IN_USE", "A template or shared theme still uses this picture.", 409)
+        audit.record(request.user, "pdf_picture.delete", "form_asset", a.id,
+                     f"Removed picture {a.name}")
         a.name = ""                       # out of the library; the stored file stays harmless
         a.save(update_fields=["name"])
         return Response(status=status.HTTP_204_NO_CONTENT)

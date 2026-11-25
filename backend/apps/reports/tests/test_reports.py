@@ -825,11 +825,9 @@ def test_publishing_a_template_works_without_a_booking_form_and_detects_stale_dr
     assert stale.status_code == 409 and stale.json()["code"] == "STALE_DRAFT"
 
 
-def test_a_storage_failure_is_recorded_as_such_and_previews_need_reports_view(renv, settings,
-                                                                               monkeypatch):
+def test_a_storage_failure_is_recorded_as_such(renv, settings, monkeypatch):
     from botocore.exceptions import ClientError
 
-    from apps.accounts.catalog import DEFAULTS
     from apps.media import storage as st
 
     set_template(renv)
@@ -844,13 +842,15 @@ def test_a_storage_failure_is_recorded_as_such_and_previews_need_reports_view(re
     b = complete_job(renv, settings=settings)
     r = Report.objects.get(booking_id=b["id"])
     assert r.error == "storage_failed" and "secret" not in r.error
-    monkeypatch.undo()
     draft = renv.admin.post(f"/api/v1/pdf-templates/{renv.template_id}/drafts").json()
-    perms = {**DEFAULTS["ops"], "pdf_templates.edit": "all", "pdf_templates.view": "all"}
-    perms.pop("reports.view")
-    renv.admin.put("/api/v1/roles/ops/permissions", {"permissions": perms}, format="json")
     r = renv.ops.post(f"/api/v1/pdf-template-versions/{draft['id']}/preview",
                       {"booking": b["id"]}, format="json")
+    assert r.status_code == 403                 # template editing is Admin-only (R-34)
+    from unittest import mock
+
+    with mock.patch("apps.reports.views.scope_for", return_value=None):   # no reports.view
+        r = renv.admin.post(f"/api/v1/pdf-template-versions/{draft['id']}/preview",
+                            {"booking": b["id"]}, format="json")
     assert r.status_code == 403 and r.json()["code"] == "FORBIDDEN"
 
 

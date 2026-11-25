@@ -33,6 +33,19 @@ from .serializers import (
 )
 
 
+def _same_origin(request) -> None:
+    """Login CSRF (F-058): a browser posting from another site may not sign it in. Browsers send
+    Origin on every cross-site POST; an app or a script sends none."""
+    from urllib.parse import urlparse
+
+    from django.conf import settings
+
+    origin = request.headers.get("Origin")
+    if origin and urlparse(origin).netloc != request.get_host() and origin not in getattr(
+            settings, "CSRF_TRUSTED_ORIGINS", []):
+        raise CodedError("BAD_ORIGIN", "Sign in from the Vayu page itself.", 403)
+
+
 class LoginView(APIView):
     authentication_classes: list = []
     permission_classes = [AllowAny]
@@ -42,7 +55,10 @@ class LoginView(APIView):
     def post(self, request):
         s = LoginSerializer(data=request.data)
         s.is_valid(raise_exception=True)
-        user = services.authenticate(s.validated_data["username"], s.validated_data["password"])
+        if s.validated_data["client"] == "web":
+            _same_origin(request)
+        user = services.authenticate(s.validated_data["username"], s.validated_data["password"],
+                                     self.get_throttles()[0].get_ident(request))
         data = {"user": UserSerializer(user).data,
                 "must_change_password": user.must_change_password}
         if s.validated_data["client"] == "web":
@@ -246,7 +262,10 @@ class UserViewSet(viewsets.ModelViewSet):
             admins = list(User.objects.select_for_update().filter(role=Role.ADMIN, is_active=True))
             if not [a for a in admins if a.pk != user.pk]:
                 raise CodedError("LAST_ADMIN", "There must always be one active admin.", 400)
+        was_role = user.role
         user = serializer.save()
+        if user.role != was_role:            # the app's tokens carry the old role (F-056)
+            services.revoke_devices(user)
         if was_active and not user.is_active:
             services.revoke_devices(user)
             audit.record(self.request.user, "user.deactivate", "user", user.id,

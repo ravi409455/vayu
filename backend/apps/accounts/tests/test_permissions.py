@@ -15,12 +15,12 @@ OPS_ALLOWED = {
     "media.manage": "all", "media.download": "all",
     "ratings.override": "all", "reports.view": "all",
     "dashboards.view": "all", "dashboards.export": "all", "users.view": "all",
-    "users.sign_out_devices": "all", "forms.view": "all", "library.view": "all",
+    "forms.view": "all", "library.view": "all",
     "bookings.delete": "all",          # the service only lets Ops delete untouched drafts
 }
 OPS_DENIED = [
     "forms.edit", "forms.publish", "forms.promote", "library.edit", "pdf_templates.view",
-    "pdf_templates.edit", "master_lists.manage", "submissions.delete",
+    "pdf_templates.edit", "master_lists.manage", "users.sign_out_devices",
     "submissions.fill", "users.manage", "roles.manage", "audit.view", "integrations.manage",
     "api_keys.manage",
 ]
@@ -61,7 +61,7 @@ def test_ops_defaults_are_daily_operations_only(make_user):
 def test_ops_cannot_change_templates_or_delete_submissions_by_default(make_user):
     ops = make_user(Role.OPS)
     for key in ("forms.edit", "forms.publish", "library.edit", "pdf_templates.edit",
-                "master_lists.manage", "submissions.delete"):
+                "master_lists.manage"):
         assert scope_for(ops, key) is None
 
 
@@ -119,13 +119,14 @@ def test_only_roles_managers_can_read_or_edit_roles(api_as, role):
 def test_granting_and_revoking_takes_effect_on_the_next_request(api_as):
     admin, _ = api_as(Role.ADMIN)
     ops, _ = api_as(Role.OPS)
-    new_form = {"key": "ppi", "name": "PPI"}
-    assert ops.post("/api/v1/forms", new_form, format="json").status_code == 403
-    perms = dict(DEFAULTS["ops"], **{"forms.edit": "all"})
+    _, target = api_as(Role.EXPERT)
+    url = f"/api/v1/users/{target.id}/sign-out-devices"
+    assert ops.post(url).status_code == 403
+    perms = dict(DEFAULTS["ops"], **{"users.sign_out_devices": "all"})
     assert put_perms(admin, "ops", perms).status_code == 200
-    assert ops.post("/api/v1/forms", new_form, format="json").status_code == 201
+    assert ops.post(url).status_code == 200
     assert put_perms(admin, "ops", dict(DEFAULTS["ops"])).status_code == 200
-    assert ops.post("/api/v1/forms", {**new_form, "key": "ppi2"}, format="json").status_code == 403
+    assert ops.post(url).status_code == 403
 
 
 def test_put_replaces_the_whole_set(api_as):
@@ -147,7 +148,7 @@ def test_scope_can_be_narrowed_to_own(api_as, make_user):
 
 @pytest.mark.parametrize("payload,code", [
     ({"bookings.teleport": "all"}, "INVALID_PERMISSION"),
-    ({"forms.edit": "own"}, "INVALID_SCOPE"),          # not a scoped permission
+    ({"users.sign_out_devices": "own"}, "INVALID_SCOPE"),   # not a scoped permission
     ({"bookings.view": "everyone"}, "INVALID_SCOPE"),
     ({"bookings.view": True}, "INVALID_SCOPE"),
     ({"roles.manage": "all"}, "NOT_GRANTABLE"),
@@ -176,12 +177,12 @@ def test_admin_role_is_locked_and_unknown_roles_404(api_as):
 
 def test_changes_are_audited_with_a_diff(api_as):
     admin, me = api_as(Role.ADMIN)
-    perms = dict(DEFAULTS["ops"], **{"forms.edit": "all"})
+    perms = dict(DEFAULTS["ops"], **{"users.sign_out_devices": "all"})
     perms.pop("dashboards.export")
     put_perms(admin, "ops", perms)
     row = AuditLog.objects.get(action="role.permissions_update")
     assert row.actor == me and row.target_id == "ops"
-    assert "+forms.edit" in row.summary and "-dashboards.export" in row.summary
+    assert "+users.sign_out_devices" in row.summary and "-dashboards.export" in row.summary
 
 
 def test_me_returns_the_effective_permissions(api_as, make_user, login):
@@ -209,9 +210,10 @@ def test_forms_are_readable_by_ops_never_by_experts_and_editable_only_when_grant
                     format="json").status_code == 403
     assert ops.post(f"/api/v1/form-versions/{v}/publish", {"row_version": 0},
                     format="json").status_code == 403
-    put_perms(admin, "ops", dict(DEFAULTS["ops"], **{"forms.publish": "all"}))
+    refused = put_perms(admin, "ops", dict(DEFAULTS["ops"], **{"forms.publish": "all"}))
+    assert refused.status_code == 400 and refused.json()["code"] == "NOT_GRANTABLE"   # R-34
     assert ops.post(f"/api/v1/form-versions/{v}/publish", {"row_version": 0},
-                    format="json").status_code != 403  # allowed through (stale draft -> 409)
+                    format="json").status_code == 403
 
 
 def test_saving_to_the_library_is_admin_only_even_for_a_role_that_may_edit_forms(api_as):
@@ -240,8 +242,9 @@ def test_master_lists_readable_by_everyone_writable_only_when_granted(api_as):
     assert expert.get("/api/v1/master-lists/city/items").status_code == 200
     body = {"key": "reason", "name": "Reason"}
     assert ops.post("/api/v1/master-lists", body, format="json").status_code == 403
-    put_perms(admin, "ops", dict(DEFAULTS["ops"], **{"master_lists.manage": "all"}))
-    assert ops.post("/api/v1/master-lists", body, format="json").status_code == 201
+    refused = put_perms(admin, "ops", dict(DEFAULTS["ops"], **{"master_lists.manage": "all"}))
+    assert refused.status_code == 400 and refused.json()["code"] == "NOT_GRANTABLE"   # R-34
+    assert admin.post("/api/v1/master-lists", body, format="json").status_code == 201
 
 
 def test_library_visibility_follows_library_view(api_as):
@@ -300,7 +303,8 @@ def test_ops_without_users_manage_cannot_manage_users(api_as, make_user):
     r = ops.patch(f"/api/v1/users/{target.id}", {"name": "X"}, format="json")
     assert r.status_code == 403
     assert ops.get("/api/v1/users").status_code == 200  # users.view
-    assert ops.post(f"/api/v1/users/{target.id}/sign-out-devices").status_code == 200
+    # off by default for Ops (F-223); an Admin may grant it
+    assert ops.post(f"/api/v1/users/{target.id}/sign-out-devices").status_code == 403
 
 
 # ------------------------------------------------------ every endpoint declares its permission

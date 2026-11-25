@@ -96,10 +96,17 @@ def test_the_setup_command_runs_twice_and_adds_staff_from_the_file(tmp_path, s3)
     staff = tmp_path / "staff.csv"
     staff.write_text("username,name,role,phone,password\nboss,Boss,admin,,\n"
                      "e1,Expert One,expert,9800000001,Secret-pass-1\n")
-    call_command("setup_platform", users=str(staff))
+    from io import StringIO
+
+    first = StringIO()
+    call_command("setup_platform", users=str(staff), stdout=first)
     assert User.objects.get(username="e1").check_password("Secret-pass-1")
     assert User.objects.get(username="boss").must_change_password
-    from io import StringIO
+    # F-233: the made-up password is in a file only the operator reads, never in the output
+    made = (tmp_path / "staff.csv.passwords").read_text().split()
+    assert made[0] == "boss" and User.objects.get(username="boss").check_password(made[1])
+    assert made[1] not in first.getvalue()
+    assert (tmp_path / "staff.csv.passwords").stat().st_mode & 0o777 == 0o600
 
     out = StringIO()
     call_command("setup_platform", users=str(staff), stdout=out)

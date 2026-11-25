@@ -17,7 +17,8 @@ def _device_id(request):
 class PushTokenView(APIView):
     """The phone's Firebase token, saved on this signed-in device only (never anyone else's row).
     If an earlier person's device on the same phone still holds it, pushes go only to the device
-    that sent it last (see tasks.push), so their notices never reach whoever uses the phone now."""
+    that sent it last (tasks.push skips a device whose token a newer device holds), so their
+    notices never reach whoever uses the phone now (F-061, F-141)."""
 
     allow_password_change_pending = True
 

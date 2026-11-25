@@ -165,3 +165,14 @@ def test_the_count_endpoint_counts_with_the_lists_filters_and_scope(env):
     assert env.ops.get("/api/v1/bookings/count", {"search": "C2"}).json() == {"count": 1}
     assert env.expert.get("/api/v1/bookings/count").json() == {"count": 1}       # own only
     assert env.ops.get("/api/v1/bookings/count", {"date_from": "x"}).status_code == 400
+
+
+def test_creating_with_an_expert_chosen_needs_the_assign_permission(env):
+    """F-057."""
+    from apps.accounts.catalog import DEFAULTS
+
+    perms = {k: v for k, v in DEFAULTS["ops"].items() if k != "bookings.assign"}
+    env.admin.put("/api/v1/roles/ops/permissions", {"permissions": perms}, format="json")
+    r = create(env.ops, booking_id="NA1", assigned_expert=env.expert_user.id)
+    assert r.status_code == 403
+    assert create(env.ops, booking_id="NA2").status_code == 201
