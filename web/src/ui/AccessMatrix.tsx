@@ -1,9 +1,7 @@
+import { STAGE_LABEL } from "../api/labels";
 import type { Access } from "../api/types";
 import { getCell, LEVELS, ROLES, setCell, setRole, STAGES, type Level } from "../lib/access";
 
-const STAGE_LABEL: Record<string, string> = {
-  draft: "Unassigned", assigned: "Assigned", in_progress: "In progress", submitted: "Uploading", completed: "Completed", cancelled: "Cancelled",
-};
 
 /** Who sees or edits this at each stage. "—" means not decided here: the section, page or default applies. */
 export function AccessMatrix({ value, onChange }: { value: Access; onChange: (a: Access) => void }) {

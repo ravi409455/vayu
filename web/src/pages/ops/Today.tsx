@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type Page } from "../../api/client";
 import { fetchAll, useList, useRefresh } from "../../api/hooks";
-import { useLabels } from "../../api/labels";
+import { STAGE_LABEL, useLabels } from "../../api/labels";
 import type { Booking, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { fmtTime, ist, today } from "../../lib/format";
@@ -24,7 +24,6 @@ const CHOSEN = "vayu:today-experts";  // the experts picked in the Experts menu,
 const LANE_H = 76;                 // height of one row of boxes; a lane with overlapping jobs gets more rows
 export { dayWindow };
 
-const STAGE_NAME: Record<string, string> = { draft: "Unassigned", assigned: "Assigned", in_progress: "In progress", submitted: "Uploading", completed: "Completed" };
 const KIND: Record<string, string> = { draft: "open", assigned: "next", in_progress: "prog", submitted: "prog", completed: "done", cancelled: "off" };
 
 /** Ops' home: what today looks like and who is where. What needs a person is in the bell and the "Needs you" menu. */
@@ -236,7 +235,7 @@ export function Today() {
       </section>
       {tip && (
         <div className="job-tip" role="tooltip" style={{ left: tip.x, top: tip.y, transform: tip.up ? "translateY(-100%)" : undefined }}>
-          <div className="job-tip-head"><b>{tip.b.booking_id}</b><span className={`job-tip-pill ${KIND[tip.b.stage]}`}>{STAGE_NAME[tip.b.stage] ?? tip.b.stage}</span></div>
+          <div className="job-tip-head"><b>{tip.b.booking_id}</b><span className={`job-tip-pill ${KIND[tip.b.stage]}`}>{STAGE_LABEL[tip.b.stage] ?? tip.b.stage}</span></div>
           <div className="job-tip-name">{String(tip.b.answers.customer_name ?? "")}</div>
           <div className="job-tip-sub">{car(tip.b.answers.car_make_model)} · {city(tip.b.answers.city)}</div>
           <dl>

@@ -1,15 +1,17 @@
 import { Eye, EyeOff, Pencil } from "lucide-react";
+import { STAGE_LABEL } from "../api/labels";
 import type { Access } from "../api/types";
 import { defaultLevel, effectiveLevel, getCell, PRESETS, ROLES, setCell, STAGES, type Level, type LevelSource } from "../lib/access";
 import { InfoTip } from "./InfoTip";
 
-const STAGE: Record<string, { label: string; tip: string }> = {
-  draft: { label: "Unassigned", tip: "The booking exists but no expert has it yet." },
-  assigned: { label: "Assigned", tip: "An expert has the booking but has not started." },
-  in_progress: { label: "In progress", tip: "The expert is doing the inspection." },
-  submitted: { label: "Uploading", tip: "The expert submitted; photos are still uploading." },
-  completed: { label: "Completed", tip: "Everything arrived and the report was made." },
-  cancelled: { label: "Cancelled", tip: "The booking was cancelled." },
+/** What each stage means, beside its agreed word (STAGE_LABEL). */
+const STAGE_TIP: Record<string, string> = {
+  draft: "The booking exists but no expert has it yet.",
+  assigned: "An expert has the booking but has not started.",
+  in_progress: "The expert is doing the inspection.",
+  submitted: "The expert submitted; photos are still uploading.",
+  completed: "Everything arrived and the report was made.",
+  cancelled: "The booking was cancelled.",
 };
 const ICON = { hidden: EyeOff, view: Eye, edit: Pencil };
 const WORD: Record<Level, string> = { hidden: "Hidden", view: "Can see", edit: "Can edit" };
@@ -40,14 +42,14 @@ export function AccessEditor({ value, onChange, kind, ftype = "short_text", pare
         <tbody>
           {STAGES.map((stage) => (
             <tr key={stage}>
-              <th scope="row">{STAGE[stage]!.label}<InfoTip>{STAGE[stage]!.tip}</InfoTip></th>
+              <th scope="row">{STAGE_LABEL[stage]}<InfoTip>{STAGE_TIP[stage]}</InfoTip></th>
               {ROLES.map((role) => {
                 const own = getCell(value, role, stage);
                 const eff = effectiveLevel(role, stage, kind, ftype, { field: value, section: parents.section, page: parents.page });
                 const Icon = ICON[eff.level];
                 return (
                   <td key={role}>
-                    <button type="button" className={`cell ${eff.level}${own ? " own" : ""}`} disabled={disabled} aria-label={`${role} ${STAGE[stage]!.label}: ${WORD[eff.level]}`}
+                    <button type="button" className={`cell ${eff.level}${own ? " own" : ""}`} disabled={disabled} aria-label={`${role} ${STAGE_LABEL[stage]}: ${WORD[eff.level]}`}
                       title={`${WORD[eff.level]} (${FROM[eff.source]}). Click to change.`}
                       onClick={() => onChange(setCell(value, role, stage, NEXT[own] ?? ""))}>
                       <Icon size={14} aria-hidden /><span>{WORD[eff.level]}</span>

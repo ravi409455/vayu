@@ -46,9 +46,9 @@ export function viewQuery(view: View, now = new Date()): Record<string, string> 
 }
 
 const VIEWS: { id: View; label: string; counted?: boolean; perm?: string }[] = [
-  { id: "today", label: "Today", counted: true }, { id: "unassigned", label: "Unassigned", counted: true },
-  { id: "in_progress", label: "In progress", counted: true }, { id: "uploading", label: "Uploading", counted: true },
-  { id: "upcoming", label: "Upcoming" }, { id: "completed", label: "Completed" },
+  { id: "today", label: "Today", counted: true }, { id: "unassigned", label: STAGE_LABEL.draft!, counted: true },
+  { id: "in_progress", label: STAGE_LABEL.in_progress!, counted: true }, { id: "uploading", label: STAGE_LABEL.submitted!, counted: true },
+  { id: "upcoming", label: "Upcoming" }, { id: "completed", label: STAGE_LABEL.completed! },
   { id: "late", label: "Started late", counted: true, perm: "bookings.review_timing" },
   { id: "quick", label: "Too quick", counted: true, perm: "bookings.review_timing" }, { id: "all", label: "All" },
 ];
