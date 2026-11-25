@@ -84,7 +84,7 @@ REST_FRAMEWORK = {
         "apps.accounts.authentication.DeviceJWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
-    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_SCHEMA_CLASS": "apps.platform.schema.Schema",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
     # abuse limits per client IP (views opt in with throttle_scope); counters live in Redis so
@@ -201,4 +201,7 @@ if SENTRY_DSN:
 SILENCED_SYSTEM_CHECKS = ["drf_spectacular.W002"]
 
 SPECTACULAR_SETTINGS = {"TITLE": "Vayu API", "VERSION": "1.0.0", "SERVE_INCLUDE_SCHEMA": False,
-                        "SCHEMA_PATH_PREFIX": "/api/v1"}
+                        "SCHEMA_PATH_PREFIX": "/api/v1",
+                        "POSTPROCESSING_HOOKS": [
+                            "drf_spectacular.hooks.postprocess_schema_enums",
+                            "apps.platform.error_codes.add_error_responses"]}

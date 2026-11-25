@@ -8,6 +8,7 @@ from django.middleware.csrf import get_token
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers, status, viewsets
+from rest_framework import serializers as s_
 from rest_framework.decorators import action
 from rest_framework.exceptions import MethodNotAllowed, ValidationError
 from rest_framework.parsers import MultiPartParser
@@ -18,6 +19,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.core.errors import CodedError
+from apps.platform.schema import obj
 
 from . import audit, avatars, roles, services
 from .authentication import DeviceCheckedRefreshSerializer
@@ -47,6 +49,9 @@ def _same_origin(request) -> None:
         raise CodedError("BAD_ORIGIN", "Sign in from the Vayu page itself.", 403)
 
 
+@extend_schema(responses=obj(
+    "Login", user=s_.DictField(), must_change_password=s_.BooleanField(),
+    access=s_.CharField(required=False), refresh=s_.CharField(required=False)))
 class LoginView(APIView):
     authentication_classes: list = []
     permission_classes = [AllowAny]
@@ -81,6 +86,8 @@ class DeviceCheckedRefreshView(TokenRefreshView):
     serializer_class = DeviceCheckedRefreshSerializer
 
 
+@extend_schema(responses=obj("Me", id=s_.IntegerField(), username=s_.CharField(),
+                             role=s_.CharField(), permissions=s_.DictField(child=s_.CharField())))
 class MeView(APIView):
     allow_password_change_pending = True
 

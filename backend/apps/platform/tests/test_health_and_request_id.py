@@ -77,3 +77,16 @@ def test_workers_alive_asks_celery_and_never_raises():
         assert real() is True
     with mock.patch("vayu.celery.app.control.ping", side_effect=OSError("no broker")):
         assert real() is False
+
+
+def test_the_error_code_table_lists_every_code():
+    """F-160: docs/error-codes.md is complete (regenerate it when this fails)."""
+    from pathlib import Path
+
+    from apps.platform.error_codes import codes, table
+
+    doc = (Path(__file__).resolve().parents[4] / "docs" / "error-codes.md").read_text()
+    assert table() in doc
+    for code in ("ALREADY_SUBMITTED", "FORM_VERSION_OLD", "INVALID_VERSION", "LINK_EXPIRED",
+                 "NOT_FOUND", "INVALID", "CANNOT_REGENERATE"):
+        assert code in codes()

@@ -27,7 +27,32 @@ def handler(exc, context):
                      getattr(exc.__cause__, "sqlstate", None),
                      getattr(context.get("request"), "path", "?"))
         exc = CodedError("INVALID_INPUT", "A value is not acceptable.", 400)
-    return exception_handler(exc, context)
+    response = exception_handler(exc, context)
+    if response is not None:
+        response.data = one_shape(response.data, exc, response.status_code)
+    return response
+
+
+# Django's own Http404 / PermissionDenied carry no DRF code
+BY_STATUS = {404: "NOT_FOUND", 403: "PERMISSION_DENIED"}
+
+
+def one_shape(data, exc, status: int = 400) -> dict:
+    """Every error body has a code and a detail (F-160), whoever raised it. A DRF field error
+    keeps its keys and adds them under fields; "Not found." etc. get DRF's own code."""
+    if isinstance(data, dict) and "code" in data and "detail" in data:
+        return data                                          # a CodedError already
+    code = str(getattr(exc, "default_code", None) or BY_STATUS.get(status, "error")).upper()
+    if isinstance(data, dict) and set(data) == {"detail"}:
+        return {"code": code, "detail": str(data["detail"])}
+    if isinstance(data, dict):
+        fields = {k: v if isinstance(v, list) else [v] for k, v in data.items()}
+        first = next(iter(fields.values()), [""])
+        return {**data, "code": "INVALID" if code == "INVALID" else code,
+                "detail": str(first[0]) if first else "Some values are invalid.",
+                "fields": fields}
+    return {"code": code, "detail": " ".join(str(x) for x in data) if isinstance(data, list)
+            else str(data)}
 
 
 class ObjectJSONParser(JSONParser):

@@ -67,3 +67,19 @@ def test_core_is_the_bottom_layer_and_imports_no_other_app():
             names = [a.name for a in node.names] if isinstance(node, ast.Import) else []
             for m in [module or "", *names]:
                 assert not any(m.startswith(f"apps.{o}") for o in others), (path.name, m)
+
+
+def test_every_error_body_has_a_code_and_a_detail(api_as):
+    """F-160: one shape whoever raised the error; field errors keep their keys."""
+    ops, _ = api_as("ops")
+    timing = ops.get("/api/v1/bookings?timing=x").json()
+    assert timing["code"] == "INVALID" and timing["detail"] == "Use late or quick."
+    assert timing["fields"] == {"timing": ["Use late or quick."]} and timing["timing"]
+    missing = ops.get("/api/v1/bookings/00000000-0000-0000-0000-000000000000").json()
+    assert missing["code"] == "NOT_FOUND" and missing["detail"]
+    coded = ops.get("/api/v1/sync/jobs?have=x")
+    assert coded.json()["code"] in ("INVALID_QUERY", "PERMISSION_DENIED")
+    from rest_framework.test import APIClient
+
+    anon = APIClient().get("/api/v1/bookings").json()
+    assert anon["code"] == "NOT_AUTHENTICATED"

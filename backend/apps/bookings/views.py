@@ -6,13 +6,16 @@ from django.db.models import DateTimeField, OuterRef, Q, Subquery, Value
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, mixins, status, viewsets
+from rest_framework import serializers as s_
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from apps.accounts.permissions import perm, scope_for
 from apps.forms.access import hidden_inspection_forms
+from apps.platform.schema import obj
 
 from . import services, submissions, sync, timing
 from .models import Booking, Inspection
@@ -330,6 +333,11 @@ class InspectionOverrides(generics.GenericAPIView):
         return Response(InspectionSerializer(insp, context=self.get_serializer_context()).data)
 
 
+@extend_schema(responses=obj(  # the phone's main call: its shape must not drift (F-161)
+    "SyncJobs", server_time=s_.DateTimeField(), jobs=s_.ListField(child=s_.DictField()),
+    types=s_.DictField(child=s_.CharField()), forms=s_.DictField(child=s_.DictField()),
+    lists=s_.DictField(child=s_.ListField(child=s_.DictField())),
+    changes=s_.ListField(child=s_.DictField())))
 class SyncJobs(generics.GenericAPIView):
     """The expert's jobs and everything needed to inspect them offline (see apps/bookings/sync.py).
     ``have`` lists form version ids the phone already holds; ``drafts`` the ones its open drafts
