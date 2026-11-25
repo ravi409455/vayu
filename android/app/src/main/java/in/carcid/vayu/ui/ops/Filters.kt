@@ -117,7 +117,7 @@ object BookingFilters {
             .value?.data?.rows().orEmpty()
 }
 
-private fun expertOptions(labels: Labels) = labels.experts.map { it.s("id") to it.s("name").ifBlank { it.s("username") } }
+private fun expertOptions(labels: Labels) = labels.experts.map { it.id?.toString().orEmpty() to it.shown }
 
 /** One quick filter: dark when on, its value in words on the left, the arrow on the right; a steady size whatever is chosen. */
 @Composable

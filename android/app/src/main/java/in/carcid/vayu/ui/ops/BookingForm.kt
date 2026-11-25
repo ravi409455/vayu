@@ -2,6 +2,7 @@ package `in`.carcid.vayu.ui.ops
 
 
 
+import `in`.carcid.vayu.core.ops.ListItem
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.lazy.items
@@ -57,7 +58,7 @@ fun BookingFormScreen(env: OpsEnv, id: String?, onBack: () -> Unit, onSaved: (St
     val tree = rememberLoad(env, version?.let { "form-versions/$it" }).value?.data?.let { FormTree.parse(it as JsonObject) }
     val existing = id?.let { rememberLoad(env, "bookings/$it").value?.data?.let { d -> Bk(d as JsonObject) } }
     val listKeys = tree?.fields?.filter { it.type == "master_list" }?.mapNotNull { it.config["list"] as? String }?.distinct().orEmpty()
-    val lists = listKeys.associateWith { k -> rememberLoad(env, "master-lists/$k/items").value?.data?.rows().orEmpty().filter { it.s("archived") != "true" }.map { it.s("key") to it.s("label") } }
+    val lists = listKeys.associateWith { k -> ListItem.list(rememberLoad(env, "master-lists/$k/items").value?.data?.rows().orEmpty()).filter { !it.archived }.map { it.key to it.label } }
     @Suppress("UNCHECKED_CAST")
     var values by remember(existing?.rowVersion) { mutableStateOf((existing?.answers?.let { JsonLogic.fromJson(it) } as? Map<String, Any?>).orEmpty()) }
     var changed by remember(existing?.rowVersion) { mutableStateOf(setOf<String>()) }

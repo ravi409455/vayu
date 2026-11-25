@@ -1,5 +1,8 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.ListItem
+import `in`.carcid.vayu.core.ops.MediaItem
+import `in`.carcid.vayu.core.ops.Inspection
 import `in`.carcid.vayu.core.api.initials
 
 import `in`.carcid.vayu.core.ARRIVED
@@ -96,9 +99,9 @@ import java.time.LocalTime
 enum class Part { ANSWERS, MEDIA, REVIEW, HISTORY }
 
 /** The inspection that counts on a booking: the latest submitted one, else the latest draft. */
-fun currentInspection(list: List<JsonObject>): JsonObject? =
-    list.filter { it.s("status") == "submitted" }.maxByOrNull { it.s("submitted_at") }
-        ?: list.filter { it.s("status") == "draft" }.maxByOrNull { it.s("created_at") }
+fun currentInspection(list: List<Inspection>): Inspection? =
+    list.filter { it.status == "submitted" }.maxByOrNull { it.submittedAt }
+        ?: list.filter { it.status == "draft" }.maxByOrNull { it.createdAt }
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
@@ -107,7 +110,7 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
     val scope = rememberCoroutineScope()
     val t = env.today()
     val load = rememberLoad(env, "bookings/$id")
-    val insps = rememberLoad(env, "bookings/$id/inspections").value?.data?.rows().orEmpty()
+    val insps = Inspection.list(rememberLoad(env, "bookings/$id/inspections").value?.data?.rows().orEmpty())
     val report = rememberLoad(env, "bookings/$id/report")
     val b = load.value?.data?.let { Bk(it as JsonObject) }
     var menu by remember { mutableStateOf(false) }
@@ -161,8 +164,8 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             Text(b.customer.ifBlank { b.code }, fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink,
                 maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
-            val why = if (b.stage == "cancelled") rememberLoad(env, "master-lists/cancel_reason/items").value?.data?.rows().orEmpty()
-                .firstOrNull { it.s("key") == b.o.s("cancel_reason") }?.s("label") ?: b.o.s("cancel_reason").replace('_', ' ') else ""
+            val why = if (b.stage == "cancelled") ListItem.list(rememberLoad(env, "master-lists/cancel_reason/items").value?.data?.rows().orEmpty())
+                .firstOrNull { it.key == b.t.cancelReason }?.label ?: b.t.cancelReason.replace('_', ' ') else ""
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 val (st, tone) = opsStatus(b)
                 Chip(listOf(st, why).filter { it.isNotBlank() }.joinToString(" · "), tone)
@@ -180,8 +183,8 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
             }
             OfflineNote(load.value)
             if (b.conflict.isNotEmpty()) {
-                val subs = insps.filter { it.s("status") == "submitted" }
-                Attention("Two experts inspected this car", subs.joinToString(". ") { "${env.labels.person(it.int("expert"))} submitted ${whenStamp(it.s("submitted_at"), env.today()).replaceFirstChar { c -> c.lowercase() }}" } +
+                val subs = insps.filter { it.status == "submitted" }
+                Attention("Two experts inspected this car", subs.joinToString(". ") { "${env.labels.person(it.expert)} submitted ${whenStamp(it.submittedAt, env.today()).replaceFirstChar { c -> c.lowercase() }}" } +
                     ". Choose which one counts.", "Compare and choose", online && env.can("bookings.edit")) { compare = true }
             }
             // the expert's files won't come (a lost phone): Ops upload the required ones, then finish
@@ -225,15 +228,15 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
                 NavRow("Inspection Data", "$n answer${if (n == 1) "" else "s"}" + if (bad > 0) " · $bad problem${if (bad == 1) "" else "s"}" else "",
                     if (bad > 0) Vayu.colors.warn else Vayu.colors.muted) { onAnswers("inspection") }
             }
-            val media = rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty().filter { it.s("status") in ARRIVED }
-            val photos = media.count { it.s("kind") == "photo" }; val videos = media.count { it.s("kind") == "video" }
+            val media = MediaItem.list(rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty()).filter { it.status in ARRIVED }
+            val photos = media.count { it.kind == "photo" }; val videos = media.count { it.kind == "video" }
             NavRow("Photos and videos", listOfNotNull("$photos photo${if (photos == 1) "" else "s"}", "$videos video${if (videos == 1) "" else "s"}".takeIf { videos > 0 }).joinToString(" · ")) { onPart(Part.MEDIA) }
             if (insp != null) {
-                val sc = insp.o("scores")
+                val sc = insp.scores
                 val word = sc.o("overall").s("word").replaceFirstChar { it.uppercase() }
                 Section("Review")
                 val nRatings = sc.o("ratings").size; val nChecks = sc.o("key_checks").size
-                val ov = insp.o("overrides"); val changed = ov.o("ratings").size + (if (ov["overall"] != null) 1 else 0) +
+                val ov = insp.overrides; val changed = ov.o("ratings").size + (if (ov["overall"] != null) 1 else 0) +
                     sc.o("key_checks").values.count { (it as? JsonObject)?.s("edited") == "true" }
                 NavRow("Overall: ${word.ifBlank { "—" }}", listOfNotNull("$nChecks Key Check${if (nChecks == 1) "" else "s"}".takeIf { nChecks > 0 },
                     "$nRatings rating${if (nRatings == 1) "" else "s"}".takeIf { nRatings > 0 },
@@ -251,7 +254,7 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
                     Icon(Icons.Outlined.PersonAdd, if (b.expert == null) "Assign an expert" else "Reassign", tint = if (online) Vayu.colors.ink else Vayu.colors.muted)
                 }
                 // call the expert straight from the job
-                env.labels.people.firstOrNull { it.int("id") == b.expert }?.s("phone")?.filter { it in '0'..'9' || it == '+' }?.takeIf { it.isNotEmpty() }?.let { ph ->
+                env.labels.people.firstOrNull { it.id == b.expert }?.phone?.filter { it in '0'..'9' || it == '+' }?.takeIf { it.isNotEmpty() }?.let { ph ->
                     IconButton(onClick = { uri.openUri("tel:$ph") }) { Icon(Icons.Outlined.Call, "Call the expert", tint = Vayu.colors.ink) }
                 }
             }
@@ -286,9 +289,9 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
             run("POST", "bookings/$id/finish", JsonObject(emptyMap()), "Finished. The report is being made.")
         }
     }
-    if (compare) CompareSheet(env, insps.filter { it.s("status") == "submitted" }, onClose = { compare = false }) { keep ->
+    if (compare) CompareSheet(env, insps.filter { it.status == "submitted" }, onClose = { compare = false }) { keep ->
         compare = false
-        val who = env.labels.person(insps.firstOrNull { it.s("id") == keep }?.int("expert"))
+        val who = env.labels.person(insps.firstOrNull { it.id == keep }?.expert)
         run("POST", "bookings/$id/resolve-conflict", buildJsonObject { put("inspection", keep) }, "Kept $who's inspection.")
     }
 }
@@ -388,12 +391,12 @@ fun AssignSheet(env: OpsEnv, b: Bk, onClose: () -> Unit, onAssign: (Int) -> Unit
             Spacer(Modifier.height(12.dp))
             SoftField(find, { find = it }, "Find an expert", icon = Icons.Outlined.Search)
             LazyColumn(Modifier.heightIn(max = 520.dp)) {
-                items(env.labels.experts.filter { find.isBlank() || it.s("name").contains(find, true) || it.s("username").contains(find, true) },
-                    key = { it.s("id") }) { u ->
-                    val uid = u.int("id") ?: return@items
+                items(env.labels.experts.filter { find.isBlank() || it.name.contains(find, true) || it.username.contains(find, true) },
+                    key = { it.id ?: it.username }) { u ->
+                    val uid = u.id ?: return@items
                     val theirs = jobs.filter { it.expert == uid && it.id != b.id }
                     val clash = at?.let { a -> theirs.firstOrNull { o -> runCatching { LocalTime.parse(o.time) }.getOrNull()?.let { java.time.Duration.between(it, a).abs().toMinutes() < 90 } == true } }
-                    val name = u.s("name").ifBlank { u.s("username") }
+                    val name = u.shown
                     Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(12.dp))
                         .background(if (pick == uid) Vayu.colors.soft else Vayu.colors.bg).clickable(role = Role.RadioButton) { pick = uid }.padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -414,7 +417,7 @@ fun AssignSheet(env: OpsEnv, b: Bk, onClose: () -> Unit, onAssign: (Int) -> Unit
 /** Reschedule (new day, time, reason) or cancel (reason): reasons are the Admin's master lists. */
 @Composable
 private fun ReasonDialog(env: OpsEnv, title: String, list: String, withSlot: Bk?, onClose: () -> Unit, onDone: (String, String, String) -> Unit) {
-    val reasons = rememberLoad(env, "master-lists/$list/items").value?.data?.rows().orEmpty().filter { it.s("archived") != "true" }
+    val reasons = ListItem.list(rememberLoad(env, "master-lists/$list/items").value?.data?.rows().orEmpty()).filter { !it.archived }
     var reason by remember { mutableStateOf<String?>(null) }
     var day by remember { mutableStateOf(withSlot?.date.orEmpty()) }
     var time by remember { mutableStateOf(withSlot?.time.orEmpty()) }
@@ -430,7 +433,7 @@ private fun ReasonDialog(env: OpsEnv, title: String, list: String, withSlot: Bk?
                 SoftButton("Time: " + time12(time).ifEmpty { "choose" }, { picking = "time" }, Modifier.fillMaxWidth())
             }
             Text("Reason", fontWeight = FontWeight.SemiBold)
-            SingleChoice("Reason", reasons.map { Option(it.s("key"), it.s("label"), false, null) }, reason, false, { reason = it as String? }, forceList = true)
+            SingleChoice("Reason", reasons.map { Option(it.key, it.label, false, null) }, reason, false, { reason = it as String? }, forceList = true)
         }
     }, confirmButton = {
         TextButton({ reason?.let { onDone(it, day, time) } }, enabled = reason != null && (withSlot == null || (day.isNotEmpty() && time.isNotEmpty()))) { Text(title) }
@@ -449,20 +452,20 @@ private fun TypeDialog(env: OpsEnv, b: Bk, onClose: () -> Unit, onDone: (String)
 /** Two experts submitted: see both side by side (who, when, how many answers) and keep one. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CompareSheet(env: OpsEnv, subs: List<JsonObject>, onClose: () -> Unit, onKeep: (String) -> Unit) {
+private fun CompareSheet(env: OpsEnv, subs: List<Inspection>, onClose: () -> Unit, onKeep: (String) -> Unit) {
     var keep by remember { mutableStateOf<String?>(null) }
     VayuSheet(onClose) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Which inspection counts?", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Vayu.colors.ink)
             Text("The other one is kept but set aside.", color = Vayu.colors.muted, fontSize = 14.sp)
             subs.forEach { i ->
-                val n = i.o("answers").values.sumOf { (it as? JsonObject)?.size ?: 0 }
-                val word = i.o("scores").o("overall").s("word")
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (keep == i.s("id")) Vayu.colors.primary else Vayu.colors.soft)
-                    .clickable(role = Role.RadioButton) { keep = i.s("id") }.padding(14.dp)) {
-                    val fg = if (keep == i.s("id")) Vayu.colors.onPrimary else Vayu.colors.ink
-                    Text(env.labels.person(i.int("expert")), fontWeight = FontWeight.Bold, color = fg)
-                    Text("Submitted ${whenStamp(i.s("submitted_at"), env.today()).replaceFirstChar { c -> c.lowercase() }} · $n answers" + if (word.isNotBlank()) " · $word" else "", color = fg, fontSize = 14.sp)
+                val n = i.answers.values.sumOf { (it as? JsonObject)?.size ?: 0 }
+                val word = i.scores.o("overall").s("word")
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (keep == i.id) Vayu.colors.primary else Vayu.colors.soft)
+                    .clickable(role = Role.RadioButton) { keep = i.id }.padding(14.dp)) {
+                    val fg = if (keep == i.id) Vayu.colors.onPrimary else Vayu.colors.ink
+                    Text(env.labels.person(i.expert), fontWeight = FontWeight.Bold, color = fg)
+                    Text("Submitted ${whenStamp(i.submittedAt, env.today()).replaceFirstChar { c -> c.lowercase() }} · $n answers" + if (word.isNotBlank()) " · $word" else "", color = fg, fontSize = 14.sp)
                 }
             }
             PrimaryButton("Keep this one", { keep?.let(onKeep) }, enabled = keep != null)

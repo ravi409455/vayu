@@ -1,5 +1,8 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.ListItem
+import `in`.carcid.vayu.core.ops.Person
+import `in`.carcid.vayu.core.ops.Booking
 import kotlinx.coroutines.async
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -57,34 +60,34 @@ import java.time.ZoneId
 /** A booking as the Ops screens read it (BookingSerializer). */
 @androidx.compose.runtime.Immutable
 class Bk(val o: JsonObject) {
-    val id = o.s("id")
-    val code = o.s("booking_id")
-    val stage = o.s("stage")
-    val type = o.s("inspection_type")
-    val expert: Int? = (o["assigned_expert"] as? JsonPrimitive)?.intOrNull
-    val answers = o.o("answers")
-    val rowVersion: Int = (o["row_version"] as? JsonPrimitive)?.intOrNull ?: 0
-    val conflict = o.s("conflict")
+    /** The reply, decoded once (R-11); a reply that isn't a booking reads as empty. */
+    val t: Booking = Booking.from(o) ?: Booking()
+    val id get() = t.id
+    val code get() = t.bookingId
+    val stage get() = t.stage
+    val type get() = t.inspectionType
+    val expert: Int? get() = t.assignedExpert
+    val answers get() = t.answers
+    val rowVersion: Int get() = t.rowVersion
+    val conflict get() = t.conflict
     /** The phone's clock wasn't checked against the server that day: the times it stamped may be off (F-222). */
-    val unverifiedTime = o.s("unverified_time") == "true"
+    val unverifiedTime get() = t.unverifiedTime
     fun a(k: String) = answers.s(k)
     val customer get() = a("customer_name")
     val phone get() = a("customer_phone")
     val date get() = a("inspection_date").take(10)
     val time get() = a("inspection_time").take(5)
-    val typeRejected: String? get() = (o["alerts"] as? kotlinx.serialization.json.JsonArray)?.map { it as JsonObject }
-        ?.firstOrNull { it.s("code") == "TYPE_CHANGE_REJECTED" }?.s("detail")
+    val typeRejected: String? get() = t.alerts.firstOrNull { it.code == "TYPE_CHANGE_REJECTED" }?.detail
     val live get() = stage !in setOf("completed", "cancelled")
     /** Started late / too quick; only Admin and Ops get "timing" (web: timingFlags). */
     val flags: List<TimingFlag> get() {
-        val t = o["timing"] as? JsonObject ?: return emptyList()
-        fun on(k: String) = t.s(k) == "true"
-        fun mins(k: String) = t.s(k).toIntOrNull()
+        val m = t.timing ?: return emptyList()
+        fun n(v: Int?) = v?.toString().orEmpty()
         return listOfNotNull(
-            TimingFlag("late", "Started ${fmtMinutes(mins("late_minutes"))} late", "Limit: start within ${t.s("grace_minutes")} min of the booked time.",
-                t.s("late_reviewed_by"), t.s("late_reviewed_at")).takeIf { on("late") },
-            TimingFlag("quick", "Took ${fmtMinutes(mins("duration_minutes"))} (min ${t.s("min_minutes")})", "Limit: take at least ${t.s("min_minutes")} min.",
-                t.s("quick_reviewed_by"), t.s("quick_reviewed_at")).takeIf { on("quick") })
+            TimingFlag("late", "Started ${fmtMinutes(m.lateMinutes)} late", "Limit: start within ${n(m.graceMinutes)} min of the booked time.",
+                m.lateReviewedBy.orEmpty(), m.lateReviewedAt.orEmpty()).takeIf { m.late },
+            TimingFlag("quick", "Took ${fmtMinutes(m.durationMinutes)} (min ${n(m.minMinutes)})", "Limit: take at least ${n(m.minMinutes)} min.",
+                m.quickReviewedBy.orEmpty(), m.quickReviewedAt.orEmpty()).takeIf { m.quick })
     }
 }
 
@@ -116,15 +119,15 @@ fun opsStatus(b: Bk): Pair<String, Tone> = when {
 /** Names for keys: cities, car models, types, people. Loaded once, kept for offline. */
 @androidx.compose.runtime.Immutable
 class Labels(val cities: Map<String, String> = emptyMap(), val cars: Map<String, String> = emptyMap(),
-             val types: List<Triple<String, String, Boolean>> = emptyList(), val people: List<JsonObject> = emptyList()) {
+             val types: List<Triple<String, String, Boolean>> = emptyList(), val people: List<Person> = emptyList()) {
     fun city(k: String) = cities[k] ?: k
     fun car(k: String) = cars[k] ?: k
     // a type that's no longer offered still reads as words ("ev" -> "EV", "used_car" -> "Used car")
     fun type(k: String) = types.firstOrNull { it.first == k }?.second
         ?: if (k.length <= 3) k.uppercase() else k.replace('_', ' ').replaceFirstChar { it.uppercase() }
-    fun person(id: Int?) = people.firstOrNull { (it["id"] as? JsonPrimitive)?.intOrNull == id }?.let { it.s("name").ifBlank { it.s("username") } } ?: if (id == null) "" else "#$id"
-    val experts get() = people.filter { it.s("role") == "expert" && it.s("is_active") != "false" }
-    fun byUsername(u: String) = people.firstOrNull { it.s("username") == u }?.s("name")?.ifBlank { null } ?: u
+    fun person(id: Int?) = people.firstOrNull { it.id == id }?.shown ?: if (id == null) "" else "#$id"
+    val experts get() = people.filter { it.role == "expert" && it.isActive }
+    fun byUsername(u: String) = people.firstOrNull { it.username == u }?.name?.ifBlank { null } ?: u
 
     /** The server's "Type change to pdi rejected: expert started ev" in words, with type names. */
     fun typeRejected(detail: String): String {
@@ -135,20 +138,20 @@ class Labels(val cities: Map<String, String> = emptyMap(), val cars: Map<String,
     companion object {
         /** The names as last saved on this phone (read in the background), to show at once. */
         suspend fun saved(data: OpsData): Labels = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            fun list(k: String) = data.saved("master-lists/$k/items")?.data?.rows().orEmpty().associate { it.s("key") to it.s("label") }
+            fun list(k: String) = ListItem.list(data.saved("master-lists/$k/items")?.data?.rows().orEmpty()).associate { it.key to it.label }
             Labels(list("city"), list("car_make_model"),
-                data.saved("inspection-types")?.data?.rows().orEmpty().map { Triple(it.s("key"), it.s("label"), it.s("available") != "false") },
-                data.saved("users")?.data?.rows().orEmpty())
+                ListItem.list(data.saved("inspection-types")?.data?.rows().orEmpty()).map { Triple(it.key, it.label, it.available) },
+                Person.list(data.saved("users")?.data?.rows().orEmpty()))
         }
 
         suspend fun load(data: OpsData): Labels {
             // failures count as empty; cancellation is never swallowed (ApiError only)
             suspend fun <T> soft(empty: T, f: suspend () -> T): T = try { f() } catch (e: ApiError) { empty }
-            suspend fun list(k: String) = soft(emptyMap()) { data.load("master-lists/$k/items").data.rows().associate { it.s("key") to it.s("label") } }
+            suspend fun list(k: String) = soft(emptyMap()) { ListItem.list(data.load("master-lists/$k/items").data.rows()).associate { it.key to it.label } }
             // all four at once: the wait is the slowest one, not the sum
             return kotlinx.coroutines.coroutineScope {
-                val types = async { soft(emptyList()) { data.load("inspection-types").data.rows().map { Triple(it.s("key"), it.s("label"), it.s("available") != "false") } } }
-                val people = async { soft(emptyList()) { data.load("users").data.rows() } }
+                val types = async { soft(emptyList()) { ListItem.list(data.load("inspection-types").data.rows()).map { Triple(it.key, it.label, it.available) } } }
+                val people = async { soft(emptyList()) { Person.list(data.load("users").data.rows()) } }
                 val cities = async { list("city") }; val cars = async { list("car_make_model") }
                 Labels(cities.await(), cars.await(), types.await(), people.await())
             }

@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.MediaLinks
+import `in`.carcid.vayu.core.ops.MediaItem
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import `in`.carcid.vayu.core.ARRIVED
@@ -94,10 +96,10 @@ suspend fun mediaBytes(env: OpsEnv, dir: File, id: String, preview: Boolean = fa
     val f = if (preview) File(dir, "media-$id-p") else full
     if (f.exists()) return@withContext f
     try {
-        val links = env.data.api.get("media/$id/url") as JsonObject
-        val url = links.s("preview_url").takeIf { preview && it.isNotBlank() } ?: links.s("url")
-        writeAtomically(if (url == links.s("url")) full else f, env.data.api.download(url))
-        if (url == links.s("url")) full else f
+        val links = MediaLinks.from(env.data.api.get("media/$id/url")) ?: return@withContext null
+        val url = links.previewUrl?.takeIf { preview && it.isNotBlank() } ?: links.url
+        writeAtomically(if (url == links.url) full else f, env.data.api.download(url))
+        if (url == links.url) full else f
     } catch (e: kotlin.coroutines.cancellation.CancellationException) { throw e } catch (e: Exception) { null }
 }
 
@@ -117,7 +119,7 @@ fun rememberOpsUploader(env: OpsEnv, id: String, data: Loaded3?, online: Boolean
     val scope = rememberCoroutineScope()
     var target by remember { mutableStateOf<Triple<String, Field, String?>?>(null) }
     // only once the expert has submitted, and never on a cancelled booking
-    val may = env.can("media.manage") && online && data?.insp?.s("status") == "submitted" && data.b.stage != "cancelled"
+    val may = env.can("media.manage") && online && data?.insp?.status == "submitted" && data.b.stage != "cancelled"
     suspend fun upload(f: Field, file: File, type: String, replaces: String?) {
         var loose: String? = null
         try {
@@ -162,16 +164,17 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val data = rememberBooking(env, id)
     val list = rememberLoad(env, "bookings/$id/media")
-    val items = list.value?.data?.rows().orEmpty().filter { it.s("status") in ARRIVED }
-    var open by remember { mutableStateOf<JsonObject?>(null) }
+    val all = MediaItem.list(list.value?.data?.rows().orEmpty())
+    val items = all.filter { it.status in ARRIVED }
+    var open by remember { mutableStateOf<MediaItem?>(null) }
     val online = list.value?.offline == false
     val fields = PARTS.flatMap { p -> data?.trees?.get(p)?.pages.orEmpty().flatMap { pg -> pg.sections.flatMap { s -> s.fields.filter { it.isMedia }.map { Triple(p, s.title, it) } } } }
     val up = rememberOpsUploader(env, id, data, online)
     open?.let { m ->
-        val f = fields.firstOrNull { it.third.key == m.s("field_key") }
-        val have = items.count { it.s("field_key") == m.s("field_key") }
-        MediaViewer(env, m, fieldLabel = f?.third?.label ?: m.s("field_key"), onClose = { open = null },
-            onReplace = f?.takeIf { up.canReplace(it.third) }?.let { { open = null; up.pick(it.first, it.third, m.s("id")) } },
+        val f = fields.firstOrNull { it.third.key == m.fieldKey }
+        val have = items.count { it.fieldKey == m.fieldKey }
+        MediaViewer(env, m, fieldLabel = f?.third?.label ?: m.fieldKey, onClose = { open = null },
+            onReplace = f?.takeIf { up.canReplace(it.third) }?.let { { open = null; up.pick(it.first, it.third, m.id) } },
             onAdd = f?.takeIf { up.canAdd(it.first, it.third, have) }?.let { { open = null; up.pick(it.first, it.third, null) } })
         return
     }
@@ -191,15 +194,15 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             OfflineNote(list.value)
-            Text("${items.count { it.s("kind") == "photo" }} photos · ${items.count { it.s("kind") == "video" }} videos", color = Vayu.colors.muted)
+            Text("${items.count { it.kind == "photo" }} photos · ${items.count { it.kind == "video" }} videos", color = Vayu.colors.muted)
             // files deleted after the storage time Admin set (Settings) are gone for good: say so
-            val deleted = list.value?.data?.rows().orEmpty().count { it.s("status") == "purged" }
+            val deleted = all.count { it.status == "purged" }
             if (deleted > 0) Text("$deleted ${if (deleted == 1) "file was" else "files were"} deleted after the storage time set in Settings.",
                 color = Vayu.colors.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
             val filled = data?.filled(env.today().toString())
             fields.groupBy { it.second }.forEach { (section, fs) ->
-                val here = items.filter { m -> fs.any { it.third.key == m.s("field_key") } }
-                val addable = fs.filter { (p, _, f) -> filled?.visible(p, f.key) != false && up.canAdd(p, f, here.count { it.s("field_key") == f.key }) }
+                val here = items.filter { m -> fs.any { it.third.key == m.fieldKey } }
+                val addable = fs.filter { (p, _, f) -> filled?.visible(p, f.key) != false && up.canAdd(p, f, here.count { it.fieldKey == f.key }) }
                 val canAdd = addable.isNotEmpty()
                 // a section with nothing to show or add is left out
                 if (here.isEmpty() && !canAdd) return@forEach
@@ -228,26 +231,26 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
 }
 
 @Composable
-internal fun MediaTile(env: OpsEnv, m: JsonObject, size: androidx.compose.ui.unit.Dp = 76.dp, onClick: () -> Unit) {
+internal fun MediaTile(env: OpsEnv, m: MediaItem, size: androidx.compose.ui.unit.Dp = 76.dp, onClick: () -> Unit) {
     val ctx = LocalContext.current
-    val img by produceState<ImageBitmap?>(null, m.s("id")) {
-        if (m.s("kind") in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.s("id"), preview = true)?.let { decoded(it, 160) }
+    val img by produceState<ImageBitmap?>(null, m.id) {
+        if (m.kind in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.id, preview = true)?.let { decoded(it, 160) }
     }
     Box(Modifier.size(size).clip(RoundedCornerShape(if (size < 76.dp) 10.dp else 12.dp)).background(Vayu.colors.illo).clickable(role = Role.Button, onClick = onClick)
-        .semantics { contentDescription = "${m.s("kind")} ${m.s("field_key")}" }, contentAlignment = Alignment.Center) {
+        .semantics { contentDescription = "${m.kind} ${m.fieldKey}" }, contentAlignment = Alignment.Center) {
         img?.let { Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
-        if (m.s("kind") == "video") Icon(Icons.Outlined.PlayCircle, null, tint = Color.White, modifier = Modifier.size(30.dp))
+        if (m.kind == "video") Icon(Icons.Outlined.PlayCircle, null, tint = Color.White, modifier = Modifier.size(30.dp))
     }
 }
 
 @Composable
-internal fun MediaViewer(env: OpsEnv, m: JsonObject, fieldLabel: String, onClose: () -> Unit, onReplace: (() -> Unit)? = null, onAdd: (() -> Unit)? = null) {
+internal fun MediaViewer(env: OpsEnv, m: MediaItem, fieldLabel: String, onClose: () -> Unit, onReplace: (() -> Unit)? = null, onAdd: (() -> Unit)? = null) {
     BackHandler(onBack = onClose)
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     // null while loading; false when it couldn't be loaded
-    val img by produceState<Any?>(null, m.s("id")) {
-        if (m.s("kind") in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.s("id"))?.let { decoded(it, 2000) } ?: false
+    val img by produceState<Any?>(null, m.id) {
+        if (m.kind in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.id)?.let { decoded(it, 2000) } ?: false
     }
     var videoUrl by remember { mutableStateOf<String?>(null) }
     var scale by remember { mutableStateOf(1f) }
@@ -264,7 +267,7 @@ internal fun MediaViewer(env: OpsEnv, m: JsonObject, fieldLabel: String, onClose
                     .pointerInput(Unit) { detectTransformGestures { _, p, z, _ -> scale = (scale * z).coerceIn(1f, 5f); pan = if (scale == 1f) androidx.compose.ui.geometry.Offset.Zero else pan + p } }
                     .graphicsLayer(scaleX = scale, scaleY = scale, translationX = pan.x, translationY = pan.y))
                 img == false -> Text("Couldn't load this photo. Check the signal and try again.", color = Color.White, modifier = Modifier.padding(24.dp))
-                m.s("kind") in setOf("photo", "signature") -> Text("Loading…", color = Color.White)
+                m.kind in setOf("photo", "signature") -> Text("Loading…", color = Color.White)
                 videoUrl != null -> AndroidView(factory = { c -> android.widget.VideoView(c).apply {
                     setMediaController(android.widget.MediaController(c).also { it.setAnchorView(this) })
                     setVideoURI(android.net.Uri.parse(videoUrl)); setOnPreparedListener { start() }
@@ -274,16 +277,17 @@ internal fun MediaViewer(env: OpsEnv, m: JsonObject, fieldLabel: String, onClose
                     modifier = Modifier.clickable(role = Role.Button) {
                         scope.launch {
                             try {
-                                val url = (env.data.api.get("media/${m.s("id")}/url") as JsonObject).s("url")
+                                val url = MediaLinks.from(env.data.api.get("media/${m.id}/url"))?.url.orEmpty()
+                                if (url.isBlank()) { env.say("Couldn't open this file. Try again."); return@launch }
                                 // videos play here; other files open in an app that can show them
-                                if (m.s("kind") == "video") videoUrl = url
+                                if (m.kind == "video") videoUrl = url
                                 else try { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
                                     catch (e: android.content.ActivityNotFoundException) { env.say("No app on this phone can open this file.") }
                             } catch (e: ApiError) { env.say(e.message) }
                         }
                     }) {
                     Icon(Icons.Outlined.PlayCircle, null, tint = Color.White, modifier = Modifier.size(72.dp))
-                    Text(if (m.s("kind") == "video") "Play" else "Open", color = Color.White)
+                    Text(if (m.kind == "video") "Play" else "Open", color = Color.White)
                 }
             }
         }

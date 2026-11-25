@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.MediaItem
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import `in`.carcid.vayu.core.ARRIVED
@@ -84,15 +85,15 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
     var onlyProblems by rememberSaveable { mutableStateOf(false) }
     var jump by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Pair<String, Field>?>(null) }
-    var viewing by remember { mutableStateOf<JsonObject?>(null) }
+    var viewing by remember { mutableStateOf<MediaItem?>(null) }
     val list = androidx.compose.foundation.lazy.rememberLazyListState()
-    val media = rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty().filter { it.s("status") in ARRIVED }
+    val media = MediaItem.list(rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty()).filter { it.status in ARRIVED }
     val up = rememberOpsUploader(env, id, data, rememberLoad(env, "bookings/$id").value?.offline == false)
     viewing?.let { m ->
-        val pf = PARTS.firstNotNullOfOrNull { p -> data?.trees?.get(p)?.fields?.firstOrNull { it.key == m.s("field_key") }?.let { p to it } }
-        val have = media.count { it.s("field_key") == m.s("field_key") }
-        MediaViewer(env, m, fieldLabel = pf?.second?.label ?: m.s("field_key"), onClose = { viewing = null },
-            onReplace = pf?.takeIf { up.canReplace(it.second) }?.let { { viewing = null; up.pick(it.first, it.second, m.s("id")) } },
+        val pf = PARTS.firstNotNullOfOrNull { p -> data?.trees?.get(p)?.fields?.firstOrNull { it.key == m.fieldKey }?.let { p to it } }
+        val have = media.count { it.fieldKey == m.fieldKey }
+        MediaViewer(env, m, fieldLabel = pf?.second?.label ?: m.fieldKey, onClose = { viewing = null },
+            onReplace = pf?.takeIf { up.canReplace(it.second) }?.let { { viewing = null; up.pick(it.first, it.second, m.id) } },
             onAdd = pf?.takeIf { up.canAdd(it.first, it.second, have) }?.let { { viewing = null; up.pick(it.first, it.second, null) } })
         return
     }
@@ -170,7 +171,7 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
                                 Text(f.label, fontSize = 12.sp, color = Vayu.colors.muted)
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     // a photo question counts what the server holds, even before the answer lists it
-                                    val held = if (f.isMedia) media.count { it.s("field_key") == f.key } else 0
+                                    val held = if (f.isMedia) media.count { it.fieldKey == f.key } else 0
                                     val shownText = if (f.isMedia && v == null && held > 0) "$held ${if (f.type == "file") "file" else f.type}${if (held == 1) "" else "s"}" else answerText(f, v, env)
                                     Text(shownText, color = Vayu.colors.ink, modifier = Modifier.weight(1f, fill = false))
                                     // the tag only when it adds something ("Minor" twice says nothing)
@@ -180,7 +181,7 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
                             }
                             // photos of this answer, small, right here
                             val keys = setOf(f.key) + photosOf[f.key].orEmpty()
-                            val mine = media.filter { it.s("field_key") in keys }
+                            val mine = media.filter { it.fieldKey in keys }
                             mine.take(2).forEach { m -> MediaTile(env, m, size = 56.dp) { viewing = m } }
                         }
                         HorizontalDivider(color = Vayu.colors.line)
@@ -211,14 +212,14 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
                     Text(pageOf[f.key].orEmpty(), fontSize = 13.sp, color = Vayu.colors.muted)
                     Question(f, value, filled.required(p, f.key), false, error ?: answerProblem(f, value), false, opsFieldEnv(env)) { value = it; error = null }
                     Text("Was ${answerText(f, data.answers[p]?.get(f.key), env)}" +
-                        (data.insp.int("expert")?.let { ", answered by ${env.labels.person(it)}." } ?: "."), fontSize = 13.sp, color = Vayu.colors.muted)
+                        (data.insp.expert?.let { ", answered by ${env.labels.person(it)}." } ?: "."), fontSize = 13.sp, color = Vayu.colors.muted)
                     Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         SoftButton("Cancel", { editing = null }, Modifier.weight(1f))
                         PrimaryButton("Save", {
                             scope.launch {
                                 try {
-                                    env.data.act("PATCH", "inspections/${data.insp.s("id")}", buildJsonObject {
-                                        put("row_version", data.insp.int("row_version") ?: 0)
+                                    env.data.act("PATCH", "inspections/${data.insp.id}", buildJsonObject {
+                                        put("row_version", data.insp.rowVersion)
                                         put("answers", buildJsonObject { put(p, buildJsonObject { put(f.key, JsonLogic.toJson(value)) }) })
                                     })
                                     editing = null; env.say("Saved."); env.refresh()
@@ -248,7 +249,7 @@ fun opsFieldEnv(env: OpsEnv, lists: Map<String, List<Pair<String, String>>> = em
     files = emptyMap(), now = { java.time.Instant.now() },
     onCamera = {}, onGallery = {}, onPickFile = {}, onSign = {}, onScan = {}, onOpenFile = { _, _ -> }, onLocate = { _, done -> done(null) },
     asset = { null },
-    people = env.labels.people.map { Triple(it.s("id"), it.s("name").ifBlank { it.s("username") }, it.s("role")) })
+    people = env.labels.people.map { Triple(it.id?.toString().orEmpty(), it.shown, it.role) })
 
 private fun answerText(f: Field, v: Any?, env: OpsEnv): String = when (f.type) {
     "single_choice" -> f.options.firstOrNull { it.key == v }?.label ?: shown(v)

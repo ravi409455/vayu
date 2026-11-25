@@ -1,6 +1,7 @@
 package `in`.carcid.vayu.ui.ops
 
 
+import `in`.carcid.vayu.core.ops.Inspection
 import `in`.carcid.vayu.ui.expert.answered
 
 import androidx.compose.material.icons.automirrored.outlined.List
@@ -17,25 +18,25 @@ import `in`.carcid.vayu.core.rules.JsonLogic
 import kotlinx.serialization.json.JsonObject
 
 /** A booking with its current inspection and that inspection's form trees. */
-class Loaded3(val b: Bk, val insp: JsonObject?, val trees: Map<String, FormTree?>, val raw: Map<String, JsonObject?>, val offline: Boolean,
-              val insps: List<JsonObject> = emptyList()) {
+class Loaded3(val b: Bk, val insp: Inspection?, val trees: Map<String, FormTree?>, val raw: Map<String, JsonObject?>, val offline: Boolean,
+              val insps: List<Inspection> = emptyList()) {
     @Suppress("UNCHECKED_CAST")
     val answers: Map<String, Map<String, Any?>> get() = PARTS.associateWith { p ->
-        (insp?.o("answers")?.get(p)?.let { JsonLogic.fromJson(it) } as? Map<String, Any?>).orEmpty() }
+        (insp?.answers?.get(p)?.let { JsonLogic.fromJson(it) } as? Map<String, Any?>).orEmpty() }
     fun filled(today: String) = trees["inspection"]?.let { Filled(trees, answers, JsonLogic.fromJson(b.answers) as Map<String, Any?>, today) }
 }
 
 /** The three forms an inspection was made with (check-in, inspection, wrap-up), raw and parsed. */
 @Composable
-fun rememberForms(env: OpsEnv, insp: JsonObject?): Map<String, JsonObject?> {
-    val versions = mapOf("inspection" to insp?.int("form_version"), "start" to insp?.int("start_version"), "end" to insp?.int("end_version"))
+fun rememberForms(env: OpsEnv, insp: Inspection?): Map<String, JsonObject?> {
+    val versions = mapOf("inspection" to insp?.formVersion, "start" to insp?.startVersion, "end" to insp?.endVersion)
     return versions.mapValues { (_, v) -> rememberLoad(env, v?.let { "form-versions/$it" }).value?.data as? JsonObject }
 }
 
 @Composable
 fun rememberBooking(env: OpsEnv, id: String): Loaded3? {
     val b = rememberLoad(env, "bookings/$id").value
-    val insps = rememberLoad(env, "bookings/$id/inspections").value?.data?.rows()
+    val insps = rememberLoad(env, "bookings/$id/inspections").value?.data?.rows()?.let(Inspection::list)
     val insp = insps?.let(::currentInspection)
     val raw = rememberForms(env, insp)
     if (b == null || insps == null) return null
