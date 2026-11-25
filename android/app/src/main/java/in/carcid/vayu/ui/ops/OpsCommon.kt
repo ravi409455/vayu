@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import androidx.compose.runtime.collectAsState
 import `in`.carcid.vayu.core.ops.ListItem
 import `in`.carcid.vayu.core.ops.Person
 import `in`.carcid.vayu.core.ops.Booking
@@ -162,13 +163,20 @@ class Labels(val cities: Map<String, String> = emptyMap(), val cars: Map<String,
 /** Everything an Ops screen needs from around it. */
 data class OpsEnv(val me: Me, val data: OpsData, val labels: Labels, val today: () -> LocalDate,
              /** Bump to reload every screen (Refresh, after a change). */
-             val tick: Int, val refresh: () -> Unit, val say: (String) -> Unit) {
+             val tick: Int, val refresh: () -> Unit, val say: (String) -> Unit,
+             /** Where screens' loads live (OpsModel); null only in tests that draw one screen alone. */
+             val loads: OpsLoads? = null) {
     fun can(p: String) = me.can(p)
 }
 
 /** Load [path] (again whenever [tick] changes); null while the first load runs. */
 @Composable
 fun rememberLoad(env: OpsEnv, path: String?): State<Loaded?, String?> {
+    env.loads?.let { loads ->
+        if (path == null) return State(null, null)
+        val flow = androidx.compose.runtime.remember(path, env.tick) { loads.get(path, env.tick) }
+        return flow.collectAsState().value
+    }
     var error by androidx.compose.runtime.remember(path) { mutableStateOf<String?>(null) }
     // the saved copy shows first (read in the background, not while the screen draws) while the
     // fresh one loads; "offline" only once loading fails
