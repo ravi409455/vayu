@@ -1,6 +1,13 @@
 name: ci
-on: [push, pull_request]
+# PRs run CI once (on the pull request); main runs on push. A newer push to the same PR cancels the
+# older run, so the runners only work on the latest commit.
+on:
+  push: {branches: [main]}
+  pull_request:
 permissions: {contents: read}
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -47,18 +54,41 @@ jobs:
               docker run --rm -v /tmp:/t tufin/oasdiff breaking /t/base.yaml /t/new.yaml --fail-on ERR
             fi
           else echo "no earlier schema to compare with"; fi
-      - run: uv run pytest --cov --cov-fail-under=85
-      - name: critical areas need 100% branch coverage
+      - name: all tests, 4 at a time (pytest-xdist), 85% coverage; the 25 slowest are listed
+        run: uv run pytest -n auto --cov --cov-fail-under=85 --durations=25
+  backend-gates:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: {POSTGRES_USER: vayu, POSTGRES_PASSWORD: vayu, POSTGRES_DB: vayu}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U vayu" --health-interval 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    defaults: {run: {working-directory: backend}}
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: astral-sh/setup-uv@v5
+      - name: PDF system libraries (WeasyPrint)
+        run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b fonts-dejavu-core
+      - run: uv sync --frozen
+      - name: critical areas need 100% branch coverage (every gate runs; all failures are shown)
         run: |
-          uv run pytest -q apps/forms --cov=apps.forms.rules --cov-branch --cov-fail-under=100
-          uv run pytest -q apps/bookings apps/forms/tests/test_access_model.py apps/media/tests/test_ops_media.py --cov=apps.bookings --cov=apps.forms.access --cov-branch --cov-fail-under=100
-          uv run pytest -q apps/media apps/reports/tests/test_media_links.py --cov=apps.media --cov-branch --cov-fail-under=100
-          uv run pytest -q apps/reports apps/bookings/tests/test_key_checks.py --cov=apps.reports --cov-branch --cov-fail-under=100
-          uv run pytest -q apps/forms/tests/test_promote.py apps/forms/tests/test_builder_support.py apps/forms/tests/test_system_forms.py apps/forms/tests/test_form_types.py apps/forms/tests/test_library_push.py --cov=apps.forms.promote --cov=apps.forms.legacy --cov-branch --cov-fail-under=100
-          uv run pytest -q apps/forms/tests/test_library.py apps/forms/tests/test_library_push.py apps/forms/tests/test_access_model.py --cov=apps.forms.library --cov=apps.forms.library_push --cov=apps.forms.ratings --cov-branch --cov-fail-under=100
-          uv run pytest -q apps/scoring apps/bookings/tests/test_scoring.py apps/bookings/tests/test_key_checks.py --cov=apps.scoring --cov-branch --cov-fail-under=100
-          uv run pytest -q apps/integrations apps/forms/tests/test_library_push.py apps/bookings/tests/test_key_checks.py --cov=apps.integrations --cov-branch --cov-fail-under=100
-          uv run pytest -q apps/accounts --cov=apps.accounts.permissions --cov=apps.accounts.roles --cov=apps.accounts.avatars --cov=apps.core.phone --cov-branch --cov-fail-under=100
+          failed=0
+          uv run pytest -q -n 2 apps/forms --cov=apps.forms.rules --cov-branch --cov-fail-under=100 || failed=1
+          uv run pytest -q -n 2 apps/bookings apps/forms/tests/test_access_model.py apps/media/tests/test_ops_media.py --cov=apps.bookings --cov=apps.forms.access --cov-branch --cov-fail-under=100 || failed=1
+          uv run pytest -q -n 2 apps/media apps/reports/tests/test_media_links.py --cov=apps.media --cov-branch --cov-fail-under=100 || failed=1
+          uv run pytest -q -n 2 apps/reports apps/bookings/tests/test_key_checks.py --cov=apps.reports --cov-branch --cov-fail-under=100 || failed=1
+          uv run pytest -q -n 2 apps/forms/tests/test_promote.py apps/forms/tests/test_builder_support.py apps/forms/tests/test_system_forms.py apps/forms/tests/test_form_types.py apps/forms/tests/test_library_push.py --cov=apps.forms.promote --cov=apps.forms.legacy --cov-branch --cov-fail-under=100 || failed=1
+          uv run pytest -q -n 2 apps/forms/tests/test_library.py apps/forms/tests/test_library_push.py apps/forms/tests/test_access_model.py --cov=apps.forms.library --cov=apps.forms.library_push --cov=apps.forms.ratings --cov-branch --cov-fail-under=100 || failed=1
+          uv run pytest -q -n 2 apps/scoring apps/bookings/tests/test_scoring.py apps/bookings/tests/test_key_checks.py --cov=apps.scoring --cov-branch --cov-fail-under=100 || failed=1
+          uv run pytest -q -n 2 apps/integrations apps/forms/tests/test_library_push.py apps/bookings/tests/test_key_checks.py --cov=apps.integrations --cov-branch --cov-fail-under=100 || failed=1
+          uv run pytest -q -n 2 apps/accounts --cov=apps.accounts.permissions --cov=apps.accounts.roles --cov=apps.accounts.avatars --cov=apps.core.phone --cov-branch --cov-fail-under=100 || failed=1
+          exit $failed
   web:
     runs-on: ubuntu-latest
     defaults: {run: {working-directory: web}}
