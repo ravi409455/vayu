@@ -119,6 +119,26 @@ class OpsFlowTest {
         shot("ops_today")
     }
 
+    @Test fun backOnBookingsOrDashboardGoesToTodayFirst() {
+        show()
+        waitFor("of 5 completed")
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Manoj Pillai")
+        androidx.test.espresso.Espresso.pressBack()
+        waitFor("of 5 completed")
+        compose.onNodeWithText("UNASSIGNED · 1").assertIsDisplayed()
+    }
+
+    @Test fun theOpenBookingComesBackAfterAndroidClosedTheApp() {
+        val restore = androidx.compose.ui.test.junit4.StateRestorationTester(compose)
+        restore.setContent { VayuTheme(ThemeMode.LIGHT) { OpsHome(me, data, { LocalDate.parse(TODAY) }, onProfile = {}) } }
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("2 Key Checks")
+        restore.emulateSavedInstanceStateRestore()
+        waitFor("2 Key Checks")                          // still on DEMO-14, not back on Today
+    }
+
     @Test fun todayStatusChipsNarrowTheDay() {
         show()
         waitFor("of 5 completed")

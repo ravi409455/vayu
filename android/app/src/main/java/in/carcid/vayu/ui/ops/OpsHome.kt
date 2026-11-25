@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -29,7 +30,8 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 /** A screen pushed on top of the Ops tabs. */
-sealed interface Route {
+/** Saved with the screen (Serializable), so Android closing the app in the background keeps Ops' place. */
+sealed interface Route : java.io.Serializable {
     data object Needs : Route
     data class Booking(val id: String) : Route
     data class Detail(val id: String, val part: Part, val group: String = "inspection") : Route
@@ -50,7 +52,9 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     // Bookings' filters live here, so they stay across tabs; a Dashboard tile sets them (dates, stage, late / quick, expert)
     var bookingFilters by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
     var tick by remember { mutableStateOf(0) }
-    val stack = remember { mutableStateListOf<Route>() }
+    val stack = rememberSaveable(saver = androidx.compose.runtime.saveable.listSaver(save = { it.toList() }, restore = { it.toMutableStateList() })) {
+        mutableStateListOf<Route>()
+    }
     var assigning by remember { mutableStateOf<Bk?>(null) }
     var labels by remember { mutableStateOf(Labels()) }
     var namesFresh by remember { mutableStateOf(false) }
@@ -89,6 +93,7 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     val pop = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
     val bar = @Composable { OpsBottomBar(tab, { tab = it; stack.clear() }, { asked = true; tick++ }, refreshing) }   // every tap counts (it restarts a load already running)
     if (stack.isNotEmpty()) BackHandler { pop() }
+    else BackHandler(tab != OpsTab.TODAY) { tab = OpsTab.TODAY }        // Back from Bookings or Dashboard: Today first, then out
 
     Box(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
         when (val r = stack.lastOrNull()) {

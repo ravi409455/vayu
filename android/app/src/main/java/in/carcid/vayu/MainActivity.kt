@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
 import `in`.carcid.vayu.ui.expert.ExpertExtras
 import `in`.carcid.vayu.ui.expert.ExpertHome
 import `in`.carcid.vayu.ui.expert.InspectionEnv
@@ -37,29 +36,34 @@ import `in`.carcid.vayu.ui.theme.Vayu
 import `in`.carcid.vayu.ui.theme.VayuTheme
 
 class MainActivity : ComponentActivity() {
+    private val factory = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T =
+            AppViewModel((application as VayuApp).graph, Build.MODEL, appVersion = BuildConfig.VERSION_CODE,
+                elapsed = android.os.SystemClock::elapsedRealtime) as T
+    }
+    private val vm: AppViewModel by lazy { ViewModelProvider(this, factory)[AppViewModel::class.java] }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                AppViewModel((application as VayuApp).graph, Build.MODEL, appVersion = BuildConfig.VERSION_CODE,
-                    elapsed = android.os.SystemClock::elapsedRealtime) as T
-        }
+        // a tapped notice: read here, not in a composable effect (after Android closed the app, the
+        // tap arrives before the first frame and would be lost)
+        if (savedInstanceState == null) opened(intent, vm)
         setContent {
-            val vm: AppViewModel = viewModel(factory = factory)
-            androidx.compose.runtime.LaunchedEffect(vm) { opened(intent, vm) }
-            androidx.compose.runtime.DisposableEffect(vm) {
-                val l = androidx.core.util.Consumer<android.content.Intent> { opened(it, vm) }
-                addOnNewIntentListener(l); onDispose { removeOnNewIntentListener(l) }
-            }
             androidx.lifecycle.compose.LifecycleResumeEffect(vm) { vm.onForeground(); onPauseOrDispose {} }
             AppRoot(vm)
         }
     }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        opened(intent, vm)
+    }
 }
 
-/** A tapped notice opens its job or booking. */
+/** A tapped notice opens its lead or booking. */
 private fun opened(intent: android.content.Intent?, vm: AppViewModel) {
     intent?.getStringExtra(Notices.EXTRA_BOOKING)?.let { vm.opening.value = it; intent.removeExtra(Notices.EXTRA_BOOKING) }
 }
