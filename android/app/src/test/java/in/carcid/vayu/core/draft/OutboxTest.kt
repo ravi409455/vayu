@@ -114,7 +114,7 @@ class OutboxTest {
         assertTrue(d.submitSent)
         assertFalse("nothing left to send, so sign-out isn't blocked", d.unsent)
         assertEquals("ALREADY_SUBMITTED", d.problemCode)                   // said, and kept off the tidy-up (it may differ)
-        assertEquals("Already submitted; Ops can edit it.", d.problem)
+        assertEquals("This lead was already submitted from your account; Ops can edit it on the web.", d.problem)   // the phone's own words
     }
 
     /** The same after a start the server refuses because the lead is past starting (the submit then goes alone). */
