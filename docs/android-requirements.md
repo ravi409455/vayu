@@ -28,7 +28,7 @@ prototype of every screen below is approved.**
 - **Ops:** bottom bar **Today · Bookings · Dashboard · Refresh** (kept clean, nothing else in it).
   Top bar: **bell** (opens Needs you, with a count badge) and **profile** avatar.
   **"+" New booking only in the top bar of the Bookings page.**
-- **Expert:** bottom bar **Jobs · Uploads (count) · Refresh**. Top bar: bell and profile.
+- **Expert:** bottom bar **Leads · Uploads (count) · Refresh**. Top bar: bell and profile.
 - **Wizard:** one form page per screen, scrolling vertically; sticky Back / Next at the bottom;
   the "Step 3 of 14 · Exterior" title opens the page list (done ticks, "needed" counts,
   not-opened dots) to jump anywhere. Pages marked "must be finished" still hold the pages after
@@ -45,10 +45,10 @@ prototype of every screen below is approved.**
 - **Ops:** show the last-loaded data offline with a clear, always-visible
   "Offline · as of 10:42" highlight. Every Ops action needs a connection and is disabled offline.
 - **Expert (from REQUIREMENTS §6, confirmed):**
-  1. Jobs and their forms are downloaded ahead of time; the whole inspection works with no signal.
+  1. Leads and their forms are downloaded ahead of time; the whole inspection works with no signal.
   2. Answers are saved on the phone instantly. A draft lives only on the phone: a lost phone means
      redoing the inspection, and photos already uploaded survive.
-  3. The job becomes "in progress" only when the check-in is complete (offline: recorded with the
+  3. The lead becomes "in progress" only when the check-in is complete (offline: recorded with the
      check-in time and sent on the next sync).
   4. Photos upload in the background on any network, resume after a restart, and are
      checksum-verified.
@@ -60,12 +60,17 @@ prototype of every screen below is approved.**
      refused, drafts of leads no longer on the list with Send / Discard).
   7a. A file the server refuses (too large, wrong type) shows its reason in Uploads and can be
      removed, also after Submit; the rest of the inspection is sent without it.
-  8. An app below the minimum version can't start new jobs but can finish the current one.
+  8. An app below the minimum version can't start new leads but can finish the current one.
   9. Times are corrected by the server clock; with no sync that day, or the phone restarted or its
      clock changed since the last sync, the time is marked "unverified".
   10. Under 2 GB free → warning; under 500 MB → Start is blocked.
 
 ## Camera and media (confirmed)
+
+- Camera, microphone refused: after one "Don't allow" Android may never ask again, so the camera
+  shows **Allow camera in Settings** (the app's page in Settings, checked again on coming back) and the
+  video camera says **No sound: the microphone isn't allowed.** with **Allow**.
+- A field without a "most files" setting takes **one** file (the agreed default, same as the server).
 
 1. In-app camera with a burned-in stamp: booking ID, expert, corrected time, GPS or
    "GPS unavailable".
@@ -90,7 +95,7 @@ prototype of every screen below is approved.**
 
 ## Screen decisions from the first prototype review (2026-11-24)
 
-- My jobs rows show only time, booking ID, customer name and status; everything else is on the job
+- My leads rows show only time, booking ID, customer name and status; everything else is on the lead
   screen.
 - Required fields show the red * right after the label text.
 - No "camera only" or similar hints on fields; the Gallery button is simply absent when the Admin
@@ -123,15 +128,20 @@ prototype of every screen below is approved.**
 
 ## Notifications
 
-- **Expert pushes:** job assigned, rescheduled, cancelled or reassigned away, booking details
-  changed; plus a **reminder 60 min before each job**; plus an on-phone alert when **photos have
+- **Expert pushes:** lead assigned, rescheduled, cancelled or reassigned away, booking details
+  changed; plus a **reminder 60 min before each lead** (booking times are India time, whatever zone the phone is in); plus an on-phone alert when **photos have
   not sent for 2 hours**. Every push also triggers a sync.
 - **Ops pushes:** Needs-you problems (stuck uploads, two-expert conflict, rejected type change,
-  PDF failed, payment mismatch), inspection submitted and completed, job started and **late start
+  PDF failed, payment mismatch), inspection submitted and completed, booking started and **late start
   (30 min past its time, not started)**, new bookings (shown simply as "New bookings").
   - Every Ops person gets every type by default; **Profile → Notifications** mutes a type
     (problems can't be muted).
-- The bell lists the person's recent notifications; tapping one opens the job or booking.
+- The bell lists the person's recent notifications; tapping one opens the lead or booking, also when
+  Android had closed the app in the background.
+- Notices are private on the lock screen ("New notice. Unlock to see it."): no customer name or address.
+- When Android blocks notices, Profile says so with **Turn on** (the app's notification settings).
+- Words: experts read **lead**, Ops **booking**, nobody "job" (docs/plan-leads-bookings-words.md; `WordsTest`
+  checks every text). The notification channel is named "Leads and updates" / "Bookings and updates" by role.
 
 ## Distribution
 
@@ -148,7 +158,7 @@ profile (picture, details, theme, password, notifications for Ops, sign out bloc
 unsynced), notifications list (bell), offline highlight, update available, devices signed out
 notice.
 
-**Expert:** My jobs (Today / Upcoming / Done, search), job detail and Start (call, WhatsApp,
+**Expert:** My leads (Today / Upcoming / Completed, search), lead detail and Start (call, WhatsApp,
 directions, storage check), check-in (GPS, time, selfie), wizard page with every field type,
 page list sheet, camera with stamp, photo review / retake, chassis scan and confirm, review and
 submit (gaps, pages not opened), submitted / uploading, Uploads tab (per file, storage, clear

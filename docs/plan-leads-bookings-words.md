@@ -1,6 +1,6 @@
 # Plan: experts say "lead", Ops say "booking" (user-facing words only)
 
-Status: **built on web and server** (`ee15cf9`); **Android not yet** ([`plan-fixes.md`](plan-fixes.md) batch 4). *(Status corrected 2026-11-25.)*
+Status: **built on web and server** (`ee15cf9`); **Android built** in batch 4 (`fix/b4-android`, guarded by `WordsTest`). *(Status corrected 2026-11-25.)*
 
 ## The rule
 
