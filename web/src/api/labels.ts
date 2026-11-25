@@ -18,9 +18,15 @@ export function useTypeLabels(): (key: unknown) => string {
   return (key) => (key === undefined || key === null || key === "" ? "" : map.get(String(key)) ?? String(key));
 }
 
+/** A master list's items (archived ones included: callers hide them where new picks are made).
+ *  The one fetch every screen shares; an empty [list] fetches nothing. */
+export function useListItems(list: string, enabled = true) {
+  return useQuery({ queryKey: keys.listItems(list), enabled: enabled && !!list, staleTime: 300_000, queryFn: ({ signal }) => fetchAll<MasterListItem>(`master-lists/${list}/items`, undefined, signal) });
+}
+
 /** key -> label for a master list (cities, car models, inspection types...). */
 export function useLabels(list: string): (key: unknown) => string {
-  const q = useQuery({ queryKey: keys.listItems(list), staleTime: 300_000, queryFn: ({ signal }) => fetchAll<MasterListItem>(`master-lists/${list}/items`, undefined, signal) });
+  const q = useListItems(list);
   const map = new Map((q.data ?? []).map((i) => [i.key, i.label]));
   return (key) => (key === undefined || key === null || key === "" ? "" : map.get(String(key)) ?? String(key));
 }

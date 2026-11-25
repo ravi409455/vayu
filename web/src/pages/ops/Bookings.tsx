@@ -3,9 +3,9 @@ import { Fragment, useEffect, useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type Page } from "../../api/client";
-import { fetchAll, useList, useRefresh } from "../../api/hooks";
-import { STAGE_LABEL, STAGE_TONE, useInspectionTypes, useLabels, useTypeLabels } from "../../api/labels";
-import type { Booking, MasterListItem, User } from "../../api/types";
+import { useList, useRefresh } from "../../api/hooks";
+import { STAGE_LABEL, STAGE_TONE, useInspectionTypes, useLabels, useListItems, useTypeLabels } from "../../api/labels";
+import type { Booking, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { allowedActions } from "../../lib/actions";
 import { useCount, viewQuery, type View } from "../../lib/bookingViews";
@@ -82,7 +82,7 @@ export function Bookings() {
   // a new filter keeps the rows on screen until its answer arrives (no flash, an open menu stays put)
   const q = useQuery({ queryKey: keys.bookings("page", query), queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query, signal }), placeholderData: keepPreviousData });
   const experts = useList<User>(keys.users(), "users", { role: "expert" });
-  const cities = useQuery({ queryKey: keys.listItems("city"), queryFn: ({ signal }) => fetchAll<MasterListItem>("master-lists/city/items", undefined, signal) });
+  const cities = useListItems("city");
   const types = useInspectionTypes();
   // an answer is picked once a type is: only that type's questions (plus check-in and wrap-up)
   const answerFields = useQuery({ queryKey: keys.answerFields(f.type), enabled: can("submissions.view") && !!f.type,
