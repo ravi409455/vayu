@@ -238,3 +238,21 @@ def test_the_migration_writes_the_old_default_into_fields_that_relied_on_it(form
     assert sec.definition["fields"][0]["config"] == {"max_count": 5}
     assert "config" not in sec.definition["fields"][1]
     assert one.definition["config"] == {"max_count": 4}
+
+
+def test_every_error_comes_with_the_servers_words(form_v, add_field, admin):
+    """F-007: the field's own words, the Admin's check message or the rule's; codes unchanged."""
+    version = build(form_v, add_field, admin)
+    add_field(form_v[2], "plate", type="short_text",
+              config={"pattern": "[A-Z]{2}", "pattern_message": "Two capital letters."})
+    words: dict = {}
+    _, errors = validate_answers(version, {"inspection": {
+        "chassis_no": "X", "door": "dent", "odo": -5, "mfg": "2027-01-01", "plate": "x1"}},
+        today="2026-10-14", messages=words)
+    assert errors == {"door_photo": "required", "odo": "OUT_OF_RANGE", "mfg": "Not in the future",
+                      "plate": "PATTERN_MISMATCH"}
+    assert words == {"door_photo": "This is required.", "odo": "Must be between 0 and 999999.",
+                     "mfg": "Not in the future", "plate": "Two capital letters."}
+    unknown: dict = {}
+    validate_answers(version, {"inspection": {"nope": 1}}, today="2026-10-14", messages=unknown)
+    assert unknown == {"nope": "Not a field of this form."}

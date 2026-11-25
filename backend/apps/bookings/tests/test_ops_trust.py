@@ -176,3 +176,11 @@ def test_creating_with_an_expert_chosen_needs_the_assign_permission(env):
     r = create(env.ops, booking_id="NA1", assigned_expert=env.expert_user.id)
     assert r.status_code == 403
     assert create(env.ops, booking_id="NA2").status_code == 201
+
+
+def test_a_refused_answer_carries_the_servers_words(env):
+    """F-007."""
+    r = create(env.ops, booking_id="W1", customer_phone="12")
+    assert r.status_code == 400
+    assert set(r.json()["messages"]) == set(r.json()["errors"])
+    assert all(isinstance(m, str) and m for m in r.json()["messages"].values())

@@ -152,7 +152,8 @@ def test_renaming_a_linked_section_through_the_library_keeps_its_rating(admin, m
     sec = section_of(tree(v), "Tyres")
     admin.post(f"/api/v1/sections/{sec['id']}/accept-update")
     cats = tree(v)["rating_config"]["categories"]
-    assert cats == [{"key": "tyres", "label": "Tyres", "sections": ["Tyre set", "Other"]}]
+    # by section key: a rename changes nothing (F-045); an unknown name is kept for validation
+    assert cats == [{"key": "tyres", "label": "Tyres", "sections": [sec["key"], "Other"]}]
     assert f
 
 
@@ -162,7 +163,7 @@ def test_renaming_a_section_by_hand_updates_the_rating_categories(admin, make_fo
         {"key": "body", "label": "Body", "sections": ["Section 1"]}]}}, format="json")
     assert admin.patch(f"/api/v1/sections/{sec}", {"title": "Bodywork"},
                        format="json").status_code == 200
-    assert tree(v)["rating_config"]["categories"][0]["sections"] == ["Bodywork"]
+    assert tree(v)["rating_config"]["categories"][0]["sections"] == ["section_1"]   # its key
     assert admin.patch(f"/api/v1/sections/{sec}", {"visible": True}, format="json").status_code == 200
     assert f
 

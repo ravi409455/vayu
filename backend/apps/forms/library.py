@@ -336,8 +336,6 @@ def accept_update(actor, obj: Field | Section) -> Field | Section:
     """Bring a linked field or section to the library's current revision. The library owns
     everything inside the item (content, rules, required, visible, access, and for a section its
     fields and their order); the form keeps only where the item sits."""
-    from .ratings import rename_section_title
-
     ensure_draft(obj.version_id)
     item = obj.library_item
     if item is None:
@@ -350,13 +348,10 @@ def accept_update(actor, obj: Field | Section) -> Field | Section:
         obj.library_revision = item.revision
         obj.save()
     else:
-        old_title = obj.title
         obj.title, obj.visible = d["title"], d.get("visible", True)
         obj.show_if, obj.access = d.get("show_if"), d.get("access", {})
         obj.library_revision = item.revision
         obj.save()
-        if old_title != obj.title:
-            rename_section_title(obj.version_id, old_title, obj.title)
         existing = {f.key: f for f in obj.fields.all()}
         wanted = {fd["key"] for fd in d["fields"]}
         for key, f in existing.items():

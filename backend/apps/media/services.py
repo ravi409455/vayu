@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from apps.accounts.permissions import scope_for
 from apps.bookings import activity
+from apps.bookings.changes import stamp
 from apps.bookings.models import Booking, Inspection
 from apps.bookings.services import err
 from apps.bookings.submissions import current_versions, deliver_filter, own_filter
@@ -320,10 +321,7 @@ def attach(request, new: MediaAsset, replaces=None) -> None:
             ids.append(str(new.id))
         answers[field.key] = ids
         insp.answers = {**insp.answers, part: answers}
-        insp.row_version += 1
-        insp.last_edited_by, insp.last_edited_at = user, timezone.now()
-        insp.last_change = {"by": user.shown_name, "at": insp.last_edited_at.isoformat(),
-                            "keys": [field.key]}
+        stamp(insp, user, [field.key])
         insp.save()
         if old is not None:
             old.replaced_by, old.replaced_at = new, timezone.now()
@@ -450,8 +448,7 @@ def check_completion(booking_id) -> bool:
         if verified != ids:
             return False
         b.stage = "completed"
-        b.row_version += 1
-        b.last_change = {"by": "system", "at": timezone.now().isoformat(), "keys": ["stage"]}
+        stamp(b, None, ["stage"])
         b.save()
         activity.log(b, None, "changed", {"stage": ["submitted", "completed"]})
     # a stage change is a booking.updated like any other (H-13); before inspection.completed so
@@ -500,10 +497,7 @@ def delete_asset(actor, asset: MediaAsset) -> None:
                     insp.answers = {**insp.answers, part: {k: v for k, v in answers.items()
                                                            if v not in (None, [])}}
             if changed:
-                insp.row_version += 1
-                insp.last_edited_by, insp.last_edited_at = actor, timezone.now()
-                insp.last_change = {"by": actor.shown_name, "at": insp.last_edited_at.isoformat(),
-                                    "keys": [asset.field_key]}
+                stamp(insp, actor, [asset.field_key])
                 insp.save()
                 scoring.recompute(insp)
         drop_zips(MediaZip.objects.filter(booking=asset.booking))  # cached ZIPs no longer match
@@ -578,9 +572,7 @@ def finish_without_missing(actor, booking: Booking) -> Booking:
                       keys=[f"{r['part']}.{r['key']}" for r in need])
         insp = b.counted_inspection()
         b.stage = "completed"
-        b.row_version += 1
-        b.last_change = {"by": actor.shown_name, "at": timezone.now().isoformat(),
-                         "keys": ["stage"]}
+        stamp(b, actor, ["stage"], edited=False)
         b.save()
         left = sum(r["count"] for r in rows)
         activity.log(b, actor, "finished_without_files",

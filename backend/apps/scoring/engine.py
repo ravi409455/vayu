@@ -68,7 +68,7 @@ def validate_config(cfg) -> None:
             sections = c.get("sections")
             if (not isinstance(sections, list) or not sections
                     or not all(isinstance(t, str) and t.strip() for t in sections)):
-                raise ValueError(f"Category '{c['key']}' needs section titles.")
+                raise ValueError(f"Category '{c['key']}' needs sections.")
             if titles & set(sections):
                 raise ValueError("A section can feed only one category.")
             titles |= set(sections)

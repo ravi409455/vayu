@@ -142,10 +142,14 @@ def publish_version(actor, version_id: int, row_version: int) -> FormVersion:
         if issues:
             raise CodedError("PUBLISH_BLOCKED", "Fix these problems before publishing.", 400,
                              issues=[i.__dict__ for i in issues])
+        from apps.scoring.service import section_keys
+
         version.status = VersionStatus.PUBLISHED
         version.published_at = timezone.now()
         version.row_version = F("row_version") + 1
-        version.save(update_fields=["status", "published_at", "row_version"])
+        # whoever wrote the config (setup, promote, the demo), it goes live by section key
+        version.rating_config = section_keys(version, version.rating_config)
+        version.save(update_fields=["status", "published_at", "row_version", "rating_config"])
         version.refresh_from_db()
         audit.record(actor, "form.publish", "form_version", version.id,
                      f"Published {version.form.key} v{version.number}")
@@ -230,3 +234,17 @@ def discard_draft(actor, form: Form) -> None:
     draft.delete()
     audit.record(actor, "form.draft_discard", "form", form.id,
                  f"Discarded draft v{number} of {form.key}")
+
+
+def save_draft_setting(actor, version_id: int, action: str, change, summary) -> FormVersion:
+    """A setting of a draft version (switches, rating config, Key Checks), saved the one way
+    (F-023): lock the draft, [change](version) sets the fields and returns their names, the
+    version goes up, then the audit row says [summary](version)."""
+    with transaction.atomic():
+        lock_draft(version_id)
+        version = get_object_or_404(FormVersion.objects.select_related("form"), pk=version_id)
+        fields = change(version)
+        version.row_version += 1
+        version.save(update_fields=[*fields, "row_version"])
+    audit.record(actor, action, "form_version", version_id, summary(version))
+    return version

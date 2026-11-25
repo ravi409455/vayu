@@ -189,9 +189,17 @@ def spec_from_version(version) -> FormSpec:
 GONE_STALE = {"ARCHIVED_OPTION", "INVALID_USER"}
 
 
-def validate_answers(version, answers: dict, today: str,
-                     overrides: dict | None = None, kept: dict | None = None) -> tuple[dict, dict]:
+# the words for the codes rules give (field checks bring their own words, AnswerError)
+RULE_WORDS = {"required": "This is required.", "UNKNOWN_FIELD": "Not a field of this form.",
+              "check_failed": "This answer does not pass the form's check."}
+
+
+def validate_answers(version, answers: dict, today: str, overrides: dict | None = None,
+                     kept: dict | None = None,
+                     messages: dict | None = None) -> tuple[dict, dict]:
     """Full server-side validation of one form's answers. Returns (cleaned, errors).
+    [messages], when given, is filled with the words for each error (F-007): the field's own
+    (a pattern's message), the Admin's check message, or the rule's, so no client rewrites them.
 
     Type errors win over rule errors; answers to hidden fields are dropped unchecked. [kept]: the
     values stored before an edit; one sent back unchanged whose option was archived or whose user
@@ -202,7 +210,9 @@ def validate_answers(version, answers: dict, today: str,
     fields = {f.key: f for f in Field.objects.filter(version=version)}
     raw = answers.get(own) or {}
     errors: dict[str, str] = {k: "UNKNOWN_FIELD" for k in raw if k not in fields}
+    words: dict[str, str] = {}
     if errors:
+        _say(messages, errors, words)
         return {}, errors
     cleaned: dict[str, Any] = {}
     type_errors: dict[str, str] = {}
@@ -215,7 +225,7 @@ def validate_answers(version, answers: dict, today: str,
             if e.code in GONE_STALE and kept is not None and kept.get(key) == value:
                 cleaned[key] = value
             else:
-                type_errors[key] = e.code
+                type_errors[key], words[key] = e.code, str(e)
     result = evaluate_form(spec_from_version(version), {**answers, own: cleaned}, today,
                            overrides)
     visible_type_errors = {k: c for k, c in type_errors.items() if result.visible[k]}
@@ -226,7 +236,15 @@ def validate_answers(version, answers: dict, today: str,
         if failed and check.message and not truthy(check.rule, result.data):
             for k in failed:
                 rule_errors[k] = check.message
-    return cleaned, {**rule_errors, **visible_type_errors}
+    out = {**rule_errors, **visible_type_errors}
+    _say(messages, out, words)
+    return cleaned, out
+
+
+def _say(messages: dict | None, errors: dict, words: dict) -> None:
+    if messages is not None:
+        messages.update({k: words.get(k) or RULE_WORDS.get(code, code)
+                         for k, code in errors.items()})
 
 
 # ------------------------------------------------------------------ design time
