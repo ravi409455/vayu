@@ -140,7 +140,7 @@ function SectionCard({
       style={{ transform: CSS.Transform.toString(s.transform), transition: s.transition, opacity: s.isDragging ? 0.5 : 1 }}
       className={`sec-card${selected ? " on" : ""}`}
     >
-      <header className="sec-head" {...pressable(onSelect)}>
+      <div className="sec-head" {...pressable(onSelect)}>
         {!readOnly && <Handle listeners={s.listeners} attributes={s.attributes} label={`Move section ${section.title}`} />}
         <strong className="grow">{section.title}</strong>
         {section.library && (
@@ -151,7 +151,7 @@ function SectionCard({
         <span className="muted small">
           {section.fields.length} field{section.fields.length === 1 ? "" : "s"}
         </span>
-      </header>
+      </div>
       <SortableContext items={section.fields.map((f) => sid({ kind: "field", id: f.id }))} strategy={verticalListSortingStrategy}>
         <div className="sec-body">
           {section.fields.map((f) => (
