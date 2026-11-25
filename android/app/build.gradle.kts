@@ -77,6 +77,12 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
+    // lint runs in CI; known false positives and old warnings live in the baseline (new ones fail)
+    lint {
+        baseline = file("lint-baseline.xml")
+        abortOnError = true
+        checkDependencies = false
+    }
 }
 
 dependencies {
@@ -97,12 +103,10 @@ dependencies {
     implementation(libs.camera.video)
     implementation(libs.mlkit.text)
     implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.lifecycle.runtime)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons)
-    implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
 
@@ -169,4 +173,10 @@ sentry {
     tracingInstrumentation { enabled.set(false) }
     includeDependenciesReport.set(false)
     telemetry.set(false)
+}
+
+// F-169: unit tests run on the debug variant only (the Compose test activity is a debug-only
+// dependency), so the obvious `./gradlew test` is green instead of 48 red release tests.
+androidComponents {
+    beforeVariants(selector().withBuildType("release")) { it.hostTests.forEach { (_, t) -> t.enable = false } }
 }
