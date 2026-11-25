@@ -1,8 +1,14 @@
-import { cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState, type InputHTMLAttributes, type ReactElement, type ReactNode } from "react";
+import { cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState, type InputHTMLAttributes, type KeyboardEvent, type ReactElement, type ReactNode } from "react";
 import { Inbox, X } from "lucide-react";
 import { ApiError, explain } from "../api/client";
 import { fmtStamp } from "../lib/format";
 import { InfoTip } from "./InfoTip";
+
+/** Props that make a non-button element act like one: a click, or Enter / Space while it has focus. */
+export const pressable = (fn: () => void) => ({
+  role: "button" as const, tabIndex: 0, onClick: fn,
+  onKeyDown: (e: KeyboardEvent) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); fn(); } },
+});
 
 /** A native modal dialog: focus moves in and stays in (the page behind is inert), Escape closes it,
  *  and focus goes back to what opened it. A click beside it closes it only when nothing can be typed. */
@@ -19,6 +25,7 @@ export function Modal({ title, children, onClose, actions, wide }: { title: stri
     return () => { if (d.open) d.close(); back?.focus?.(); };
   }, []);
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- a click on the backdrop; keyboards close it with Escape
     <dialog ref={ref} className="modal-dlg" aria-labelledby={head} tabIndex={-1}
       onCancel={(e) => { e.preventDefault(); close.current(); }}
       onClick={(e) => { if (e.target === ref.current && !ref.current.querySelector("input, select, textarea, [contenteditable]")) close.current(); }}>

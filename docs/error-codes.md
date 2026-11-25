@@ -83,7 +83,7 @@ Regenerate: `uv run python -c "from apps.platform.error_codes import table; prin
 | `INVALID_OVERRIDES` | 400 | … |
 | `INVALID_PERMISSION` | 400 | Unknown permission '…'. |
 | `INVALID_PERMISSIONS` | 400 | permissions must be an object. |
-| `INVALID_QUERY` | 400 | Query parameters are a list of up to …. |
+| `INVALID_QUERY` | 400 | have and drafts must be version ids, since a date-time. |
 | `INVALID_RATING_CONFIG` | 400 | … |
 | `INVALID_REASON` | 400 | Choose a reschedule reason from the list. |
 | `INVALID_REORDER` | 400 | Send pages, sections and/or fields. |
@@ -151,7 +151,9 @@ Regenerate: `uv run python -c "from apps.platform.error_codes import table; prin
 | `RULE_NOT_SELF_CONTAINED` | 400 | A rule uses '…', which is not part of this library item. Put that field in the same library section, or keep this item out of the library. |
 | `SHARED_BLOCKED` | 400 | Some templates using this would show fields their form does not have. |
 | `SHARED_IN_USE` | 409 | Still used by …. Remove it from those reports first. |
+| `STALE_BOOKING` | 409 | Someone changed this booking since you opened it. |
 | `STALE_DRAFT` | 409 | The draft changed since you opened it; reload. |
+| `STALE_INSPECTION` | 409 | Someone changed this inspection since you opened it. |
 | `STALE_LIBRARY_ITEM` | 409 | Someone saved this item after you opened it; reload to see their changes. |
 | `SYSTEM_FIELD` | 400 | System fields cannot go to the library. |
 | `SYSTEM_FORM` | 400 | The booking, start and end forms cannot be switched off. |

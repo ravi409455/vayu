@@ -10,7 +10,7 @@ from typing import Any
 from django.db import transaction
 
 from apps.accounts import audit
-from apps.bookings.services import err
+from apps.core.errors import fail
 from apps.forms import assets
 from apps.forms.models import FormAsset
 
@@ -118,14 +118,14 @@ def import_file(actor, t: PdfTemplate, payload: Any) -> dict:
     from .service import definition_issues
 
     if not isinstance(payload, dict) or payload.get("kind") != FILE_KIND:
-        raise err("INVALID_TEMPLATE_FILE", "This is not a Vayu report template file.")
+        raise fail("INVALID_TEMPLATE_FILE", "This is not a Vayu report template file.")
     if payload.get("schema") != SCHEMA:
-        raise err("INVALID_TEMPLATE_FILE", "This file was made by another version of Vayu.")
+        raise fail("INVALID_TEMPLATE_FILE", "This file was made by another version of Vayu.")
     with transaction.atomic():
         try:
             d, notes = load_payload(actor, payload)
         except ValueError as e:
-            raise err("INVALID_TEMPLATE_FILE", str(e)) from e
+            raise fail("INVALID_TEMPLATE_FILE", str(e)) from e
         draft = t.versions.select_for_update().filter(status="draft").first()
         if draft is None:
             last = t.versions.order_by("-number").first()

@@ -5,7 +5,7 @@ from typing import Any
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from apps.bookings.models import Booking, Inspection
-from apps.bookings.services import err
+from apps.core.errors import fail
 from apps.forms.fieldtypes import DEFAULT_MAX_COUNT
 from apps.forms.models import Field
 
@@ -19,7 +19,7 @@ def submitted_answer(booking: Booking, field: Field, lock: Any=False) -> Any:
     part = next((p for p, v in (insp.pinned() if insp else {}).items()
                  if v is not None and v.id == field.version_id), None)
     if insp is None or part is None:
-        raise err("NOT_SUBMITTED", "Files can be added only after the expert submits.", 409)
+        raise fail("NOT_SUBMITTED", "Files can be added only after the expert submits.", 409)
     value = (insp.answers.get(part) or {}).get(field.key)
     return insp, part, [value] if isinstance(value, str) else list(value or [])
 

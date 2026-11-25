@@ -4,7 +4,9 @@ import ast
 from pathlib import Path
 
 APPS = Path(__file__).resolve().parents[1]
-CALLS = {"err", "CodedError", "bad"}        # the helpers that raise a coded error
+# the helpers that raise a coded error: name -> (index of the code argument, fixed HTTP status)
+CALLS: dict[str, tuple[int, int | None]] = {"fail": (0, None), "CodedError": (0, None),
+                                            "check_row_version": (2, 409)}
 # raised by DRF and the error handler (apps/core/exceptions.py), not by a call above
 FRAMEWORK = {"INVALID": (400, "A field is invalid; `fields` says which."),
              "PARSE_ERROR": (400, "The body is not valid JSON (or not a JSON object)."),
@@ -33,14 +35,16 @@ def codes() -> dict[str, tuple[int, str]]:
         if "tests" in path.parts or "migrations" in path.parts:
             continue
         for node in ast.walk(ast.parse(path.read_text())):
-            if not (isinstance(node, ast.Call) and getattr(node.func, "id", "") in CALLS
-                    and node.args and isinstance(node.args[0], ast.Constant)
-                    and isinstance(node.args[0].value, str)):
+            if not isinstance(node, ast.Call) or getattr(node.func, "id", "") not in CALLS:
                 continue
-            status = next((a.value for a in node.args[2:3] if isinstance(a, ast.Constant)
-                           and isinstance(a.value, int)), 400)
-            text = _text(node.args[1]) if len(node.args) > 1 else ""
-            out.setdefault(node.args[0].value, (status, text))
+            at, fixed = CALLS[node.func.id]  # type: ignore[attr-defined]
+            args = node.args[at:]
+            if not (args and isinstance(args[0], ast.Constant) and isinstance(args[0].value, str)):
+                continue
+            status = fixed or next((a.value for a in args[2:3] if isinstance(a, ast.Constant)
+                                    and isinstance(a.value, int)), 400)
+            text = _text(args[1]) if len(args) > 1 else ""
+            out.setdefault(args[0].value, (status, text))
     return out
 
 

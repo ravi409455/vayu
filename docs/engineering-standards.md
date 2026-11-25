@@ -134,14 +134,14 @@ copy the old pattern.
   (`select_for_update`), and edits carry `row_version`. Stage changes go through the stage rules.
 - Work for after the commit (Celery tasks, events that tasks read) goes through
   `core_tasks.after_commit`. Tasks are safe to run twice and have a time limit.
-- Errors: `err("CODE", "Sentence.", status)` / `CodedError`; a new code is added to the documented
+- Errors: `raise fail("CODE", "Sentence.", status)` (`apps/core/errors.py`); a new code is added to the documented
   list. Use the enums for stages, statuses and event names, never a bare string.
 - Queries: no query per row. A list endpoint gets a query-count test. Filters used in lists have an
   index.
 - Migrations: reversible, or the reason is written in the migration and the runbook. Data
   migrations don't import app code. Never edit an applied migration.
 - Outgoing calls (webhooks, storage, push): timeouts, the address guard, no secrets in logs.
-- Types and style: `ruff` clean, `mypy apps vayu` clean, lines ≤ 100, type hints on new functions.
+- Types and style: `ruff` clean (includes security `S` and complexity `C90`, max 12; the allow list in `pyproject.toml` only shrinks), `mypy apps vayu` clean, lines ≤ 100, type hints on new functions.
 - Tests: pytest, real database, API-level where possible. The modules with a 100% branch-coverage
   gate (see `.github/workflows/ci.yml`, job `backend-gates`) stay at 100%.
 

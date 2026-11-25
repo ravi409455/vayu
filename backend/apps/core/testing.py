@@ -6,7 +6,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.models import Role, User
 
-PASSWORD = "Str0ng-pass-1"
+PASSWORD = "Str0ng-pass-1"  # noqa: S105 - test-only password
 
 
 @pytest.fixture

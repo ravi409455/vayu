@@ -1,10 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { api } from "../../../api/client";
-import { fetchAll } from "../../../api/hooks";
-import { keys } from "../../../api/keys";
-import { useInspectionTypes, useTypeLabels } from "../../../api/labels";
-import type { Booking, MasterListItem, User } from "../../../api/types";
+import { useInspectionTypes, useListItems, useTypeLabels } from "../../../api/labels";
+import type { Booking, User } from "../../../api/types";
 import { Confirm, Field, Modal } from "../../../ui/kit";
 
 export function Actions({ kind, booking, experts, onClose, onDone, fail }: { kind: "assign" | "reschedule" | "cancel" | "release" | "type"; booking: Booking; experts: User[]; onClose: () => void; onDone: () => void; fail: (e: unknown) => void }) {
@@ -13,12 +10,7 @@ export function Actions({ kind, booking, experts, onClose, onDone, fail }: { kin
   const [time, setTime] = useState(String(booking.answers.inspection_time ?? ""));
   const [reason, setReason] = useState("");
   const [type, setType] = useState(booking.inspection_type);
-  const reasons = useQuery({
-    queryKey: keys.listItems(kind === "cancel" ? "cancel_reason" : "reschedule_reason"),
-    enabled: kind === "cancel" || kind === "reschedule",
-    queryFn: ({ signal }) =>
-      fetchAll<MasterListItem>(`master-lists/${kind === "cancel" ? "cancel_reason" : "reschedule_reason"}/items`, undefined, signal),
-  });
+  const reasons = useListItems(kind === "cancel" ? "cancel_reason" : "reschedule_reason", kind === "cancel" || kind === "reschedule");
   const types = useInspectionTypes();
   const typeLabel = useTypeLabels();
   const [busy, setBusy] = useState(false);

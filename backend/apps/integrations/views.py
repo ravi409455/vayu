@@ -14,152 +14,13 @@ from rest_framework.views import APIView
 from apps.accounts import audit
 from apps.accounts.permissions import perm
 from apps.bookings.models import Booking
-from apps.bookings.services import err
+from apps.core.errors import fail
 from apps.core.pagination import Pages
 from apps.forms.models import Field, Form, FormType
 
 from . import apikeys, values, webhooks
 from .models import ApiKey, Delivery, Integration
-
-TOGGLES = ("include_data", "include_pdf", "include_image_zip", "include_video_zip", "is_active")
-DESIGN = ("form", "event", "url", "query", "headers", "body_mode", "body")   # need a fresh check
-MAX_TEXT = 1000
-
-
-def _text(value: Any, what: str, allowed: set[str], *, one_line: bool = False) -> str:
-    """A string that may hold {{ref}} tokens; every token must be one the form offers."""
-    if not isinstance(value, str) or len(value) > MAX_TEXT:
-        raise err("INVALID_VALUE", f"{what} must be text of up to {MAX_TEXT} characters.")
-    if not values.check_syntax(value):
-        raise err("INVALID_VALUE", f"{what} has a '{{{{' or '}}}}' that is not a whole value.")
-    if one_line and ("\r" in value or "\n" in value):
-        raise err("INVALID_VALUE", f"{what} cannot hold a line break.")
-    bad = [r for r in values.refs_in(value) if r not in allowed]
-    if bad:
-        raise err("UNKNOWN_VALUE", f"{what} uses {bad[0]}, which this form and event do not "
-                  "offer.", ref=bad[0])
-    return value
-
-
-def _json(node: Any, allowed: set[str], depth: int, count: list[Any]) -> Any:
-    """A custom body: any JSON object or list; strings may hold {{ref}} values the form offers."""
-    count[0] += 1
-    if count[0] > values.MAX_NODES or depth > values.MAX_DEPTH:
-        raise err("INVALID_BODY", f"The body is too big or nested too deeply (up to "
-                  f"{values.MAX_NODES} values, {values.MAX_DEPTH} levels).")
-    if isinstance(node, str):
-        return _text(node, "A body value", allowed)
-    if isinstance(node, dict):
-        out = {}
-        for k, v in node.items():
-            if not k.strip() or len(k) > 100 or "{{" in k:
-                raise err("INVALID_BODY", "A name in the body is plain text of up to 100 "
-                          "characters.")
-            out[k] = _json(v, allowed, depth + 1, count)
-        return out
-    if isinstance(node, list):
-        return [_json(v, allowed, depth + 1, count) for v in node]
-    if node is None or isinstance(node, (bool, int, float)):
-        return node
-    raise err("INVALID_BODY", "The body is JSON.")           # pragma: no cover - JSON has no more
-
-
-def _clean_integration(data: dict[str, Any], current: Integration | None = None, *,
-                       check_address: bool = True) -> dict[str, Any]:
-    """Validated column values from a request body (only what the body carries)."""
-    out: dict[str, Any] = {}
-    if "form" in data or current is None:
-        form_id = data.get("form")
-        chosen = Form.objects.filter(pk=form_id).first() if isinstance(form_id, int) else None
-        if chosen is None or chosen.type not in (FormType.BOOKING, FormType.CUSTOM):
-            raise err("INVALID_FORM", "Choose a booking or inspection form.")
-        out["form"] = chosen
-    if "name" in data or current is None:
-        name = data.get("name")
-        if not isinstance(name, str) or not name.strip() or len(name) > 100:
-            raise err("INVALID_NAME", "Give the integration a name (up to 100 characters).")
-        out["name"] = name.strip()
-    if "event" in data or current is None:
-        if data.get("event") not in webhooks.EVENTS:
-            raise err("INVALID_EVENT", "Pick one event.", allowed=webhooks.EVENTS)
-        out["event"] = data["event"]
-    form: Form = out["form"] if "form" in out else current.form        # type: ignore[union-attr]
-    event = out.get("event") or (current.event if current else "")
-    if form.type == FormType.BOOKING and not event.startswith("booking."):
-        raise err("INVALID_EVENT", "A booking form integration can only use booking events.")
-    if "method" in data or current is None:
-        method = data.get("method", "POST")
-        if method not in webhooks.METHODS:
-            raise err("INVALID_METHOD", "Pick POST, PUT, PATCH, GET or DELETE.",
-                      allowed=webhooks.METHODS)
-        out["method"] = method
-    for key in TOGGLES:
-        if key in data:
-            if not isinstance(data[key], bool):
-                raise err("INVALID_TOGGLE", f"{key} must be true or false.")
-            out[key] = data[key]
-    if "fields" in data:
-        fields = data["fields"]
-        if not isinstance(fields, list) or not all(isinstance(f, str) for f in fields):
-            raise err("INVALID_FIELDS", "fields must be a list of field keys.")
-        out["fields"] = sorted(set(fields))
-    if "body_mode" in data and data["body_mode"] not in ("standard", "custom"):
-        raise err("INVALID_BODY", "The body is standard or custom.")
-    if not any(k in data for k in DESIGN) and current is not None:
-        return out                                   # a toggle or a rename: nothing to re-check
-    allowed = {e["ref"] for e in values.catalogue(form, event)}
-    url = data["url"] if "url" in data or current is None else current.url
-    if not isinstance(url, str) or len(url) > 500 or not url.startswith(("http://", "https://")):
-        raise err("INVALID_URL", "This URL cannot be used (bad_url).", reason="bad_url")
-    base = "/".join(url.split("/", 3)[:3])
-    after = url[len(base):]
-    if "{{" in base or any("{{" in part for part in after.replace("#", "?").split("?")[1:]):
-        raise err("INVALID_URL", "Values can go in the path only, not in the address or the "
-                  "query (use the query rows).", reason="value_outside_path")
-    _text(url, "The URL", allowed)
-    if check_address:
-        reason = webhooks.check_url(values.TOKEN.sub("x", url))
-        if reason:
-            raise err("INVALID_URL", f"This URL cannot be used ({reason}).", reason=reason)
-    out["url"] = url
-    query = data.get("query", current.query if current else [])
-    if (not isinstance(query, list) or len(query) > values.MAX_QUERY
-            or not all(isinstance(q, dict) for q in query)):
-        raise err("INVALID_QUERY", f"Query parameters are a list of up to {values.MAX_QUERY}.")
-    out["query"] = []
-    for q in query:
-        key = q.get("key")
-        if not isinstance(key, str) or not key.strip() or len(key) > 100 or "{{" in key:
-            raise err("INVALID_QUERY", "A query parameter needs a plain name.")
-        out["query"].append({"key": key.strip(),
-                             "value": _text(q.get("value", ""), f"Query '{key}'", allowed)})
-    headers = data.get("headers", current.headers if current else [])
-    if (not isinstance(headers, list) or len(headers) > values.MAX_HEADERS
-            or not all(isinstance(h, dict) for h in headers)):
-        raise err("INVALID_HEADERS", f"Headers are a list of up to {values.MAX_HEADERS}.")
-    out["headers"], names = [], set()
-    for h in headers:
-        name = h.get("key")
-        if not isinstance(name, str) or not webhooks.HEADER_NAME.fullmatch(name) or len(name) > 100:
-            raise err("INVALID_HEADERS", "A header name is letters, digits and - only.")
-        if name.lower() in webhooks.LOCKED_HEADERS or name.lower().startswith("x-vayu-"):
-            raise err("LOCKED_HEADER", f"{name} is set by the system and cannot be changed.")
-        if name.lower() in names:
-            raise err("INVALID_HEADERS", f"{name} is listed twice.")
-        names.add(name.lower())
-        out["headers"].append({"key": name, "value": _text(h.get("value", ""), f"Header {name}",
-                                                          allowed, one_line=True)})
-    mode = out.get("body_mode") or data.get("body_mode") or (current.body_mode if current
-                                                             else "standard")
-    out["body_mode"] = mode
-    body = data.get("body", current.body if current else {})
-    if mode == "custom":
-        if not isinstance(body, (dict, list)):
-            raise err("INVALID_BODY", "The body is a JSON object or list.")
-        out["body"] = _json(body, allowed, 1, [0])
-    else:
-        out["body"] = {}
-    return out
+from .serializers import IntegrationSerializer
 
 
 def body(i: Integration, cache: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -193,8 +54,9 @@ class IntegrationList(APIView):
         return Response([body(i, cache) for i in qs])
 
     def post(self, request: Request) -> Response:
-        i = Integration(created_by=request.user,  # type: ignore[misc]
-                        **_clean_integration(request.data))
+        s = IntegrationSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        i = Integration(created_by=request.user, **s.validated_data)  # type: ignore[misc]
         i.save()
         audit.record(request.user, "integration.create", "integration", i.id,
                      f"Created integration {i.name} for form {i.form.key}")
@@ -212,7 +74,9 @@ class IntegrationDetail(APIView):
 
     def patch(self, request: Request, pk: Any) -> Response:
         i = self._get(pk)
-        for key, value in _clean_integration(request.data, i).items():
+        s = IntegrationSerializer(i, data=request.data)
+        s.is_valid(raise_exception=True)
+        for key, value in s.validated_data.items():
             setattr(i, key, value)
         i.save()
         audit.record(request.user, "integration.update", "integration", i.id,
@@ -278,9 +142,9 @@ class Catalogue(APIView):
         form = Form.objects.filter(pk=request.query_params.get("form", "").strip() or 0).first()
         event = request.query_params.get("event")
         if form is None or form.type not in (FormType.BOOKING, FormType.CUSTOM):
-            raise err("INVALID_FORM", "Choose a booking or inspection form.")
+            raise fail("INVALID_FORM", "Choose a booking or inspection form.")
         if event is not None and event not in webhooks.EVENTS:
-            raise err("INVALID_EVENT", "Pick one event.", allowed=webhooks.EVENTS)
+            raise fail("INVALID_EVENT", "Pick one event.", allowed=webhooks.EVENTS)
         return Response(values.catalogue(form, event))
 
 
@@ -293,7 +157,9 @@ class Preview(APIView):
     def post(self, request: Request) -> Response:
         data = {**request.data}
         data["name"] = data.get("name") or "preview"          # a preview does not need a name yet
-        i = Integration(**_clean_integration(data, check_address=False))
+        s = IntegrationSerializer(data=data, check_address=False)
+        s.is_valid(raise_exception=True)
+        i = Integration(**s.validated_data)
         booking = _booking_for(request, i.form, submitted=not i.event.startswith("booking."))
         d = Delivery(integration=i, event=i.event,
                      booking_uuid=str(booking.id) if booking else "",
@@ -302,10 +168,10 @@ class Preview(APIView):
         try:
             req = webhooks.build_request(d, "preview" if booking else "sample", types)
         except values.MissingPathValue as e:
-            raise err("PATH_VALUE_EMPTY", f"{e} is empty for this booking, so the URL cannot be "
-                      "built.") from e
+            raise fail("PATH_VALUE_EMPTY", f"{e} is empty for this booking, so the URL cannot be "
+                       "built.") from e
         except ValueError as e:                              # the body would be too large
-            raise err("REQUEST_FAILED", f"The request cannot be built: {e}.") from e
+            raise fail("REQUEST_FAILED", f"The request cannot be built: {e}.") from e
         return Response({
             "method": req.method, "url": req.url, "sample": booking is None,
             "headers": [{"name": k, "value": v} for k, v in req.headers.items()],
@@ -351,24 +217,24 @@ def _clean_scope(scope: Any) -> dict[str, Any]:
     """{"forms": {form key: [field keys] or ["*"]}} where every name really exists."""
     if not isinstance(scope, dict) or not isinstance(scope.get("forms"), dict) \
             or not scope["forms"] or set(scope) - {"forms"}:
-        raise err("INVALID_SCOPE", 'scope must look like {"forms": {"<form key>": ["<field>"]}}.')
+        raise fail("INVALID_SCOPE", 'scope must look like {"forms": {"<form key>": ["<field>"]}}.')
     out: dict[str, Any] = {}
     for key, fields in scope["forms"].items():
         form = Form.objects.filter(key=key, type__in=[FormType.BOOKING, FormType.CUSTOM],
                                    is_active=True).first()
         if form is None:
-            raise err("INVALID_SCOPE", f"'{key}' is not an active booking or inspection form.")
+            raise fail("INVALID_SCOPE", f"'{key}' is not an active booking or inspection form.")
         if fields == ["*"]:
             out[key] = ["*"]
             continue
         if not isinstance(fields, list) or not fields or not all(
                 isinstance(f, str) for f in fields):
-            raise err("INVALID_SCOPE", f"List the field keys for '{key}', or [\"*\"].")
+            raise fail("INVALID_SCOPE", f"List the field keys for '{key}', or [\"*\"].")
         known = set(Field.objects.filter(version__form=form, key__in=fields)
                     .values_list("key", flat=True))
         if set(fields) - known:
-            raise err("INVALID_SCOPE", f"Unknown fields for '{key}': "
-                      f"{', '.join(sorted(set(fields) - known))}.")
+            raise fail("INVALID_SCOPE", f"Unknown fields for '{key}': "
+                       f"{', '.join(sorted(set(fields) - known))}.")
         out[key] = sorted(set(fields))
     return {"forms": out}
 
@@ -378,7 +244,7 @@ KEY_ACTIONS = ("assign", "cancel", "reschedule", "change_type")
 
 def _clean_actions(raw: Any) -> list[str]:
     if not isinstance(raw, list) or any(a not in KEY_ACTIONS for a in raw):
-        raise err("INVALID_ACTIONS", f"allowed_actions is a list of: {', '.join(KEY_ACTIONS)}.")
+        raise fail("INVALID_ACTIONS", f"allowed_actions is a list of: {', '.join(KEY_ACTIONS)}.")
     return sorted(set(raw))
 
 
@@ -401,10 +267,10 @@ class ApiKeyList(APIView):
     def post(self, request: Request) -> Response:
         name = request.data.get("name")
         if not isinstance(name, str) or not name.strip() or len(name) > 100:
-            raise err("INVALID_NAME", "Give the key a name (up to 100 characters).")
+            raise fail("INVALID_NAME", "Give the key a name (up to 100 characters).")
         allow = request.data.get("allow_delete", False)
         if not isinstance(allow, bool):
-            raise err("INVALID_TOGGLE", "allow_delete must be true or false.")
+            raise fail("INVALID_TOGGLE", "allow_delete must be true or false.")
         scope = _clean_scope(request.data.get("scope"))
         actions = _clean_actions(request.data.get("allowed_actions", []))
         key, prefix, hashed = apikeys.generate()
@@ -426,17 +292,17 @@ class ApiKeyDetail(APIView):
     def patch(self, request: Request, pk: Any) -> Response:
         k = get_object_or_404(ApiKey, pk=pk)
         if k.revoked_at is not None:
-            raise err("KEY_REVOKED", "A revoked key cannot be changed.", 409)
+            raise fail("KEY_REVOKED", "A revoked key cannot be changed.", 409)
         if "name" in request.data:
             name = request.data["name"]
             if not isinstance(name, str) or not name.strip() or len(name) > 100:
-                raise err("INVALID_NAME", "Give the key a name (up to 100 characters).")
+                raise fail("INVALID_NAME", "Give the key a name (up to 100 characters).")
             k.name = name.strip()
         if "scope" in request.data:
             k.scope = _clean_scope(request.data["scope"])
         if "allow_delete" in request.data:
             if not isinstance(request.data["allow_delete"], bool):
-                raise err("INVALID_TOGGLE", "allow_delete must be true or false.")
+                raise fail("INVALID_TOGGLE", "allow_delete must be true or false.")
             k.allow_delete = request.data["allow_delete"]
         if "allowed_actions" in request.data:
             k.allowed_actions = _clean_actions(request.data["allowed_actions"])

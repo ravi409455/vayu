@@ -53,7 +53,7 @@ def preview(booking: Booking, insp, definition_: dict, edge: int = 480):
     """(pdf bytes, filename, layout, checks) of any definition for one booking: nothing is
     stored."""
     definition_ = shared.resolve(definition_)
-    src = context.Source(booking, insp, revision=0, token="preview")
+    src = context.Source(booking, insp, revision=0, token="preview")  # noqa: S106 - a label, not a secret
     pages = context.build(src, definition_)
     values = src.values()
     pdf, layout, checks = render.render_with_layout(render.render_html(pages, definition_, values,

@@ -7,9 +7,8 @@ from rest_framework.request import Request
 
 from apps.accounts.permissions import scope_for
 from apps.bookings.models import Booking
-from apps.bookings.services import err
 from apps.bookings.submissions import current_versions, deliver_filter, own_filter
-from apps.core.errors import CodedError
+from apps.core.errors import CodedError, fail
 from apps.forms.access import hidden_inspection_forms, levels_for
 from apps.forms.models import Field
 
@@ -26,7 +25,7 @@ def writable_booking(request: Request, booking_id: Any, moved_ok: bool = False) 
         qs = qs.filter(deliver_filter(user) if moved_ok else own_filter(user)).distinct()
     b = qs.filter(pk=booking_id).first()
     if b is None:
-        raise err("NOT_FOUND", f"{word(user).capitalize()} not found.", 404)
+        raise fail("NOT_FOUND", f"{word(user).capitalize()} not found.", 404)
     return b
 
 
@@ -41,7 +40,7 @@ def readable_booking(request: Request, booking_id: Any) -> Booking:
         qs = qs.filter(own_filter(request.user)).distinct()
     b = qs.filter(pk=booking_id).first()
     if b is None:
-        raise err("NOT_FOUND", f"{word(request.user).capitalize()} not found.", 404)
+        raise fail("NOT_FOUND", f"{word(request.user).capitalize()} not found.", 404)
     return b
 
 
@@ -51,7 +50,7 @@ def field_for(booking: Booking, field_key: str) -> Field:
         f = Field.objects.filter(version=v, key=field_key).first() if v else None
         if f is not None:
             return f
-    raise err("UNKNOWN_FIELD", f"'{field_key}' is not a field of this inspection.")
+    raise fail("UNKNOWN_FIELD", f"'{field_key}' is not a field of this inspection.")
 
 
 def hidden_fields(user: Any, booking: Booking) -> set[str]:

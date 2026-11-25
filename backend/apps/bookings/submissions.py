@@ -9,7 +9,8 @@ from django.utils import timezone
 
 from apps.core import events
 from apps.core import tasks as core_tasks
-from apps.core.errors import CodedError
+from apps.core.concurrency import check_row_version
+from apps.core.errors import CodedError, fail
 from apps.forms.access import STAGES, levels_for, role_may_see_submissions
 from apps.forms.models import PARTS, Field, Form, FormType, FormVersion, VersionStatus
 from apps.forms.rules import validate_answers
@@ -17,14 +18,13 @@ from apps.forms.serializers import VersionTreeSerializer
 from apps.scoring import service as scoring
 
 from . import activity, timing
-from .changes import check_fresh, stamp
+from .changes import stamp
 from .models import Booking, Inspection
 from .services import (
     _changed,
     _lock,
     active_inspection_type,
     booking_form_version,
-    err,
     sync_columns,
     today,
 )
@@ -39,8 +39,8 @@ def inspection_version(inspection_type: str) -> FormVersion:
                                inspection_type=inspection_type).first()
     version = latest_published(form) if form else None
     if version is None:
-        raise err("NO_INSPECTION_FORM", f"No published inspection form for '{inspection_type}'.",
-                  409)
+        raise fail("NO_INSPECTION_FORM", f"No published inspection form for '{inspection_type}'.",
+                   409)
     return version
 
 
@@ -119,8 +119,8 @@ def check_shape(answers) -> None:
     """answers must be {"inspection": {...}, "start": {...}, "end": {...}} (every part optional)."""
     if not isinstance(answers, dict) or any(
             answers.get(k) is not None and not isinstance(answers[k], dict) for k in PARTS):
-        raise err("INVALID_ANSWERS",
-                  "answers must look like {inspection: {...}, start: {...}, end: {...}}.")
+        raise fail("INVALID_ANSWERS",
+                   "answers must look like {inspection: {...}, start: {...}, end: {...}}.")
 
 
 def _alert(b: Booking, code: str, detail: str) -> None:
@@ -166,7 +166,7 @@ def _named_version(raw, forms) -> FormVersion | None:
     version = FormVersion.objects.filter(pk__in=[raw] if type(raw) is int else [], form__in=forms,
                                          status=VersionStatus.PUBLISHED).select_related("form")
     if not version:
-        raise err("INVALID_VERSION", "That form version is not one this lead can use.")
+        raise fail("INVALID_VERSION", "That form version is not one this lead can use.")
     return version[0]
 
 
@@ -227,8 +227,8 @@ def _refuse_old(b: Booking) -> NoReturn:
             _late_work(b, "FORM_VERSION_REFUSED",
                        "The expert filled a form version replaced before they started.")
             b.save(update_fields=["alerts"])
-    raise err("FORM_VERSION_OLD", "This lead was filled on a form that had already been "
-              "replaced. Ops have been told.", 409) from None
+    raise fail("FORM_VERSION_OLD", "This lead was filled on a form that had already been "
+               "replaced. Ops have been told.", 409) from None
 
 
 @transaction.atomic
@@ -238,29 +238,29 @@ def _start(actor, b: Booking, client_uuid, client_started_at, inspection_type, a
     existing = Inspection.objects.filter(client_start_uuid=client_uuid).first()
     if existing is not None:
         if existing.booking_id != b.id or existing.expert_id != actor.pk:
-            raise err("UUID_CONFLICT", "That request ID belongs to another request.", 409)
+            raise fail("UUID_CONFLICT", "That request ID belongs to another request.", 409)
         return b, existing
     # the phone's clock is trusted only back to when the booking existed: nobody started it before
     at = max(client_started_at or timezone.now(), b.created_at - CLOCK_ALLOWANCE)
     too_old = app_version is not None and app_version < settings.MIN_APP_VERSION
     if too_old and not _before_too_old(at):
-        raise err("APP_TOO_OLD", "Update the app to start new leads.", 426)
+        raise fail("APP_TOO_OLD", "Update the app to start new leads.", 426)
     if b.assigned_expert_id != actor.pk:
-        raise err("NOT_ASSIGNED", "This lead is no longer assigned to you.", 409)
+        raise fail("NOT_ASSIGNED", "This lead is no longer assigned to you.", 409)
     if b.stage == "in_progress":
         # the expert's phone lost its saved session (new device, cleared storage): hand back
         # their own open inspection so they can carry on instead of being locked out
         mine = Inspection.objects.filter(booking=b, expert=actor, status="draft").last()
         if mine is None:
-            raise err("ALREADY_STARTED", "This lead is already started.", 409)
+            raise fail("ALREADY_STARTED", "This lead is already started.", 409)
         return b, mine
     if b.stage != "assigned":
-        raise err("INVALID_STAGE", f"A {b.stage} lead cannot be started.", 409)
+        raise fail("INVALID_STAGE", f"A {b.stage} lead cannot be started.", 409)
     changes = {"stage": ["assigned", "in_progress"]}
     if inspection_type is not None and inspection_type != b.inspection_type:
         # the expert physically started this type offline: it wins over Ops' later change
         if not isinstance(inspection_type, str) or not active_inspection_type(inspection_type):
-            raise err("INVALID_TYPE", "Unknown inspection type.")
+            raise fail("INVALID_TYPE", "Unknown inspection type.")
         changes["inspection_type"] = [b.inspection_type, inspection_type]
         _alert(b, "TYPE_CHANGE_REJECTED",
                f"Type change to {b.inspection_type} rejected: expert started {inspection_type}")
@@ -319,8 +319,8 @@ def _clean_all(b: Booking, pinned: dict, answers: dict, kept: dict | None = None
     messages: dict = {}
     unused = [part for part, v in pinned.items() if v is None and raw[part]]
     if unused:
-        raise err("INVALID_ANSWERS", "This inspection does not use that form.",
-                  errors={k: "NOT_USED" for part in unused for k in raw[part]})
+        raise fail("INVALID_ANSWERS", "This inspection does not use that form.",
+                   errors={k: "NOT_USED" for part in unused for k in raw[part]})
     for part in PARTS:
         version = pinned[part]
         if version is None:
@@ -336,8 +336,8 @@ def _clean_all(b: Booking, pinned: dict, answers: dict, kept: dict | None = None
     errors = {**errors, **reference_errors(
         b, [(pinned[p], cleaned[p]) for p in PARTS if pinned[p] is not None])}
     if errors:
-        raise err("INVALID_ANSWERS", "Some answers are invalid.", errors=errors,
-                  messages={k: messages.get(k, v) for k, v in errors.items()})
+        raise fail("INVALID_ANSWERS", "Some answers are invalid.", errors=errors,
+                   messages={k: messages.get(k, v) for k, v in errors.items()})
     return cleaned
 
 
@@ -376,7 +376,7 @@ def _submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id):
     done = Inspection.objects.filter(client_submission_uuid=submission_uuid).first()
     if done is not None:
         if done.booking_id != b.id or done.expert_id != actor.pk:
-            raise err("UUID_CONFLICT", "That request ID belongs to another request.", 409)
+            raise fail("UUID_CONFLICT", "That request ID belongs to another request.", 409)
         return b, done
     # their open draft; else the one Ops force-released while they worked (it still counts)
     insp = (b.inspections.filter(expert=actor, status="draft").first()
@@ -385,7 +385,7 @@ def _submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id):
     if insp is None and b.inspections.filter(expert=actor,
                                              status__in=("submitted", "superseded")).exists():
         # a new request id for work already sent (a reinstalled app): never a second inspection
-        raise err("ALREADY_SUBMITTED", "Already submitted; Ops can edit it.", 409)
+        raise fail("ALREADY_SUBMITTED", "Already submitted; Ops can edit it.", 409)
     if insp is None:
         # an offline start that never reached us: the phone names its pinned version, but it must
         # belong to a form that handles this booking's type (no shopping for another type's form)
@@ -394,7 +394,7 @@ def _submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id):
             form__inspection_type=b.inspection_type).select_related("form").first() \
             if form_version_id else None
         if version is None:
-            raise err("NOT_STARTED", "Start the inspection first.", 409)
+            raise fail("NOT_STARTED", "Start the inspection first.", 409)
         # it must have been the latest at some moment since the booking existed (start unknown)
         replaced = _replaced_by(version)
         if replaced is not None and replaced <= b.created_at - CLOCK_ALLOWANCE:
@@ -409,7 +409,7 @@ def _submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id):
     pinned = insp.pinned()
     locked = _locked_keys(actor.role, "in_progress", pinned, answers, {})
     if locked:
-        raise err("FIELD_ACCESS", "You cannot change these fields.", 403, keys=locked)
+        raise fail("FIELD_ACCESS", "You cannot change these fields.", 403, keys=locked)
     # a submit without the check-in keeps the one sent at start
     if "start" not in answers:
         answers = {**answers, "start": (insp.answers or {}).get("start")}
@@ -487,22 +487,24 @@ def _check_files(actor, b: Booking, pinned, old: dict, new: dict, changed) -> No
             own = MediaAsset.objects.filter(booking=b, field_key=k, uploaded_by=actor,
                                             replaced_at__isnull=True, pk__in=added).count()
             if own != len(added):
-                raise err("UNKNOWN_MEDIA", "Add only files you uploaded to this field.")
+                raise fail("UNKNOWN_MEDIA", "Add only files you uploaded to this field.")
     if dropped:
-        raise err("FILE_REMOVAL_NOT_ALLOWED", "Files cannot be removed. Replace them on the "
-                  "Media tab instead.", 403, keys=dropped)
+        raise fail("FILE_REMOVAL_NOT_ALLOWED", "Files cannot be removed. Replace them on the "
+                   "Media tab instead.", 403, keys=dropped)
 
 
 @transaction.atomic
 def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) -> Inspection:
     check_shape(answers)
     insp = Inspection.objects.select_for_update().get(pk=insp.pk)
-    check_fresh(insp, row_version, "STALE_INSPECTION", "inspection")
+    check_row_version(insp, row_version, "STALE_INSPECTION",
+                      "Someone changed this inspection since you opened it.", who=True)
     b = insp.booking
     pinned = insp.pinned()
     locked = _locked_keys(actor.role, b.stage, pinned, answers, insp.answers)
     if locked:
-        raise err("FIELD_ACCESS", "You cannot change these fields at this stage.", 403, keys=locked)
+        raise fail("FIELD_ACCESS", "You cannot change these fields at this stage.",
+                   403, keys=locked)
     merged = {k: {**(insp.answers.get(k) or {}), **(answers.get(k) or {})} for k in PARTS}
     new = _clean_all(b, pinned, merged, kept=insp.answers)
     changed = [(part, k) for part in PARTS
@@ -555,16 +557,17 @@ def searchable_stages(role: str) -> dict[str, list[str]]:
 @transaction.atomic
 def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Inspection:
     insp = Inspection.objects.select_for_update().get(pk=insp.pk)
-    check_fresh(insp, row_version, "STALE_INSPECTION", "inspection")
+    check_row_version(insp, row_version, "STALE_INSPECTION",
+                      "Someone changed this inspection since you opened it.", who=True)
     try:
         scoring.validate_overrides(insp.form_version, body)
     except ValueError as e:
-        raise err("INVALID_OVERRIDES", str(e)) from e
+        raise fail("INVALID_OVERRIDES", str(e)) from e
     # no review of work nobody has sent (F-238), nor Key Check texts while it is being inspected
     if insp.status != "submitted" or (body.get("key_checks") and insp.booking.stage not in (
             "submitted", "completed")):
-        raise err("NOT_SUBMITTED", "Ratings and Key Checks can be set once the expert submits.",
-                  409)
+        raise fail("NOT_SUBMITTED", "Ratings and Key Checks can be set once the expert submits.",
+                   409)
     before = {k: v["value"] for k, v in ((insp.scores or {}).get("key_checks") or {}).items()}
     insp.overrides = scoring.apply_overrides(insp.overrides, body)
     stamp(insp, actor, ["overrides"])
@@ -588,10 +591,10 @@ def resolve_conflict(actor, b: Booking, inspection_id) -> Booking:
     ("superseded"), never deleted, and the booking carries on with the kept one."""
     b = _lock(b)
     if not b.conflict:
-        raise err("NO_CONFLICT", "This booking has no conflict to resolve.", 409)
+        raise fail("NO_CONFLICT", "This booking has no conflict to resolve.", 409)
     keep = b.inspections.filter(pk=inspection_id, status="submitted").first()
     if keep is None:
-        raise err("INVALID_INSPECTION", "Choose one of this booking's submitted inspections.")
+        raise fail("INVALID_INSPECTION", "Choose one of this booking's submitted inspections.")
     b.inspections.filter(status="submitted").exclude(pk=keep.pk).update(status="superseded")
     changes: dict = {"conflict": [b.conflict, ""],
                      "inspection": [None, str(keep.id)]}

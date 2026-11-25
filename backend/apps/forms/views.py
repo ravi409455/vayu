@@ -7,7 +7,6 @@ from rest_framework.views import APIView
 
 from apps.accounts import audit
 from apps.accounts.permissions import perm, perm_any
-from apps.core.errors import CodedError
 
 from . import assets, library, library_push, promote, services
 from .models import (
@@ -124,14 +123,8 @@ class FormViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
     def duplicate(self, request, pk=None):
         """A copy of this custom form (newest version) as a new form with its own key and name:
         library links, ratings, Key Checks and PDF template come along; it starts as a draft."""
-        form = self.get_object()
-        latest = form.versions.order_by("-number").first()
-        assert latest is not None
         d = request.data if isinstance(request.data, dict) else {}
-        out = promote.import_bundle(request.user, promote.export_bundle(latest),
-                                    as_new={"key": d.get("key"), "name": d.get("name")})
-        audit.record(request.user, "form.duplicate", "form", out["form"],
-                     f"Copied {form.key} as {d.get('key')}")
+        out = services.duplicate_form(request.user, self.get_object(), d.get("key"), d.get("name"))
         return Response(out, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"])
@@ -414,7 +407,7 @@ class PublishVersion(generics.GenericAPIView):
         v = services.publish_version(request.user, pk, body.validated_data["row_version"])
         return Response({"id": v.id, "number": v.number, "status": v.status,
                          "published_at": v.published_at, "row_version": v.row_version,
-                         "warnings": pdf_warnings(v) + integration_warnings(v)})
+                         "warnings": services.publish_warnings(v)})
 
 
 class VersionSettings(generics.GenericAPIView):
@@ -423,21 +416,7 @@ class VersionSettings(generics.GenericAPIView):
     serializer_class = serializers.Serializer
 
     def patch(self, request, pk):
-        body = request.data
-        if not isinstance(body, dict) or not body or set(body) - {"use_start", "use_end"} \
-                or not all(isinstance(v, bool) for v in body.values()):
-            raise CodedError("INVALID_SETTINGS", "Send use_start and/or use_end as true/false.",
-                             400)
-        def change(version):
-            if version.form.type != "custom":
-                raise CodedError("INVALID_SETTINGS", "Only custom forms have these settings.", 400)
-            for k, v in body.items():
-                setattr(version, k, v)
-            return list(body)
-
-        version = services.save_draft_setting(
-            request.user, pk, "form.settings", change,
-            lambda v: f"Begins with start: {v.use_start}, ends with end: {v.use_end}")
+        version = services.save_version_settings(request.user, pk, request.data)
         return Response({"use_start": version.use_start, "use_end": version.use_end,
                          "row_version": version.row_version})
 
@@ -447,23 +426,10 @@ class RatingConfigView(generics.GenericAPIView):
     serializer_class = serializers.Serializer
 
     def patch(self, request, pk):
-        from apps.scoring.engine import validate_config
-
         config = request.data.get("config")
         if config is None:
             raise serializers.ValidationError({"config": "This field is required."})
-        try:
-            validate_config(config)
-        except ValueError as e:
-            raise CodedError("INVALID_RATING_CONFIG", str(e), 400) from e
-        from apps.scoring.service import section_keys
-
-        def change(version):
-            version.rating_config = section_keys(version, config)   # by section key (F-045)
-            return ["rating_config"]
-
-        version = services.save_draft_setting(request.user, pk, "form.rating_config", change,
-                                              lambda v: "Updated rating config")
+        version = services.save_rating_config(request.user, pk, config)
         return Response({"rating_config": version.rating_config,
                          "row_version": version.row_version})
 
@@ -475,35 +441,9 @@ class KeyChecksView(generics.GenericAPIView):
     serializer_class = serializers.Serializer
 
     def patch(self, request, pk):
-        from apps.scoring.keychecks import validate
-
         items = request.data.get("key_checks")
-        try:
-            validate(items)
-        except ValueError as e:
-            raise CodedError("INVALID_KEY_CHECKS", str(e), 400) from e
-        def change(version):
-            if items and version.form.type != "custom":       # only inspections are reviewed
-                raise CodedError("INVALID_KEY_CHECKS", "Only inspection forms have Key Checks.",
-                                 400)
-            version.key_checks = items
-            return ["key_checks"]
-
-        version = services.save_draft_setting(request.user, pk, "form.key_checks", change,
-                                              lambda v: "Updated Key Checks")
+        version = services.save_key_checks(request.user, pk, items)
         return Response({"key_checks": items, "row_version": version.row_version})
-
-
-def pdf_warnings(version) -> list:
-    from apps.reports.service import warnings
-
-    return warnings(version)
-
-
-def integration_warnings(version) -> list:
-    from apps.integrations.values import publish_warnings
-
-    return publish_warnings(version, published=True)
 
 
 class PromoteExport(generics.GenericAPIView):
