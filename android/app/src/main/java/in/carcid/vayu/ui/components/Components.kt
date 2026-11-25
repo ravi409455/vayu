@@ -381,3 +381,27 @@ fun TimePick(initial: java.time.LocalTime, onPick: (java.time.LocalTime) -> Unit
         dismissButton = { androidx.compose.material3.TextButton(onDismiss) { Text("Cancel") } },
         text = { androidx.compose.material3.TimePicker(state) })
 }
+
+/**
+ * Something Android blocks (camera, microphone, notices) that only its Settings can turn back on:
+ * says what is lost and opens the app's page there with [button].
+ */
+@Composable
+fun SettingsNudge(text: String, button: String, settings: android.content.Intent, modifier: Modifier = Modifier, dark: Boolean = false) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (dark) Color(0xCC000000) else Vayu.colors.warnTint)
+        .padding(start = 14.dp, top = 6.dp, bottom = 6.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(text, fontSize = 14.sp, color = if (dark) Color.White else Vayu.colors.warn, modifier = Modifier.weight(1f))
+        androidx.compose.material3.TextButton({ runCatching { ctx.startActivity(settings.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } }) {
+            Text(button, fontWeight = FontWeight.SemiBold, color = if (dark) Color.White else Vayu.colors.warn)
+        }
+    }
+}
+
+/** This app's page in Android Settings (permissions live there). */
+fun appSettings(ctx: android.content.Context) = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+    android.net.Uri.fromParts("package", ctx.packageName, null))
+
+/** This app's notification settings. */
+fun noticeSettings(ctx: android.content.Context) = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName)

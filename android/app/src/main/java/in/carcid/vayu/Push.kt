@@ -56,6 +56,10 @@ object Notices {
             .setSmallIcon(R.drawable.ic_notice)
             .setContentTitle(title).setContentText(body).setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
+            // the lock screen says a notice came, not whose car or where (customer name and address)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(NotificationCompat.Builder(ctx, if (problem) PROBLEMS else JOBS).setSmallIcon(R.drawable.ic_notice)
+                .setContentTitle("Vayu").setContentText("New notice. Unlock to see it.").build())
             .setContentIntent(PendingIntent.getActivity(ctx, tag.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
             .build()
         runCatching { NotificationManagerCompat.from(ctx).notify(tag, 0, n) }

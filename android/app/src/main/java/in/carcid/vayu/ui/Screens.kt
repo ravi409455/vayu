@@ -188,6 +188,15 @@ fun ProfileScreen(state: Screen.Profile, onBack: () -> Unit, onTheme: (String) -
             SectionLabel("Look")
             Segmented(listOf("Light", "Dark", "Match phone"), themes.indexOf(me.theme).coerceAtLeast(0), { onTheme(themes[it]) })
             if (state.error != null) Text(state.error, color = Vayu.colors.bad, modifier = Modifier.padding(top = 8.dp))
+            // blocked notices drop new work, reminders and photo alerts without a word: say so (checked again on coming back)
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            var noticesOff by remember { mutableStateOf(false) }
+            androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+                noticesOff = !androidx.core.app.NotificationManagerCompat.from(ctx).areNotificationsEnabled(); onPauseOrDispose {}
+            }
+            if (noticesOff) `in`.carcid.vayu.ui.components.SettingsNudge(
+                "Notifications are off: new ${if (me.role == "ops") "bookings" else "leads"}, reminders and alerts won't show.",
+                "Turn on", `in`.carcid.vayu.ui.components.noticeSettings(ctx), Modifier.padding(top = 16.dp))
             if (me.role == "ops") {
                 SectionLabel("Notifications")
                 NotifyRow("Problems", null) {}
