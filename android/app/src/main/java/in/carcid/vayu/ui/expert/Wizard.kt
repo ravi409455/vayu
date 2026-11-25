@@ -116,7 +116,7 @@ fun InspectionScreen(env: InspectionEnv, onClose: () -> Unit) {
     if (filled == null) {
         Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding().padding(20.dp)) {
             CloseButton("Close", onClose)
-            Text("This job's form isn't on the phone yet. Connect to the internet once and tap Refresh.", color = Vayu.colors.ink)
+            Text("This lead's form isn't on the phone yet. Connect to the internet once and tap Refresh.", color = Vayu.colors.ink)
         }
         return
     }
@@ -376,9 +376,9 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
 }
 
 private fun problemText(d: Draft) = when (d.problemCode) {
-    "NOT_ASSIGNED" -> "This job was given to another expert. You can still submit what you did, or discard it."
-    "INVALID_STAGE" -> "This job was cancelled. Your draft is still sent to Ops if you submit."
-    "APP_TOO_OLD" -> "Update the app to start new jobs."
+    "NOT_ASSIGNED" -> "This lead was given to another expert. You can still submit what you did, or discard it."
+    "INVALID_STAGE" -> "This lead was cancelled. Your draft is still sent to Ops if you submit."
+    "APP_TOO_OLD" -> "Update the app to start new leads."
     else -> d.problem ?: ""
 }
 
@@ -492,7 +492,7 @@ private fun StepLine(n: Int, text: String, done: Boolean) {
 @Composable
 private fun IconButtonBack(onClick: () -> Unit) =
     androidx.compose.material3.IconButton(onClick = onClick, modifier = Modifier.padding(6.dp)) {
-        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back to My jobs", tint = Vayu.colors.ink)
+        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back to My leads", tint = Vayu.colors.ink)
     }
 
 /** A form picture, fetched once and kept on the phone. */

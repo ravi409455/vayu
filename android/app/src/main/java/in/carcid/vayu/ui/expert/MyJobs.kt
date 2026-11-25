@@ -174,9 +174,9 @@ private const val GB = 1024L * 1024 * 1024
 /** Why a job can't be started on this phone now (null: it can). A started draft can always go on. */
 fun cannotStart(j: Job, d: Draft?, ready: Boolean, extras: ExpertExtras): String? = when {
     d != null -> null
-    extras.updateNeeded -> "Update the app to start new jobs."
+    extras.updateNeeded -> "Update the app to start new leads."
     extras.freeBytes < GB / 2 -> "The phone is almost full. Clear sent photos on the Uploads tab first."
-    !ready -> "This job's form isn't on the phone yet. Connect once and tap Refresh."
+    !ready -> "This lead's form isn't on the phone yet. Connect once and tap Refresh."
     else -> null
 }
 
@@ -202,8 +202,8 @@ fun ExpertHome(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit
     androidx.compose.runtime.LaunchedEffect(state.syncing) {
         if (!state.syncing && asked) {
             asked = false
-            say(when { state.offline -> "No signal. Showing the jobs saved" + (state.syncedAt?.let { " at $it" } ?: "") + "."
-                state.error != null -> state.error; else -> "Jobs up to date." })
+            say(when { state.offline -> "No signal. Showing the leads saved" + (state.syncedAt?.let { " at $it" } ?: "") + "."
+                state.error != null -> state.error; else -> "Leads up to date." })
         }
     }
     val inspecting = state.jobs.firstOrNull { it.id == inspectId }
@@ -218,7 +218,7 @@ fun ExpertHome(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit
                 NotificationsScreen(extras.bell, today, onBack = { bell = false }, onReadAll = { extras.onRead(null) }, onOpen = { n ->
                     extras.onRead(listOf(n.id))
                     if (n.booking != null && state.jobs.any { it.id == n.booking }) { openId = n.booking; bell = false }
-                    else say("That job is no longer on your list.")
+                    else say("That lead is no longer on your list.")
                 })
             }
             open != null -> {
@@ -266,7 +266,7 @@ fun NotificationsScreen(bell: `in`.carcid.vayu.ui.BellState, today: LocalDate, o
         Text("Notifications", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink, modifier = Modifier.padding(horizontal = 20.dp))
         LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp)) {
             if (bell.notes.isEmpty()) item {
-                Text(if (bell.loaded) "Nothing yet. New jobs, changed times and cancellations show here." else "Loading…",
+                Text(if (bell.loaded) "Nothing yet. New leads, changed times and cancellations show here." else "Loading…",
                     color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 16.dp))
             }
             noteRows(bell.notes, today, onOpen)
@@ -289,10 +289,10 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
         .let { if (tab == JobTab.DONE) it.reversed() else it }
     val todayCount = mine.count { tabOf(it, today) == JobTab.TODAY }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
-        VayuTopBar("My jobs", me.initials, bellCount = extras.bell.unread, onBell = onBell, onProfile = onProfile)
+        VayuTopBar("My leads", me.initials, bellCount = extras.bell.unread, onBell = onBell, onProfile = onProfile)
         // a thin bar while jobs download (Refresh, reopening); fixed height so nothing jumps
         Box(Modifier.fillMaxWidth().height(3.dp).padding(horizontal = 20.dp)) {
-            if (state.syncing) LinearProgressIndicator(Modifier.fillMaxSize().semantics { contentDescription = "Updating jobs" },
+            if (state.syncing) LinearProgressIndicator(Modifier.fillMaxSize().semantics { contentDescription = "Updating leads" },
                 color = Vayu.colors.brand, trackColor = Vayu.colors.soft)
         }
         LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp)) {
@@ -308,7 +308,7 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
                 val banners = buildList {
                     extras.notices.forEach { (id, text) -> add("ops:$id:$text" to (text to Tone.WARN)) }
                     if (extras.freeBytes < 2 * GB) add("space" to ("%.1f GB free. Clear sent photos on the Uploads tab before it runs out.".format(extras.freeBytes.toDouble() / GB) to Tone.WARN))
-                    if (extras.updateNeeded) add("update" to ("Update needed to start new jobs. Started jobs can still be finished." to Tone.BAD))
+                    if (extras.updateNeeded) add("update" to ("Update needed to start new leads. Started leads can still be finished." to Tone.BAD))
                 }.filter { it.first !in closed }
                 banners.forEach { (key, b) ->
                     Banner(b.first, b.second, { closed = closed + key })
@@ -332,8 +332,8 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
             }
             if (shown.isEmpty()) item {
                 Text(when {
-                    state.syncing && state.jobs.isEmpty() -> "Getting your jobs…"
-                    needle.isNotEmpty() -> "No job matches \"$query\"."
+                    state.syncing && state.jobs.isEmpty() -> "Getting your leads…"
+                    needle.isNotEmpty() -> "No lead matches \"$query\"."
                     tab == JobTab.TODAY -> "Nothing for today."
                     tab == JobTab.UPCOMING -> "Nothing coming up."
                     else -> "Nothing finished in the last 7 days."
@@ -388,7 +388,7 @@ fun JobDetailScreen(j: Job, ready: Boolean, today: LocalDate, onBack: () -> Unit
     val place = listOf(j.address, j.city).filter { it.isNotBlank() }.joinToString(", ")
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
         IconButton(onClick = onBack, modifier = Modifier.padding(start = 6.dp, top = 10.dp)) {
-            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back to My jobs", tint = Vayu.colors.ink)
+            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back to My leads", tint = Vayu.colors.ink)
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             Text(j.customer.ifBlank { j.bookingId }, fontSize = 26.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink,

@@ -72,7 +72,7 @@ class BellScreensTest {
             UpdateScreen(AppUpdate(5, "1.1.0", 24 * 1_048_576L, "ab", listOf("Faster photo uploads on slow networks", "Scan registration numbers too"),
                 "http://x", required = true)) { later = true }
         } }
-        compose.onNodeWithText("Version 1.1.0 · 24 MB. You need it to start new jobs. A job you already started can be finished on this version.").assertExists()
+        compose.onNodeWithText("Version 1.1.0 · 24 MB. You need it for new work. Work you already started can be finished on this version.").assertExists()
         compose.onNodeWithText("Download update").assertExists()
         compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/update_available.png", roborazziOptions = options)
         compose.onNodeWithText("Later").performClick()

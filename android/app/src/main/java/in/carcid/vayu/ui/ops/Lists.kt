@@ -292,7 +292,7 @@ fun NeedsYouScreen(env: OpsEnv, loaded: List<Need>?, onBack: () -> Unit, onOpen:
         LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp)) {
             if (tab == 1) {
                 if (updates.notes.isEmpty()) item {
-                    Text(if (updates.loaded) "Nothing yet. Jobs started, submitted and completed, late starts and new bookings show here." else "Loading…",
+                    Text(if (updates.loaded) "Nothing yet. Bookings started, submitted and completed, late starts and new bookings show here." else "Loading…",
                         color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp))
                 }
                 noteRows(updates.notes, env.today()) { n -> n.booking?.let(onOpen) }

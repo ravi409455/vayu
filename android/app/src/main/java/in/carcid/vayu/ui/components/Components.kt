@@ -267,7 +267,10 @@ fun SoftField(value: String, onValueChange: (String) -> Unit, placeholder: Strin
               icon: ImageVector? = null, trailing: (@Composable () -> Unit)? = null,
               visualTransformation: androidx.compose.ui.text.input.VisualTransformation =
                   androidx.compose.ui.text.input.VisualTransformation.None,
-              error: Boolean = false, password: Boolean = false, enabled: Boolean = true) {
+              error: Boolean = false, password: Boolean = false, enabled: Boolean = true,
+              /** The keyboard's action key (Next, Done…) and what it does; Next moves to the following field. */
+              imeAction: androidx.compose.ui.text.input.ImeAction = androidx.compose.ui.text.input.ImeAction.Default,
+              onIme: (() -> Unit)? = null) {
     Row(modifier.fillMaxWidth().heightIn(min = 54.dp).clip(RoundedCornerShape(14.dp)).background(Vayu.colors.soft)
         .let { if (error) it.border(2.dp, Vayu.colors.bad, RoundedCornerShape(14.dp)) else it }
         .padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically,
@@ -278,8 +281,10 @@ fun SoftField(value: String, onValueChange: (String) -> Unit, placeholder: Strin
             BasicTextField(value, onValueChange, enabled = enabled, singleLine = true, visualTransformation = visualTransformation,
                 // passwords: no suggestions, no keyboard learning
                 keyboardOptions = if (password) androidx.compose.foundation.text.KeyboardOptions(
-                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Password, autoCorrectEnabled = false)
-                else androidx.compose.foundation.text.KeyboardOptions.Default,
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Password, autoCorrectEnabled = false, imeAction = imeAction)
+                else androidx.compose.foundation.text.KeyboardOptions(imeAction = imeAction),
+                keyboardActions = if (onIme == null) androidx.compose.foundation.text.KeyboardActions.Default
+                    else androidx.compose.foundation.text.KeyboardActions(onAny = { onIme() }),
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = if (enabled) Vayu.colors.ink else Vayu.colors.muted),
                 cursorBrush = SolidColor(Vayu.colors.ink),
                 modifier = Modifier.fillMaxWidth().semantics { contentDescription = placeholder })

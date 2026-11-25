@@ -265,8 +265,8 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
             run("POST", "bookings/$id/cancel", buildJsonObject { put("reason", reason) }, "Booking cancelled.")
         }
         "type" -> TypeDialog(env, b, onClose = { action = null }) { run("POST", "bookings/$id/change-type", buildJsonObject { put("inspection_type", it) }, "Type changed to ${env.labels.type(it)}.") }
-        "release" -> Confirm("Force release this job?", "The expert is taken off the job. If they still have a draft and submit it later, you'll see a conflict to resolve.",
-            "Force release", { action = null }) { run("POST", "bookings/$id/force-release", JsonObject(emptyMap()), "Released. The job can be assigned again.") }
+        "release" -> Confirm("Force release this booking?", "The expert is taken off the booking. If they still have a draft and submit it later, you'll see a conflict to resolve.",
+            "Force release", { action = null }) { run("POST", "bookings/$id/force-release", JsonObject(emptyMap()), "Released. The booking can be assigned again.") }
         "signout" -> Confirm("Sign out ${env.labels.person(b.expert)}'s phone?", "Their phone signs out at once. Work not yet sent from it is refused by the server until they sign in again.",
             "Sign out the phone", { action = null }) { run("POST", "users/${b.expert}/sign-out-devices", JsonObject(emptyMap()), "Their phone is signed out.") }
         "delete" -> Confirm("Delete ${b.code}?", "The booking is removed. This can't be undone.", "Delete booking", { action = null }) {
@@ -276,7 +276,7 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
         }
     }
     action?.takeIf { it.startsWith("finish:") }?.removePrefix("finish:")?.let { n ->
-        Confirm("Finish without the missing files?", "The job is marked Completed and the report is made without $n file${if (n == "1") "" else "s"}. " +
+        Confirm("Finish without the missing files?", "The booking is marked Completed and the report is made without $n file${if (n == "1") "" else "s"}. " +
             "If the expert's phone sends them later, they are added and the report is made again.", "Finish", { action = null }) {
             run("POST", "bookings/$id/finish", JsonObject(emptyMap()), "Finished. The report is being made.")
         }
@@ -395,7 +395,7 @@ fun AssignSheet(env: OpsEnv, b: Bk, onClose: () -> Unit, onAssign: (Int) -> Unit
                         Avatar(name.split(" ").take(2).joinToString("") { it.take(1).uppercase() }, size = 36)
                         Column(Modifier.weight(1f)) {
                             Text(name, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
-                            Text("${theirs.size} job${if (theirs.size == 1) "" else "s"} that day", fontSize = 13.sp, color = Vayu.colors.muted)
+                            Text("${theirs.size} booking${if (theirs.size == 1) "" else "s"} that day", fontSize = 13.sp, color = Vayu.colors.muted)
                             Text(if (clash != null) "Busy: ${clash.code} at ${time12(clash.time)}" else if (at != null) "Free at ${time12(b.time)}" else "",
                                 fontSize = 13.sp, color = if (clash != null) Vayu.colors.warn else Vayu.colors.ok)
                         }

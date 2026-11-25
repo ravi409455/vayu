@@ -763,7 +763,7 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
         val failed = rep?.s("status") == "failed"
         Text(when {
             b.conflict.isNotEmpty() -> "Waits for your choice above"
-            rep == null -> if (b.stage == "completed") "Being made" else "Made when the job is done"
+            rep == null -> if (b.stage == "completed") "Being made" else "Made when the booking is completed"
             updating -> "Updating…"
             failed -> "Couldn't be made · tried again by itself"
             rep!!.s("status") == "ready" -> "Ready" + (rep!!.s("generated_at").takeIf { it.isNotBlank() }?.let { " · made ${whenStamp(it, env.today()).replaceFirstChar { c -> c.lowercase() }}" } ?: "")

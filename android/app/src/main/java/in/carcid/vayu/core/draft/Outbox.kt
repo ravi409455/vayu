@@ -16,7 +16,7 @@ import java.io.RandomAccessFile
 
 /** The draft's job is closed on the server: its work can't be sent; the expert discards it. */
 const val JOB_CLOSED = "JOB_CLOSED"
-const val CLOSED_TEXT = "This job is closed on the server, so this work can't be sent. Discard the draft."
+const val CLOSED_TEXT = "This lead is closed on the server, so this work can't be sent. Discard the draft."
 
 /** Try again later: no signal, the server is down, the sign-in has to be renewed, or this phone was signed out. */
 fun transient(e: ApiError) = e.code == ApiError.NETWORK || e.status >= 500 || e.status == 401 || e.code == "DEVICE_REVOKED"

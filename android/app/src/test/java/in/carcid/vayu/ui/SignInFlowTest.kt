@@ -1,6 +1,8 @@
 package `in`.carcid.vayu.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -61,24 +63,34 @@ class SignInFlowTest {
 
     @Test fun theSignInScreenMatchesTheDesign() {
         launch()
-        compose.onNodeWithText("Welcome back. Your jobs are waiting.").assertIsDisplayed()
+        compose.onNodeWithText("Welcome back. Your work is waiting.").assertIsDisplayed()
         compose.onRoot().captureRoboImage("src/test/screenshots/sign_in.png", roborazziOptions = options)
+    }
+
+    @Test fun theKeyboardGoesFromUsernameToPasswordAndSignsIn() {
+        signedIn("expert")
+        launch()
+        compose.onNodeWithContentDescription("Username").performTextInput("ravi")
+        compose.onNodeWithContentDescription("Username").performImeAction()               // Next, not Done
+        compose.onNodeWithContentDescription("Password").assertIsFocused().performTextInput("Vayu-local-1")
+        compose.onNodeWithContentDescription("Password").performImeAction()               // Done signs in
+        waitFor("My leads")
     }
 
     @Test fun anExpertLandsOnMyJobs() {
         signedIn("expert")
-        launch(); signIn(); waitFor("My jobs")
+        launch(); signIn(); waitFor("My leads")
     }
 
     @Test fun theSignInQueuesThePushTokenToBeSentUntilItArrives() {
         signedIn("expert")
-        launch(); signIn(); waitFor("My jobs")
+        launch(); signIn(); waitFor("My leads")
         org.junit.Assert.assertEquals(1, pushTokens)                       // WorkManager retries it (offline at sign-in)
     }
 
     @Test fun aSignInThatEndsWhileTheAppRunsAsksToSignInAgain() {
         signedIn("expert")
-        launch(); signIn(); waitFor("My jobs")
+        launch(); signIn(); waitFor("My leads")
         server.on("GET sync/jobs", """{"code":"token_not_valid","detail":"Token is invalid or expired"}""", 401)
         server.on("POST auth/refresh", """{"code":"token_not_valid","detail":"Token is invalid or expired"}""", 401)
         compose.onNode(androidx.compose.ui.test.hasContentDescription("Refresh", substring = true)).performClick()

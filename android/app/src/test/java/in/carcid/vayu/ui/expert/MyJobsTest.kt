@@ -164,7 +164,7 @@ class MyJobsTest {
         compose.onNodeWithText("Ready to work without signal").assertIsDisplayed()
         compose.onNodeWithText("Start inspection").assertIsDisplayed()
         compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/job_detail.png", roborazziOptions = options)
-        compose.onNodeWithContentDescription("Back to My jobs").performClick()
+        compose.onNodeWithContentDescription("Back to My leads").performClick()
         compose.onNodeWithText("Today · 4").assertIsDisplayed()
     }
 

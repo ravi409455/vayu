@@ -27,7 +27,6 @@ import androidx.compose.ui.platform.LocalContext
 import `in`.carcid.vayu.ui.AdminRefusedScreen
 import `in`.carcid.vayu.ui.AppViewModel
 import `in`.carcid.vayu.ui.ChangePasswordScreen
-import `in`.carcid.vayu.ui.HomeScreen
 import `in`.carcid.vayu.ui.ProfileScreen
 import `in`.carcid.vayu.ui.Screen
 import `in`.carcid.vayu.ui.SignInScreen

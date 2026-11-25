@@ -39,7 +39,9 @@ object Notices {
 
     private fun channels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(JOBS, "Jobs and updates", NotificationManager.IMPORTANCE_DEFAULT))
+        // the name is the signed-in person's word (Settings shows it); the id never changes
+        val ops = (ctx.applicationContext as? VayuApp)?.graph?.tokens?.me()?.get("role") == "ops"
+        nm.createNotificationChannel(NotificationChannel(JOBS, if (ops) "Bookings and updates" else "Leads and updates", NotificationManager.IMPORTANCE_DEFAULT))
         nm.createNotificationChannel(NotificationChannel(PROBLEMS, "Problems", NotificationManager.IMPORTANCE_HIGH))
     }
 
