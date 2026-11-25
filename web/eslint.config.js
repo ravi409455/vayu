@@ -2,7 +2,7 @@
 // stale value after a refetch). Every switch-off must say why ("-- reason"), and a switch-off that
 // no longer hides anything fails the run. Lines stay under 300 characters (F-034).
 // ponytail: 300 stops the worst lines without reformatting the dense house style; a lower limit
-// (or Prettier, ~+13k lines) is a separate decision.
+// (or Prettier, ~+13k lines) was declined: no mass reformat (F-034).
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";

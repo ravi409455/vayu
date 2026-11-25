@@ -186,7 +186,7 @@ review numbers above are re-measured and recorded here.
 
 ## Status 2026-11-25
 Done (fix round + quality branch): Q1.1 (Ruff `S` and `C90` max 12 with a per-file allow list of 18
-files; `SIM`/`RET`/`PIE`/`PL`/`T20` not added), Q1.2, Q1.3 (jsx-a11y, Prettier), Q1.4, Q2.1
+files; `SIM`/`RET`/`PIE`/`PL`/`T20` not added), Q1.2, Q1.3 (jsx-a11y; Prettier dropped: no mass reformat, owner decision on F-034), Q1.4, Q2.1
 (`core.errors.fail`), Q2.2 (`core.concurrency.check_row_version`), Q2.3, Q2.4, Q2.5
 (`IntegrationSerializer`, form-builder saves in `forms/services.py`), Q2.6 (`useListItems`,
 FormRenderer split; `pages/ops/Booking.tsx` split earlier), Q3, Q4 (`core.log.event`,
