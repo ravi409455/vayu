@@ -10,15 +10,13 @@ export type Stuck = { id: string; booking: string; booking_id: string; field_key
 export type PdfProblem = { booking: string; booking_id: string; status: string; error: string };
 /** A report something changed under since it was made (Ops press Regenerate, F-219). */
 export type StaleReport = { booking: string; booking_id: string; since: string };
-type ReportProblems = (PdfProblem & { out_of_date?: boolean; since?: string })[] | { failed?: PdfProblem[]; out_of_date?: StaleReport[] };
+/** One row of problems/reports: a failed or stuck render, or a PDF that changed under itself. */
+type ReportRow = PdfProblem & { problem: "failed" | "stuck" | "out_of_date"; out_of_date_since: string | null };
 
-/** problems/reports, failed and out of date apart. ponytail: reads both shapes the server may send
- *  (a list with out_of_date rows, or { failed, out_of_date }) until the backend field is final. */
-export function reportProblems(raw: ReportProblems | undefined): { failed: PdfProblem[]; outOfDate: StaleReport[] } {
-  if (!raw) return { failed: [], outOfDate: [] };
-  if (!Array.isArray(raw)) return { failed: raw.failed ?? [], outOfDate: raw.out_of_date ?? [] };
-  return { failed: raw.filter((r) => !r.out_of_date || r.error),
-    outOfDate: raw.filter((r) => r.out_of_date).map((r) => ({ booking: r.booking, booking_id: r.booking_id, since: r.since ?? "" })) };
+/** problems/reports, failed and out of date apart. */
+export function reportProblems(rows: ReportRow[] | undefined): { failed: PdfProblem[]; outOfDate: StaleReport[] } {
+  return { failed: (rows ?? []).filter((r) => r.problem !== "out_of_date"),
+    outOfDate: (rows ?? []).filter((r) => r.problem === "out_of_date").map((r) => ({ booking: r.booking, booking_id: r.booking_id, since: r.out_of_date_since ?? "" })) };
 }
 
 /** Everything that needs a person, from the four problem queues. Shared by the Problems page,
@@ -28,7 +26,7 @@ export function useProblems() {
   const on = !!me && me.role !== "expert" && can("bookings.view");
   const opts = { enabled: on, staleTime: 30_000, refetchInterval: 60_000 } as const;
   const stuck = useQuery({ ...opts, queryKey: keys.problems("stuck"), queryFn: ({ signal }) => api<Stuck[]>("problems/stuck-uploads", { signal }) });
-  const pdf = useQuery({ ...opts, queryKey: keys.problems("pdf"), queryFn: ({ signal }) => api<ReportProblems>("problems/reports", { signal }) });
+  const pdf = useQuery({ ...opts, queryKey: keys.problems("pdf"), queryFn: ({ signal }) => api<ReportRow[]>("problems/reports", { signal }) });
   const conflicts = useQuery({ ...opts, queryKey: keys.problems("conflict"), queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query: { problem: "conflict" }, signal }) });
   const types = useQuery({ ...opts, queryKey: keys.problems("type"), queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query: { problem: "type_change" }, signal }) });
   // started late, and finished too quickly: two separate lists (last 7 days), each until someone marks it reviewed

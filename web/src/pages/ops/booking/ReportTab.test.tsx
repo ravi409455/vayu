@@ -3,10 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AuthProvider } from "./auth";
-import { reportProblems } from "./lib/problems";
-import { ReportTab } from "./pages/ops/booking/ReportTab";
-import { ToastProvider } from "./ui/kit";
+import { AuthProvider } from "../../../auth";
+import { reportProblems } from "../../../lib/problems";
+import { ReportTab } from "./ReportTab";
+import { ToastProvider } from "../../../ui/kit";
 
 afterEach(() => vi.restoreAllMocks());
 const json = (x: unknown, status = 200) => new Response(JSON.stringify(x), { status, headers: { "Content-Type": "application/json" } });
@@ -50,10 +50,10 @@ describe("reports are made again only by Regenerate (F-219)", () => {
     expect(await screen.findByText(/Out of date: changes since this PDF/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Regenerate" })).toBeNull();
   });
-  it("Needs you lists out-of-date reports apart from failed ones", () => {
-    expect(reportProblems({ failed: [{ booking: "a", booking_id: "A-1", status: "failed", error: "x" }], out_of_date: [{ booking: "b", booking_id: "B-1", since: "2026-11-25T10:00:00Z" }] }))
-      .toEqual({ failed: [{ booking: "a", booking_id: "A-1", status: "failed", error: "x" }], outOfDate: [{ booking: "b", booking_id: "B-1", since: "2026-11-25T10:00:00Z" }] });
-    expect(reportProblems([{ booking: "a", booking_id: "A-1", status: "ready", error: "", out_of_date: true, since: "s" }]).outOfDate).toEqual([{ booking: "a", booking_id: "A-1", since: "s" }]);
-    expect(reportProblems([{ booking: "a", booking_id: "A-1", status: "failed", error: "boom" }]).failed).toHaveLength(1);
+  it("Needs you lists out-of-date reports apart from failed and stuck ones", () => {
+    const row = (problem: "failed" | "stuck" | "out_of_date", since: string | null = null) => ({ booking: problem, booking_id: problem.toUpperCase(), status: "ready", error: "", problem, out_of_date_since: since });
+    const r = reportProblems([row("failed"), row("stuck"), row("out_of_date", "2026-11-25T10:00:00Z")]);
+    expect(r.failed.map((x) => x.booking)).toEqual(["failed", "stuck"]);
+    expect(r.outOfDate).toEqual([{ booking: "out_of_date", booking_id: "OUT_OF_DATE", since: "2026-11-25T10:00:00Z" }]);
   });
 });
