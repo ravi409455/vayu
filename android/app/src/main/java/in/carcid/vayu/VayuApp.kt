@@ -111,7 +111,8 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
     fun prune(userId: Int) {
         val jobs = jobs(userId).jobs().associateBy { it.id }
         val drafts = drafts(userId)
-        drafts.all().filter { d -> d.submitSent && d.files.all { it.verified } && jobs[d.bookingId].let { it == null || it.stage == "completed" } }
+        drafts.all().filter { d -> d.submitSent && d.files.all { it.verified } && jobs[d.bookingId].let { it == null || it.stage == "completed" } &&
+            d.problemCode != `in`.carcid.vayu.core.draft.ALREADY_SUBMITTED }      // may differ from the server's copy: only sign-out removes it
             .forEach { drafts.discard(it.bookingId) }
     }
 

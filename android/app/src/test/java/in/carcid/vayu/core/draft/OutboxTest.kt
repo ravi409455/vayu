@@ -112,8 +112,9 @@ class OutboxTest {
         outbox.run()
         val d = drafts.get(BOOKING)!!
         assertTrue(d.submitSent)
-        assertEquals(null, d.problemCode); assertEquals(null, d.problem)
         assertFalse("nothing left to send, so sign-out isn't blocked", d.unsent)
+        assertEquals("ALREADY_SUBMITTED", d.problemCode)                   // said, and kept off the tidy-up (it may differ)
+        assertEquals("Already submitted; Ops can edit it.", d.problem)
     }
 
     /** The same after a start the server refuses because the lead is past starting (the submit then goes alone). */
@@ -123,7 +124,7 @@ class OutboxTest {
         server.on("POST bookings/$BOOKING/submit", """{"code":"ALREADY_SUBMITTED","detail":"Already submitted; Ops can edit it."}""", 409)
         outbox.run()
         val d = drafts.get(BOOKING)!!
-        assertTrue(d.submitSent); assertEquals(null, d.problem); assertFalse(d.unsent)
+        assertTrue(d.submitSent); assertEquals("ALREADY_SUBMITTED", d.problemCode); assertFalse(d.unsent)
     }
 
     @Test fun aJobClosedOnTheServerSaysSoAndStopsTrying() = runBlocking {

@@ -25,6 +25,18 @@ class GraphTest {
         assertTrue(beat.contains("\"drafts\":1")); assertTrue(beat.contains("\"files\":0"))
     }
 
+    /** A draft the server said it already had may differ from the server's copy: tidying never deletes it (sign-out does). */
+    @Test fun aDraftTheServerAlreadyHadIsNotTidiedAway() {
+        graph.jobs(3).apply(`in`.carcid.vayu.core.sync.payload(`in`.carcid.vayu.core.sync.job(BOOKING, stage = "completed")), 0)
+        graph.drafts(3).save(Draft(BOOKING, "DEMO-2", "Arjun", mapOf("inspection" to 7), "pdi", submitSent = true,
+            problem = "Already submitted; Ops can edit it.", problemCode = "ALREADY_SUBMITTED"))
+        graph.prune(3)
+        assertTrue(graph.drafts(3).get(BOOKING) != null)
+        graph.drafts(3).update(BOOKING) { it.copy(problem = null, problemCode = null) }    // an ordinary sent draft does go
+        graph.prune(3)
+        assertEquals(null, graph.drafts(3).get(BOOKING))
+    }
+
     @Test fun formsOfDraftsAreKeptWhenTheServerSignsThePersonOut() {
         graph.jobs(3).apply(`in`.carcid.vayu.core.sync.payload(`in`.carcid.vayu.core.sync.job(BOOKING),
             forms = """{"7":{"pages":[]}}"""), 0)
