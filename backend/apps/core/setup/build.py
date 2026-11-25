@@ -48,13 +48,18 @@ def _norm(spec: dict) -> dict:
 
 
 @transaction.atomic
-def apply(admin, form: Form, spec: dict, extra: dict | None = None) -> str:
-    """Make `form`'s live version match `spec` ("unchanged" | "published v<n>"). `extra`:
-    version settings such as key_checks and rating_config. A spec field whose key is a system
-    field of the form takes that field's place (relabelled, moved), keeping its locked type."""
+def apply(admin, form: Form, spec: dict, extra: dict | None = None, force: bool = False) -> str:
+    """Publish `spec` on a form that has no live version yet ("published v<n>"). A form already
+    live is the Admin's: it is kept as it is ("kept") unless [force] (H-11), which publishes the
+    spec as a new version from a fresh draft (live inspections keep theirs) and never takes over
+    a draft the Admin has open. `extra`: version settings such as key_checks and rating_config.
+    A spec field whose key is a system field of the form takes that field's place (relabelled,
+    moved), keeping its locked type."""
     extra = extra or {}
     spec = _norm(spec)
     live = form.versions.filter(status=VersionStatus.PUBLISHED).order_by("-number").first()
+    if live is not None and not force:
+        return "kept"
     system = {f.key: f for f in Field.objects.filter(version=live, is_system=True)} if live \
         else {}
     if live is not None:
@@ -62,6 +67,9 @@ def apply(admin, form: Form, spec: dict, extra: dict | None = None) -> str:
         if want == _version_rows(live, tuple(extra)):
             return "unchanged"
     draft = form.versions.filter(status=VersionStatus.DRAFT).first()
+    if live is not None and draft is not None:
+        raise SetupRefused(f"{form.name} has a draft open in the builder: publish or discard it "
+                           "first. Nothing was changed.")
     if draft is None:
         draft = form_services.create_draft(admin, form) if live else form.versions.get()
     _fill(draft, spec)
@@ -95,10 +103,16 @@ def _with_system(spec: dict, system: dict[str, Field]) -> dict:
     return out
 
 
+class SetupRefused(Exception):
+    """Something the Admin owns stands in the way of a forced re-run."""
+
+
 def _fill(v: FormVersion, spec: dict) -> None:
     system = {f.key: f for f in Field.objects.filter(version=v, is_system=True)}
     Field.objects.filter(version=v, is_system=False).delete()
     old_sections = list(Section.objects.filter(version=v))
+    for s in old_sections:            # out of the way: the new sections keep their own keys
+        Section.objects.filter(pk=s.pk).update(key=f"old_{s.pk}")
     old_pages = list(Page.objects.filter(version=v))
     placed: set[str] = set()
     for pn, p in enumerate(spec["pages"]):
