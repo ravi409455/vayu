@@ -247,7 +247,7 @@ class Builder:
     def __init__(self, users: dict[str, User], seed: int = 7):
         self.u = users
         self.ops = users["ops"]
-        self.rng = random.Random(seed)
+        self.rng = random.Random(seed)  # noqa: S311 - seeded test data, not security
         self.pics = Pictures()
         self.n = 0
         self.cities = list(MasterListItem.objects.filter(list__key="city", archived=False)

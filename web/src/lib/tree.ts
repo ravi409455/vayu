@@ -6,14 +6,22 @@ import type { FormPage } from "../api/types";
 export type Ref = { kind: "page" | "section" | "field"; id: number };
 export type ReorderBody = { pages?: number[]; sections?: Record<string, number[]>; fields?: Record<string, number[]> };
 
-const clone = (pages: FormPage[]): FormPage[] => pages.map((p) => ({ ...p, sections: p.sections.map((s) => ({ ...s, fields: [...s.fields] })) }));
+const clone = (pages: FormPage[]): FormPage[] =>
+  pages.map((p) => ({ ...p, sections: p.sections.map((s) => ({ ...s, fields: [...s.fields] })) }));
 
 function findSection(pages: FormPage[], id: number) {
-  for (const p of pages) { const i = p.sections.findIndex((s) => s.id === id); if (i >= 0) return { page: p, index: i }; }
+  for (const p of pages) {
+    const i = p.sections.findIndex((s) => s.id === id);
+    if (i >= 0) return { page: p, index: i };
+  }
   return null;
 }
 function findField(pages: FormPage[], id: number) {
-  for (const p of pages) for (const s of p.sections) { const i = s.fields.findIndex((f) => f.id === id); if (i >= 0) return { section: s, index: i }; }
+  for (const p of pages)
+    for (const s of p.sections) {
+      const i = s.fields.findIndex((f) => f.id === id);
+      if (i >= 0) return { section: s, index: i };
+    }
   return null;
 }
 
@@ -31,8 +39,16 @@ export function applyDrag(pages: FormPage[], active: Ref, over: Ref): FormPage[]
     const src = findSection(out, active.id);
     if (!src) return pages;
     const [moved] = src.page.sections.splice(src.index, 1);
-    let target = over.kind === "page" ? { page: out.find((p) => p.id === over.id)!, index: -1 } : over.kind === "section" ? findSection(out, over.id) : null;
-    if (!target || !target.page) { src.page.sections.splice(src.index, 0, moved!); return pages; }
+    let target =
+      over.kind === "page"
+        ? { page: out.find((p) => p.id === over.id)!, index: -1 }
+        : over.kind === "section"
+          ? findSection(out, over.id)
+          : null;
+    if (!target || !target.page) {
+      src.page.sections.splice(src.index, 0, moved!);
+      return pages;
+    }
     const at = target.index < 0 ? target.page.sections.length : target.index;
     target.page.sections.splice(at, 0, moved!);
     return out;
@@ -40,10 +56,16 @@ export function applyDrag(pages: FormPage[], active: Ref, over: Ref): FormPage[]
   const src = findField(out, active.id);
   if (!src) return pages;
   const [moved] = src.section.fields.splice(src.index, 1);
-  const target = over.kind === "section"
-    ? { section: out.flatMap((p) => p.sections).find((s) => s.id === over.id)!, index: -1 }
-    : over.kind === "field" ? findField(out, over.id) : null;
-  if (!target || !target.section) { src.section.fields.splice(src.index, 0, moved!); return pages; }
+  const target =
+    over.kind === "section"
+      ? { section: out.flatMap((p) => p.sections).find((s) => s.id === over.id)!, index: -1 }
+      : over.kind === "field"
+        ? findField(out, over.id)
+        : null;
+  if (!target || !target.section) {
+    src.section.fields.splice(src.index, 0, moved!);
+    return pages;
+  }
   target.section.fields.splice(target.index < 0 ? target.section.fields.length : target.index, 0, moved!);
   return out;
 }

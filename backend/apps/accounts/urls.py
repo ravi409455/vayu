@@ -1,3 +1,4 @@
+"""URLs of the accounts API (auth/*, users, roles, permissions, audit log)."""
 from django.urls import path
 from rest_framework.routers import SimpleRouter
 

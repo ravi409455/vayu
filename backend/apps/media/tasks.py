@@ -1,3 +1,5 @@
+"""Celery jobs for files: verify an upload (checksum, real picture or video, preview), flag stuck
+uploads, delete files and purge old ones."""
 import hashlib
 import io
 import logging
@@ -7,11 +9,12 @@ from django.utils import timezone
 from PIL import Image, ImageOps
 from pillow_heif import register_heif_opener
 
+from apps.core import log
+
 from . import storage
 from .models import MediaAsset
 
 register_heif_opener()       # Pillow opens iPhone HEIC photos
-logger = logging.getLogger(__name__)
 MAX_EDGE = 2048
 PREVIEW_EDGE = 480
 # the first box of an MP4 / MOV file (QuickTime files may begin with any of these)
@@ -63,6 +66,8 @@ def verify_asset(asset_id: str) -> str:
         return "failed"
     asset.status, asset.verified_at = "verified", timezone.now()
     asset.save(update_fields=["status", "verified_at", "preview_key", "jpeg_key"])
+    log.event("upload.verified", booking=str(asset.booking_id), media=str(asset.id),
+              kind=asset.kind, size=asset.size)
     booking = asset.booking
     if booking.stage == "completed" and asset.replaced_at is None:   # Ops added it afterwards
         insp = booking.counted_inspection()
@@ -106,9 +111,8 @@ def _check(asset: MediaAsset) -> bool:
 
 def _failed(asset: MediaAsset, reason: str) -> None:
     """Why a file failed, findable by booking in the logs (F-212)."""
-    logger.warning("upload failed verification", extra={
-        "booking": str(asset.booking_id), "media": str(asset.id), "field": asset.field_key,
-        "reason": reason})
+    log.event("upload.failed", level=logging.WARNING, booking=str(asset.booking_id),
+              media=str(asset.id), field=asset.field_key, reason=reason)
 
 
 @shared_task

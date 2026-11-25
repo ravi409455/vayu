@@ -1,3 +1,4 @@
+"""Settings shared by every environment, read from environment variables."""
 import os
 from datetime import timedelta
 from pathlib import Path
@@ -178,7 +179,7 @@ LOGGING = {
     "formatters": {
         "json": {
             "()": "pythonjsonlogger.json.JsonFormatter",
-            "format": "%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s",
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s %(task_id)s",
         }
     },
     "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "json",

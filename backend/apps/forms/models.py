@@ -1,3 +1,5 @@
+"""Master lists, forms and their versions (pages, sections, fields, checks), the field library and
+form pictures. Only a draft version can change."""
 import re
 import uuid
 from typing import Any

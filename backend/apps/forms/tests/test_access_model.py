@@ -2,7 +2,15 @@
 import pytest
 from django.core.management import call_command
 
-from apps.forms.access import LEVELS, ROLES, STAGES, resolve, validate_access
+from apps.forms.access import (
+    LEVELS,
+    ROLES,
+    STAGES,
+    levels_by_stage,
+    levels_for,
+    resolve,
+    validate_access,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -129,3 +137,17 @@ def test_the_type_cannot_be_chosen_or_changed(admin):
 def test_only_custom_forms_can_be_created(admin, ftype):
     r = admin.post("/api/v1/forms", {"key": "x_form", "type": ftype, "name": "X"}, format="json")
     assert r.status_code == 400
+
+
+def test_levels_by_stage_matches_levels_for_and_a_draft_is_never_cached(admin, make_form, tree,
+                                                                         add_field):
+    from apps.forms.models import Field, FormVersion
+
+    v = make_form()["draft_version"]["id"]
+    add_field(tree(v)["pages"][0]["sections"][0]["id"], key="odo",
+              access={"expert": {"in_progress": "hidden"}})
+    draft = FormVersion.objects.select_related("form").get(pk=v)
+    assert levels_by_stage(draft, "expert") == {s: levels_for(draft, "expert", s) for s in STAGES}
+    assert levels_by_stage(draft, "expert")["in_progress"]["odo"] == "hidden"
+    Field.objects.filter(key="odo").update(access={})            # a draft may change any time
+    assert levels_by_stage(draft, "expert")["in_progress"]["odo"] == "edit"

@@ -3,14 +3,15 @@
 import type { Booking } from "../api/types";
 import { fmtTime, ist, today } from "./format";
 
-export const PLANNED_HOURS = 1;            // a job that has not started: booked time, one hour
-export const LATE_GRACE_MINUTES = 15;     // default; Admin sets the real one on the Settings page
-const MIN_HOURS = 0.25;                    // a job that just started is still a box you can see
+export const PLANNED_HOURS = 1; // a job that has not started: booked time, one hour
+export const LATE_GRACE_MINUTES = 15; // default; Admin sets the real one on the Settings page
+const MIN_HOURS = 0.25; // a job that just started is still a box you can see
 
 export type Span = {
-  start: number; end: number;
+  start: number;
+  end: number;
   kind: "planned" | "running" | "finished";
-  late: number;                            // minutes after the booked time it really started; 0 = not late
+  late: number; // minutes after the booked time it really started; 0 = not late
 };
 
 export const hoursOf = (t: unknown): number | null => {
@@ -32,8 +33,10 @@ export function jobSpan(b: Job, now: Date, graceMinutes = LATE_GRACE_MINUTES): S
   const day = today(now);
   const booked = hoursOf(b.answers.inspection_time);
   const started = clock(b.started_at, day);
-  const running = b.stage === "in_progress", done = b.stage === "submitted" || b.stage === "completed";
-  if (started === null || !(running || done)) {                      // not started: where it was booked
+  const running = b.stage === "in_progress",
+    done = b.stage === "submitted" || b.stage === "completed";
+  if (started === null || !(running || done)) {
+    // not started: where it was booked
     const s = booked ?? 8;
     return { start: s, end: s + PLANNED_HOURS, kind: "planned", late: 0 };
   }
@@ -43,7 +46,8 @@ export function jobSpan(b: Job, now: Date, graceMinutes = LATE_GRACE_MINUTES): S
   return { start: started, end: Math.max(finished, started + MIN_HOURS), kind: "finished", late };
 }
 
-export const DAY_START = 9, DAY_END = 21;      // the working day: 9 am to 9 pm
+export const DAY_START = 9,
+  DAY_END = 21; // the working day: 9 am to 9 pm
 
 /** The hours the schedule spans: 9 am to 9 pm, widened to fit the day's boxes. */
 export function dayWindow(spans: { start: number; end: number }[]): [number, number] {
@@ -54,23 +58,35 @@ export function dayWindow(spans: { start: number; end: number }[]): [number, num
 export function stackRows(spans: { start: number; end: number }[]): { row: number[]; rows: number } {
   const ends: number[] = [];
   const row = new Array<number>(spans.length).fill(0);
-  [...spans.keys()].sort((a, b) => spans[a]!.start - spans[b]!.start).forEach((i) => {
-    let r = ends.findIndex((e) => e <= spans[i]!.start);
-    if (r < 0) r = ends.length;
-    ends[r] = spans[i]!.end;
-    row[i] = r;
-  });
+  [...spans.keys()]
+    .sort((a, b) => spans[a]!.start - spans[b]!.start)
+    .forEach((i) => {
+      let r = ends.findIndex((e) => e <= spans[i]!.start);
+      if (r < 0) r = ends.length;
+      ends[r] = spans[i]!.end;
+      row[i] = r;
+    });
   return { row, rows: Math.max(1, ends.length) };
 }
 
-export const hm = (h: number) => { const m = Math.round(h * 60); return fmtTime(`${Math.floor(m / 60) % 24}:${String(m % 60).padStart(2, "0")}`); };
-const length = (h: number) => { const m = Math.round(h * 60), x = Math.floor(m / 60); return x ? `${x} h${m % 60 ? ` ${m % 60} min` : ""}` : `${m} min`; };
+export const hm = (h: number) => {
+  const m = Math.round(h * 60);
+  return fmtTime(`${Math.floor(m / 60) % 24}:${String(m % 60).padStart(2, "0")}`);
+};
+const length = (h: number) => {
+  const m = Math.round(h * 60),
+    x = Math.floor(m / 60);
+  return x ? `${x} h${m % 60 ? ` ${m % 60} min` : ""}` : `${m} min`;
+};
 
 /** The hover: the real start and end where they are known, the booked hour otherwise, said so. */
 export function spanTitle(s: Span): string {
-  const text = s.kind === "planned" ? `Booked ${hm(s.start)} – ${hm(s.end)} (planned)`
-    : s.kind === "running" ? `Started ${hm(s.start)}, still going`
-      : `Started ${hm(s.start)}, finished ${hm(s.end)} (${length(s.end - s.start)})`;
+  const text =
+    s.kind === "planned"
+      ? `Booked ${hm(s.start)} – ${hm(s.end)} (planned)`
+      : s.kind === "running"
+        ? `Started ${hm(s.start)}, still going`
+        : `Started ${hm(s.start)}, finished ${hm(s.end)} (${length(s.end - s.start)})`;
   return s.late ? `${text}\nStarted ${s.late} min late` : text;
 }
 
@@ -100,9 +116,12 @@ export type Fact = { label: string; value: string; bad?: boolean };
 /** The lines of the hover card: what was booked, when it really began and ended, how long it took. */
 export function spanFacts(s: Span, booked: number | null, nowAt: number): Fact[] {
   if (s.kind === "planned") {
-    return [{ label: "Booked", value: `${hm(s.start)} – ${hm(s.end)} (planned)` },
-      nowAt > s.start ? { label: "Status", value: `Not started, ${length(nowAt - s.start)} past the booked time`, bad: true }
-        : { label: "Status", value: `Not started, begins in ${length(s.start - nowAt)}` }];
+    return [
+      { label: "Booked", value: `${hm(s.start)} – ${hm(s.end)} (planned)` },
+      nowAt > s.start
+        ? { label: "Status", value: `Not started, ${length(nowAt - s.start)} past the booked time`, bad: true }
+        : { label: "Status", value: `Not started, begins in ${length(s.start - nowAt)}` },
+    ];
   }
   const out: Fact[] = [];
   if (booked !== null) out.push({ label: "Booked", value: hm(booked) });

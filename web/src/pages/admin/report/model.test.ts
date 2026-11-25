@@ -3,7 +3,20 @@ import { slugKey } from "../../../lib/fieldTypes";
 import { freshCopies, pageOf, partNames, withIds, withoutIds, type Definition } from "./model";
 import { keyOf } from "./sharing";
 
-const def = (): Definition => withIds({ schema: 2, pages: [{ title: "One", parts: [{ type: "text", html: "Hello" }, { type: "columns", columns: [{ parts: [{ type: "text", html: "Inner" }] }] }] as never }, { title: "Two", parts: [] }] });
+const def = (): Definition =>
+  withIds({
+    schema: 2,
+    pages: [
+      {
+        title: "One",
+        parts: [
+          { type: "text", html: "Hello" },
+          { type: "columns", columns: [{ parts: [{ type: "text", html: "Inner" }] }] },
+        ] as never,
+      },
+      { title: "Two", parts: [] },
+    ],
+  });
 
 describe("report designer helpers, one copy each (F-016)", () => {
   it("copies get fresh ids and keep everything else", () => {
@@ -15,7 +28,7 @@ describe("report designer helpers, one copy each (F-016)", () => {
   });
   it("finds a part's page, also inside columns, and names every part", () => {
     const d = def();
-    const inner = (d.pages[0]!.parts[1] as Extract<typeof d.pages[0]["parts"][number], { type: "columns" }>).columns[0]!.parts[0]!;
+    const inner = (d.pages[0]!.parts[1] as Extract<(typeof d.pages)[0]["parts"][number], { type: "columns" }>).columns[0]!.parts[0]!;
     expect(pageOf(d, inner.id!)?.title).toBe("One");
     expect(partNames(d)[inner.id!]).toBe("Inner");
   });

@@ -1,3 +1,4 @@
+"""Webhook integrations, their deliveries (one row per event sent) and API keys."""
 import uuid
 
 from django.conf import settings

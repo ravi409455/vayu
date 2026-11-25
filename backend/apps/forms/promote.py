@@ -8,7 +8,7 @@ from django.db import transaction
 from django.db.models import Max
 
 from apps.accounts import audit
-from apps.core.errors import CodedError
+from apps.core.errors import fail
 
 from .access import validate_access
 from .fieldtypes import validate_config as validate_field_config
@@ -36,9 +36,6 @@ from .system_fields import SYSTEM_FIELDS
 
 SCHEMA = 2
 
-
-def bad(code: str, message: str, status: int = 400, **extra) -> CodedError:
-    return CodedError(code, message, status, **extra)
 
 
 # ------------------------------------------------------------------ export
@@ -152,7 +149,7 @@ def _import_assets(actor, b: dict) -> dict[str, str]:
 
     payload = b.get("assets") or {}
     if not isinstance(payload, dict):
-        raise bad("INVALID_BUNDLE", "The bundle's pictures are not valid.")
+        raise fail("INVALID_BUNDLE", "The bundle's pictures are not valid.")
     return {old: str(assets.import_from_bundle(actor, p).id) for old, p in payload.items()}
 
 
@@ -160,10 +157,10 @@ def _import_assets(actor, b: dict) -> dict[str, str]:
 
 def _check_shape(b: Any) -> None:
     if not isinstance(b, dict):
-        raise bad("INVALID_BUNDLE", "The bundle must be a JSON object.")
+        raise fail("INVALID_BUNDLE", "The bundle must be a JSON object.")
     if isinstance(b.get("schema"), int) and b["schema"] > SCHEMA:
-        raise bad("BUNDLE_TOO_NEW", "This bundle comes from a newer version of Vayu; upgrade "
-                  "this server first.")
+        raise fail("BUNDLE_TOO_NEW", "This bundle comes from a newer version of Vayu; upgrade "
+                   "this server first.")
     form, version = b.get("form"), b.get("version")
     if (b.get("schema") not in (1, SCHEMA) or not isinstance(form, dict)
             or not isinstance(version, dict)
@@ -174,7 +171,7 @@ def _check_shape(b: Any) -> None:
                     ("booking", "inspection", "ops"))
             or not all(isinstance(form.get(k), str) and form[k] or k == "inspection_type"
                        for k in ("key", "name"))):
-        raise bad("INVALID_BUNDLE", "This is not a valid Vayu form bundle.")
+        raise fail("INVALID_BUNDLE", "This is not a valid Vayu form bundle.")
     known = {(i.get("kind"), i.get("key")) for i in b["library"] if isinstance(i, dict)}
     for p in version["pages"]:
         for s in p.get("sections", []):
@@ -182,8 +179,8 @@ def _check_shape(b: Any) -> None:
             for link in links:
                 kind = "section" if link is s.get("library") else "field"
                 if link and (kind, link.get("key")) not in known:
-                    raise bad("INVALID_BUNDLE", f"Library item '{link.get('key')}' is missing "
-                              "from the bundle.")
+                    raise fail("INVALID_BUNDLE", f"Library item '{link.get('key')}' is missing "
+                               "from the bundle.")
 
 
 def _check_content(b: dict) -> None:
@@ -241,7 +238,7 @@ def _check_content(b: dict) -> None:
         if b.get("pdf_template"):
             validate_definition(b["pdf_template"]["definition"])
     except (ValueError, KeyError, TypeError, AttributeError) as e:
-        raise bad("INVALID_BUNDLE", f"The bundle's content is not valid: {e}") from e
+        raise fail("INVALID_BUNDLE", f"The bundle's content is not valid: {e}") from e
 
 
 def _conflicts(b: dict, existing: Form | None) -> list[str]:
@@ -329,13 +326,13 @@ def _as_new(b: dict, as_new: dict) -> dict:
     """The bundle as a brand-new custom form with this key and name (a copy, never an overwrite)."""
     key, name = as_new.get("key"), as_new.get("name")
     if b["form"]["type"] != FormType.CUSTOM:
-        raise bad("NOT_DUPLICABLE", "Only custom forms can be copied; the booking, start and "
-                  "end forms are the only ones of their kind.")
+        raise fail("NOT_DUPLICABLE", "Only custom forms can be copied; the booking, start and "
+                   "end forms are the only ones of their kind.")
     if not isinstance(key, str) or not KEY_RE.fullmatch(key) \
             or not isinstance(name, str) or not name.strip():
-        raise bad("INVALID_BUNDLE", "A new form needs a name and a key (a-z, 0-9, _).")
+        raise fail("INVALID_BUNDLE", "A new form needs a name and a key (a-z, 0-9, _).")
     if Form.objects.filter(key=key).exists():
-        raise bad("KEY_TAKEN", f"A form with the key '{key}' already exists.", 409)
+        raise fail("KEY_TAKEN", f"A form with the key '{key}' already exists.", 409)
     return {**b, "form": {**b["form"], "key": key, "name": name.strip(), "inspection_type": key}}
 
 
@@ -344,7 +341,7 @@ def import_bundle(actor, b: Any, as_new: dict | None = None) -> dict:
     try:
         return _import_bundle(actor, b, as_new)
     except (KeyError, TypeError, AttributeError) as e:
-        raise bad("INVALID_BUNDLE", "This is not a valid Vayu form bundle.") from e
+        raise fail("INVALID_BUNDLE", "This is not a valid Vayu form bundle.") from e
 
 
 def _import_bundle(actor, b: Any, as_new: dict | None) -> dict:
@@ -353,7 +350,7 @@ def _import_bundle(actor, b: Any, as_new: dict | None) -> dict:
         try:
             b = upgrade_v1(b)
         except OldBundleError as e:
-            raise bad("OLD_BUNDLE", str(e)) from e
+            raise fail("OLD_BUNDLE", str(e)) from e
     from apps.reports.models import PdfTemplate, PdfTemplateVersion
 
     if as_new is not None:
@@ -365,14 +362,14 @@ def _import_bundle(actor, b: Any, as_new: dict | None) -> dict:
                 else Form.objects.filter(key=form_data["key"]).first())
     conflicts = _conflicts(b, existing)
     if conflicts:
-        raise bad("IMPORT_CONFLICTS", "This bundle conflicts with what is already here.",
-                  conflicts=conflicts)
+        raise fail("IMPORT_CONFLICTS", "This bundle conflicts with what is already here.",
+                   conflicts=conflicts)
     if existing and existing.versions.filter(status=VersionStatus.DRAFT).exists():
-        raise bad("DRAFT_EXISTS", "This form already has a draft; publish or discard it first.",
-                  409)
+        raise fail("DRAFT_EXISTS", "This form already has a draft; publish or discard it first.",
+                   409)
     template = PdfTemplate.objects.filter(form=existing).first() if existing else None
     if template and template.versions.filter(status="draft").exists() and b.get("pdf_template"):
-        raise bad("DRAFT_EXISTS", "This form's PDF template already has a draft.", 409)
+        raise fail("DRAFT_EXISTS", "This form's PDF template already has a draft.", 409)
     notes: list[str] = []
     with transaction.atomic():
         _remap_assets(b, _import_assets(actor, b))
@@ -413,7 +410,7 @@ def _import_bundle(actor, b: Any, as_new: dict | None) -> dict:
             try:
                 definition, template_notes = transfer.load_payload(actor, b["pdf_template"])
             except ValueError as e:
-                raise bad("INVALID_BUNDLE", f"The bundle's PDF template is not valid: {e}") from e
+                raise fail("INVALID_BUNDLE", f"The bundle's PDF template is not valid: {e}") from e
             notes += template_notes
             t, _ = PdfTemplate.objects.get_or_create(form=form)
             last = t.versions.order_by("-number").first()

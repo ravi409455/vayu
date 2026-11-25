@@ -1,3 +1,4 @@
+"""`manage.py publish_apk`: upload a signed release APK and offer it as the latest app version."""
 import hashlib
 import os
 

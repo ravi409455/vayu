@@ -5,7 +5,8 @@ import { apiAs, json, signIn } from "./api";
 // a real (tiny) JPEG
 const JPEG = Buffer.from(
   "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAAwAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDzSiiivkT+iAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAP//Z",
-  "base64");
+  "base64",
+);
 const file = (name: string) => ({ name, mimeType: "image/jpeg", buffer: JPEG });
 
 test.use({ permissions: ["geolocation"], geolocation: { latitude: 28.6139, longitude: 77.209 } });
@@ -15,9 +16,23 @@ async function assignedJob(bookingId: string) {
   const admin = await apiAs("admin");
   const users = await json(await admin.get("users"));
   const expert = (users.results ?? users).find((u: { username: string }) => u.username === "expert");
-  const b = await json(await ops.post("bookings", { data: { answers: {
-    booking_id: bookingId, customer_name: "Kavya Rao", customer_phone: "9876500011", address: "7 Lake View Rd", city: "delhi",
-    inspection_date: "2026-11-24", inspection_time: "11:30", inspection_type: "pdi", car_make_model: "maruti_victoris" } } }));
+  const b = await json(
+    await ops.post("bookings", {
+      data: {
+        answers: {
+          booking_id: bookingId,
+          customer_name: "Kavya Rao",
+          customer_phone: "9876500011",
+          address: "7 Lake View Rd",
+          city: "delhi",
+          inspection_date: "2026-11-24",
+          inspection_time: "11:30",
+          inspection_type: "pdi",
+          car_make_model: "maruti_victoris",
+        },
+      },
+    }),
+  );
   await json(await ops.post(`bookings/${b.id}/assign`, { data: { expert: expert.id } }));
   return b.id as string;
 }
@@ -34,7 +49,7 @@ test("J3: expert completes a full inspection on the web", async ({ page }) => {
 
   // check-in: location + selfie
   await expect(page.getByText(/Step 1 of/)).toBeVisible();
-  await expect(page.getByTestId("gps-value")).toContainText("28.6139");           // taken by itself
+  await expect(page.getByTestId("gps-value")).toContainText("28.6139"); // taken by itself
   await page.getByTestId("camera-selfie").setInputFiles(file("selfie.jpg"));
   await expect(page.getByTestId("media-item")).toHaveCount(1);
   await page.getByRole("button", { name: "Next" }).click();
@@ -57,17 +72,23 @@ test("J3: expert completes a full inspection on the web", async ({ page }) => {
   await page.getByRole("button", { name: "Door photo" }).click();
   await page.getByTestId("camera-door_photo").setInputFiles(file("door.jpg"));
   await expect(page.getByTestId("media-item")).toHaveCount(1);
-  while (!(await page.getByRole("heading", { name: "Before you submit" }).isVisible())) await page.getByRole("button", { name: "Next" }).click();
+  while (!(await page.getByRole("heading", { name: "Before you submit" }).isVisible()))
+    await page.getByRole("button", { name: "Next" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Everything required" })).toBeVisible();
   await page.getByRole("button", { name: "Submit inspection" }).click();
 
   // uploading finishes by itself and the booking completes
   await expect(page.getByText("Completed. Everything arrived")).toBeVisible({ timeout: 60_000 });
   const ops = await apiAs("ops");
-  await expect.poll(async () => {
-    const r = await ops.get(`bookings/${id}/report`);
-    return r.ok() ? (await r.json()).status : `HTTP ${r.status()}`;
-  }, { timeout: 40_000 }).toBe("ready");
+  await expect
+    .poll(
+      async () => {
+        const r = await ops.get(`bookings/${id}/report`);
+        return r.ok() ? (await r.json()).status : `HTTP ${r.status()}`;
+      },
+      { timeout: 40_000 },
+    )
+    .toBe("ready");
   const report = await json(await ops.get(`bookings/${id}/report`));
   expect(report.filename).toBe("J3-1PDI.pdf");
 });
@@ -79,10 +100,10 @@ test("J3b: GPS denied shows 'GPS unavailable' and does not block the job", async
   await signIn(page, "expert");
   await page.goto(`/jobs/${id}`);
   await page.getByRole("button", { name: "Start inspection" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "GPS unavailable" })).toBeVisible();   // asked by itself, refused
-  await page.getByTestId("camera-selfie").setInputFiles(file("selfie.jpg"));                    // the selfie is still required
+  await expect(page.getByRole("status").filter({ hasText: "GPS unavailable" })).toBeVisible(); // asked by itself, refused
+  await page.getByTestId("camera-selfie").setInputFiles(file("selfie.jpg")); // the selfie is still required
   await expect(page.getByTestId("media-item")).toHaveCount(1);
-  await page.getByRole("button", { name: "Next" }).click();             // GPS refusal does not block
+  await page.getByRole("button", { name: "Next" }).click(); // GPS refusal does not block
   await expect(page.getByText(/Step 2 of/)).toBeVisible();
   await ctx.close();
 });
@@ -98,9 +119,9 @@ test("J3c: a refresh keeps the draft and the pending upload carries on", async (
   await page.getByLabel("Odometer").fill("77");
   await page.getByRole("button", { name: "Next" }).click();
   await page.reload();
-  await expect(page.getByText(/Step 3 of/)).toBeVisible();         // same step
+  await expect(page.getByText(/Step 3 of/)).toBeVisible(); // same step
   await page.getByRole("button", { name: "Back" }).click();
-  await expect(page.getByLabel("Odometer")).toHaveValue("77");     // same answer
+  await expect(page.getByLabel("Odometer")).toHaveValue("77"); // same answer
 });
 
 test("J3d: an upload that could not reach storage resumes by itself after a refresh", async ({ page }) => {
@@ -108,13 +129,13 @@ test("J3d: an upload that could not reach storage resumes by itself after a refr
   await signIn(page, "expert");
   await page.goto(`/jobs/${id}`);
   await page.getByRole("button", { name: "Start inspection" }).click();
-  await page.route("http://localhost:5055/**", (r) => r.abort());               // storage is unreachable
+  await page.route("http://localhost:5055/**", (r) => r.abort()); // storage is unreachable
   await page.getByTestId("camera-selfie").setInputFiles(file("selfie.jpg"));
   await expect(page.getByTestId("media-item")).toHaveCount(1);
   await expect(page.getByText("Will retry")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(/files 0\/1 sent/)).toBeVisible();
-  await page.unroute("http://localhost:5055/**");                               // back online
-  await page.reload();                                                          // the page forgot everything in memory
+  await page.unroute("http://localhost:5055/**"); // back online
+  await page.reload(); // the page forgot everything in memory
   await expect(page.getByText(/files 1\/1 sent/)).toBeVisible({ timeout: 30_000 });
 });
 
@@ -127,11 +148,11 @@ test("J3e: the job is not in progress until the check-in is done", async ({ page
   await page.getByRole("button", { name: "Start inspection" }).click();
   await expect(page.getByText(/Step 1 of/)).toBeVisible();
   await expect(page.getByText("Not started yet.")).toBeVisible();
-  expect(await stage()).toBe("assigned");                                       // the wizard is open, the job is not started
-  await page.reload();                                                          // still the same: nothing was started behind our back
+  expect(await stage()).toBe("assigned"); // the wizard is open, the job is not started
+  await page.reload(); // still the same: nothing was started behind our back
   await expect(page.getByText("Not started yet.")).toBeVisible();
   expect(await stage()).toBe("assigned");
-  await page.getByTestId("camera-selfie").setInputFiles(file("selfie.jpg"));    // the check-in is complete
+  await page.getByTestId("camera-selfie").setInputFiles(file("selfie.jpg")); // the check-in is complete
   await expect(page.getByText("Not started yet.")).toHaveCount(0);
   await expect.poll(stage).toBe("in_progress");
 });
@@ -143,13 +164,15 @@ test("J3f: continuing on a phone that lost its draft shows the photo already sen
   await page.getByRole("button", { name: "Start inspection" }).click();
   await page.getByTestId("camera-selfie").setInputFiles(file("selfie.jpg"));
   await expect(page.getByText(/files 1\/1 sent/)).toBeVisible({ timeout: 30_000 });
-  await page.evaluate(() => { localStorage.clear(); });                         // a new phone: no saved session, no draft
+  await page.evaluate(() => {
+    localStorage.clear();
+  }); // a new phone: no saved session, no draft
   await page.goto(`/jobs/${id}`);
   await page.getByRole("button", { name: "Continue inspection" }).click();
   await expect(page.getByText(/Step 1 of/)).toBeVisible();
-  await expect(page.getByTestId("media-item")).toHaveCount(1);                  // the selfie is back, not "0/1"
+  await expect(page.getByTestId("media-item")).toHaveCount(1); // the selfie is back, not "0/1"
   await page.getByRole("button", { name: "Remove" }).click();
-  await page.getByTestId("camera-selfie").setInputFiles(file("again.jpg"));     // and a retake is not refused
+  await page.getByTestId("camera-selfie").setInputFiles(file("again.jpg")); // and a retake is not refused
   await expect(page.getByTestId("media-item")).toHaveCount(1);
   await expect(page.getByRole("alert").filter({ hasText: "takes at most" })).toHaveCount(0);
 });

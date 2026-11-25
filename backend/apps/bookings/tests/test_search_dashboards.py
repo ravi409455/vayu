@@ -86,6 +86,17 @@ def test_filter_by_expert(many):
     assert many.ops.get("/api/v1/bookings?expert=1,x").status_code == 400
 
 
+def test_filter_by_several_stages(many):
+    b = many.ops.get("/api/v1/bookings?search=SA100").json()["results"][0]
+    assign(many, b)
+    everyone = set(ids(many.ops, ""))
+    assert ids(many.ops, "stage=assigned") == ["SA10001"]
+    # several stages at once (Ops tick more than one status); an unknown word is refused
+    assert set(ids(many.ops, "stage=draft,assigned")) == everyone
+    assert set(ids(many.ops, "stage=draft")) == everyone - {"SA10001"}
+    assert many.ops.get("/api/v1/bookings?stage=assigned,nope").status_code == 400
+
+
 # ---------------------------------------------------------------- dashboards
 
 def volume(client, query):
@@ -226,9 +237,13 @@ def test_chassis_search_follows_the_same_rule(ienv, booking):  # noqa: F811
     start(ienv.expert, booking)
     submit(ienv.expert, booking)                      # no media: booking goes straight to 'completed'
     assert ids(ienv.ops, "search=273129") == ["SA37926"]
+    from apps.forms import access
     from apps.forms.models import Field
 
+    # a published version never changes in the app; this test changes one behind its back, so
+    # the cached levels (Q5.1) are dropped too
     Field.objects.filter(key="chassis_no").update(access={"ops": {"completed": "hidden"}})
+    access._published_levels.cache_clear()
     assert ids(ienv.ops, "search=273129") == []
     assert ids(ienv.admin, "search=273129") == ["SA37926"]
 

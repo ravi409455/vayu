@@ -1,3 +1,4 @@
+"""The Celery app, and the signals that carry a request's id into the jobs it queues."""
 import os
 
 from celery import Celery
@@ -20,7 +21,8 @@ def _carry_request_id(headers=None, **_):
 
 
 @task_prerun.connect
-def _restore_request_id(task=None, **_):
-    from apps.core.logging import request_id_var
+def _restore_request_id(task=None, task_id=None, **_):
+    from apps.core.logging import request_id_var, task_id_var
 
     request_id_var.set(getattr(task.request, "request_id", None) or "-")
+    task_id_var.set(task_id or "-")                     # and every line says which task (Q4.2)

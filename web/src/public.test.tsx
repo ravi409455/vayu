@@ -3,11 +3,21 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { safeDownload, validToken, VerifyPage, ZipPage } from "./pages/Public";
 
-const res = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+const res = (status: number, body: unknown) =>
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const at = (path: string, el: JSX.Element, route: string) =>
-  render(<MemoryRouter initialEntries={[path]}><Routes><Route path={route} element={el} /></Routes></MemoryRouter>);
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path={route} element={el} />
+      </Routes>
+    </MemoryRouter>,
+  );
 
-afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 describe("customer links stay on their own endpoints (F-063)", () => {
   it("a crafted token never reaches another API path", () => {
@@ -39,19 +49,28 @@ describe("the buyer is never told a genuine report is missing because of a hiccu
 describe("ZIP page (F-176)", () => {
   it("keeps polling through 429, slower each time, and stops on 404", async () => {
     vi.useFakeTimers();
-    const f = vi.spyOn(globalThis, "fetch")
+    const f = vi
+      .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(res(200, { status: "building", progress: 10 }))
       .mockResolvedValueOnce(res(429, { detail: "slow down" }))
       .mockResolvedValueOnce(res(404, {}));
     at("/zip/abcdefgh12345", <ZipPage />, "/zip/:token");
-    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
     expect(screen.getByText("Preparing… 10%")).toBeInTheDocument();
-    await act(async () => { await vi.advanceTimersByTimeAsync(1500); });       // next try waits longer than before
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    }); // next try waits longer than before
     expect(f).toHaveBeenCalledTimes(1);
-    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+    });
     expect(f).toHaveBeenCalledTimes(2);
-    expect(screen.getByText(/Still working on it/)).toBeInTheDocument();       // 429: not "not available"
-    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(screen.getByText(/Still working on it/)).toBeInTheDocument(); // 429: not "not available"
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
     expect(f).toHaveBeenCalledTimes(3);
     expect(screen.getByRole("alert")).toHaveTextContent("invalid, expired");
   });

@@ -1,3 +1,5 @@
+"""Accounts API: sign-in and sign-out, profile and picture, phone heartbeat, password change, users,
+roles and their permissions, and the audit log."""
 from django.conf import settings
 from django.contrib.auth import login as django_login
 from django.contrib.auth import logout as django_logout
@@ -18,6 +20,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from apps.core import log
 from apps.core.errors import CodedError
 from apps.platform.schema import obj
 
@@ -170,8 +173,9 @@ class LogoutView(APIView):
         token = request.auth
         device_id = token.get("device_id") if hasattr(token, "get") else None
         if device_id:
-            Device.objects.filter(pk=device_id, revoked_at__isnull=True).update(
-                revoked_at=timezone.now(), push_token="")
+            if Device.objects.filter(pk=device_id, revoked_at__isnull=True).update(
+                    revoked_at=timezone.now(), push_token=""):
+                log.event("auth.device_revoked", user=request.user, count=1)
         else:
             django_logout(request._request)
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -216,6 +220,7 @@ class ChangePasswordView(APIView):
         user.must_change_password = False
         user.save(update_fields=["password", "must_change_password"])
         audit.record(user, "user.change_password", "user", user.id, "Changed their password")
+        log.event("auth.password_changed", user=user, changed_by=user.pk)
         # a changed password signs out every other phone (this one keeps working)
         others = Device.objects.filter(user=user, revoked_at__isnull=True)
         if hasattr(request.auth, "get") and request.auth.get("device_id"):
@@ -306,7 +311,7 @@ class UserViewSet(viewsets.ModelViewSet):
         if request.user.pk != user.pk and not scope_for(request.user, "users.view", request):
             raise CodedError("NOT_FOUND", "No picture.", 404)
         row = User.objects.defer(None).filter(pk=user.pk).values("avatar", "avatar_version").first()
-        assert row is not None
+        assert row is not None  # noqa: S101 - invariant, narrows the type
         if not row["avatar"]:
             raise CodedError("NOT_FOUND", "No picture.", 404)
         etag = f'W/"{user.pk}-{row["avatar_version"]}"'
@@ -328,6 +333,7 @@ class UserViewSet(viewsets.ModelViewSet):
         user.locked_until = None
         user.save()
         services.revoke_devices(user)
+        log.event("auth.password_changed", user=user, changed_by=request.user.pk)
         audit.record(request.user, "user.reset_password", "user", user.id,
                      f"Reset password for {user.username}")
         return Response(UserSerializer(user).data)

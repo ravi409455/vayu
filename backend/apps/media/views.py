@@ -1,3 +1,5 @@
+"""Media API: the direct-to-storage upload flow (initiate, complete), file links, Ops file actions,
+missing files, stuck uploads and ZIPs."""
 from django.http import HttpResponseRedirect
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -8,8 +10,8 @@ from rest_framework.views import APIView
 
 from apps.accounts.permissions import perm, perm_any, scope_for
 from apps.bookings.models import Booking
-from apps.bookings.services import err
 from apps.bookings.submissions import own_filter
+from apps.core.errors import fail
 
 from . import services, storage, zips
 from .models import MediaAsset
@@ -18,7 +20,7 @@ from .models import MediaAsset
 def _asset(request, pk, *, write=True) -> MediaAsset:
     asset = MediaAsset.objects.select_related("booking").filter(pk=pk).first()
     if asset is None:
-        raise err("NOT_FOUND", "Media not found.", 404)
+        raise fail("NOT_FOUND", "Media not found.", 404)
     if asset.uploaded_by_id == request.user.pk:     # one's own upload, even on a job moved away
         services.writable_booking(request, asset.booking_id, moved_ok=True)
     else:                                           # anyone else's: only on one's own jobs
@@ -106,12 +108,12 @@ class Url(APIView):
         asset = _asset(request, pk, write=False)
         if asset.field_key in services.hidden_fields(request.user, asset.booking) or (
                 asset.replaced_at is not None and request.user.role != "admin"):  # history: Admin
-            raise err("NOT_FOUND", "Media not found.", 404)      # same answer as a missing file
+            raise fail("NOT_FOUND", "Media not found.", 404)      # same answer as a missing file
         if asset.status == "purged":                 # Admin's storage time (Settings)
-            raise err("MEDIA_REMOVED", "This file was deleted after the storage time set in "
-                      "Settings (Photo and video storage).", 410)
+            raise fail("MEDIA_REMOVED", "This file was deleted after the storage time set in "
+                       "Settings (Photo and video storage).", 410)
         if asset.status != "verified":
-            raise err("NOT_READY", "This file is not verified yet.", 409)
+            raise fail("NOT_READY", "This file is not verified yet.", 409)
         return Response({"url": storage.presign_get(asset.key),
                          "preview_url": storage.presign_get(asset.preview_key)
                          if asset.preview_key else None,
@@ -155,13 +157,13 @@ class ZipDownload(APIView):
     def get(self, request, token):
         z = zips.zip_from_token(token)
         if z is None or not zips.fresh(z):
-            raise err("LINK_EXPIRED", "This download link is invalid or has expired.", 404)
+            raise fail("LINK_EXPIRED", "This download link is invalid or has expired.", 404)
         if z.status == "ready":
             url = storage.presign_get(z.key, zips.download_name(z))
             if request.query_params.get("format") == "json":    # the "Preparing..." web page
                 return Response({"status": "ready", "progress": 100, "url": url})
             return HttpResponseRedirect(url)
         if z.status == "failed":
-            raise err("NO_MEDIA", "There is nothing to download.", 404)
+            raise fail("NO_MEDIA", "There is nothing to download.", 404)
         return Response({"status": z.status, "progress": z.progress},
                         status=status.HTTP_202_ACCEPTED)

@@ -1,4 +1,9 @@
+"""Celery jobs that render a booking's PDF report (with retries) and sweep failed renders."""
+import contextlib
 import logging
+import re
+import time
+import zlib
 from datetime import timedelta
 
 from botocore.exceptions import ClientError
@@ -9,7 +14,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from apps.bookings.models import Booking
-from apps.core import events
+from apps.core import events, log
 from apps.media import storage
 
 from . import context, definition, render, shared
@@ -20,6 +25,8 @@ SOFT_LIMIT, HARD_LIMIT = 300, 330        # seconds: 150 photos must fit with roo
 STUCK_AFTER = timedelta(seconds=HARD_LIMIT + 60)   # a render older than this was killed
 RETRY_FAILED = timedelta(minutes=30)               # a failed render is tried again after this
 logger = logging.getLogger(__name__)
+STREAM = re.compile(rb"stream\r?\n(.*?)\r?\nendstream", re.S)
+PAGE_COUNT = re.compile(rb"/Type\s*/Pages\b.*?/Count\s+(\d+)", re.S)
 
 
 def published_template(booking: Booking, insp) -> PdfTemplateVersion | None:
@@ -53,12 +60,22 @@ def preview(booking: Booking, insp, definition_: dict, edge: int = 480):
     """(pdf bytes, filename, layout, checks) of any definition for one booking: nothing is
     stored."""
     definition_ = shared.resolve(definition_)
-    src = context.Source(booking, insp, revision=0, token="preview")
+    src = context.Source(booking, insp, revision=0, token="preview")  # noqa: S106 - a label, not a secret
     pages = context.build(src, definition_)
     values = src.values()
     pdf, layout, checks = render.render_with_layout(render.render_html(pages, definition_, values,
                                                                edge=edge))
     return pdf, definition.filename_for(definition_, values), layout, checks
+
+
+def page_count(pdf: bytes) -> int:
+    """How many pages a PDF has, for the log: the page tree's /Count, which WeasyPrint keeps in
+    compressed object streams."""
+    found = PAGE_COUNT.findall(pdf)
+    for stream in STREAM.findall(pdf):
+        with contextlib.suppress(zlib.error):          # images and fonts are not page objects
+            found += PAGE_COUNT.findall(zlib.decompress(stream))
+    return max((int(n) for n in found), default=0)
 
 
 def _render_with_retries(booking, insp, tv, token: str, revision: int):
@@ -109,12 +126,16 @@ def render_report(booking_id: str) -> str:
         Report.objects.filter(pk=report.pk).update(render_started_at=None)
         return "skipped"
     revision = report.revision + 1
+    log.event("pdf.render_started", booking=str(booking.id), revision=revision)
+    began = time.monotonic()
     try:
         pdf, name, key = _render_with_retries(booking, insp, tv, report.token, revision)
     except Exception as exc:  # noqa: BLE001 - recorded, not raised: Ops see it as a problem
         reason = ("timeout" if isinstance(exc, SoftTimeLimitExceeded)
                   else "storage_failed" if isinstance(exc, ClientError) else "render_failed")
-        logger.exception("PDF render failed for booking %s", booking.id)   # detail stays in logs
+        logger.exception("PDF render failed for booking %s", booking.id,   # detail stays in logs
+                         extra={"event": "pdf.render_failed", "booking": str(booking.id),
+                                "reason": reason})
         # a PDF already made stays ready (the customer's QR keeps working, H-18); the failure is
         # kept beside it for Ops
         # the last PDF no longer shows the data that asked for a new one: out of date again
@@ -143,6 +164,8 @@ def render_report(booking_id: str) -> str:
                                     template_version=tv)
     if old:
         storage.delete(old)
+    log.event("pdf.render_done", booking=str(booking.id), revision=revision,
+              pages=page_count(pdf), duration_ms=round((time.monotonic() - began) * 1000))
     events.emit("pdf.ready", booking=str(booking.id), booking_id=booking.booking_id,
                 revision=revision)
     return "ready"

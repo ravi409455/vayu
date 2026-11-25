@@ -1,7 +1,7 @@
 import pytest
 
 from apps.core import tasks as core_tasks
-from apps.core.testing import api_as, login, make_user  # noqa: F401  (pytest fixtures)
+from apps.core.testing import api_as, logged, login, make_user  # noqa: F401  (pytest fixtures)
 
 
 def pytest_configure(config):
@@ -21,3 +21,12 @@ def _fresh_cache():
     from django.core.cache import cache
 
     cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_level_cache():
+    """Field levels of published versions are cached for the process (Q5.1); each test's database
+    starts over, so the cache does too."""
+    from apps.forms import access
+
+    access._published_levels.cache_clear()

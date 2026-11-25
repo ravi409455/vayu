@@ -1,9 +1,11 @@
 """The REST API for other systems (API key auth). A key sees and writes only the forms and fields
 in its scope; DELETE needs the key to have been given it explicitly."""
+import logging
 import uuid
 from typing import Any, cast
 
 from django.db import transaction
+from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
@@ -12,6 +14,7 @@ from rest_framework.views import APIView
 from apps.accounts import audit
 from apps.bookings import services, submissions
 from apps.bookings.models import Booking, Inspection
+from apps.core import log
 from apps.core.errors import CodedError
 from apps.core.pagination import Pages
 from apps.forms.models import Form, FormType
@@ -90,6 +93,7 @@ class ExtView(APIView):
 
 
 class Bookings(ExtView):
+    @extend_schema(operation_id="ext_bookings_list")
     def get(self, request: Any) -> Response:
         allowed = need_form(request, booking_form())
         qs = Booking.objects.all()
@@ -156,6 +160,8 @@ class BookingDetail(ExtView):
 
 def need_action(request: Any, action: str) -> None:
     if action not in (request.auth.allowed_actions or []):
+        log.event("api_key.refused", level=logging.WARNING, reason="action_not_allowed",
+                  key_prefix=request.auth.prefix, action=action)
         raise CodedError("ACTION_NOT_ALLOWED", f"This key may not {action.replace('_', ' ')}. "
                          "Ask an Admin to allow it.", 403)
 
@@ -178,6 +184,7 @@ class BookingAction(ExtView):
               "reschedule": ["inspection_date", "inspection_time"],
               "change_type": ["inspection_type"]}
 
+    @extend_schema(operation_id="ext_bookings_action")
     def post(self, request: Any, ref: Any, action: Any) -> Response:
         name = action.replace("-", "_")
         if name not in self.ACTIONS:

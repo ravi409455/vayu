@@ -5,8 +5,18 @@ export type LayoutPage = { width: number; height: number; parts: LayoutPart[] };
 
 /** The real PDF, drawn page by page, with an outline over every part: click one to change it.
  *  Smaller parts sit on top, so a click inside columns picks the inner part. */
-export function Preview({ pdf, pages, selected, names, onSelect }: {
-  pdf: string; pages: LayoutPage[]; selected: string | null; names: Record<string, string>; onSelect: (id: string) => void;
+export function Preview({
+  pdf,
+  pages,
+  selected,
+  names,
+  onSelect,
+}: {
+  pdf: string;
+  pages: LayoutPage[];
+  selected: string | null;
+  names: Record<string, string>;
+  onSelect: (id: string) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(560);
@@ -46,7 +56,9 @@ export function Preview({ pdf, pages, selected, names, onSelect }: {
         if (!cancelled) setFailed(true);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [pdf, width]);
 
   useEffect(() => {
@@ -62,12 +74,27 @@ export function Preview({ pdf, pages, selected, names, onSelect }: {
         const parts = [...pg.parts].sort((a, b) => b.w * b.h - a.w * a.h);
         return (
           <div key={i} className="rd-page" style={{ width, height: pg.height * scale }}>
-            <canvas ref={(c) => { canvases.current[i] = c; }} style={{ width, height: pg.height * scale }} aria-label={`Page ${i + 1}`} />
+            <canvas
+              ref={(c) => {
+                canvases.current[i] = c;
+              }}
+              style={{ width, height: pg.height * scale }}
+              aria-label={`Page ${i + 1}`}
+            />
             {parts.map((p) => (
-              <button key={p.id} type="button" data-part={p.id} className={`rd-hit${selected === p.id ? " on" : ""}`}
-                aria-label={`Select ${names[p.id] ?? "part"}`} title={names[p.id]}
+              <button
+                key={p.id}
+                type="button"
+                data-part={p.id}
+                className={`rd-hit${selected === p.id ? " on" : ""}`}
+                aria-label={`Select ${names[p.id] ?? "part"}`}
+                title={names[p.id]}
                 style={{ left: p.x * scale, top: p.y * scale, width: p.w * scale, height: p.h * scale }}
-                onClick={(e) => { e.stopPropagation(); onSelect(p.id); }} />
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelect(p.id);
+                }}
+              />
             ))}
             <span className="rd-pageno">{i + 1}</span>
           </div>

@@ -47,7 +47,7 @@ def submit_with(env, b, **media):
 
 # ---------------------------------------------------------------- initiate
 
-def test_initiate_returns_part_urls_and_is_idempotent(job, settings):
+def test_initiate_returns_part_urls_and_is_idempotent(job, settings, logged):
     env, b = job
     data = jpeg()
     body = initiate_body(b["id"], data)
@@ -58,6 +58,8 @@ def test_initiate_returns_part_urls_and_is_idempotent(job, settings):
     assert out["parts"][0]["url"].startswith("https://") and "uploadId" in out["parts"][0]["url"]
     again = env.expert.post("/api/v1/media/initiate", body, format="json")
     assert again.status_code == 200 and again.json()["id"] == out["id"]
+    [started] = logged("upload.initiated")                         # the retry is not a new one
+    assert (started["media"], started["booking"], started["size"]) == (out["id"], b["id"], len(data))
     assert MediaAsset.objects.count() == 1
 
 
@@ -128,10 +130,11 @@ def test_source_is_stored_for_gallery_photos(job, settings):
 
 # ---------------------------------------------------------------- complete / resume / checksum
 
-def test_complete_verifies_and_makes_a_preview(job, settings):
+def test_complete_verifies_and_makes_a_preview(job, settings, logged):
     env, b = job
     r = upload(env.expert, b["id"], jpeg(), settings)
     assert r.status_code == 200 and r.json()["status"] == "verified"
+    assert logged("upload.verified")[0]["media"] == r.json()["id"]
     a = MediaAsset.objects.get()
     assert a.verified_at and storage.exists(a.key) and storage.exists(a.preview_key)
     assert max(Image.open(io.BytesIO(storage.read(a.preview_key))).size) <= 480

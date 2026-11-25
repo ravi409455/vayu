@@ -9,6 +9,8 @@ from typing import Any
 from django.db import transaction
 
 from apps.accounts import audit
+from apps.core import log
+from apps.core.concurrency import check_row_version
 from apps.core.errors import CodedError
 from apps.integrations.values import publish_warnings
 
@@ -39,7 +41,7 @@ def affected(item: LibraryItem) -> list[tuple[Form, FormVersion]]:
     out = []
     for form in Form.objects.filter(pk__in=form_ids).order_by("id"):
         latest = form.versions.order_by("-number").first()
-        assert latest is not None
+        assert latest is not None  # noqa: S101 - invariant, narrows the type
         if any(o.library_revision != item.revision for o in _usages(latest, item)):
             out.append((form, latest))
     return out
@@ -125,6 +127,8 @@ def _run(actor: Any, item: LibraryItem, *, publish: bool, commit: bool) -> dict[
                      f"{item.kind} {item.key} r{item.revision} -> "
                      f"{', '.join(f['form'] for f in result['forms']) or 'no forms'}"
                      f"{' (published)' if publish else ''}")
+    log.event("library.pushed", user=actor, item=item.id, revision=item.revision,
+              forms=len(result["forms"]), skipped=len(result["skipped"]), published=publish)
     return result
 
 
@@ -137,9 +141,8 @@ def preview(actor: Any, item: LibraryItem) -> dict[str, Any]:
 
 def push(actor: Any, item: LibraryItem, *, revision: Any, publish: bool,
          confirm: bool) -> dict[str, Any]:
-    if revision != item.revision:
-        raise CodedError("STALE_LIBRARY_ITEM", "This item changed since you looked at it; "
-                         "reload and review again.", 409, revision=item.revision)
+    check_row_version(item, revision, "STALE_LIBRARY_ITEM", "This item changed since you looked "
+                      "at it; reload and review again.", field="revision")
     if publish and not confirm:
         raise CodedError("CONFIRM_REQUIRED", "Publishing cannot be undone: confirm it.", 400)
     try:

@@ -17,19 +17,36 @@ export function PasswordForm({ onDone, secondary }: { onDone: () => void | Promi
     setBusy(true);
     try {
       await api("auth/change-password", { body: { old_password: o, new_password: n } });
-      setO(""); setN(""); setN2("");
+      setO("");
+      setN("");
+      setN2("");
       await onDone();
     } catch (e2) {
       setErr(explain(e2));
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <form onSubmit={submit}>
-      <Field label="Current password"><input type="password" autoComplete="current-password" value={o} onChange={(e) => setO(e.target.value)} /></Field>
-      <Field label="New password" help="At least 8 characters."><input type="password" autoComplete="new-password" value={n} onChange={(e) => setN(e.target.value)} /></Field>
-      <Field label="New password again"><input type="password" autoComplete="new-password" value={n2} onChange={(e) => setN2(e.target.value)} /></Field>
-      {err && <p className="error" role="alert">{err}</p>}
-      <button className="primary" disabled={!o || !n || busy}>Change password</button>{secondary && <> {secondary}</>}
+      <Field label="Current password">
+        <input type="password" autoComplete="current-password" value={o} onChange={(e) => setO(e.target.value)} />
+      </Field>
+      <Field label="New password" help="At least 8 characters.">
+        <input type="password" autoComplete="new-password" value={n} onChange={(e) => setN(e.target.value)} />
+      </Field>
+      <Field label="New password again">
+        <input type="password" autoComplete="new-password" value={n2} onChange={(e) => setN2(e.target.value)} />
+      </Field>
+      {err && (
+        <p className="error" role="alert">
+          {err}
+        </p>
+      )}
+      <button className="primary" disabled={!o || !n || busy}>
+        Change password
+      </button>
+      {secondary && <> {secondary}</>}
     </form>
   );
 }

@@ -40,8 +40,14 @@ describe("what a person gets at a stage", () => {
     const page = { expert: { in_progress: "hidden" as const } };
     const section = { expert: { in_progress: "view" as const } };
     const field = { expert: { in_progress: "edit" as const } };
-    expect(effectiveLevel("expert", "in_progress", "inspection", "short_text", { field, section, page })).toEqual({ level: "edit", source: "field" });
-    expect(effectiveLevel("expert", "in_progress", "inspection", "short_text", { section, page })).toEqual({ level: "view", source: "section" });
+    expect(effectiveLevel("expert", "in_progress", "inspection", "short_text", { field, section, page })).toEqual({
+      level: "edit",
+      source: "field",
+    });
+    expect(effectiveLevel("expert", "in_progress", "inspection", "short_text", { section, page })).toEqual({
+      level: "view",
+      source: "section",
+    });
     expect(effectiveLevel("expert", "in_progress", "inspection", "short_text", { page })).toEqual({ level: "hidden", source: "page" });
     expect(effectiveLevel("expert", "in_progress", "inspection", "short_text", {})).toEqual({ level: "edit", source: "default" });
   });

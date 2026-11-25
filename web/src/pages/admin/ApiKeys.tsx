@@ -12,7 +12,10 @@ import { keys } from "../../api/keys";
 export function parseFields(s: string): string[] {
   const t = s.trim();
   if (t === "*") return ["*"];
-  return t.split(",").map((x) => x.trim()).filter((x) => x && x !== "*");
+  return t
+    .split(",")
+    .map((x) => x.trim())
+    .filter((x) => x && x !== "*");
 }
 
 export function ApiKeys() {
@@ -29,45 +32,167 @@ export function ApiKeys() {
       const forms: Record<string, string[]> = {};
       for (const [k, v] of Object.entries(e.scope)) {
         const fields = parseFields(v);
-        if (fields.length > 0) forms[k] = fields;      // no fields listed = the form is left out
+        if (fields.length > 0) forms[k] = fields; // no fields listed = the form is left out
       }
       const body = { name: e.name, allow_delete: e.allow_delete, scope: { forms } };
       return e.id ? api<ApiKeyRow>(`api-keys/${e.id}`, { method: "PATCH", body }) : api<ApiKeyRow>("api-keys", { body });
     },
-    onSuccess: (r) => { setEdit(null); if (r.key) setShown(r.key); else say("Saved."); void refresh(keys.apiKeys()); },
+    onSuccess: (r) => {
+      setEdit(null);
+      if (r.key) setShown(r.key);
+      else say("Saved.");
+      void refresh(keys.apiKeys());
+    },
     onError: fail,
   });
-  const revoke = useMutation({ mutationFn: (k: ApiKeyRow) => api(`api-keys/${k.id}/revoke`, { body: {} }), onSuccess: () => { say("Revoked. It stopped working immediately."); void refresh(keys.apiKeys()); }, onError: fail });
+  const revoke = useMutation({
+    mutationFn: (k: ApiKeyRow) => api(`api-keys/${k.id}/revoke`, { body: {} }),
+    onSuccess: () => {
+      say("Revoked. It stopped working immediately.");
+      void refresh(keys.apiKeys());
+    },
+    onError: fail,
+  });
   return (
     <>
-      <PageHeader title="API keys" subtitle={<>Let another system read and write bookings. API docs: <a href="/api/v1/docs" target="_blank" rel="noreferrer">/api/v1/docs</a></>}>
-        <button className="primary" onClick={() => setEdit({ name: "", allow_delete: false, scope: {} })}>New key</button></PageHeader>
+      <PageHeader
+        title="API keys"
+        subtitle={
+          <>
+            Let another system read and write bookings. API docs:{" "}
+            <a href="/api/v1/docs" target="_blank" rel="noreferrer">
+              /api/v1/docs
+            </a>
+          </>
+        }
+      >
+        <button className="primary" onClick={() => setEdit({ name: "", allow_delete: false, scope: {} })}>
+          New key
+        </button>
+      </PageHeader>
       {apiKeys.isError && <LoadError error={apiKeys.error} what="API keys" onRetry={apiKeys.refetch} />}
-      {apiKeys.data && apiKeys.data.length === 0 ? <Empty title="No API keys yet" action={<button className="primary" onClick={() => setEdit({ name: "", allow_delete: false, scope: {} })}>New key</button>}>A key lets another system read and write bookings.</Empty> :
-      <table><thead><tr><th>Name</th><th>Key starts with</th><th>Can access</th><th>Last used</th><th><span className="sr-only">Actions</span></th></tr></thead>
-        <tbody>{(apiKeys.data ?? []).map((k) => (
-          <tr key={k.id}><td>{k.name} {k.revoked_at && <Pill tone="bad">Revoked</Pill>} {k.allow_delete && <Pill tone="warn">Can delete</Pill>}</td>
-            <td className="mono">vk_{k.prefix}_…</td>
-            <td className="small">{Object.entries(k.scope.forms).map(([f, v]) => `${f}: ${v.join(", ")}`).join(" · ")}</td>
-            <td>{when(k.last_used_at) || "never"}</td>
-            <td style={{ textAlign: "right" }}>{!k.revoked_at && <MoreMenu label={`Actions for ${k.name}`} items={[
-              { label: "Edit", onClick: () => setEdit({ id: k.id, name: k.name, allow_delete: k.allow_delete, scope: Object.fromEntries(Object.entries(k.scope.forms).map(([f, v]) => [f, v.join(", ")])) }) },
-              { label: "Revoke…", danger: true, onClick: () => setRevoking(k) },
-            ]} />}</td></tr>))}</tbody></table>}
-      {revoking && <Confirm title={`Revoke ${revoking.name}?`} danger confirmLabel="Revoke key" busy={revoke.isPending} onCancel={() => setRevoking(null)}
-        onConfirm={() => revoke.mutate(revoking, { onSettled: () => setRevoking(null) })}><p>It stops working immediately. This cannot be undone.</p></Confirm>}
+      {apiKeys.data && apiKeys.data.length === 0 ? (
+        <Empty
+          title="No API keys yet"
+          action={
+            <button className="primary" onClick={() => setEdit({ name: "", allow_delete: false, scope: {} })}>
+              New key
+            </button>
+          }
+        >
+          A key lets another system read and write bookings.
+        </Empty>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Key starts with</th>
+              <th>Can access</th>
+              <th>Last used</th>
+              <th>
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {(apiKeys.data ?? []).map((k) => (
+              <tr key={k.id}>
+                <td>
+                  {k.name} {k.revoked_at && <Pill tone="bad">Revoked</Pill>} {k.allow_delete && <Pill tone="warn">Can delete</Pill>}
+                </td>
+                <td className="mono">vk_{k.prefix}_…</td>
+                <td className="small">
+                  {Object.entries(k.scope.forms)
+                    .map(([f, v]) => `${f}: ${v.join(", ")}`)
+                    .join(" · ")}
+                </td>
+                <td>{when(k.last_used_at) || "never"}</td>
+                <td style={{ textAlign: "right" }}>
+                  {!k.revoked_at && (
+                    <MoreMenu
+                      label={`Actions for ${k.name}`}
+                      items={[
+                        {
+                          label: "Edit",
+                          onClick: () =>
+                            setEdit({
+                              id: k.id,
+                              name: k.name,
+                              allow_delete: k.allow_delete,
+                              scope: Object.fromEntries(Object.entries(k.scope.forms).map(([f, v]) => [f, v.join(", ")])),
+                            }),
+                        },
+                        { label: "Revoke…", danger: true, onClick: () => setRevoking(k) },
+                      ]}
+                    />
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {revoking && (
+        <Confirm
+          title={`Revoke ${revoking.name}?`}
+          danger
+          confirmLabel="Revoke key"
+          busy={revoke.isPending}
+          onCancel={() => setRevoking(null)}
+          onConfirm={() => revoke.mutate(revoking, { onSettled: () => setRevoking(null) })}
+        >
+          <p>It stops working immediately. This cannot be undone.</p>
+        </Confirm>
+      )}
       {edit && (
-        <Modal title={edit.id ? "Edit API key" : "New API key"} onClose={() => setEdit(null)}
-          actions={<><button onClick={() => setEdit(null)}>Cancel</button><button className="primary" onClick={() => save.mutate(edit)} disabled={save.isPending || !edit.name || Object.values(edit.scope).every((v) => parseFields(v).length === 0)}>Save</button></>}>
-          <Field label="Name"><input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Field>
+        <Modal
+          title={edit.id ? "Edit API key" : "New API key"}
+          onClose={() => setEdit(null)}
+          actions={
+            <>
+              <button onClick={() => setEdit(null)}>Cancel</button>
+              <button
+                className="primary"
+                onClick={() => save.mutate(edit)}
+                disabled={save.isPending || !edit.name || Object.values(edit.scope).every((v) => parseFields(v).length === 0)}
+              >
+                Save
+              </button>
+            </>
+          }
+        >
+          <Field label="Name">
+            <input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
+          </Field>
           <h3>Forms and fields</h3>
-          <p className="muted small">Type <code>*</code> for every field, or field keys separated by commas. Leave empty for no access.</p>
+          <p className="muted small">
+            Type <code>*</code> for every field, or field keys separated by commas. Leave empty for no access.
+          </p>
           {eligible.map((f) => (
-            <Field key={f.id} label={`${f.name} (${f.key})`}><input aria-label={`Fields of ${f.key}`} placeholder="no access (type * for every field)" value={edit.scope[f.key] ?? ""} onChange={(e) => setEdit({ ...edit, scope: { ...edit.scope, [f.key]: e.target.value } })} /></Field>))}
-          <label className="check"><input type="checkbox" checked={edit.allow_delete} onChange={(e) => setEdit({ ...edit, allow_delete: e.target.checked })} /> Allow deleting bookings (audited)</label>
+            <Field key={f.id} label={`${f.name} (${f.key})`}>
+              <input
+                aria-label={`Fields of ${f.key}`}
+                placeholder="no access (type * for every field)"
+                value={edit.scope[f.key] ?? ""}
+                onChange={(e) => setEdit({ ...edit, scope: { ...edit.scope, [f.key]: e.target.value } })}
+              />
+            </Field>
+          ))}
+          <label className="check">
+            <input type="checkbox" checked={edit.allow_delete} onChange={(e) => setEdit({ ...edit, allow_delete: e.target.checked })} />{" "}
+            Allow deleting bookings (audited)
+          </label>
         </Modal>
       )}
-      {shown && <Modal title="Your new API key" onClose={() => setShown(null)}><p>Copy it now. It is shown only once and cannot be recovered.</p><pre className="mono card" data-testid="api-key">{shown}</pre></Modal>}
+      {shown && (
+        <Modal title="Your new API key" onClose={() => setShown(null)}>
+          <p>Copy it now. It is shown only once and cannot be recovered.</p>
+          <pre className="mono card" data-testid="api-key">
+            {shown}
+          </pre>
+        </Modal>
+      )}
     </>
   );
 }

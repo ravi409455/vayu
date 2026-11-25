@@ -1,3 +1,4 @@
+"""Bookings, their reschedule history, the inspections experts submit, and the activity timeline."""
 import uuid
 
 from django.conf import settings

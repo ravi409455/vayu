@@ -8,7 +8,13 @@ import { signIn, submittedJob, waitForReport, type Pdi } from "./api";
 
 async function axe(page: Page) {
   const r = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice"]).analyze();
-  return r.violations.map((v) => `${v.id}: ${v.nodes.slice(0, 3).map((n) => n.target.join(" ")).join(" | ")}`);
+  return r.violations.map(
+    (v) =>
+      `${v.id}: ${v.nodes
+        .slice(0, 3)
+        .map((n) => n.target.join(" "))
+        .join(" | ")}`,
+  );
 }
 const overflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 
@@ -31,7 +37,12 @@ for (const [who, paths] of STAFF) {
     await signIn(page, who);
     const found: string[] = [];
     const seed = JSON.parse(readFileSync("e2e/.seed.json", "utf8")) as Pdi;
-    const more = { ops: [`/booking/${bookingId}`, "/booking/new"], admin: [`/forms/${seed.formId}`, "/integrations/new"], expert: [`/jobs/${bookingId}`] }[who] ?? [];
+    const more =
+      {
+        ops: [`/booking/${bookingId}`, "/booking/new"],
+        admin: [`/forms/${seed.formId}`, "/integrations/new"],
+        expert: [`/jobs/${bookingId}`],
+      }[who] ?? [];
     for (const p of [...paths, ...more]) {
       await page.goto(p);
       await page.locator("main h1").first().waitFor();
@@ -45,7 +56,8 @@ for (const [who, paths] of STAFF) {
 }
 
 test("dark mode: no contrast problems (F-178)", async ({ page }) => {
-  await page.route("**/api/v1/auth/me", async (r) => {           // the person's saved look, as if they picked Dark
+  await page.route("**/api/v1/auth/me", async (r) => {
+    // the person's saved look, as if they picked Dark
     const res = await r.fetch();
     await r.fulfill({ response: res, json: { ...(await res.json()), theme: "dark" } });
   });

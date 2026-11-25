@@ -1,3 +1,4 @@
+"""Booking stages and inspection statuses, and which stage may follow which."""
 from django.db import models
 
 

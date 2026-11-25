@@ -1,3 +1,4 @@
+"""`manage.py seed_master_lists`: creates the standard master lists and their items."""
 from django.core.management.base import BaseCommand
 
 from apps.forms.models import MasterList, MasterListItem

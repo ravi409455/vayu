@@ -9,7 +9,7 @@ export function asList<T>(x: unknown): T[] {
 }
 
 type Query = Record<string, string | number | undefined>;
-const MAX_PAGES = 40;          // ponytail: 2000 rows at 50 a page; lists that can grow past that need paging on screen
+const MAX_PAGES = 40; // ponytail: 2000 rows at 50 a page; lists that can grow past that need paging on screen
 
 /** Every row of a list endpoint: follows the server's pages to the end. */
 export async function fetchAll<T>(path: string, query?: Query, signal?: AbortSignal): Promise<T[]> {

@@ -1,3 +1,4 @@
+"""Uploaded files (photos, videos, files) of a booking, and the ZIPs built from them."""
 import uuid
 
 from django.conf import settings

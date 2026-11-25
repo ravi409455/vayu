@@ -1,3 +1,5 @@
+"""Phone sign-in: the JWT access token must belong to a device that is still signed in, and a
+refresh is refused once the device was signed out."""
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer

@@ -7,7 +7,7 @@ from django.core.management.base import BaseCommand, CommandError
 from apps.accounts.models import Role, User
 from apps.forms.models import MasterList, MasterListItem
 
-PASSWORD = "Passw0rd-e2e"
+PASSWORD = "Passw0rd-e2e"  # noqa: S105 - e2e-only password
 USERS = [("admin", Role.ADMIN, "Asha Admin"), ("ops", Role.OPS, "Priya Ops"),
          ("expert", Role.EXPERT, "Ravi Expert"), ("expert2", Role.EXPERT, "Meera Expert")]
 ITEMS = {"city": [("delhi", "Delhi"), ("pune", "Pune")],
@@ -39,7 +39,7 @@ class Command(BaseCommand):
             "AllowedOrigins": ["*"], "AllowedMethods": ["GET", "PUT", "POST", "HEAD"],
             "AllowedHeaders": ["*"], "ExposeHeaders": ["ETag"]}]})
         for page in boto3.client("s3", endpoint_url=settings.S3_ENDPOINT_URL,
-                                 aws_access_key_id="test", aws_secret_access_key="test",
+                                 aws_access_key_id="test", aws_secret_access_key="test",  # noqa: S106 - local MinIO
                                  region_name="us-east-1").get_paginator("list_objects_v2").paginate(
                                      Bucket=settings.S3_BUCKET):
             for o in page.get("Contents", []):

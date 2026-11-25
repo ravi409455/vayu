@@ -1,3 +1,4 @@
+"""URLs of the integrations API (webhooks, API keys, the /ext API for keys, API docs)."""
 from django.urls import path
 
 from . import ext_views, views

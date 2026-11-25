@@ -79,9 +79,9 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
     val day = rememberLoad(env, "bookings?date_from=$t&date_to=$t&order=schedule")
     val all = day.value?.data?.rows().orEmpty().map(::Bk).filter { it.stage != "cancelled" }
     var open by rememberSaveable { mutableStateOf(setOf<Int>()) }
-    var pick by rememberSaveable { mutableStateOf<String?>(null) }      // the Status chip: null = All
-    var experts by rememberSaveable { mutableStateOf(setOf<String>()) } // the Experts chip: empty = everyone
-    val shown = all.filter { (pick == null || it.stage == pick) && (experts.isEmpty() || it.expert?.toString() in experts) }
+    var stages by rememberSaveable { mutableStateOf(setOf<String>()) }  // the Status chip: empty = every status
+    var onlyExperts by rememberSaveable { mutableStateOf(setOf<String>()) } // the Experts chip: empty = everyone
+    val shown = all.filter { (stages.isEmpty() || it.stage in stages) && (onlyExperts.isEmpty() || it.expert?.toString() in onlyExperts) }
     val online = day.value?.offline == false
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         VayuTopBar("Today", env.me.initials, bellCount = needs, onBell = onBell, onProfile = onProfile)
@@ -92,9 +92,9 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
                 day.error?.takeIf { day.value == null }?.let { Text(it, color = Vayu.colors.bad, modifier = Modifier.padding(top = 12.dp)) }
                 if (all.isNotEmpty()) {
                     DayCard(all)
-                    TodayFilters(listOf<Pair<String?, Int>>(null to all.size) + STAGE_WORDS.keys.filter { it != "cancelled" }
-                        .map { k -> k to all.count { it.stage == k } }.filter { it.second > 0 || it.first == pick }, pick, experts, env.labels,
-                        onStage = { pick = it }, onExperts = { experts = it })
+                    TodayFilters(STAGE_WORDS.keys.filter { it != "cancelled" }.map { k -> k to all.count { it.stage == k } }
+                        .filter { it.second > 0 || it.first in stages }, stages, onlyExperts, env.labels,
+                        onStages = { stages = it }, onExperts = { onlyExperts = it })
                 }
             }
             val unassigned = shown.filter { it.stage == "draft" }
@@ -154,10 +154,10 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
             if (day.value != null && all.isEmpty()) item {
                 Text("Nothing booked for today.", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp))
             }
-            else if (shown.isEmpty() && pick != null) item {
+            else if (shown.isEmpty()) item {       // the chips left nothing: say so, one tap back to the whole day
                 Column(Modifier.padding(vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Nothing ${STAGE_WORDS[pick]?.lowercase()} today.", color = Vayu.colors.muted)
-                    SoftButton("Show all", { pick = null }, Modifier.fillMaxWidth())
+                    Text("No bookings today match these filters.", color = Vayu.colors.muted)
+                    SoftButton("Show all", { stages = emptySet(); onlyExperts = emptySet() }, Modifier.fillMaxWidth())
                 }
             }
             item { Spacer(Modifier.height(24.dp)) }

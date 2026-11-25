@@ -15,7 +15,7 @@ describe("the little i", () => {
     await u.unhover(screen.getByRole("button", { name: "More info" }));
     expect(screen.queryByRole("tooltip")).toBeNull();
     await u.tab();
-    expect(screen.getByRole("tooltip")).toBeInTheDocument();                         // keyboard focus
+    expect(screen.getByRole("tooltip")).toBeInTheDocument(); // keyboard focus
     await u.keyboard("{Escape}");
     expect(screen.queryByRole("tooltip")).toBeNull();
   });

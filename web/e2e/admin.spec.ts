@@ -23,7 +23,7 @@ test.describe("admin screens", () => {
     await row.getByRole("button", { name: "Actions for nina" }).click();
     await page.getByRole("menuitem", { name: "Deactivate…" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Deactivate" }).click();
-    await expect(row).toHaveCount(0);                                            // deactivated people are hidden by default
+    await expect(row).toHaveCount(0); // deactivated people are hidden by default
     await page.getByLabel("Show deactivated").check();
     await expect(row).toContainText("Deactivated");
   });
@@ -70,7 +70,9 @@ test.describe("admin screens", () => {
     const forms = await json(await admin.get("forms"));
     const pdi = (forms.results ?? forms).find((f: { key: string }) => f.key === "pdi");
     const v = await json(await admin.get(`form-versions/${pdi.draft_version.id}`));
-    await expect.poll(async () => (await json(await admin.get(`form-versions/${pdi.draft_version.id}`))).rating_config?.deductions?.critical).toBe(2);
+    await expect
+      .poll(async () => (await json(await admin.get(`form-versions/${pdi.draft_version.id}`))).rating_config?.deductions?.critical)
+      .toBe(2);
     expect(v.rating_config.categories[0].key).toBe("exterior");
   });
 
@@ -79,7 +81,8 @@ test.describe("admin screens", () => {
     const admin = await apiAs("admin");
     const forms = await json(await admin.get("forms"));
     let pdi = (forms.results ?? forms).find((f: { key: string }) => f.key === "pdi");
-    if (!pdi.draft_version) {            // do not depend on an earlier test having started a draft
+    if (!pdi.draft_version) {
+      // do not depend on an earlier test having started a draft
       await json(await admin.post(`forms/${pdi.id}/drafts`, { data: {} }));
       pdi = await json(await admin.get(`forms/${pdi.id}`));
     }
@@ -106,13 +109,13 @@ test.describe("admin screens", () => {
     expect(key).toMatch(/^vk_[0-9a-f]{8}_/);
     await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
     await expect(page.locator("tr", { hasText: "ERP" })).toContainText(`vk_${key.split("_")[1]}_…`);
-    expect(await page.content()).not.toContain(key);                    // never shown again
+    expect(await page.content()).not.toContain(key); // never shown again
     const ok = await page.request.get(`${API_ROOT}/api/v1/ext/bookings`, { headers: { Authorization: `Api-Key ${key}` } });
     expect(ok.status()).toBe(200);
     page.once("dialog", (x) => x.accept());
     await page.locator("tr", { hasText: "ERP" }).getByRole("button", { name: "Actions for ERP" }).click();
     await page.getByRole("menuitem", { name: "Revoke…" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Revoke key" }).click();           // our own dialog, not the browser's
+    await page.getByRole("dialog").getByRole("button", { name: "Revoke key" }).click(); // our own dialog, not the browser's
     await expect(page.locator("tr", { hasText: "ERP" })).toContainText("Revoked");
     const gone = await page.request.get(`${API_ROOT}/api/v1/ext/bookings`, { headers: { Authorization: `Api-Key ${key}` } });
     expect(gone.status()).toBe(401);
@@ -125,7 +128,10 @@ test.describe("admin screens", () => {
     const pdi = (forms.results ?? forms).find((f: { key: string }) => f.key === "pdi");
     // drop the open draft the rating test left, so the import has room
     await page.goto("/promote");
-    const [download] = await Promise.all([page.waitForEvent("download"), page.locator("tr", { hasText: "PDI" }).getByRole("link", { name: "Download bundle" }).click()]);
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.locator("tr", { hasText: "PDI" }).getByRole("link", { name: "Download bundle" }).click(),
+    ]);
     const path = await download.path();
     const bundle = JSON.parse(await (await import("node:fs/promises")).readFile(path!, "utf8"));
     expect(bundle.form.key).toBe("pdi");

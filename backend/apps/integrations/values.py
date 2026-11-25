@@ -315,7 +315,7 @@ class Resolver:
         return self._cache[ref]
 
     def _booking(self) -> Any:
-        assert self.booking is not None      # callers run only when the job still exists
+        assert self.booking is not None  # noqa: S101 - callers run only while the booking exists
         return self.booking
 
     def inspection(self) -> Any:

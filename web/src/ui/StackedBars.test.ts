@@ -11,6 +11,6 @@ describe("stacked bars", () => {
     const f = foldSeries(series, cols);
     expect(f.series).toHaveLength(8);
     expect(f.series[7]!.name).toBe("Other");
-    expect(f.cols[0]!.values.__other).toBe(1 + 2 + 3);         // the three smallest
+    expect(f.cols[0]!.values.__other).toBe(1 + 2 + 3); // the three smallest
   });
 });

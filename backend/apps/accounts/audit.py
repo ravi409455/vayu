@@ -1,3 +1,4 @@
+"""The audit log: one append-only row per Admin-visible change (who, what, which object)."""
 from .models import AuditLog
 
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { viewQuery } from "./bookingViews";
 import { dayWindow } from "./schedule";
 
-const NOW = new Date(2026, 10, 23, 14, 20);   // Mon 23 Nov 2026, 2:20 pm
+const NOW = new Date(2026, 10, 23, 14, 20); // Mon 23 Nov 2026, 2:20 pm
 
 describe("booking views", () => {
   it("each saved view asks the server for the right slice", () => {
@@ -14,6 +14,11 @@ describe("booking views", () => {
   });
   it("the schedule spans at least 9 am to 9 pm and grows to fit early or late jobs", () => {
     expect(dayWindow([])).toEqual([9, 21]);
-    expect(dayWindow([{ start: 7.5, end: 8.5 }, { start: 20.25, end: 21.25 }])).toEqual([7, 22]);
+    expect(
+      dayWindow([
+        { start: 7.5, end: 8.5 },
+        { start: 20.25, end: 21.25 },
+      ]),
+    ).toEqual([7, 22]);
   });
 });

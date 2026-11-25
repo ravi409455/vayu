@@ -28,8 +28,13 @@ function files(dir: string): string[] {
 /** Texts a person can read: string and template parts and JSX text. One-word lowercase strings
  *  are code keys (query keys, store names, class names), so they are left out. */
 function texts(path: string): { text: string; line: number; jsx: boolean }[] {
-  const src = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true,
-    path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const src = ts.createSourceFile(
+    path,
+    readFileSync(path, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+    path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
   const out: { text: string; line: number; jsx: boolean }[] = [];
   const visit = (n: ts.Node) => {
     if (ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) return;
@@ -55,8 +60,7 @@ function slips(): string[] {
     const expert = EXPERT_ONLY.some((d) => rel.startsWith(d));
     for (const t of texts(f)) {
       if (JOB.test(t.text)) out.push(`${rel}:${t.line} says "job": ${t.text}`);
-      if (expert && BOOKING.test(t.text) && !EXPERT_BOOKING_OK.some((r) => r.test(t.text))
-          && !(t.jsx && EXPERT_LABEL_OK.has(t.text)))
+      if (expert && BOOKING.test(t.text) && !EXPERT_BOOKING_OK.some((r) => r.test(t.text)) && !(t.jsx && EXPERT_LABEL_OK.has(t.text)))
         out.push(`${rel}:${t.line} says "booking" to an expert: ${t.text}`);
     }
   }

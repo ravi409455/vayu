@@ -10,15 +10,37 @@ import { Empty, Pill, useToast } from "../../../ui/kit";
 import { PdfPreview } from "./PdfPreview";
 import type { Activity } from "./parts";
 
-type ReportInfo = { verify_url?: string; revision: number; status: string; updating: boolean; generated_at: string | null; filename: string; error: string; url: string | null; preview_url?: string | null;
+type ReportInfo = {
+  verify_url?: string;
+  revision: number;
+  status: string;
+  updating: boolean;
+  generated_at: string | null;
+  filename: string;
+  error: string;
+  url: string | null;
+  preview_url?: string | null;
   /** something it shows changed since this PDF was made; Ops press Regenerate (F-219) */
-  out_of_date?: boolean; regenerate?: { allowed: boolean; reason: string | null } };
+  out_of_date?: boolean;
+  regenerate?: { allowed: boolean; reason: string | null };
+};
 
 /** The booking's report (null: none yet). While it is being made, look every few seconds. */
 export function useReport(bookingId: string, enabled = true) {
-  return useQuery({ queryKey: keys.bookingPart(bookingId, "report"), retry: false, enabled,
+  return useQuery({
+    queryKey: keys.bookingPart(bookingId, "report"),
+    retry: false,
+    enabled,
     refetchInterval: (x) => (x.state.data?.updating ? 3000 : false),
-    queryFn: async () => { try { return await api<ReportInfo>(`bookings/${bookingId}/report`); } catch (e) { if (e instanceof ApiError && e.status === 404) return null; throw e; } } });
+    queryFn: async () => {
+      try {
+        return await api<ReportInfo>(`bookings/${bookingId}/report`);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) return null;
+        throw e;
+      }
+    },
+  });
 }
 
 /** The PDF: made when the booking completes. Later changes do not touch it: it shows "Out of date"
@@ -30,20 +52,37 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
   const { can } = useAuth();
   const q = useReport(booking.id);
   const r = q.data;
-  const regen = useMutation({            // one press, one request: the button is off while it runs
+  const regen = useMutation({
+    // one press, one request: the button is off while it runs
     mutationFn: () => api(`bookings/${booking.id}/report/regenerate`, { body: {} }),
-    onSuccess: () => { say("Making the new PDF. It shows here by itself."); void q.refetch(); void refresh(keys.problems()); },
-    onError: (e) => { fail(e); void q.refetch(); },
+    onSuccess: () => {
+      say("Making the new PDF. It shows here by itself.");
+      void q.refetch();
+      void refresh(keys.problems());
+    },
+    onError: (e) => {
+      fail(e);
+      void q.refetch();
+    },
   });
-  const why = r?.regenerate && !r.regenerate.allowed ? r.regenerate.reason ?? "" : "";
+  const why = r?.regenerate && !r.regenerate.allowed ? (r.regenerate.reason ?? "") : "";
   const passedOn = activity.filter((a) => a.kind === "report_downloaded" || a.kind === "report_shared");
   async function copyCheckLink() {
-    try { if (!navigator.clipboard) throw new Error("no clipboard"); await navigator.clipboard.writeText(r!.verify_url!); }
-    catch { say("Could not copy here. Select the link and copy it yourself.", true); return; }
-    try {                                           // logged only once it really was copied
+    try {
+      if (!navigator.clipboard) throw new Error("no clipboard");
+      await navigator.clipboard.writeText(r!.verify_url!);
+    } catch {
+      say("Could not copy here. Select the link and copy it yourself.", true);
+      return;
+    }
+    try {
+      // logged only once it really was copied
       await api(`bookings/${booking.id}/report/shared`, { body: { how: "check_link" } });
-      say("Check link copied."); void refresh(keys.bookingPart(booking.id, "activity"));
-    } catch (e) { fail(e); }
+      say("Check link copied.");
+      void refresh(keys.bookingPart(booking.id, "activity"));
+    } catch (e) {
+      fail(e);
+    }
   }
   return (
     <>

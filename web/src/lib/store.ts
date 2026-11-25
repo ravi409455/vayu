@@ -1,21 +1,50 @@
 // Things that must survive a page refresh. Drafts are small (localStorage); pictures and videos
 // waiting to upload are blobs (IndexedDB), so a refresh or a closed tab loses nothing.
-const hasLS = () => { try { return typeof localStorage !== "undefined"; } catch { return false; } };
+const hasLS = () => {
+  try {
+    return typeof localStorage !== "undefined";
+  } catch {
+    return false;
+  }
+};
 
 export function loadJSON<T>(key: string, fallback: T): T {
   if (!hasLS()) return fallback;
-  try { const raw = localStorage.getItem(key); return raw ? (JSON.parse(raw) as T) : fallback; } catch { return fallback; }
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
 }
 export function saveJSON(key: string, value: unknown): void {
-  if (hasLS()) try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage full or blocked: the draft just is not kept */ }
+  if (hasLS())
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      /* storage full or blocked: the draft just is not kept */
+    }
 }
 export function removeKey(key: string): void {
-  if (hasLS()) try { localStorage.removeItem(key); } catch { /* nothing to do */ }
+  if (hasLS())
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* nothing to do */
+    }
 }
 
 export type PendingUpload = {
-  clientUuid: string; bookingId: string; fieldKey: string; kind: "photo" | "video" | "file" | "signature";
-  contentType: string; name: string; sha256: string; assetId: string; source: "camera" | "gallery"; blob: Blob;
+  clientUuid: string;
+  bookingId: string;
+  fieldKey: string;
+  kind: "photo" | "video" | "file" | "signature";
+  contentType: string;
+  name: string;
+  sha256: string;
+  assetId: string;
+  source: "camera" | "gallery";
+  blob: Blob;
 };
 
 const DB = "vayu-uploads";
@@ -45,7 +74,11 @@ const clearJobs = () => tx("readwrite", (s) => s.clear());
 const WORK = ["vayu:draft:", "vayu:job:"];
 const workKeys = (): string[] => {
   if (!hasLS()) return [];
-  try { return Object.keys(localStorage).filter((k) => WORK.some((p) => k.startsWith(p))); } catch { return []; }
+  try {
+    return Object.keys(localStorage).filter((k) => WORK.some((p) => k.startsWith(p)));
+  } catch {
+    return [];
+  }
 };
 export async function unsentWork(): Promise<{ drafts: number; files: number }> {
   const files = (await allJobs().catch(() => [])).length;

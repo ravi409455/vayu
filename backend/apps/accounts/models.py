@@ -1,3 +1,4 @@
+"""Users and roles, signed-in phones (Device), per-role permission grants, and the audit log."""
 import uuid
 from typing import Any
 

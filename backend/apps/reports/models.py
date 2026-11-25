@@ -1,3 +1,5 @@
+"""PDF templates and their versions, shared parts, and each booking's report with its render
+history."""
 import secrets
 
 from django.db import models

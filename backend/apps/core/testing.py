@@ -1,4 +1,5 @@
 """Shared pytest fixtures, imported by the root conftest.py."""
+import logging
 from typing import Any
 
 import pytest
@@ -6,7 +7,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.models import Role, User
 
-PASSWORD = "Str0ng-pass-1"
+PASSWORD = "Str0ng-pass-1"  # noqa: S105 - test-only password
 
 
 @pytest.fixture
@@ -42,3 +43,20 @@ def api_as(make_user: Any) -> Any:
         return client, user
 
     return _as
+
+
+_PLAIN = set(vars(logging.makeLogRecord({}))) | {"message", "asctime"}
+
+
+@pytest.fixture
+def logged(caplog: Any) -> Any:
+    """The structured events (apps.core.log) logged so far: logged("pdf.render_done") is a list
+    of each one's fields; logged() all of them as (name, fields)."""
+    caplog.set_level(logging.INFO, logger="vayu.events")
+
+    def _get(name: str | None = None) -> Any:
+        rows = [(r.event, {k: v for k, v in vars(r).items() if k not in _PLAIN})
+                for r in caplog.records if r.name == "vayu.events"]
+        return [f for n, f in rows if n == name] if name else rows
+
+    return _get

@@ -10,7 +10,10 @@ export function ThemeSync() {
   const signedIn = !!me;
   useEffect(() => {
     if (loading) return;
-    if (!signedIn) { applySignedOut(); return; }
+    if (!signedIn) {
+      applySignedOut();
+      return;
+    }
     applyTheme(choice);
     if (choice !== "system" || !window.matchMedia) return;
     const q = window.matchMedia("(prefers-color-scheme: dark)");

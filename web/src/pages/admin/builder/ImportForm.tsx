@@ -29,35 +29,115 @@ export function ImportDialog({ bundle, forms, onClose }: { bundle: Bundle; forms
   const asNew = mode === "new" && !system;
   const go = useMutation({
     mutationFn: () => api<Result>("promote/import", { body: bundle, query: asNew ? { as_new_key: key, as_new_name: name } : undefined }),
-    onSuccess: (r) => { setDone(r); void refresh(keys.forms()); },
-    onError: (e) => { if (e instanceof ApiError && Array.isArray(e.body.conflicts)) setConflicts(e.body.conflicts as string[]); else fail(e); },
+    onSuccess: (r) => {
+      setDone(r);
+      void refresh(keys.forms());
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && Array.isArray(e.body.conflicts)) setConflicts(e.body.conflicts as string[]);
+      else fail(e);
+    },
   });
   if (done) {
     return (
-      <Modal title="Imported as a draft" onClose={onClose} actions={<><button onClick={onClose}>Close</button><button className="primary" onClick={() => nav(`/forms/${done.form}`)}>Open the form</button></>}>
-        <p role="status">{done.created.form ? "A new form was created." : "A new draft was added to the form."} Nothing is live until you publish it.</p>
-        {done.notes.length > 0 && <><h3>Differences from the library here</h3><ul className="small">{done.notes.map((n, i) => <li key={i}>{n}</li>)}</ul></>}
-        {done.notes.length === 0 && <p className="muted small">The library here already matched the file, or did not need anything added.</p>}
+      <Modal
+        title="Imported as a draft"
+        onClose={onClose}
+        actions={
+          <>
+            <button onClick={onClose}>Close</button>
+            <button className="primary" onClick={() => nav(`/forms/${done.form}`)}>
+              Open the form
+            </button>
+          </>
+        }
+      >
+        <p role="status">
+          {done.created.form ? "A new form was created." : "A new draft was added to the form."} Nothing is live until you publish it.
+        </p>
+        {done.notes.length > 0 && (
+          <>
+            <h3>Differences from the library here</h3>
+            <ul className="small">
+              {done.notes.map((n, i) => (
+                <li key={i}>{n}</li>
+              ))}
+            </ul>
+          </>
+        )}
+        {done.notes.length === 0 && (
+          <p className="muted small">The library here already matched the file, or did not need anything added.</p>
+        )}
       </Modal>
     );
   }
   return (
-    <Modal title={`Import “${bundle.form?.name ?? "form"}”`} onClose={onClose}
-      actions={<><button onClick={onClose}>Cancel</button><button className="primary" disabled={go.isPending || (asNew && (!name.trim() || !/^[a-z][a-z0-9_]{1,62}$/.test(key)))} onClick={() => go.mutate()}>Import as a draft</button></>}>
-      <p className="muted">An import never goes live by itself and never overwrites the library. You review the draft and publish it yourself.</p>
+    <Modal
+      title={`Import “${bundle.form?.name ?? "form"}”`}
+      onClose={onClose}
+      actions={
+        <>
+          <button onClick={onClose}>Cancel</button>
+          <button
+            className="primary"
+            disabled={go.isPending || (asNew && (!name.trim() || !/^[a-z][a-z0-9_]{1,62}$/.test(key)))}
+            onClick={() => go.mutate()}
+          >
+            Import as a draft
+          </button>
+        </>
+      }
+    >
+      <p className="muted">
+        An import never goes live by itself and never overwrites the library. You review the draft and publish it yourself.
+      </p>
       {!system && existing && (
         <div role="radiogroup" aria-label="Where to import">
-          <label className="check"><input type="radio" name="mode" checked={mode === "draft"} onChange={() => setMode("draft")} /> As a new draft of “{existing.name}”</label>
-          <label className="check"><input type="radio" name="mode" checked={mode === "new"} onChange={() => setMode("new")} /> As a new form (a copy)</label>
-        </div>)}
+          <label className="check">
+            <input type="radio" name="mode" checked={mode === "draft"} onChange={() => setMode("draft")} /> As a new draft of “
+            {existing.name}”
+          </label>
+          <label className="check">
+            <input type="radio" name="mode" checked={mode === "new"} onChange={() => setMode("new")} /> As a new form (a copy)
+          </label>
+        </div>
+      )}
       {system && <p>This file replaces the content of the {type} form as a new draft.</p>}
       {!system && !existing && <p>No form with the key “{bundle.form?.key}” exists here, so a new form is created.</p>}
       {asNew && (
         <>
-          <Field label="Name of the new form"><input aria-label="Name of the new form" value={name} onChange={(e) => { setName(e.target.value); if (!keyEdited) setKey(slugKey(e.target.value)); }} /></Field>
-          <Field label="Key" help="Used by the API and reports. It can never change."><input aria-label="Key" value={key} onChange={(e) => { setKeyEdited(true); setKey(e.target.value); }} /></Field>
-        </>)}
-      {conflicts.length > 0 && <div role="alert" className="error"><strong>This file conflicts with what is here:</strong><ul>{conflicts.map((c, i) => <li key={i}>{c}</li>)}</ul></div>}
+          <Field label="Name of the new form">
+            <input
+              aria-label="Name of the new form"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (!keyEdited) setKey(slugKey(e.target.value));
+              }}
+            />
+          </Field>
+          <Field label="Key" help="Used by the API and reports. It can never change.">
+            <input
+              aria-label="Key"
+              value={key}
+              onChange={(e) => {
+                setKeyEdited(true);
+                setKey(e.target.value);
+              }}
+            />
+          </Field>
+        </>
+      )}
+      {conflicts.length > 0 && (
+        <div role="alert" className="error">
+          <strong>This file conflicts with what is here:</strong>
+          <ul>
+            {conflicts.map((c, i) => (
+              <li key={i}>{c}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Modal>
   );
 }
@@ -72,15 +152,53 @@ export function DuplicateDialog({ form, onClose }: { form: FormSummary; onClose:
   const [keyEdited, setKeyEdited] = useState(false);
   const dup = useMutation({
     mutationFn: () => api<Result>(`forms/${form.id}/duplicate`, { body: { key, name } }),
-    onSuccess: (r) => { void refresh(keys.forms()); nav(`/forms/${r.form}`); },
+    onSuccess: (r) => {
+      void refresh(keys.forms());
+      nav(`/forms/${r.form}`);
+    },
     onError: fail,
   });
   return (
-    <Modal title={`Duplicate “${form.name}”`} onClose={onClose}
-      actions={<><button onClick={onClose}>Cancel</button><button className="primary" disabled={dup.isPending || !name.trim() || !/^[a-z][a-z0-9_]{1,62}$/.test(key)} onClick={() => dup.mutate()}>Duplicate</button></>}>
-      <p className="muted">The copy starts as a draft with the same pages, fields, library links, ratings, Key Checks and PDF template. It is a separate form from then on.</p>
-      <Field label="Name of the copy"><input aria-label="Name of the copy" value={name} onChange={(e) => { setName(e.target.value); if (!keyEdited) setKey(slugKey(e.target.value)); }} /></Field>
-      <Field label="Key" help="Used by the API and reports. It can never change."><input aria-label="Key" value={key} onChange={(e) => { setKeyEdited(true); setKey(e.target.value); }} /></Field>
+    <Modal
+      title={`Duplicate “${form.name}”`}
+      onClose={onClose}
+      actions={
+        <>
+          <button onClick={onClose}>Cancel</button>
+          <button
+            className="primary"
+            disabled={dup.isPending || !name.trim() || !/^[a-z][a-z0-9_]{1,62}$/.test(key)}
+            onClick={() => dup.mutate()}
+          >
+            Duplicate
+          </button>
+        </>
+      }
+    >
+      <p className="muted">
+        The copy starts as a draft with the same pages, fields, library links, ratings, Key Checks and PDF template. It is a separate form
+        from then on.
+      </p>
+      <Field label="Name of the copy">
+        <input
+          aria-label="Name of the copy"
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            if (!keyEdited) setKey(slugKey(e.target.value));
+          }}
+        />
+      </Field>
+      <Field label="Key" help="Used by the API and reports. It can never change.">
+        <input
+          aria-label="Key"
+          value={key}
+          onChange={(e) => {
+            setKeyEdited(true);
+            setKey(e.target.value);
+          }}
+        />
+      </Field>
     </Modal>
   );
 }

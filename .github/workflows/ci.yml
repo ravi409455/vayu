@@ -37,9 +37,9 @@ jobs:
       - run: uv run mypy apps vayu
       - run: uv run python manage.py makemigrations --check --dry-run
         env: {DJANGO_SETTINGS_MODULE: vayu.settings.test}
-      - name: the committed OpenAPI file matches the code
+      - name: the committed OpenAPI file matches the code, with no generator warnings
         run: |
-          uv run python manage.py spectacular --file /tmp/openapi.yaml
+          uv run python manage.py spectacular --fail-on-warn --file /tmp/openapi.yaml
           diff openapi.yaml /tmp/openapi.yaml || (echo "Run: cd backend && DJANGO_SETTINGS_MODULE=vayu.settings.test uv run python manage.py spectacular --file openapi.yaml" && exit 1)
         env: {DJANGO_SETTINGS_MODULE: vayu.settings.test}
       - name: no breaking API changes (oasdiff)
@@ -105,6 +105,7 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm run format:check
       - run: npm test
       - run: npm run build
   e2e:

@@ -1,3 +1,5 @@
+"""Bookings API: the list (filters, search, counts), detail, Ops actions, inspections and the
+expert app's sync."""
 import re
 import uuid
 from datetime import date
@@ -14,12 +16,14 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from apps.accounts.permissions import perm, scope_for
+from apps.core.errors import fail
 from apps.forms.access import hidden_inspection_forms
 from apps.platform.schema import obj
 
 from . import services, submissions, sync, timing
 from .models import Booking, Inspection
 from .serializers import BookingSerializer, InspectionSerializer
+from .stages import Stage
 
 ACTION_PERMISSIONS = {
     "list": "bookings.view", "retrieve": "bookings.view", "create": "bookings.create",
@@ -49,6 +53,8 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         return [perm(key)()] if key else [perm("bookings.view")()]
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):          # the OpenAPI generator
+            return Booking.objects.none()
         qs = Booking.objects.select_related(
             "last_edited_by", "released_by", "late_reviewed_by", "quick_reviewed_by",
         ).prefetch_related("reschedules__by")
@@ -83,6 +89,12 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
                     if not all(i.isdigit() for i in ids):
                         raise ValidationError({param: "Use user ids, separated by commas."})
                     qs = qs.filter(assigned_expert_id__in=ids)
+                    continue
+                if param == "stage":                  # one stage or several: stage=draft,assigned
+                    wanted = p[param].split(",")
+                    if not set(wanted) <= set(Stage.values):
+                        raise ValidationError({param: "Use stage words, separated by commas."})
+                    qs = qs.filter(stage__in=wanted)
                     continue
                 qs = qs.filter(**{column: p[param]})
         problem = p.get("problem")                    # the Ops problem queue
@@ -352,7 +364,7 @@ class SyncJobs(generics.GenericAPIView):
         have, drafts = ([p for p in request.query_params.get(name, "").split(",") if p]
                         for name in ("have", "drafts"))
         if (since_raw and since is None) or not all(p.isdigit() for p in have + drafts):
-            raise services.err("INVALID_QUERY",
-                               "have and drafts must be version ids, since a date-time.")
+            raise fail("INVALID_QUERY",
+                       "have and drafts must be version ids, since a date-time.")
         return Response(sync.payload(request.user, {int(p) for p in have}, since,
                                      self.get_serializer_context(), {int(p) for p in drafts}))

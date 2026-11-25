@@ -394,7 +394,7 @@ def convert(app: str, ns: str = "inspection", only: set[str] | None = None,
                 photo = to_field({"kind": "app-file", "required": False, "key": "",
                                   "_label": re.sub(r"\s*-\s*", " ", ours["label"]) + " Photos",
                                   "label": ""}, taken, problems)
-                assert photo is not None                   # a photo field always converts
+                assert photo is not None  # noqa: S101 - a photo field always converts
                 photo.update(type="photo", _section=title, _check=ours)
                 photo.pop("clappia")                       # ours: Clappia has no such photo
                 fields.append(photo)

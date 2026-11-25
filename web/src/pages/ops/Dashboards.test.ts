@@ -3,7 +3,7 @@ import { pivot } from "./Dashboards";
 
 afterEach(() => vi.restoreAllMocks());
 
-const NOW = new Date(2026, 10, 23, 14, 20);   // Mon 23 Nov 2026, 2:20 pm
+const NOW = new Date(2026, 10, 23, 14, 20); // Mon 23 Nov 2026, 2:20 pm
 
 describe("dashboard", () => {
   it("presets cover the right dates and pick a sensible bar size", async () => {
@@ -24,7 +24,7 @@ describe("dashboard", () => {
   });
   it("compares with as many days straight before, and keeps minutes short", async () => {
     const { previousRange, minsParts } = await import("./Dashboards");
-    expect(previousRange("2026-10-26", "2026-11-24")).toEqual(["2026-09-26", "2026-10-25"]);   // 30 days before 30 days
+    expect(previousRange("2026-10-26", "2026-11-24")).toEqual(["2026-09-26", "2026-10-25"]); // 30 days before 30 days
     expect(previousRange("2026-11-24", "2026-11-24")).toEqual(["2026-11-23", "2026-11-23"]);
     expect(minsParts(40)).toEqual(["40", "min"]);
     expect(minsParts(100)).toEqual(["1 h 40 m", ""]);
@@ -45,7 +45,11 @@ describe("dashboard", () => {
 
 describe("dashboard table", () => {
   it("lines rows up by period and key, zero when missing", () => {
-    const { periods, keys, cell } = pivot([{ period: "2026-10-14", key: "pdi", count: 2 }, { period: "2026-10-14", key: "ev", count: 1 }, { period: "2026-10-21", key: "pdi", count: 3 }]);
+    const { periods, keys, cell } = pivot([
+      { period: "2026-10-14", key: "pdi", count: 2 },
+      { period: "2026-10-14", key: "ev", count: 1 },
+      { period: "2026-10-21", key: "pdi", count: 3 },
+    ]);
     expect(periods).toEqual(["2026-10-14", "2026-10-21"]);
     expect(keys).toEqual(["ev", "pdi"]);
     expect([cell("2026-10-14", "pdi"), cell("2026-10-21", "ev")]).toEqual([2, 0]);

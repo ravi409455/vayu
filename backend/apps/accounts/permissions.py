@@ -1,7 +1,10 @@
 """Permission checks. Every API view declares the catalog permission(s) it needs with `perm()`;
 a test scans the URL conf so a new endpoint cannot be forgotten."""
+import logging
+
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
+from apps.core import log
 from apps.core.errors import CodedError
 
 from .catalog import KEYS
@@ -49,6 +52,11 @@ class PasswordChangeNotRequired(BasePermission):
         return True
 
 
+def refused(request, view, keys: list[str]) -> None:
+    log.event("permission.refused", level=logging.WARNING, user=request.user,
+              view=type(view).__name__, permission=keys)
+
+
 def perm(read: str | None, write: str | tuple[str, ...] | None = None):
     """Permission class: safe methods need `read` (None = any signed-in user); other methods need
     `write` (all of them if several), or `read` when write is not given."""
@@ -68,7 +76,10 @@ def perm(read: str | None, write: str | tuple[str, ...] | None = None):
                 required = (read,) if read else ()
             else:
                 required = write_keys or ((read,) if read else ())
-            return all(scope_for(request.user, k, request) for k in required)
+            missing = [k for k in required if not scope_for(request.user, k, request)]
+            if missing:
+                refused(request, view, missing)
+            return not missing
 
     return _Perm
 
@@ -83,6 +94,9 @@ def perm_any(*keys: str):
             if not request.user.is_authenticated:
                 return False
             enforce_password_change(request, view)
-            return any(scope_for(request.user, k, request) for k in keys)
+            if any(scope_for(request.user, k, request) for k in keys):
+                return True
+            refused(request, view, list(keys))
+            return False
 
     return _PermAny

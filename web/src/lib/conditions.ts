@@ -30,7 +30,16 @@ function rowRule(r: Row): unknown {
   const v = { var: r.field };
   if (r.op === "filled") return { "!!": [v] };
   if (r.op === "empty") return { "!": [v] };
-  if (r.op === "in") return { in: [v, r.value.split(",").map((x) => parseValue(x.trim())).filter((x) => x !== "")] };
+  if (r.op === "in")
+    return {
+      in: [
+        v,
+        r.value
+          .split(",")
+          .map((x) => parseValue(x.trim()))
+          .filter((x) => x !== ""),
+      ],
+    };
   return { [r.op]: [v, parseValue(r.value)] };
 }
 

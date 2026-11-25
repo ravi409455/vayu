@@ -1,3 +1,4 @@
+"""Notify API: the phone's push token, the bell list and read marks, and the latest app download."""
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers as s_

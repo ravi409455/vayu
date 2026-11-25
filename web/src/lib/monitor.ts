@@ -27,10 +27,15 @@ export function scrubCrumb(b: Breadcrumb): Breadcrumb | null {
 export async function startMonitoring(dsn = import.meta.env.VITE_SENTRY_DSN as string | undefined): Promise<void> {
   if (!dsn) return;
   const S = await import("@sentry/react");
-  S.init({ dsn, environment: (import.meta.env.VITE_SENTRY_ENV as string | undefined) ?? import.meta.env.MODE, release: import.meta.env.VITE_RELEASE as string | undefined,
+  S.init({
+    dsn,
+    environment: (import.meta.env.VITE_SENTRY_ENV as string | undefined) ?? import.meta.env.MODE,
+    release: import.meta.env.VITE_RELEASE as string | undefined,
     // collect nothing about people or requests; scrub() and scrubCrumb() check again before sending
     dataCollection: { userInfo: false, cookies: false, httpHeaders: false, httpBodies: [], urlQueryParams: false },
-    beforeSend: scrub, beforeBreadcrumb: scrubCrumb });
+    beforeSend: scrub,
+    beforeBreadcrumb: scrubCrumb,
+  });
   sdk = S;
 }
 

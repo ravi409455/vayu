@@ -1,6 +1,7 @@
 # Plan: code quality fixes (from the principal-architect review, 2026-11)
 
-Status: **finalized, not started** (open points closed 2026-11-23). Source: the whole-codebase review (logging, documentation, comments,
+Status: **mostly done** (2026-11-25; see "Status 2026-11-25" at the end for what is left).
+Open points closed 2026-11-23. Source: the whole-codebase review (logging, documentation, comments,
 SOLID, optimisation, reuse, modularity, structure, clean code, security, long-term maintenance). Every
 item below was measured in the code at `891ec08`; numbers are quoted so progress can be checked.
 **Re-measure every number when Q1 starts**: form types (`1d2de51`) and the library plan land first and
@@ -182,3 +183,25 @@ is 39 lines.
 ## Done when (whole plan)
 All Q items closed, CI enforces lint / type / scan / schema / query-count / log-privacy checks, and the
 review numbers above are re-measured and recorded here.
+
+## Status 2026-11-25
+Done (fix round + quality branch): Q1.1 (Ruff `S` and `C90` max 12 with a per-file allow list of 18
+files; `SIM`/`RET`/`PIE`/`PL`/`T20` not added), Q1.2, Q1.3 (jsx-a11y + Prettier, whole web app reformatted, CI runs format:check), Q1.4, Q2.1
+(`core.errors.fail`), Q2.2 (`core.concurrency.check_row_version`), Q2.3, Q2.4, Q2.5
+(`IntegrationSerializer`, form-builder saves in `forms/services.py`), Q2.6 (`useListItems`,
+FormRenderer split; `pages/ops/Booking.tsx` split earlier), Q3, Q4 (`core.log.event`,
+`docs/logging.md`), Q5 (search 90 → 12 queries, pinned by a test), Q6.2 (0 generator warnings,
+`--fail-on-warn` in CI), Q6.3 (`docs/integrations/`), module docstrings on every module, Q7.1
+(`docs/guides/`), Q7.2 `docs/architecture.md`, Q7.3 `CONTRIBUTING.md`.
+
+Left:
+- Q1.1: `SIM`, `RET`, `PIE`, `PL`, `T20`; the C901 allow list (18 files) to shrink.
+- Q2.6: repeated inline `style={{…}}` objects into CSS classes.
+- Q6.1: real request / response schemas and descriptions on every operation (many still say
+  "any object"); Q6.3's end-to-end test that follows the guide; Q6.4 Ruff `D` rules and
+  docstrings on public service functions and models.
+- Q7.1 screenshots from the Playwright journeys; Q7.2 ADR files and moving the amendment log out of
+  `plan.md` (the decisions are listed in `docs/architecture.md`); Q7.3 `SECURITY.md` (a short note
+  is in `CONTRIBUTING.md`).
+- Webhook signature code (Q6.3) does not apply: requests are not signed since 2026-11-24 (token
+  header instead), so the guide shows token checks.

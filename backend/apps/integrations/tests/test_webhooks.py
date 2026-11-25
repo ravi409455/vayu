@@ -306,19 +306,24 @@ def delivery(ienv, ref="R1", **kw):
     return Delivery.objects.get(booking_ref=ref)
 
 
-def test_success_is_final(ienv, http):
+def test_success_is_final(ienv, http, logged):
     d = delivery(ienv)
     assert d.status == "success" and d.attempts == 1 and d.response_status == 200
+    row = logged("webhook.delivery")[-1]
+    assert (row["delivery"], row["status"], row["http"], row["attempt"]) == (str(d.id), "success",
+                                                                             200, 1)
+    assert row["duration_ms"] >= 0 and "url" not in row
     assert d.error == "" and d.next_retry_at is None
 
 
 @pytest.mark.parametrize("status", [500, 502, 503, 429])
-def test_5xx_and_429_are_retried(ienv, status):
+def test_5xx_and_429_are_retried(ienv, status, logged):
     with responses.RequestsMock() as r:
         r.add(responses.POST, HOOK, status=status)
         d = delivery(ienv)
     assert d.status == "retrying" and d.error == f"http_{status}" and d.response_status == status
     assert abs((d.next_retry_at - timezone.now()).total_seconds() - 60) < 5
+    assert logged("webhook.delivery")[-1]["status"] == "retrying"
 
 
 @pytest.mark.parametrize("exc,reason", [(requests.Timeout(), "timeout"),

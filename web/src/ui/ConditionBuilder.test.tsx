@@ -4,7 +4,10 @@ import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { ConditionBuilder } from "./ConditionBuilder";
 
-const FIELDS = [{ value: "inspection.door", label: "Door" }, { value: "inspection.odometer", label: "Odometer" }];
+const FIELDS = [
+  { value: "inspection.door", label: "Door" },
+  { value: "inspection.odometer", label: "Odometer" },
+];
 
 function Harness({ initial = null as unknown }) {
   const [rule, setRule] = useState<unknown>(initial);
@@ -21,7 +24,7 @@ describe("ConditionBuilder", () => {
     const u = userEvent.setup();
     render(<Harness />);
     await u.click(screen.getByRole("button", { name: "+ Add condition" }));
-    expect(screen.getByLabelText("Field")).toBeInTheDocument();       // not thrown away
+    expect(screen.getByLabelText("Field")).toBeInTheDocument(); // not thrown away
     expect(screen.getByTestId("rule")).toHaveTextContent("null");
     await u.selectOptions(screen.getByLabelText("Field"), "inspection.door");
     await u.type(screen.getByLabelText("Value"), "dent");

@@ -18,15 +18,38 @@ export function useOpsFiles(booking: Booking, f: MediaField, onDone: () => void,
     setBusy(true);
     try {
       for (const file of files) {
-        const id = await addFile({ bookingId: booking.id, fieldKey: f.key, kind: f.type as "photo", file, name: file.name, source: "gallery", replaces });
+        const id = await addFile({
+          bookingId: booking.id,
+          fieldKey: f.key,
+          kind: f.type as "photo",
+          file,
+          name: file.name,
+          source: "gallery",
+          replaces,
+        });
         // only a fully sent file goes into the inspection (a half-sent one must not push out a good one)
-        try { await uploaded(id); } catch (e) { void discardFile(id); throw e; }
+        try {
+          await uploaded(id);
+        } catch (e) {
+          void discardFile(id);
+          throw e;
+        }
         await api(`media/${id}/attach`, { body: replaces ? { replaces } : {} });
         if (replaces) onReplaced?.(id);
       }
       say(replaces ? "Replaced. The old file is kept in the history." : "Added. It is checked in the background.");
-    } catch (e) { fail(e); } finally { setBusy(false); onDone(); }
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+      onDone();
+    }
   }
-  return { allowed: can("media.manage") && opsMayEdit(booking) && f.opsOk, busy, put,
-    accept: f.accept, noun: f.type === "photo" ? "photo" : f.type };
+  return {
+    allowed: can("media.manage") && opsMayEdit(booking) && f.opsOk,
+    busy,
+    put,
+    accept: f.accept,
+    noun: f.type === "photo" ? "photo" : f.type,
+  };
 }

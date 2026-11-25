@@ -5,5 +5,10 @@ import { Avatar } from "./Avatar";
 export function ExpertCell({ id, experts }: { id: number | null; experts: User[] }) {
   if (!id) return <span className="muted">—</span>;
   const u = experts.find((e) => e.id === id);
-  return <span className="who-avatar"><Avatar who={u ?? { id }} size={22} />{u ? u.name || u.username : `#${id}`}</span>;
+  return (
+    <span className="who-avatar">
+      <Avatar who={u ?? { id }} size={22} />
+      {u ? u.name || u.username : `#${id}`}
+    </span>
+  );
 }

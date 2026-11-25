@@ -1,3 +1,5 @@
+"""Booking rules: create, edit (with the stale-edit guard), assign, reschedule, cancel,
+force-release, change type and delete. Each change is stamped, audited and emitted as an event."""
 from datetime import date
 from typing import Any
 
@@ -9,14 +11,15 @@ from apps.accounts.models import Role, User
 from apps.accounts.permissions import scope_for
 from apps.core import events
 from apps.core import tasks as core_tasks
-from apps.core.errors import CodedError
+from apps.core.concurrency import check_row_version
+from apps.core.errors import fail
 from apps.forms.access import levels_for
 from apps.forms.fieldtypes import AnswerError, clean_answer
 from apps.forms.models import Field, Form, FormType, FormVersion, MasterListItem, VersionStatus
 from apps.forms.rules import validate_answers
 
 from . import activity
-from .changes import check_fresh, stamp
+from .changes import stamp
 from .models import Booking, Inspection, RescheduleLog
 from .stages import can_transition
 
@@ -25,9 +28,6 @@ COLUMNS = {"customer_name": "customer_name", "customer_phone": "customer_phone",
            "booking_id": "booking_id"}
 ACTION_ONLY = ("assigned_expert", "inspection_type")  # changed through their own actions
 
-
-def err(code: str, message: str, status: int = 400, **extra: Any) -> CodedError:
-    return CodedError(code, message, status, **extra)
 
 
 def today() -> str:
@@ -39,7 +39,7 @@ def booking_form_version() -> FormVersion:
     version = (form.versions.filter(status=VersionStatus.PUBLISHED).order_by("-number").first()
                if form else None)
     if version is None:
-        raise err("NO_BOOKING_FORM", "Publish the booking form first.", 409)
+        raise fail("NO_BOOKING_FORM", "Publish the booking form first.", 409)
     return version
 
 
@@ -59,8 +59,8 @@ def clean(version: FormVersion, answers: dict[str, Any],
     cleaned, errors = validate_answers(version, {"booking": answers}, today(), kept=kept,
                                        messages=messages)
     if errors:
-        raise err("INVALID_ANSWERS", "Some answers are invalid.", errors=errors,
-                  messages=messages)
+        raise fail("INVALID_ANSWERS", "Some answers are invalid.", errors=errors,
+                   messages=messages)
     return cleaned
 
 
@@ -77,7 +77,7 @@ def _ensure_unique(booking_id: str, exclude: Any=None) -> None:
     if exclude is not None:
         qs = qs.exclude(pk=exclude.pk)
     if qs.exists():
-        raise err("DUPLICATE_BOOKING_ID", f"Booking ID '{booking_id}' is already used.")
+        raise fail("DUPLICATE_BOOKING_ID", f"Booking ID '{booking_id}' is already used.")
 
 
 def _save(b: Booking) -> None:
@@ -85,7 +85,7 @@ def _save(b: Booking) -> None:
         with transaction.atomic():
             b.save()
     except IntegrityError as e:  # lost a race on the unique booking ID
-        raise err("DUPLICATE_BOOKING_ID", "That booking ID is already used.") from e
+        raise fail("DUPLICATE_BOOKING_ID", "That booking ID is already used.") from e
 
 
 def _touch(b: Booking, actor: Any, keys: list[str]) -> None:
@@ -98,7 +98,7 @@ def create(actor: Any, answers: dict[str, Any]) -> Booking:
     cleaned = clean(version, answers)
     _ensure_unique(cleaned["booking_id"])
     if cleaned.get("assigned_expert") and scope_for(actor, "bookings.assign") is None:
-        raise err("FORBIDDEN", "Choosing the expert needs the assign permission.", 403)  # F-057
+        raise fail("FORBIDDEN", "Choosing the expert needs the assign permission.", 403)  # F-057
     b = Booking(answers=cleaned, created_by=actor, last_edited_by=actor,
                 last_edited_at=timezone.now())
     sync_columns(b)
@@ -113,10 +113,11 @@ def create(actor: Any, answers: dict[str, Any]) -> Booking:
 @transaction.atomic
 def edit(actor: Any, b: Booking, new_answers: dict[str, Any], row_version: int) -> Booking:
     b = Booking.objects.select_for_update().get(pk=b.pk)
-    check_fresh(b, row_version, "STALE_BOOKING", "booking")
+    check_row_version(b, row_version, "STALE_BOOKING",
+                      "Someone changed this booking since you opened it.", who=True)
     forbidden = [k for k in new_answers if k in ACTION_ONLY]
     if forbidden:
-        raise err("USE_ACTION", f"{', '.join(forbidden)} change through their own actions.")
+        raise fail("USE_ACTION", f"{', '.join(forbidden)} change through their own actions.")
     version = booking_form_version()
     levels = levels_for(version, actor.role, b.stage)
     default = "edit" if actor.role == "admin" else "view"
@@ -126,7 +127,8 @@ def edit(actor: Any, b: Booking, new_answers: dict[str, Any], row_version: int) 
                     if levels.get(k, default) == "hidden"
                     or (v != b.answers.get(k) and levels.get(k, default) != "edit"))
     if locked:  # checked before validation
-        raise err("FIELD_ACCESS", "You cannot change these fields at this stage.", 403, keys=locked)
+        raise fail("FIELD_ACCESS", "You cannot change these fields at this stage.",
+                   403, keys=locked)
     merged = {**b.answers, **new_answers}
     cleaned = clean(version, merged, kept=b.answers)
     changes = {k: [b.answers.get(k), cleaned.get(k)] for k in set(cleaned) | set(b.answers)
@@ -162,14 +164,14 @@ def assign(actor: Any, b: Booking, expert_id: Any) -> Booking:
     b = _lock(b)
     expert = User.objects.filter(pk=expert_id, role=Role.EXPERT, is_active=True).first()
     if expert is None:
-        raise err("INVALID_EXPERT", "Choose an active expert.")
+        raise fail("INVALID_EXPERT", "Choose an active expert.")
     if b.stage == "assigned" and b.assigned_expert_id == expert.id:
         return b                    # a double click: no second "New lead", no new timeline row
     if b.stage == "in_progress":
-        raise err("ALREADY_STARTED", "The expert has started; force-release the booking first.",
-                  409)
+        raise fail("ALREADY_STARTED", "The expert has started; force-release the booking first.",
+                   409)
     if not can_transition(b.stage, "assigned"):
-        raise err("INVALID_STAGE", f"A {b.stage} booking cannot be assigned.", 409)
+        raise fail("INVALID_STAGE", f"A {b.stage} booking cannot be assigned.", 409)
     changes = {"stage": [b.stage, "assigned"], "assigned_expert": [b.assigned_expert_id, expert.id]}
     b.stage, b.assigned_expert = "assigned", expert
     b.answers = {**b.answers, "assigned_expert": expert.id}
@@ -182,14 +184,14 @@ def assign(actor: Any, b: Booking, expert_id: Any) -> Booking:
 def reschedule(actor: Any, b: Booking, date_: Any, time_: Any, reason: Any) -> Booking:
     b = _lock(b)
     if b.stage not in ("draft", "assigned"):
-        raise err("INVALID_STAGE", f"A {b.stage} booking cannot be rescheduled.", 409)
+        raise fail("INVALID_STAGE", f"A {b.stage} booking cannot be rescheduled.", 409)
     if not isinstance(reason, str) or not active_item("reschedule_reason", reason):
-        raise err("INVALID_REASON", "Choose a reschedule reason from the list.")
+        raise fail("INVALID_REASON", "Choose a reschedule reason from the list.")
     try:
         d = clean_answer(Field(type="date", config={}), date_)
         t = clean_answer(Field(type="time", config={}), time_)
     except AnswerError as e:
-        raise err("INVALID_SCHEDULE", str(e)) from e
+        raise fail("INVALID_SCHEDULE", str(e)) from e
     RescheduleLog.objects.create(booking=b, old_date=b.answers["inspection_date"],
                                  old_time=b.answers["inspection_time"], new_date=d, new_time=t,
                                  reason=reason, by=actor)
@@ -205,9 +207,9 @@ def reschedule(actor: Any, b: Booking, date_: Any, time_: Any, reason: Any) -> B
 def cancel(actor: Any, b: Booking, reason: Any) -> Booking:
     b = _lock(b)
     if not isinstance(reason, str) or not active_item("cancel_reason", reason):
-        raise err("INVALID_REASON", "Choose a cancel reason from the list.")
+        raise fail("INVALID_REASON", "Choose a cancel reason from the list.")
     if not can_transition(b.stage, "cancelled"):
-        raise err("INVALID_STAGE", f"A {b.stage} booking cannot be cancelled.", 409)
+        raise fail("INVALID_STAGE", f"A {b.stage} booking cannot be cancelled.", 409)
     changes = {"stage": [b.stage, "cancelled"]}
     b.stage, b.cancel_reason, b.cancelled_at = "cancelled", reason, timezone.now()
     _changed(actor, b, changes)
@@ -218,7 +220,7 @@ def cancel(actor: Any, b: Booking, reason: Any) -> Booking:
 def force_release(actor: Any, b: Booking) -> Booking:
     b = _lock(b)
     if b.stage != "in_progress":
-        raise err("NOT_STARTED", "Only a started booking can be force-released.", 409)
+        raise fail("NOT_STARTED", "Only a started booking can be force-released.", 409)
     b.stage, b.started_at, b.late_minutes = "assigned", None, None
     b.late_reviewed_by = b.late_reviewed_at = None     # the next start is judged afresh
     b.released_by, b.released_at, b.released_draft_expected = actor, timezone.now(), True
@@ -235,7 +237,7 @@ def force_release(actor: Any, b: Booking) -> Booking:
 def review_timing(actor: Any, b: Booking, flag: Any) -> Booking:
     """Mark one flag ("late" or "quick") as looked at; the other stays open."""
     if flag not in ("late", "quick"):
-        raise err("INVALID_FLAG", "Say which flag: late or quick.")
+        raise fail("INVALID_FLAG", "Say which flag: late or quick.")
     b = _lock(b)
     setattr(b, f"{flag}_reviewed_by", actor)
     setattr(b, f"{flag}_reviewed_at", timezone.now())
@@ -249,7 +251,7 @@ def clear_alert(actor: Any, b: Booking, code: Any) -> Booking:
     b = _lock(b)
     kept = [a for a in b.alerts if a.get("code") != code]
     if len(kept) == len(b.alerts):
-        raise err("NO_ALERT", "This booking has no such alert.", 409)
+        raise fail("NO_ALERT", "This booking has no such alert.", 409)
     b.alerts = kept
     b.save(update_fields=["alerts"])
     activity.log(b, actor, "alert_cleared", {"alert": [code, None]})
@@ -260,9 +262,10 @@ def clear_alert(actor: Any, b: Booking, code: Any) -> Booking:
 def change_type(actor: Any, b: Booking, inspection_type: Any) -> Booking:
     b = _lock(b)
     if b.started_at is not None or b.stage not in ("draft", "assigned"):
-        raise err("TYPE_LOCKED", "The inspection type is locked once the booking has started.", 409)
+        raise fail("TYPE_LOCKED", "The inspection type is locked once the booking has started.",
+                   409)
     if not isinstance(inspection_type, str) or not active_inspection_type(inspection_type):
-        raise err("INVALID_TYPE", "Choose an inspection type from the list.")
+        raise fail("INVALID_TYPE", "Choose an inspection type from the list.")
     changes = {"inspection_type": [b.inspection_type, inspection_type]}
     b.answers = {**b.answers, "inspection_type": inspection_type}
     sync_columns(b)
@@ -281,8 +284,8 @@ def delete(actor: Any, b: Booking) -> None:
 
     b = _lock(b)                                       # no assign can slip in meanwhile (F-121)
     if actor.role != Role.ADMIN and (b.stage != "draft" or b.inspections.exists()):
-        raise err("DELETE_NOT_ALLOWED", "Only an Admin can delete a booking that has been "
-                  "assigned or worked on. Cancel it instead.", 403)
+        raise fail("DELETE_NOT_ALLOWED", "Only an Admin can delete a booking that has been "
+                   "assigned or worked on. Cancel it instead.", 403)
     keys = [k for a in b.media.all() for k in asset_keys(a)]
     keys += [k for k in Report.objects.filter(booking=b).values_list("key", flat=True) if k]
     keys += [k for k in MediaZip.objects.filter(booking=b).values_list("key", flat=True) if k]

@@ -1,3 +1,5 @@
+"""Reports API: PDF templates (drafts, publish, preview, checks), shared parts, a booking's report
+(download, regenerate), problems and the public verify page."""
 import base64
 
 from django.conf import settings
@@ -5,6 +7,7 @@ from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
@@ -15,8 +18,8 @@ from rest_framework.views import APIView
 from apps.accounts import audit
 from apps.accounts.permissions import perm, scope_for
 from apps.bookings.models import Booking
-from apps.bookings.services import err
 from apps.bookings.submissions import own_filter
+from apps.core.errors import fail
 from apps.forms.access import may_see_submissions
 from apps.forms.models import Form, MasterListItem
 from apps.media import storage
@@ -96,16 +99,16 @@ class Preview(APIView):
         tv = get_object_or_404(PdfTemplateVersion.objects.select_related("template__form"), pk=pk)
         # template editing is Admin-only now (R-34); kept in case that ever changes
         if scope_for(request.user, "reports.view", request) is None:
-            raise err("FORBIDDEN", "Previews use real data, so they need reports.view.", 403)
+            raise fail("FORBIDDEN", "Previews use real data, so they need reports.view.", 403)
         booking = _report_booking(request, request.data.get("booking"))
         insp = booking.counted_inspection()
         if insp is None or insp.form_version.form_id != tv.template.form_id:
-            raise err("INVALID_BOOKING", "Pick a submitted booking inspected with this form.")
+            raise fail("INVALID_BOOKING", "Pick a submitted booking inspected with this form.")
         if "definition" in request.data:          # the designer: unsaved edits, with positions
             try:
                 d = validate_definition(request.data["definition"])
             except ValueError as e:
-                raise err("INVALID_TEMPLATE", str(e)) from e
+                raise fail("INVALID_TEMPLATE", str(e)) from e
             pdf, name, layout, checks = tasks.preview(booking, insp, d)
             return Response({"filename": name, "pages": layout, "checks": checks,
                              "pdf": base64.b64encode(pdf).decode()})
@@ -127,7 +130,7 @@ class Checks(APIView):
         try:
             d = validate_definition(d)
         except ValueError as e:
-            raise err("INVALID_TEMPLATE", str(e)) from e
+            raise fail("INVALID_TEMPLATE", str(e)) from e
         return Response({"issues": service.definition_issues(tv.template, d),
                          "unused": service.unused_fields(tv.template, d)})
 
@@ -143,7 +146,7 @@ def _report_booking(request, pk) -> Booking:
         Q(inspection_type=b.inspection_type)
         | Q(pk__in=b.inspections.values("form_version__form_id")))
     if any(not may_see_submissions(request.user, f) for f in forms):
-        raise err("NOT_FOUND", "Booking not found.", 404)
+        raise fail("NOT_FOUND", "Booking not found.", 404)
     return b
 
 
@@ -154,7 +157,7 @@ class BookingReport(APIView):
         b = _report_booking(request, pk)
         r = Report.objects.filter(booking=b).first()
         if r is None:
-            raise err("NO_REPORT", "No report has been generated yet.", 404)
+            raise fail("NO_REPORT", "No report has been generated yet.", 404)
         blocked = regenerate_blocked(b, r)
         return Response({"revision": r.revision, "status": r.status,
                          "updating": bool(r.render_started_at),       # being made right now
@@ -199,7 +202,7 @@ class Regenerate(APIView):
         r = Report.objects.filter(booking=b).first()
         blocked = regenerate_blocked(b, r)
         if blocked:
-            raise err("CANNOT_REGENERATE", blocked, 409)
+            raise fail("CANNOT_REGENERATE", blocked, 409)
         core_tasks.after_commit(lambda: tasks.render_report.delay(str(b.id)))
         return Response(status=status.HTTP_202_ACCEPTED)
 
@@ -208,7 +211,7 @@ def _ready_report(request, pk) -> Report:
     b = _report_booking(request, pk)
     r = Report.objects.filter(booking=b, status="ready").first()
     if r is None:
-        raise err("NO_REPORT", "The report is not ready yet.", 404)
+        raise fail("NO_REPORT", "The report is not ready yet.", 404)
     return r
 
 
@@ -238,7 +241,7 @@ class Shared(APIView):
 
         how = request.data.get("how")
         if how not in ("check_link", "pdf"):
-            raise err("INVALID", "how must be check_link or pdf.")
+            raise fail("INVALID", "how must be check_link or pdf.")
         r = _ready_report(request, pk)
         activity.log(r.booking, request.user, "report_shared", {"revision": r.revision,
                                                                  "how": how})
@@ -283,7 +286,7 @@ class Verify(APIView):
     def get(self, request, token):
         r = Report.objects.filter(token=token, status="ready").select_related("booking").first()
         if r is None:
-            raise err("NOT_FOUND", "No such report.", 404)
+            raise fail("NOT_FOUND", "No such report.", 404)
         b = r.booking
         insp = b.counted_inspection()
         car = MasterListItem.objects.filter(list__key="car_make_model", key=b.car_make_model) \
@@ -357,7 +360,7 @@ class Picture(APIView):
     def delete(self, request, pk):
         a = self._get(pk)
         if _in_use(str(a.id)):
-            raise err("PICTURE_IN_USE", "A template or shared theme still uses this picture.", 409)
+            raise fail("PICTURE_IN_USE", "A template or shared theme still uses this picture.", 409)
         audit.record(request.user, "pdf_picture.delete", "form_asset", a.id,
                      f"Removed picture {a.name}")
         a.name = ""                       # out of the library; the stored file stays harmless
@@ -378,6 +381,7 @@ class SharedItems(APIView):
 
     permission_classes = [perm("pdf_templates.view", "pdf_templates.edit")]
 
+    @extend_schema(operation_id="pdf_shared_list")
     def get(self, request):
         qs = SharedItem.objects.order_by("kind", "name")
         if kind := request.query_params.get("kind"):
@@ -412,7 +416,7 @@ class SharedItemDetail(APIView):
         if rev := request.query_params.get("revision"):
             r = item.revisions.filter(revision=int(rev) if rev.isdigit() else 0).first()
             if r is None:
-                raise err("NOT_FOUND", "No such version.", 404)
+                raise fail("NOT_FOUND", "No such version.", 404)
             body["content"], body["revision"] = r.content, r.revision
         return Response(body)
 
@@ -426,7 +430,7 @@ class CopyTemplate(APIView):
         t = get_object_or_404(PdfTemplate, pk=pk)
         form = get_object_or_404(Form, pk=request.data.get("form"))
         last = t.versions.order_by("-number").first()
-        assert last is not None
+        assert last is not None  # noqa: S101 - invariant, narrows the type
         return Response(_template_body(transfer.copy_template(request.user, last, form)),
                         status=status.HTTP_201_CREATED)
 

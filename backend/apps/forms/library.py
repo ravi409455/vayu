@@ -7,7 +7,8 @@ from django.db import transaction
 from django.db.models import Max
 
 from apps.accounts import audit
-from apps.core.errors import CodedError
+from apps.core.concurrency import check_row_version
+from apps.core.errors import CodedError, fail
 
 from .access import validate_access
 from .fieldtypes import ConfigError, validate_config
@@ -35,68 +36,65 @@ OUTSIDE_OK = {f"booking.{spec['key']}" for spec in SYSTEM_FIELDS["booking"]} | {
     "inspection.chassis_no"}
 
 
-def bad(code: str, message: str, status: int = 400) -> CodedError:
-    return CodedError(code, message, status)
-
 
 # ------------------------------------------------------------------ definitions
 
 def validate_field_definition(d: Any, *, expect_key: str | None = None) -> dict[str, Any]:
     if not isinstance(d, dict) or set(d) - FIELD_KEYS or not {"key", "label", "type"} <= set(d):
-        raise bad("INVALID_DEFINITION", "A field definition needs key, label and type, and only "
-                  f"these properties: {', '.join(sorted(FIELD_KEYS))}.")
+        raise fail("INVALID_DEFINITION", "A field definition needs key, label and type, and only "
+                   f"these properties: {', '.join(sorted(FIELD_KEYS))}.")
     if not KEY_RE.fullmatch(str(d["key"])):
-        raise bad("INVALID_KEY", "Field keys are 2-63 chars: a-z, 0-9, _, starting with a letter.")
+        raise fail("INVALID_KEY", "Field keys are 2-63 chars: a-z, 0-9, _, starting with a letter.")
     if expect_key is not None and d["key"] != expect_key:
-        raise bad("INVALID_DEFINITION", "The definition's key must equal the item's key.")
+        raise fail("INVALID_DEFINITION", "The definition's key must equal the item's key.")
     if not isinstance(d["label"], str) or not d["label"].strip():
-        raise bad("INVALID_DEFINITION", "A field needs a label.")
+        raise fail("INVALID_DEFINITION", "A field needs a label.")
     if d["type"] not in FieldType.values:
-        raise bad("INVALID_CONFIG", f"Unknown field type '{d['type']}'.")
+        raise fail("INVALID_CONFIG", f"Unknown field type '{d['type']}'.")
     try:
         validate_config(d["type"], d.get("config", {}))
     except ConfigError as e:
-        raise bad("INVALID_CONFIG", str(e)) from e
+        raise fail("INVALID_CONFIG", str(e)) from e
     rules = {"show_if": d.get("show_if"), "required_if": d.get("required_if")}
     if d["type"] == "derived":
         rules["config.rule"] = d["config"]["rule"]
     for name, rule in rules.items():
         issues = rule_syntax_issues(rule, name) if rule is not None else []
         if issues:
-            raise bad("INVALID_RULE", "; ".join(f"{i.path}: {i.message}" for i in issues))
+            raise fail("INVALID_RULE", "; ".join(f"{i.path}: {i.message}" for i in issues))
     try:
         validate_access(d.get("access", {}))
     except ValueError as e:
-        raise bad("INVALID_ACCESS", str(e)) from e
+        raise fail("INVALID_ACCESS", str(e)) from e
     for flag in ("required", "visible"):
         if flag in d and not isinstance(d[flag], bool):
-            raise bad("INVALID_DEFINITION", f"{flag} must be true or false.")
+            raise fail("INVALID_DEFINITION", f"{flag} must be true or false.")
     if not isinstance(d.get("helper_text", ""), str):
-        raise bad("INVALID_DEFINITION", "helper_text must be text.")
+        raise fail("INVALID_DEFINITION", "helper_text must be text.")
     return d
 
 
 def validate_section_definition(d: Any) -> dict[str, Any]:
     if (not isinstance(d, dict) or set(d) - SECTION_KEYS or not isinstance(d.get("fields"), list)):
-        raise bad("INVALID_DEFINITION", "A section definition needs a title and a fields list.")
+        raise fail("INVALID_DEFINITION", "A section definition needs a title and a fields list.")
     if not isinstance(d.get("title"), str) or not d["title"].strip():
-        raise bad("INVALID_DEFINITION", "A section needs a title.")
+        raise fail("INVALID_DEFINITION", "A section needs a title.")
     if d.get("show_if") is not None:
         issues = rule_syntax_issues(d["show_if"], "show_if")
         if issues:
-            raise bad("INVALID_RULE", "; ".join(f"{i.path}: {i.message}" for i in issues))
+            raise fail("INVALID_RULE", "; ".join(f"{i.path}: {i.message}" for i in issues))
     try:
         validate_access(d.get("access", {}))
     except ValueError as e:
-        raise bad("INVALID_ACCESS", str(e)) from e
+        raise fail("INVALID_ACCESS", str(e)) from e
     if not isinstance(d.get("visible", True), bool):
-        raise bad("INVALID_DEFINITION", "visible must be true or false.")
+        raise fail("INVALID_DEFINITION", "visible must be true or false.")
     keys = []
     for f in d["fields"]:
         validate_field_definition(f)
         keys.append(f["key"])
     if len(set(keys)) != len(keys):
-        raise bad("INVALID_DEFINITION", "Field keys must be unique within the section.")
+        raise fail("INVALID_DEFINITION", "Field keys must be unique within the section.")
     return d
 
 
@@ -122,21 +120,21 @@ def check_self_contained(kind: str, definition: dict[str, Any]) -> None:
             form, _, rest = name.partition(".")
             ref = f"{form}.{rest.split('.')[0]}"
             if ref not in own and ref not in OUTSIDE_OK:
-                raise bad("RULE_NOT_SELF_CONTAINED",
-                          f"A rule uses '{ref}', which is not part of this library item. Put that "
-                          "field in the same library section, or keep this item out of the "
-                          "library.")
+                raise fail("RULE_NOT_SELF_CONTAINED",
+                           f"A rule uses '{ref}', which is not part of this library item. Put that "
+                           "field in the same library section, or keep this item out of the "
+                           "library.")
 
 
 def _check_immutable(kind: str, old: dict[str, Any], new: dict[str, Any]) -> None:
     if kind == LibraryKind.FIELD:
         if new.get("type") != old["type"]:  # the key was already checked in update_item
-            raise bad("TYPE_IMMUTABLE", "A library field's type can never change.")
+            raise fail("TYPE_IMMUTABLE", "A library field's type can never change.")
     else:
         old_types = {f["key"]: f["type"] for f in old["fields"]}
         for f in new["fields"]:
             if f["key"] in old_types and old_types[f["key"]] != f["type"]:
-                raise bad("TYPE_IMMUTABLE", f"Field '{f['key']}' cannot change type.")
+                raise fail("TYPE_IMMUTABLE", f"Field '{f['key']}' cannot change type.")
 
 
 # ------------------------------------------------------------------ items
@@ -182,12 +180,12 @@ def _validate(kind: str, key: str, definition: Any) -> None:
 def create_item(actor: Any, *, kind: str, key: str, name: str | None,
                 definition: Any) -> LibraryItem:
     if kind not in (LibraryKind.FIELD, LibraryKind.SECTION):
-        raise bad("INVALID_DEFINITION", "kind must be 'field' or 'section'.")
+        raise fail("INVALID_DEFINITION", "kind must be 'field' or 'section'.")
     if kind == LibraryKind.SECTION and not LIST_KEY_RE.fullmatch(key or ""):
-        raise bad("INVALID_KEY", "Use lowercase letters, digits and _; start with a letter.")
+        raise fail("INVALID_KEY", "Use lowercase letters, digits and _; start with a letter.")
     _validate(kind, key, definition)
     if LibraryItem.objects.filter(kind=kind, key=key).exists():
-        raise bad("DUPLICATE_KEY", f"A library {kind} with key '{key}' already exists.")
+        raise fail("DUPLICATE_KEY", f"A library {kind} with key '{key}' already exists.")
     default_name = definition["label"] if kind == LibraryKind.FIELD else definition["title"]
     item = LibraryItem.objects.create(kind=kind, key=key, name=name or default_name,
                                       definition=definition)
@@ -203,13 +201,12 @@ def update_item(actor: Any, item: LibraryItem, *, definition: Any = None,
     item = LibraryItem.objects.select_for_update().get(pk=item.pk)
     if definition is not None:
         if revision is None:
-            raise bad("REVISION_REQUIRED", "Send the revision you started from.")
-        if revision != item.revision:
-            raise CodedError("STALE_LIBRARY_ITEM", "Someone saved this item after you opened it; "
-                             "reload to see their changes.", 409, revision=item.revision)
+            raise fail("REVISION_REQUIRED", "Send the revision you started from.")
+        check_row_version(item, revision, "STALE_LIBRARY_ITEM", "Someone saved this item after you "
+                          "opened it; reload to see their changes.", field="revision")
         if item.kind == LibraryKind.FIELD:
             if isinstance(definition, dict) and definition.get("key", item.key) != item.key:
-                raise bad("KEY_IMMUTABLE", "A library field's key can never change.")
+                raise fail("KEY_IMMUTABLE", "A library field's key can never change.")
         _validate(item.kind, item.key, definition)
         _check_immutable(item.kind, item.definition, definition)
         if definition != item.definition:
@@ -268,7 +265,7 @@ def _field_attrs(d: dict[str, Any]) -> dict[str, Any]:
 
 def _usable(item: LibraryItem, kind: str) -> None:
     if item.kind != kind:
-        raise bad("WRONG_KIND", f"Expected a {kind} item.")
+        raise fail("WRONG_KIND", f"Expected a {kind} item.")
     if item.archived:
         raise CodedError("ARCHIVED", "This library item is archived.", 409)
 
@@ -341,7 +338,7 @@ def accept_update(actor: Any, obj: Field | Section) -> Field | Section:
     ensure_draft(obj.version_id)
     item = obj.library_item
     if item is None:
-        raise bad("NOT_LINKED", "This item is not linked to the library.")
+        raise fail("NOT_LINKED", "This item is not linked to the library.")
     if obj.library_revision == item.revision:
         return obj
     d = item.definition
@@ -375,9 +372,9 @@ def accept_update(actor: Any, obj: Field | Section) -> Field | Section:
 def unlink(actor: Any, obj: Field | Section) -> Field | Section:
     ensure_draft(obj.version_id)
     if isinstance(obj, Field) and obj.section.library_item_id is not None:
-        raise bad("VIA_SECTION", "This field is part of a linked section; unlink the section.")
+        raise fail("VIA_SECTION", "This field is part of a linked section; unlink the section.")
     if obj.library_item is None:
-        raise bad("NOT_LINKED", "This item is not linked to the library.")
+        raise fail("NOT_LINKED", "This item is not linked to the library.")
     key = obj.library_item.key
     obj.library_item, obj.library_revision = None, None
     obj.save()

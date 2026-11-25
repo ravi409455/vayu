@@ -16,14 +16,32 @@ const STAGE_TIP: Record<string, string> = {
 const ICON = { hidden: EyeOff, view: Eye, edit: Pencil };
 const WORD: Record<Level, string> = { hidden: "Hidden", view: "Can see", edit: "Can edit" };
 const NEXT: Record<string, Level | ""> = { "": "hidden", hidden: "view", view: "edit", edit: "" };
-const FROM: Record<LevelSource, string> = { field: "set on this field", section: "from its section", page: "from its page", default: "the standard rule" };
+const FROM: Record<LevelSource, string> = {
+  field: "set on this field",
+  section: "from its section",
+  page: "from its page",
+  default: "the standard rule",
+};
 
 /** Who can see or edit this, at each stage of a booking. One row per stage, one column per role,
  *  so it always fits on screen. Each cell shows the result that applies (nobody has to guess); a
  *  faded cell is inherited, a solid one is set right here. Click a cell to cycle
  *  inherited → hidden → can see → can edit. */
-export function AccessEditor({ value, onChange, kind, ftype = "short_text", parents = {}, disabled, note }: {
-  value: Access; onChange: (a: Access) => void; kind: string; ftype?: string; parents?: { section?: Access; page?: Access }; disabled?: boolean;
+export function AccessEditor({
+  value,
+  onChange,
+  kind,
+  ftype = "short_text",
+  parents = {},
+  disabled,
+  note,
+}: {
+  value: Access;
+  onChange: (a: Access) => void;
+  kind: string;
+  ftype?: string;
+  parents?: { section?: Access; page?: Access };
+  disabled?: boolean;
   /** an extra sentence for the "i" (a page or section: it applies to everything inside) */
   note?: string;
 }) {

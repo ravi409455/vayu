@@ -43,8 +43,24 @@ describe("field types in words", () => {
     const userEvent = (await import("@testing-library/user-event")).default;
     const { FieldEditor } = await import("../pages/admin/builder/FieldEditor");
     const onSave = vi.fn();
-    const f = { id: 1, section: 1, key: "door", label: "Door", helper_text: "", type: "single_choice", required: false, required_if: null, show_if: null,
-      config: { options: [{ key: "ok", label: "OK" }] }, visible: true, order: 0, is_system: false, access: {}, locked: false, library: null };
+    const f = {
+      id: 1,
+      section: 1,
+      key: "door",
+      label: "Door",
+      helper_text: "",
+      type: "single_choice",
+      required: false,
+      required_if: null,
+      show_if: null,
+      config: { options: [{ key: "ok", label: "OK" }] },
+      visible: true,
+      order: 0,
+      is_system: false,
+      access: {},
+      locked: false,
+      library: null,
+    };
     const u = userEvent.setup();
     render(<FieldEditor field={f as never} choices={[]} lists={[]} categories={[]} onSave={onSave} onDelete={() => {}} readOnly={false} />);
     await u.click(screen.getByRole("button", { name: "+ Add choice" }));
@@ -52,6 +68,12 @@ describe("field types in words", () => {
     await u.selectOptions(screen.getAllByLabelText("What this choice means")[1]!, "major");
     await u.click(screen.getByRole("button", { name: "Dropdown" }));
     await u.click(screen.getByRole("button", { name: "Save field" }));
-    expect(onSave.mock.calls[0]![0].config).toEqual({ options: [{ key: "ok", label: "OK" }, { key: "badly_dented", label: "Badly dented", is_defect: true, severity: "major" }], display: "dropdown" });
+    expect(onSave.mock.calls[0]![0].config).toEqual({
+      options: [
+        { key: "ok", label: "OK" },
+        { key: "badly_dented", label: "Badly dented", is_defect: true, severity: "major" },
+      ],
+      display: "dropdown",
+    });
   });
 });

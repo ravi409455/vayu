@@ -1,3 +1,4 @@
+"""The forms app: after every migrate the booking, start and end forms exist."""
 from django.apps import AppConfig
 from django.db import DatabaseError, transaction
 from django.db.models.signals import post_migrate

@@ -250,13 +250,14 @@ class OpsFlowTest {
         waitFor("Time not verified")
     }
 
-    /** Today's filters are one line, like Bookings: a Status chip that opens the day's statuses with their counts. */
-    @Test fun todayStatusChipNarrowsTheDay() {
+    /** Today's filters are one line: a Status chip that opens the day's statuses with their counts; several can be ticked, like Experts. */
+    @Test fun todayStatusChipNarrowsTheDayToSeveralStatuses() {
         show()
         waitFor("of 5 completed")
         compose.onNodeWithContentDescription("Status: any").performClick()
         compose.onNodeWithText("Unassigned · 1").assertExists()                       // each status says how many today
         compose.onNodeWithText("In progress · 1").performClick()
+        compose.onNodeWithText("Done · 1 chosen").performClick()
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Rohit Sharma")).fetchSemanticsNodes().isEmpty() }   // unassigned hidden
         waitFor("Ravi Expert")                       // the list reloads after the chip: wait for the row
         compose.onNode(hasText("Ravi Expert", substring = true)).performClick()
@@ -265,8 +266,14 @@ class OpsFlowTest {
         assertTrue(compose.onAllNodes(hasText("Meera Expert")).fetchSemanticsNodes().isEmpty())  // nothing in progress
         shot("ops_today_in_progress")
         compose.onNodeWithContentDescription("Status: In progress").performClick()
-        compose.onNodeWithText("All · 5").performClick()
-        waitFor("Rohit Sharma")
+        compose.onNodeWithText("Unassigned · 1").performClick()                        // a second status on top
+        compose.onNodeWithText("Done · 2 chosen").performClick()
+        waitFor("Rohit Sharma")                                                         // unassigned is back
+        waitFor("Farhan Ali")                                                           // in progress still there
+        assertTrue(compose.onAllNodes(hasText("Arjun Mehta")).fetchSemanticsNodes().isEmpty())   // assigned: still not listed
+        compose.onNodeWithContentDescription("Status: 2 chosen").performClick()
+        compose.onNodeWithText("Any status").performClick()
+        waitFor("Meera Expert")                                                         // everything again
     }
 
     /** A list the server refuses says why, instead of "Loading…" for ever (seen on the phone with a stale server). */
@@ -288,6 +295,13 @@ class OpsFlowTest {
         assertTrue(compose.onAllNodes(hasText("Rohit Sharma")).fetchSemanticsNodes().isEmpty())   // nobody's yet: not this expert's
         compose.onNodeWithContentDescription("Experts: 1 chosen").assertIsDisplayed()
         compose.onNode(hasText("Ravi Expert", substring = true)).assertExists()
+        // the two chips together can leave nothing: the screen says so and one tap shows the whole day again
+        compose.onNodeWithContentDescription("Status: any").performClick()
+        compose.onNodeWithText("Completed · 1").performClick()
+        compose.onNodeWithText("Done · 1 chosen").performClick()
+        waitFor("No bookings today match these filters.")
+        compose.onNodeWithText("Show all").performClick()
+        waitFor("Meera Expert")
     }
 
     @Test fun quickFiltersAndTheFilterViewAreOneChoice() {
@@ -295,9 +309,18 @@ class OpsFlowTest {
         compose.onNodeWithText("Bookings").performClick()
         waitFor("Showing 5 · Today")
         assertTrue(server.queries.any { it.startsWith("date_from=$TODAY&date_to=$TODAY&order=schedule") })   // today by default
+        // Status takes several, like Experts: tick two, Done
         compose.onNodeWithContentDescription("Status: any").performClick()
-        compose.onAllNodes(hasText("Assigned")).onLast().performClick()               // the menu, over the list
-        compose.waitUntil(5_000) { server.queries.any { "stage=assigned" in it } }
+        compose.onAllNodes(hasText("Assigned")).onLast().performClick()               // the sheet, over the list
+        compose.onAllNodes(hasText("In progress")).onLast().performClick()
+        compose.onNodeWithText("Done · 2 chosen").performClick()
+        waitFor("Today · 2 statuses")
+        compose.waitUntil(5_000) { server.queries.any { "stage=assigned,in_progress" in it } }
+        compose.onNodeWithContentDescription("Status: 2 chosen").performClick()
+        compose.onAllNodes(hasText("In progress")).onLast().performClick()            // untick: one status reads as its word
+        compose.onNodeWithText("Done · 1 chosen").performClick()
+        waitFor("Today · Assigned")
+        compose.waitUntil(5_000) { server.queries.any { "stage=assigned&" in "$it&" } }
         compose.onNodeWithContentDescription("Experts: any").performClick()
         compose.onNodeWithText("Ravi Expert").performClick()
         compose.onNodeWithText("Meera Expert").performClick()

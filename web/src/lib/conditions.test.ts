@@ -31,7 +31,15 @@ describe("condition builder emits JsonLogic", () => {
     expect(evaluate(toRule({ join: "and", rows: [{ field: "inspection.missing", op: "empty", value: "" }] }), data)).toBe(true);
   });
   it("an unfinished row is ignored and no rows means always", () => {
-    expect(toRule({ join: "and", rows: [{ field: "", op: "==", value: "x" }, { field: "a.b", op: "==", value: "" }] })).toBeNull();
+    expect(
+      toRule({
+        join: "and",
+        rows: [
+          { field: "", op: "==", value: "x" },
+          { field: "a.b", op: "==", value: "" },
+        ],
+      }),
+    ).toBeNull();
   });
 });
 
@@ -39,8 +47,21 @@ describe("round trip", () => {
   const cases: Cond[] = [
     { join: "and", rows: [] },
     { join: "and", rows: [{ field: "inspection.door", op: "==", value: "dent" }] },
-    { join: "or", rows: [{ field: "inspection.door", op: "!=", value: "ok" }, { field: "inspection.odometer", op: "<=", value: "50" }] },
-    { join: "and", rows: [{ field: "booking.city", op: "in", value: "delhi, pune" }, { field: "inspection.door", op: "filled", value: "" }, { field: "ops.x", op: "empty", value: "" }] },
+    {
+      join: "or",
+      rows: [
+        { field: "inspection.door", op: "!=", value: "ok" },
+        { field: "inspection.odometer", op: "<=", value: "50" },
+      ],
+    },
+    {
+      join: "and",
+      rows: [
+        { field: "booking.city", op: "in", value: "delhi, pune" },
+        { field: "inspection.door", op: "filled", value: "" },
+        { field: "ops.x", op: "empty", value: "" },
+      ],
+    },
   ];
   for (const c of cases) it(JSON.stringify(c), () => expect(fromRule(toRule(c))).toEqual(c));
   it("keeps what it cannot draw as raw JSON (null)", () => {

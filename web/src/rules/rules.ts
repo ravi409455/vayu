@@ -63,8 +63,7 @@ export function isEmpty(v: unknown): boolean {
   return false;
 }
 
-const normalise = (answers: Values = {}): Values =>
-  Object.fromEntries(Object.entries(answers).map(([k, v]) => [k, isEmpty(v) ? null : v]));
+const normalise = (answers: Values = {}): Values => Object.fromEntries(Object.entries(answers).map(([k, v]) => [k, isEmpty(v) ? null : v]));
 
 function isDefect(f: FieldSpec, value: unknown): boolean {
   if (!CHOICE.has(f.type) || value === null) return false;
@@ -73,12 +72,7 @@ function isDefect(f: FieldSpec, value: unknown): boolean {
   return chosen.some((v) => defects.has(v as string));
 }
 
-export function evaluateForm(
-  spec: FormSpec,
-  answers: Record<string, Values | undefined>,
-  today: string,
-  overrides: Values = {},
-): Result {
+export function evaluateForm(spec: FormSpec, answers: Record<string, Values | undefined>, today: string, overrides: Values = {}): Result {
   const own = spec.form;
   const base: Record<string, Values> = Object.fromEntries(FORMS.map((f) => [f, normalise(answers[f])]));
   const values: Values = Object.fromEntries(spec.fields.map((f) => [f.key, base[own]?.[f.key] ?? null]));
@@ -110,10 +104,7 @@ export function evaluateForm(
     const data = buildData(visible);
     const memo = new Map<string, boolean>();
     const next = Object.fromEntries(
-      spec.fields.map((f) => [
-        f.key,
-        (f.visible ?? true) && containerVisible(f.section, data, memo) && truthy(f.show_if, data),
-      ]),
+      spec.fields.map((f) => [f.key, (f.visible ?? true) && containerVisible(f.section, data, memo) && truthy(f.show_if, data)]),
     );
     if (spec.fields.every((f) => next[f.key] === visible[f.key])) {
       settled = true;

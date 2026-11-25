@@ -9,7 +9,7 @@ describe("API key field scope", () => {
   it("every field only when * is typed on its own", () => {
     expect(parseFields("*")).toEqual(["*"]);
     expect(parseFields(" * ")).toEqual(["*"]);
-    expect(parseFields("city, *")).toEqual(["city"]);       // a stray * inside a list is not a wildcard
+    expect(parseFields("city, *")).toEqual(["city"]); // a stray * inside a list is not a wildcard
   });
   it("a list of keys", () => {
     expect(parseFields("city, address ,, odometer")).toEqual(["city", "address", "odometer"]);

@@ -1,5 +1,6 @@
 """API keys: a long random secret shown once, stored only as a SHA-256 hash."""
 import hashlib
+import logging
 import secrets
 from typing import Any
 
@@ -9,6 +10,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
 
 from apps.accounts.models import Role, User
+from apps.core import log
 
 from .models import ApiKey
 
@@ -53,8 +55,14 @@ class ApiKeyAuthentication(BaseAuthentication):
         parts = key.split("_")
         row = ApiKey.objects.filter(prefix=parts[1]).first() if len(parts) >= 3 else None
         if row is None or not secrets.compare_digest(row.key_hash, _hash(key)):
+            # the prefix of a key we know, never what was sent
+            log.event("api_key.refused", level=logging.WARNING, reason="invalid",
+                      key_prefix=row.prefix if row else "unknown")
             raise AuthenticationFailed("Invalid API key.")
         if row.revoked_at is not None:
+            log.event("api_key.refused", level=logging.WARNING, reason="revoked",
+                      key_prefix=row.prefix)
             raise AuthenticationFailed("This API key was revoked.")
         ApiKey.objects.filter(pk=row.pk).update(last_used_at=timezone.now())
+        log.event("api_key.used", key_prefix=row.prefix, method=request.method)
         return service_user(), row

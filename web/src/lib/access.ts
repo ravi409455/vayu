@@ -51,9 +51,17 @@ export function defaultLevel(role: string, stage: string, kind: string, ftype: s
 
 /** The level a person gets at a stage, and which layer decided it (the most specific one wins). */
 export function effectiveLevel(
-  role: string, stage: string, kind: string, ftype: string, layers: { field?: Access; section?: Access; page?: Access },
+  role: string,
+  stage: string,
+  kind: string,
+  ftype: string,
+  layers: { field?: Access; section?: Access; page?: Access },
 ): { level: Level; source: LevelSource } {
-  const order: [LevelSource, Access | undefined][] = [["field", layers.field], ["section", layers.section], ["page", layers.page]];
+  const order: [LevelSource, Access | undefined][] = [
+    ["field", layers.field],
+    ["section", layers.section],
+    ["page", layers.page],
+  ];
   for (const [source, a] of order) {
     const l = a?.[role]?.[stage];
     if (l && !(role === "expert" && SYSTEM_FILLED.includes(ftype))) return { level: l, source };
@@ -63,9 +71,29 @@ export function effectiveLevel(
 
 /** Ready-made access patterns, so nobody has to fill twelve cells by hand. */
 export const PRESETS: { id: string; label: string; tip: string; apply: () => Access | null }[] = [
-  { id: "default", label: "Standard", tip: "Experts fill it while working and can read it afterwards. Ops can always edit.", apply: () => ({}) },
-  { id: "ops_only", label: "Ops only", tip: "Experts never see it. Ops and Admin can edit it.", apply: () => setRole({}, "expert", "hidden") },
-  { id: "expert_readonly", label: "Read-only for experts", tip: "Experts can see it but not change it.", apply: () => setRole({}, "expert", "view") },
-  { id: "locked_after_submit", label: "Lock after submit", tip: "Experts edit while working; after they submit nobody but Ops can change it.",
-    apply: () => setCell(setCell(setCell({}, "expert", "submitted", "view"), "expert", "completed", "view"), "expert", "in_progress", "edit") },
+  {
+    id: "default",
+    label: "Standard",
+    tip: "Experts fill it while working and can read it afterwards. Ops can always edit.",
+    apply: () => ({}),
+  },
+  {
+    id: "ops_only",
+    label: "Ops only",
+    tip: "Experts never see it. Ops and Admin can edit it.",
+    apply: () => setRole({}, "expert", "hidden"),
+  },
+  {
+    id: "expert_readonly",
+    label: "Read-only for experts",
+    tip: "Experts can see it but not change it.",
+    apply: () => setRole({}, "expert", "view"),
+  },
+  {
+    id: "locked_after_submit",
+    label: "Lock after submit",
+    tip: "Experts edit while working; after they submit nobody but Ops can change it.",
+    apply: () =>
+      setCell(setCell(setCell({}, "expert", "submitted", "view"), "expert", "completed", "view"), "expert", "in_progress", "edit"),
+  },
 ];

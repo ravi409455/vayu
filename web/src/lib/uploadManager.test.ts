@@ -7,17 +7,28 @@ const db = new Map<string, PendingUpload>();
 let putFails = false;
 let putHook: (() => void) | null = null;
 vi.mock("./store", () => ({
-  putJob: async (j: PendingUpload) => { if (putFails) throw new Error("QuotaExceededError"); db.set(j.clientUuid, j); putHook?.(); },
-  deleteJob: async (id: string) => { db.delete(id); },
+  putJob: async (j: PendingUpload) => {
+    if (putFails) throw new Error("QuotaExceededError");
+    db.set(j.clientUuid, j);
+    putHook?.();
+  },
+  deleteJob: async (id: string) => {
+    db.delete(id);
+  },
   allJobs: async () => [...db.values()],
 }));
 type Plan = () => Promise<{ id: string; status: string }>;
 const plans: Plan[] = [];
-const transfer = vi.fn(async (s: { clientUuid: string; assetId?: string }) => (plans.shift() ?? (async () => ({ id: s.assetId || "srv-" + s.clientUuid, status: "verified" })))());
+const transfer = vi.fn(async (s: { clientUuid: string; assetId?: string }) =>
+  (plans.shift() ?? (async () => ({ id: s.assetId || "srv-" + s.clientUuid, status: "verified" })))(),
+);
 let initiateFails: Error | null = null;
 vi.mock("./uploader", () => ({
   transfer: (s: never) => transfer(s),
-  initiate: async (s: { clientUuid: string }) => { if (initiateFails) throw initiateFails; return { id: "srv-" + s.clientUuid, status: "pending", part_size: 1 }; },
+  initiate: async (s: { clientUuid: string }) => {
+    if (initiateFails) throw initiateFails;
+    return { id: "srv-" + s.clientUuid, status: "pending", part_size: 1 };
+  },
   hashBlob: async () => "0".repeat(64),
   shrinkImage: async (b: Blob) => b,
   abortTransfers: vi.fn(),
@@ -25,17 +36,37 @@ vi.mock("./uploader", () => ({
 const reported = vi.fn();
 vi.mock("./monitor", () => ({ report: (...a: unknown[]) => reported(...a) }));
 const api = vi.fn(async (_path: string, _o?: unknown): Promise<unknown> => ({ status: "verified" }));
-vi.mock("../api/client", async (orig) => ({ ...(await orig<typeof import("../api/client")>()), api: (p: string, o?: unknown) => api(p, o) }));
+vi.mock("../api/client", async (orig) => ({
+  ...(await orig<typeof import("../api/client")>()),
+  api: (p: string, o?: unknown) => api(p, o),
+}));
 
 import { addFile, realId, resumeUploads, retryFailed, reset, RETRY_MS, uploadFor, useUploads } from "./uploadManager";
 import { renderHook } from "@testing-library/react";
 
 const add = (extra: Record<string, unknown> = {}) =>
-  addFile({ bookingId: "b1", fieldKey: "door", kind: "file", file: new Blob(["x"], { type: "image/jpeg" }), name: "a.jpg", source: "camera", ...extra });
+  addFile({
+    bookingId: "b1",
+    fieldKey: "door",
+    kind: "file",
+    file: new Blob(["x"], { type: "image/jpeg" }),
+    name: "a.jpg",
+    source: "camera",
+    ...extra,
+  });
 const flush = () => vi.advanceTimersByTimeAsync(0);
 const states = () => renderHook(() => useUploads("b1")).result.current;
 
-beforeEach(() => { vi.useFakeTimers(); reset(); db.clear(); plans.length = 0; transfer.mockClear(); api.mockClear(); putFails = false; initiateFails = null; });
+beforeEach(() => {
+  vi.useFakeTimers();
+  reset();
+  db.clear();
+  plans.length = 0;
+  transfer.mockClear();
+  api.mockClear();
+  putFails = false;
+  initiateFails = null;
+});
 afterEach(() => vi.useRealTimers());
 
 describe("upload queue", () => {
@@ -53,18 +84,22 @@ describe("upload queue", () => {
     for (let i = 0; i < 4; i++) await add();
     await flush();
     expect(transfer).toHaveBeenCalledTimes(2);
-    gates[0]!(); await flush();
+    gates[0]!();
+    await flush();
     expect(transfer).toHaveBeenCalledTimes(3);
   });
 
   it("a failed file is tried again by itself, waiting longer each time (C-03)", async () => {
-    plans.push(() => Promise.reject(new Error("network")), () => Promise.reject(new Error("network")));
+    plans.push(
+      () => Promise.reject(new Error("network")),
+      () => Promise.reject(new Error("network")),
+    );
     const id = await add();
     await flush();
     expect(uploadFor(id)?.status).toBe("failed");
     await vi.advanceTimersByTimeAsync(RETRY_MS);
     expect(transfer).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(RETRY_MS);            // second wait is twice as long
+    await vi.advanceTimersByTimeAsync(RETRY_MS); // second wait is twice as long
     expect(transfer).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(RETRY_MS);
     expect(transfer).toHaveBeenCalledTimes(3);
@@ -77,8 +112,8 @@ describe("upload queue", () => {
     await vi.advanceTimersByTimeAsync(RETRY_MAX());
     expect(transfer).toHaveBeenCalledTimes(1);
     expect(uploadFor(id)).toMatchObject({ status: "failed", permanent: true, error: "'door' takes at most 1." });
-    expect(reported).toHaveBeenCalledWith(new Error("Upload failed: TOO_MANY"), { where: "upload", kind: "file", code: "TOO_MANY" });   // F-235, code only
-    retryFailed();                                           // the person asked: try anyway
+    expect(reported).toHaveBeenCalledWith(new Error("Upload failed: TOO_MANY"), { where: "upload", kind: "file", code: "TOO_MANY" }); // F-235, code only
+    retryFailed(); // the person asked: try anyway
     await flush();
     expect(transfer).toHaveBeenCalledTimes(2);
   });
@@ -146,19 +181,31 @@ describe("no connection when picked (F-143)", () => {
 
 describe("sign-out (F-072) and resume (H-15)", () => {
   it("sign-out stops the queue and forgets every file", async () => {
-    plans.push(() => new Promise(() => {}), () => new Promise(() => {}));
+    plans.push(
+      () => new Promise(() => {}),
+      () => new Promise(() => {}),
+    );
     for (let i = 0; i < 3; i++) await add();
     reset();
     await flush();
     expect(states()).toEqual([]);
-    expect(transfer).toHaveBeenCalledTimes(2);              // the third never starts under the next person
+    expect(transfer).toHaveBeenCalledTimes(2); // the third never starts under the next person
   });
 
   it("a file still being prepared when the person signs out is not kept", async () => {
     let release!: () => void;
     initiateFails = null;
-    const gate = new Promise<void>((r) => { release = r; });
-    const pending = addFile({ bookingId: "b1", fieldKey: "door", kind: "file", file: { size: 1, type: "image/jpeg", slice: () => ({ arrayBuffer: () => gate.then(() => new ArrayBuffer(1)) }) } as unknown as Blob, name: "a", source: "camera" });
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const pending = addFile({
+      bookingId: "b1",
+      fieldKey: "door",
+      kind: "file",
+      file: { size: 1, type: "image/jpeg", slice: () => ({ arrayBuffer: () => gate.then(() => new ArrayBuffer(1)) }) } as unknown as Blob,
+      name: "a",
+      source: "camera",
+    });
     reset();
     release();
     await expect(pending).rejects.toThrow("Signed out.");
@@ -167,7 +214,7 @@ describe("sign-out (F-072) and resume (H-15)", () => {
   });
 
   it("a sign-out while the file is being stored leaves nothing behind", async () => {
-    putHook = () => reset();                                // the person signs out during the save
+    putHook = () => reset(); // the person signs out during the save
     await expect(add()).rejects.toThrow("Signed out.");
     putHook = null;
     expect(db.size).toBe(0);
@@ -175,7 +222,18 @@ describe("sign-out (F-072) and resume (H-15)", () => {
   });
 
   it("resumes what the browser kept, once", async () => {
-    db.set("u1", { clientUuid: "u1", bookingId: "b1", fieldKey: "door", kind: "file", contentType: "image/jpeg", name: "a", sha256: "", assetId: "m1", source: "camera", blob: new Blob(["x"]) });
+    db.set("u1", {
+      clientUuid: "u1",
+      bookingId: "b1",
+      fieldKey: "door",
+      kind: "file",
+      contentType: "image/jpeg",
+      name: "a",
+      sha256: "",
+      assetId: "m1",
+      source: "camera",
+      blob: new Blob(["x"]),
+    });
     expect(await resumeUploads("b1")).toBe(1);
     expect(await resumeUploads("b1")).toBe(0);
     await flush();
@@ -183,4 +241,6 @@ describe("sign-out (F-072) and resume (H-15)", () => {
   });
 });
 
-function RETRY_MAX() { return 120_000; }
+function RETRY_MAX() {
+  return 120_000;
+}

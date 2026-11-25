@@ -5,7 +5,17 @@ import { useAuth } from "../../../auth";
 import { fmtStamp } from "../../../lib/format";
 import { useToast } from "../../../ui/kit";
 
-export function ConflictBanner({ booking, insps, experts, onResolved }: { booking: Booking; insps: Inspection[]; experts: User[]; onResolved: () => void }) {
+export function ConflictBanner({
+  booking,
+  insps,
+  experts,
+  onResolved,
+}: {
+  booking: Booking;
+  insps: Inspection[];
+  experts: User[];
+  onResolved: () => void;
+}) {
   const { can } = useAuth();
   const { fail, say } = useToast();
   const [keep, setKeep] = useState("");

@@ -29,7 +29,7 @@ from apps.forms.models import (
 )
 from apps.media.services import check_completion
 
-PASSWORD = "Vayu-local-1"
+PASSWORD = "Vayu-local-1"  # noqa: S105 - local demo password
 ALLOWED = ("vayu.settings.local", "vayu.settings.test", "vayu.settings.e2e")
 USERS = [("admin", Role.ADMIN, "Asha Admin", False), ("ops", Role.OPS, "Priya Ops", False),
          ("expert", Role.EXPERT, "Ravi Expert", False),
@@ -49,7 +49,7 @@ LISTS = {"city": [("delhi", "Delhi"), ("pune", "Pune"), ("mumbai", "Mumbai")],
 
 def _publish(form: Form) -> FormVersion:
     draft = form.versions.filter(status="draft").first()
-    assert draft is not None
+    assert draft is not None  # noqa: S101 - invariant, narrows the type
     return form_services.publish_version(User.objects.get(username="admin"), draft.id,
                                          draft.row_version)
 

@@ -18,18 +18,39 @@ export function AppDownload() {
       <PageHeader title="Android app" subtitle="Install Vayu on an Android phone. The app updates itself after that." />
       {q.isError && <LoadError error={q.error} what="the app download" onRetry={q.refetch} />}
       {q.isLoading && <p className="muted">Loading…</p>}
-      {r && !r.version_code && <div className="card" role="status"><strong>No app build has been published yet.</strong><p className="muted">An Admin publishes one on the server; it shows here at once.</p></div>}
+      {r && !r.version_code && (
+        <div className="card" role="status">
+          <strong>No app build has been published yet.</strong>
+          <p className="muted">An Admin publishes one on the server; it shows here at once.</p>
+        </div>
+      )}
       {r?.version_code && (
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Version {r.version_name}</h2>
-          {r.notes && r.notes.length > 0 && <ul>{r.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
-          <a className="btn primary" href="/api/v1/app/download" download><Download size={16} aria-hidden /> Download the app{r.size ? ` (${mb(r.size)})` : ""}</a>
+          {r.notes && r.notes.length > 0 && (
+            <ul>
+              {r.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
+          <a className="btn primary" href="/api/v1/app/download" download>
+            <Download size={16} aria-hidden /> Download the app{r.size ? ` (${mb(r.size)})` : ""}
+          </a>
           <ol className="small" style={{ marginTop: 14 }}>
             <li>Open the downloaded file on the phone. Android may ask to allow installs from your browser: allow it for this install.</li>
             <li>Open Vayu and sign in with your own username.</li>
           </ol>
-          {r.sha256 && <p className="muted small">SHA-256 checksum, to check the file is ours: <code className="mono" style={{ wordBreak: "break-all" }}>{r.sha256}</code></p>}
-        </div>)}
+          {r.sha256 && (
+            <p className="muted small">
+              SHA-256 checksum, to check the file is ours:{" "}
+              <code className="mono" style={{ wordBreak: "break-all" }}>
+                {r.sha256}
+              </code>
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

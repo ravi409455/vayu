@@ -1,3 +1,4 @@
+"""The notify app: the bell and pushes subscribe to domain events on start."""
 from django.apps import AppConfig
 
 

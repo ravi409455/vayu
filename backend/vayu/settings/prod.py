@@ -1,3 +1,4 @@
+"""Production and staging settings (TLS at Caddy, required secrets)."""
 from django.core.exceptions import ImproperlyConfigured
 
 from .base import *  # noqa: F401,F403

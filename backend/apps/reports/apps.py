@@ -1,3 +1,4 @@
+"""The reports app: reports react to domain events on start (render, mark out of date)."""
 from django.apps import AppConfig
 
 

@@ -6,7 +6,9 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("requests can be cancelled (F-167)", () => {
   it("api() and fetchAll() hand the query's signal to fetch", async () => {
-    const f = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }));
+    const f = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }));
     const c = new AbortController();
     await api("bookings", { signal: c.signal });
     await fetchAll("users", undefined, c.signal);
@@ -25,7 +27,14 @@ describe("error handling", () => {
     expect(explain(new TypeError("network"))).toMatch(/connection/);
   });
   it("reads who changed a booking from a 409", () => {
-    const e = new ApiError(409, { code: "STALE_BOOKING", detail: "x", changed_by: "priya", changed_at: "2026-11-23T10:00:00Z", changed_keys: ["city"], row_version: 4 });
+    const e = new ApiError(409, {
+      code: "STALE_BOOKING",
+      detail: "x",
+      changed_by: "priya",
+      changed_at: "2026-11-23T10:00:00Z",
+      changed_keys: ["city"],
+      row_version: 4,
+    });
     expect(staleInfo(e)).toEqual({ by: "priya", at: "2026-11-23T10:00:00Z", keys: ["city"], rowVersion: 4 });
     expect(staleInfo(new ApiError(409, { code: "DRAFT_EXISTS" }))).toBeNull();
     expect(staleInfo(new Error("x"))).toBeNull();
@@ -46,11 +55,13 @@ describe("error handling", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 401, headers: { "Content-Type": "application/json" } }));
     onUnauthorized.mockClear();
     await expect(api("auth/login", { body: {} })).rejects.toMatchObject({ status: 401 });
-    expect(onUnauthorized).toHaveBeenCalledOnce();     // sign-in failures are 401 too: wrong password shows its own message
+    expect(onUnauthorized).toHaveBeenCalledOnce(); // sign-in failures are 401 too: wrong password shows its own message
   });
   it("sends the CSRF token on writes only", async () => {
     document.cookie = "csrftoken=abc123";
-    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }));
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }));
     await api("x");
     await api("x", { body: { a: 1 } });
     const [get, post] = spy.mock.calls.map((c) => (c[1]?.headers ?? {}) as Record<string, string>);

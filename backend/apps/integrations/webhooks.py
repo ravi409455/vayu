@@ -19,6 +19,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.connection import HTTPConnection, HTTPSConnection
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
+from apps.core import log
 from apps.core import tasks as core_tasks
 
 from . import values
@@ -308,8 +309,16 @@ def _finish(d: Delivery, status: str, error: str = "", http: int | None = None) 
     d.status, d.error, d.response_status = status, error, http
     d.next_retry_at = None
     d.save()
-    logger.info("webhook %s", status, extra={"booking": d.booking_uuid, "delivery": str(d.id),
-                                             "event": d.event, "error": error, "http": http})
+    _logged(d, status, error, http)
+
+
+def _logged(d: Delivery, status: str, error: str, http: int | None) -> None:
+    """One webhook.delivery line per attempt: the result, never the URL or the body."""
+    took = timezone.now() - d.last_attempt_at if d.last_attempt_at else timedelta(0)
+    log.event("webhook.delivery", level=logging.INFO if status == "success" else logging.WARNING,
+              booking=d.booking_uuid, delivery=str(d.id), integration=str(d.integration_id),
+              webhook_event=d.event, status=status, error=error, http=http, attempt=d.attempts,
+              duration_ms=round(took.total_seconds() * 1000))
 
 
 def attempt(d: Delivery) -> Delivery:
@@ -366,4 +375,5 @@ def _retry(d: Delivery, error: str, http: int | None) -> Delivery:
     d.status, d.error, d.response_status = "retrying", error, http
     d.next_retry_at = timezone.now() + timedelta(seconds=schedule[d.attempts - 1])
     d.save()
+    _logged(d, "retrying", error, http)
     return d
