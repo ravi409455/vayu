@@ -250,14 +250,24 @@ class Problems(APIView):
 
     def get(self, request):
         killed = timezone.now() - tasks.STUCK_AFTER       # a render that never finished
-        # a failed render (with or without an earlier PDF) or one that never finished; a report
-        # only out of date is no problem (Ops regenerate it when they are done)
-        qs = Report.objects.exclude(error="") | Report.objects.filter(
-            render_started_at__lt=killed)
+        # a failed render (with or without an earlier PDF), one that never finished, and a
+        # completed booking whose PDF is out of date ("edited but not regenerated", REQUIREMENTS
+        # §9: Needs you only, no bell or push)
+        qs = (Report.objects.exclude(error="") | Report.objects.filter(
+            render_started_at__lt=killed) | Report.objects.filter(
+            stale=True, status="ready", booking__stage="completed"))
         if scope_for(request.user, "reports.view", request) == "own":
             qs = qs.filter(booking__in=Booking.objects.filter(own_filter(request.user)))
+
+        def problem(r) -> str:
+            if r.error:
+                return "failed"
+            return "stuck" if r.render_started_at and r.render_started_at < killed \
+                else "out_of_date"
+
         return Response([{"booking": str(r.booking_id), "booking_id": r.booking.booking_id,
-                          "status": r.status, "error": r.error}
+                          "status": r.status, "error": r.error, "problem": problem(r),
+                          "out_of_date_since": r.stale_since if r.stale else None}
                          for r in qs.select_related("booking").distinct()])
 
 

@@ -213,8 +213,8 @@ def test_a_later_render_that_fails_keeps_the_report_genuine(done, monkeypatch):
     verify = APIClient().get(f"/api/v1/verify/{r.token}")
     assert verify.status_code == 200 and verify.json()["valid"] is True
     problems = env.ops.get("/api/v1/problems/reports").json()
-    assert problems == [{"booking": b["id"], "booking_id": "SA37926", "status": "ready",
-                         "error": "render_failed"}]
+    assert [{k: p[k] for k in ("booking", "status", "error", "problem")} for p in problems] == [
+        {"booking": b["id"], "status": "ready", "error": "render_failed", "problem": "failed"}]
     monkeypatch.undo()
     assert tasks.render_report(b["id"]) == "ready"
     assert Report.objects.get(pk=r.pk).error == "" and not env.ops.get(
@@ -383,3 +383,36 @@ def test_a_purge_job_removes_the_jpeg_copy_too(done, settings):
     app_settings.put("media", {"photo_days": 30, "video_days": 0})
     assert purge_expired() >= 1
     assert not storage.exists("copies/x.jpg")
+
+
+def test_an_out_of_date_report_is_in_needs_you_with_since_when_and_tells_nobody(done):
+    """REQUIREMENTS §9 "edited but not regenerated": the problem list only, no bell or push."""
+    from apps.notify.models import Notification
+
+    env, b, r = done
+    assert env.ops.get("/api/v1/problems/reports").json() == []
+    before = Notification.objects.count()
+    insp = Inspection.objects.get(booking_id=b["id"])
+    env.ops.patch(f"/api/v1/inspections/{insp.id}", {
+        "answers": {"inspection": {"odometer": 99}}, "row_version": 0}, format="json")
+    first = Report.objects.get(pk=r.pk).stale_since
+    env.ops.patch(f"/api/v1/inspections/{insp.id}", {
+        "answers": {"inspection": {"odometer": 98}}, "row_version": 1}, format="json")
+    assert Report.objects.get(pk=r.pk).stale_since == first            # since the first change
+    (row,) = env.ops.get("/api/v1/problems/reports").json()
+    assert row["problem"] == "out_of_date" and row["booking_id"] == "SA37926"
+    assert row["out_of_date_since"] and row["status"] == "ready"
+    assert not Notification.objects.filter(pk__gt=0, kind="problem").exclude(
+        title__startswith="SA37926 completed").count() > before          # no new problem notice
+    assert env.ops.post(f"/api/v1/bookings/{b['id']}/report/regenerate").status_code == 202
+    assert env.ops.get("/api/v1/problems/reports").json() == []
+    assert Report.objects.get(pk=r.pk).stale_since is None
+
+
+def test_problems_name_failed_and_stuck_renders(done):
+    env, b, r = done
+    Report.objects.filter(pk=r.pk).update(error="render_failed")
+    assert env.ops.get("/api/v1/problems/reports").json()[0]["problem"] == "failed"
+    Report.objects.filter(pk=r.pk).update(error="", render_started_at=timezone.now()
+                                          - tasks.STUCK_AFTER - timedelta(seconds=5))
+    assert env.ops.get("/api/v1/problems/reports").json()[0]["problem"] == "stuck"

@@ -61,6 +61,13 @@ def new_token() -> str:
     return secrets.token_urlsafe(24)      # 192 bits: unguessable, stable across revisions
 
 
+def mark_out_of_date(reports) -> None:
+    """Something these reports show changed: out of date (Ops regenerate), since the first
+    change that made them so."""
+    reports.filter(stale_since__isnull=True).update(stale_since=timezone.now())
+    reports.update(stale=True)
+
+
 class Report(models.Model):
     """The latest PDF of a booking. Older revisions are not kept."""
 
@@ -75,6 +82,7 @@ class Report(models.Model):
     template_version = models.ForeignKey(PdfTemplateVersion, null=True, blank=True,
                                          on_delete=models.SET_NULL, related_name="+")
     stale = models.BooleanField(default=False)    # data changed since this PDF was made
+    stale_since = models.DateTimeField(null=True, blank=True)   # out of date from then
     error = models.TextField(blank=True)
     generated_at = models.DateTimeField(null=True, blank=True)
     # the booking's first PDF: the photo / video ZIP links in it last 30 days from then (R-09)
