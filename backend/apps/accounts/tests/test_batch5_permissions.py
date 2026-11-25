@@ -40,7 +40,10 @@ def test_the_migration_removes_existing_grants_in_order_and_can_turn_sign_out_ba
     left = set(RolePermission.objects.filter(role="ops").values_list("permission", flat=True))
     assert left & {"api_keys.manage", "forms.edit", "users.sign_out_devices",
                    "submissions.delete"} == set() and "bookings.view" in left
-    m.sign_out_on(django_apps, None)
+    from django.db import connection
+
+    with connection.schema_editor() as editor:
+        m.sign_out_on(django_apps, editor)
     assert RolePermission.objects.filter(role="ops", permission="users.sign_out_devices").exists()
 
 
