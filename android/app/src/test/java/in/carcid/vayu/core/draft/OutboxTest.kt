@@ -105,6 +105,27 @@ class OutboxTest {
         assertEquals("false", submit["unverified_time"]!!.jsonPrimitive.content)
     }
 
+    /** Review blocker: work already on the server (a reinstalled app resends it with a new request id) is done, not stuck. */
+    @Test fun aSubmitTheServerAlreadyHasCountsAsSent() = runBlocking {
+        ready()
+        server.on("POST bookings/$BOOKING/submit", """{"code":"ALREADY_SUBMITTED","detail":"Already submitted; Ops can edit it."}""", 409)
+        outbox.run()
+        val d = drafts.get(BOOKING)!!
+        assertTrue(d.submitSent)
+        assertEquals(null, d.problemCode); assertEquals(null, d.problem)
+        assertFalse("nothing left to send, so sign-out isn't blocked", d.unsent)
+    }
+
+    /** The same after a start the server refuses because the lead is past starting (the submit then goes alone). */
+    @Test fun aRepeatedStartAndSubmitOnWorkAlreadySentFinish() = runBlocking {
+        ready()
+        server.on("POST bookings/$BOOKING/start", """{"code":"INVALID_STAGE","detail":"A submitted lead cannot be started."}""", 409)
+        server.on("POST bookings/$BOOKING/submit", """{"code":"ALREADY_SUBMITTED","detail":"Already submitted; Ops can edit it."}""", 409)
+        outbox.run()
+        val d = drafts.get(BOOKING)!!
+        assertTrue(d.submitSent); assertEquals(null, d.problem); assertFalse(d.unsent)
+    }
+
     @Test fun aJobClosedOnTheServerSaysSoAndStopsTrying() = runBlocking {
         ready()
         server.on("POST media/initiate", """{"code":"NOT_FOUND","detail":"Booking not found."}""", 404)
