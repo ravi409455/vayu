@@ -118,6 +118,10 @@ prototype of every screen below is approved.**
   per screen, other actions in the ⋮ menu. A booking opens on its customer and details; Answers,
   Photos, Ratings and payment, Report and History open as rows (no tabs). Bookings is a list with
   Today / Upcoming / All and one Filter button (board view parked).
+- Ops booking screen, changed 2026-11-25 (owner): no Payment row of its own (payment is ordinary
+  wrap-up answers, read under Inspection Data); the report card has Open, Share and Regenerate in one row and no Check link (the
+  check link is printed in the PDF); the page list on the answers screen lists every page of
+  Check-in, Inspection and Wrap-up, numbered across all three, under the three tabs.
 - Expert screens, same calm style, tuned for filling big forms fast: one-tap answer buttons the
   full width of the screen; choosing a defect opens its photo and note right under the question;
   after each answer the page scrolls to the next unanswered one; per-section counts ("3 of 6");

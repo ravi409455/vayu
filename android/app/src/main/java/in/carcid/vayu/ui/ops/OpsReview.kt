@@ -179,14 +179,3 @@ private fun Picks(options: List<String>, chosen: String?, suggested: String?, co
 @Composable
 private fun BackLink(text: String, onClick: () -> Unit) = Text(text, color = Vayu.colors.info, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
     overflow = TextOverflow.Ellipsis, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button, onClick = onClick).padding(vertical = 6.dp, horizontal = 2.dp))
-
-/** Payment as Ops read it: "₹1,499 · UPI" / "Taken at wrap-up" (mode names from the wrap-up form). */
-fun paymentText(data: Loaded3): Pair<String, String> {
-    val end = data.answers["end"].orEmpty()
-    val mode = end["payment_mode"]?.let { k -> data.trees["end"]?.fields?.firstOrNull { it.key == "payment_mode" }?.options?.firstOrNull { it.key == k }?.label ?: k.toString() }
-    return when (end["taking_payment"]) {
-        true -> listOfNotNull((end["payment_amount"] as? Number)?.let { "₹" + shown(it.toDouble()) }, mode).joinToString(" · ").ifBlank { "Taken" } to "Taken at wrap-up"
-        false -> "Pay later" to "No payment taken"
-        else -> "Not answered yet" to ""
-    }
-}

@@ -333,6 +333,16 @@ class OpsFlowTest {
         assertTrue(server.bodiesOf("POST bookings/$B14/resolve-conflict").single().contains("aaaaaaaa-0000-0000-0000-000000000001"))
     }
 
+    /** Payment is ordinary wrap-up answers (REQUIREMENTS 5.2): the booking screen has no payment section of its own. */
+    @Test fun theBookingScreenHasNoPaymentSection() {
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("Inspection Data"); waitFor("2 Key Checks")
+        compose.onNodeWithText("PAYMENT").assertDoesNotExist()
+        compose.onNodeWithText("Not answered yet").assertDoesNotExist()
+    }
+
     @Test fun anAnswerIsChangedWithItsRowVersion() {
         server.on("PATCH inspections/aaaaaaaa-0000-0000-0000-000000000001", "{}")
         show()

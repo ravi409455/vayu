@@ -237,9 +237,6 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
                 NavRow("Overall: ${word.ifBlank { "—" }}", listOfNotNull("$nChecks Key Check${if (nChecks == 1) "" else "s"}".takeIf { nChecks > 0 },
                     "$nRatings rating${if (nRatings == 1) "" else "s"}".takeIf { nRatings > 0 },
                     "$changed changed by Ops".takeIf { changed > 0 }).joinToString(" · ")) { onPart(Part.REVIEW) }
-                Section("Payment")
-                val (title, sub) = paymentText(data)
-                NavRow(title, sub) { onAnswers("end") }
             }
             Section("Details")
             Detail("Car", env.labels.car(b.a("car_make_model")))
