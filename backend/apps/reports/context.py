@@ -8,13 +8,14 @@ from django.utils import timezone
 
 from apps.bookings.models import Booking, Inspection
 from apps.bookings.services import booking_form_version
+from apps.forms.fieldtypes import NOT_VALUES
 from apps.forms.models import PARTS, Field, MasterListItem, Page, Section
 from apps.forms.rules import evaluate_form, spec_from_version, truthy
 
 from . import placeholders
 from .definition import field_ref
 
-MEDIA = {"photo", "video", "file", "signature", "image"}
+MEDIA = NOT_VALUES                          # the field-type registry
 # the option keys that mean "Not able to check": the demo option sets' and the real (Clappia)
 # forms', where the answer "Not Able to Check" becomes not_able_to_check (C-02)
 NOT_CHECKED = {"not_checked", "not_able_to_check"}

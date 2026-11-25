@@ -7,7 +7,16 @@ from typing import Any
 
 import jsonlogic_rs
 
-from .fieldtypes import AnswerError, ConfigError, clean_answer, is_empty, validate_config
+from .fieldtypes import (
+    CHOICES,
+    NOT_VALUES,
+    AnswerError,
+    ConfigError,
+    clean_answer,
+    is_empty,
+    validate_config,
+)
+from .fieldtypes import SYSTEM_FILLED as TYPE_SYSTEM_FILLED
 
 FORMS = ("booking", "start", "end", "inspection")
 # Deliberately small. Everything form logic needs (conditions, "is empty", defect counts) fits in
@@ -17,10 +26,10 @@ ALLOWED_OPS = {"var", "==", "!=", "===", "!==", "<", "<=", ">", ">=", "!", "!!",
                "in", "some", "all", "none", "filter", "reduce", "+"}
 BANNED_OPS = {"missing", "missing_some", "-", "*", "/", "%", "min", "max", "cat", "substr", "map"}
 ITERATING_OPS = {"some", "all", "none", "filter", "reduce"}
-CHOICE_TYPES = {"single_choice", "multi_choice"}
-SYSTEM_FILLED = {"derived", "rating"}
+CHOICE_TYPES = CHOICES
+SYSTEM_FILLED = TYPE_SYSTEM_FILLED
 SPECIAL_VARS = {"_today", "_defects"}
-MEDIA = {"photo", "video", "file", "signature", "image"}   # not checks: a photo cannot show one
+MEDIA = NOT_VALUES   # not checks: a photo cannot show one (the field-type registry)
 
 
 # ------------------------------------------------------------------ evaluation

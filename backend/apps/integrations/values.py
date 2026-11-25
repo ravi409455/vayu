@@ -10,6 +10,8 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote
 
+from apps.forms.fieldtypes import NOT_VALUES
+
 # {{ref}}, or {{ref | text}} to send the value as text
 TOKEN = re.compile(r"\{\{\s*([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_\-]+)+)(\s*\|\s*text)?\s*\}\}")
 MAX_NODES, MAX_HEADERS, MAX_QUERY, MAX_DEPTH = 500, 20, 30, 8
@@ -24,7 +26,7 @@ JOB = {"job.booking_id": ("Booking ID", "text"),
        "job.expert": ("Expert", "text"), "job.created_at": ("Created at", "datetime"),
        "job.submitted_at": ("Submitted at", "datetime"), "job.revision": ("Revision", "number")}
 # a field's picker type; photos, videos, files, signatures and pictures are links, not values
-HIDDEN = {"photo", "video", "file", "signature", "image"}
+HIDDEN = NOT_VALUES
 TYPES = {"number": "number", "currency": "number", "rating": "number", "yes_no": "boolean",
          "derived": "boolean", "date": "date", "datetime": "datetime", "multi_choice": "list"}
 

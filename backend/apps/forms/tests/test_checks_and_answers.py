@@ -256,3 +256,26 @@ def test_every_error_comes_with_the_servers_words(form_v, add_field, admin):
     unknown: dict = {}
     validate_answers(version, {"inspection": {"nope": 1}}, today="2026-10-14", messages=unknown)
     assert unknown == {"nope": "Not a field of this form."}
+
+
+def test_every_field_type_is_one_registry_entry(monkeypatch):
+    """F-043 (plan-quality Q3): the stored types and the registry match, and a new type needs
+    nothing but its entry to be checked and cleaned."""
+    from types import SimpleNamespace
+
+    from apps.forms import fieldtypes
+    from apps.forms.models import FieldType
+
+    assert set(fieldtypes.TYPES) == set(FieldType.values)
+    assert fieldtypes.NOT_VALUES == {"photo", "video", "file", "signature", "image"}
+    assert fieldtypes.SYSTEM_FILLED == {"derived", "rating"}
+    monkeypatch.setitem(fieldtypes.TYPES, "barcode", fieldtypes.FieldType(
+        frozenset({"length"}), lambda f, v: v.upper()))
+    fieldtypes.validate_config("barcode", {"length": 8})
+    with pytest.raises(fieldtypes.ConfigError):
+        fieldtypes.validate_config("barcode", {"colour": 1})
+    assert fieldtypes.clean_answer(SimpleNamespace(type="barcode", config={}, key="b"),
+                                   "ab12") == "AB12"
+    with pytest.raises(fieldtypes.AnswerError) as e:
+        fieldtypes.clean_answer(SimpleNamespace(type="nope", config={}, key="n"), "x")
+    assert e.value.code == "UNKNOWN_TYPE"
