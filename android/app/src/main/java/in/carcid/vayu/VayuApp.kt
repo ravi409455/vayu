@@ -134,21 +134,7 @@ class VayuApp : Application() {
             o.dsn = BuildConfig.SENTRY_DSN
             o.release = "vayu@${BuildConfig.VERSION_NAME}+${BuildConfig.VERSION_CODE}"
             o.environment = if (BuildConfig.DEBUG) "debug" else "release"
-            o.isSendDefaultPii = false
-            o.isEnableAutoSessionTracking = false
-            o.isEnableUserInteractionBreadcrumbs = false
-            o.isEnableNetworkEventBreadcrumbs = false
-            o.isEnableActivityLifecycleTracingAutoFinish = false
-            o.tracesSampleRate = null
-            o.maxBreadcrumbs = 0
-            // only what broke and where in the code: no error text (it can name a booking or a
-            // customer), no extras, no user, no request; so nothing personal is ever stored or sent
-            o.beforeSend = io.sentry.SentryOptions.BeforeSendCallback { e, _ ->
-                e.message = null; e.request = null; e.user = null; e.breadcrumbs = null
-                e.extras?.keys?.toList()?.forEach { e.removeExtra(it) }
-                e.exceptions?.forEach { it.value = null }
-                e
-            }
+            privateCrashReports(o)
         }; android.util.Log.i("Vayu", "crash reports on: ${io.sentry.Sentry.isEnabled()}") }
             .apply { priority = Thread.MIN_PRIORITY }.start()
         // shots never confirmed before the app died, and other files no draft refers to
@@ -199,4 +185,32 @@ class OutboxWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             wm.enqueueUniqueWork("outbox", if (running) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE, work)
         }
     }
+}
+
+/**
+ * Crash reports say only what broke and where in the code: no error text (it can name a booking or a
+ * customer), no extras, user, request, breadcrumbs, screenshots, view tree, logs or traces. Every
+ * option is set here explicitly, so a new Sentry version's defaults can't turn one back on.
+ */
+fun privateCrashReports(o: io.sentry.android.core.SentryAndroidOptions) {
+    o.isSendDefaultPii = false
+    o.isEnableAutoSessionTracking = false
+    o.isEnableUserInteractionBreadcrumbs = false
+    o.isEnableNetworkEventBreadcrumbs = false
+    o.isEnableActivityLifecycleTracingAutoFinish = false
+    o.isAttachScreenshot = false
+    o.isAttachViewHierarchy = false
+    o.logs.isEnabled = false
+    o.tracesSampleRate = null
+    o.maxBreadcrumbs = 0
+    o.beforeBreadcrumb = io.sentry.SentryOptions.BeforeBreadcrumbCallback { _, _ -> null }
+    o.beforeSend = io.sentry.SentryOptions.BeforeSendCallback { e, _ -> scrubbed(e) }
+}
+
+/** The event with its text, request, user, breadcrumbs and extras removed. */
+fun scrubbed(e: io.sentry.SentryEvent): io.sentry.SentryEvent {
+    e.message = null; e.request = null; e.user = null; e.breadcrumbs = null
+    e.extras?.keys?.toList()?.forEach { e.removeExtra(it) }
+    e.exceptions?.forEach { it.value = null }
+    return e
 }
