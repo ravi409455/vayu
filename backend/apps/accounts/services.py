@@ -1,5 +1,6 @@
 
 from django.conf import settings
+from django.contrib.auth.hashers import make_password
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
@@ -40,6 +41,8 @@ def authenticate(username: str, password: str, ip: str = "") -> User:
     fail = CodedError("INVALID_CREDENTIALS", "Invalid username or password.", 401)
     if failures >= settings.LOCKOUT_MAX_FAILURES:
         raise fail
+    if user is None:
+        make_password(password)        # the same hashing time as a real user (no timing hint)
     if user is None or not user.check_password(password) or not user.is_active:
         # ponytail: get + set is not atomic; two tries in the same instant may count once
         cache.set(key, failures + 1, settings.LOCKOUT_MINUTES * 60)
@@ -57,7 +60,7 @@ def revoke_devices(user: User) -> int:
 
 def register_device_and_tokens(user: User, device_name: str) -> dict:
     """A new phone replaces the old one, unless the old one may still hold work that hasn't
-    reached the server (then the person syncs it first, or Ops sign that phone out)."""
+    reached the server (then the person syncs it first, or someone allowed to sign it out does)."""
     with transaction.atomic():
         busy = next((d for d in Device.objects.select_for_update().filter(
             user=user, revoked_at__isnull=True) if d.holds_work()), None)
@@ -65,7 +68,7 @@ def register_device_and_tokens(user: User, device_name: str) -> dict:
             counts = busy.unsynced or {}
             raise CodedError("DEVICE_HAS_UNSYNCED_DATA",
                              "Your other phone still has work that hasn't been sent. Open the app "
-                             "there and let it sync, or ask Ops to sign that phone out.", 409,
+                             "there and let it sync, or ask an Admin to sign that phone out.", 409,
                              drafts=counts.get("drafts"), files=counts.get("files"))
         revoke_devices(user)
         device = Device.objects.create(user=user, name=device_name)

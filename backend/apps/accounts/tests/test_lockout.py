@@ -59,3 +59,14 @@ def test_success_resets_the_counter(make_user, login):
     Device.objects.update(unsynced={"drafts": 0, "files": 0})   # that phone has nothing pending
     fail(login, 4)
     assert login(APIClient(), "asha").status_code == 200
+
+
+def test_an_unknown_username_costs_a_password_hash_like_a_real_one(db, login):
+    """Review: no timing difference tells which usernames exist."""
+    from unittest import mock
+
+    from apps.accounts import services
+
+    with mock.patch.object(services, "make_password", wraps=services.make_password) as hashed:
+        assert login(APIClient(), "nobody", password="wrong-pass-1").status_code == 401
+    hashed.assert_called_once()

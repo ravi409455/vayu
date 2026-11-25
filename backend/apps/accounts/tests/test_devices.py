@@ -148,6 +148,7 @@ def test_a_new_phone_is_refused_while_the_old_one_holds_unsent_work(make_user, l
     heartbeat(old, drafts=1, files=4)
     r = login(APIClient(), "asha")
     assert r.status_code == 409 and r.json()["code"] == "DEVICE_HAS_UNSYNCED_DATA"
+    assert "ask an Admin" in r.json()["detail"]          # Ops may not sign phones out (F-223)
     assert r.json()["drafts"] == 1 and r.json()["files"] == 4
     assert bearer(old["access"]).get("/api/v1/auth/me").status_code == 200   # old one still works
     assert Device.objects.filter(revoked_at__isnull=True).count() == 1
