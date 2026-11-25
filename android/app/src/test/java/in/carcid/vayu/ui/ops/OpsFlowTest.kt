@@ -475,13 +475,13 @@ class OpsFlowTest {
         compose.onNodeWithContentDescription("Inspection type: any").performClick()
         compose.onNodeWithText("PDI").performClick()
         waitFor("Any question")                                                   // that type's questions, no form name in front
-        assertTrue(server.queries.contains("type=pdi"))
+        compose.waitUntil(5_000) { server.queries.contains("type=pdi") }
         compose.onNodeWithContentDescription("Answer: any").performScrollTo().performClick()
         compose.onNodeWithText("Payment verified?").performClick()
         compose.onNodeWithText("Not filled").performClick()                       // its answers open straight after
         compose.onNodeWithText("Show bookings").performClick()
         waitFor("Payment verified?: Not filled")
-        assertTrue(server.queries.any { "type=pdi" in it && "answer=end.payment_verified&value=__none__" in it })
+        compose.waitUntil(5_000) { server.queries.any { "type=pdi" in it && "answer=end.payment_verified&value=__none__" in it } }   // the label shows before the request lands
         compose.onNodeWithContentDescription("All filters, 2 on").assertExists()   // type, and the answer with its value
     }
 
