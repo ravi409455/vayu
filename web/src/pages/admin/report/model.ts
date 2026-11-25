@@ -1,6 +1,7 @@
 /** The report template (schema 2) as the designer edits it: pages holding parts. Pure functions,
  *  so every change is easy to test. The backend's apps/reports/schema.json is the full contract. */
 import type { FormPage } from "../../../api/types";
+import { NO_TEXT_TYPES } from "../../../lib/fieldTypes";
 
 export type Row = { field: string; label?: string; show_if?: unknown; fallback?: string };
 export type Cell = { field: string; fallback?: string } | { text: string };
@@ -15,18 +16,37 @@ export type StyleRule = { when: "problem" | "ok" | "warn" | "bad" | "muted" | "m
 export type Look = { lines?: "all" | "rows" | "none"; height?: "compact" | "normal" | "roomy"; stripes?: boolean; label_width?: number; header?: boolean; headers?: string[]; emphasis?: boolean; kv?: boolean };
 type Common = { id?: string; show_if?: unknown; hide_when_empty?: boolean; new_page?: boolean; keep_together?: boolean; keep_title?: boolean; box?: Box };
 export type SharedRef = { key: string; revision: number };
-export type Part = Common & (
-  | { type: "table"; title?: string; source: Source; per_row?: 1 | 2 | 3 | 4; look?: Look; style_rules?: StyleRule[] }
-  | { type: "photos"; title?: string; source: PhotoSource; which?: "all" | "issues" | "first"; per_row?: 1 | 2 | 3 | 4; shape?: "4:3" | "16:9" | "1:1" | "original"; fit?: "fill" | "whole" | "top"; caption?: "label" | "check" | "custom" | "none"; caption_text?: string; frame?: { border?: "none" | "grey" | "brand"; round?: boolean; gap?: number } }
-  | { type: "text"; html: string; columns?: 1 | 2; size?: "fine" | "small" | "normal" | "large" | "title"; align?: "left" | "center" | "right" | "justify" }
-  | { type: "columns"; columns: { width?: number; parts: Part[] }[]; gap?: number; align?: "top" | "middle" }
-  | { type: "verify"; size?: number }
-  | { type: "button"; link: LinkName; label: string; align?: "left" | "center" | "right" }
-  | { type: "contents"; title?: string; columns?: 1 | 2 }
-  | { type: "page_break" }
-  | { type: "spacer"; height?: number }
-  | { type: "html"; title?: string; html: string; css?: string }
-  | { type: "snippet"; ref: SharedRef });
+export type Part = Common &
+  (
+    | { type: "table"; title?: string; source: Source; per_row?: 1 | 2 | 3 | 4; look?: Look; style_rules?: StyleRule[] }
+    | {
+        type: "photos";
+        title?: string;
+        source: PhotoSource;
+        which?: "all" | "issues" | "first";
+        per_row?: 1 | 2 | 3 | 4;
+        shape?: "4:3" | "16:9" | "1:1" | "original";
+        fit?: "fill" | "whole" | "top";
+        caption?: "label" | "check" | "custom" | "none";
+        caption_text?: string;
+        frame?: { border?: "none" | "grey" | "brand"; round?: boolean; gap?: number };
+      }
+    | {
+        type: "text";
+        html: string;
+        columns?: 1 | 2;
+        size?: "fine" | "small" | "normal" | "large" | "title";
+        align?: "left" | "center" | "right" | "justify";
+      }
+    | { type: "columns"; columns: { width?: number; parts: Part[] }[]; gap?: number; align?: "top" | "middle" }
+    | { type: "verify"; size?: number }
+    | { type: "button"; link: LinkName; label: string; align?: "left" | "center" | "right" }
+    | { type: "contents"; title?: string; columns?: 1 | 2 }
+    | { type: "page_break" }
+    | { type: "spacer"; height?: number }
+    | { type: "html"; title?: string; html: string; css?: string }
+    | { type: "snippet"; ref: SharedRef }
+  );
 export type PartType = Part["type"];
 /** The report's own links: the verify page, and one ZIP of every photo or every video. */
 export type LinkName = "photos" | "videos" | "verify";
@@ -89,6 +109,24 @@ export function findPart(d: Definition, id: string): Part | null {
   return w ? w.list[w.index]! : null;
 }
 
+/** A PDF template as the list sends it, and one of its versions. */
+export type Template = { id: number; form: number; form_key: string; versions: { id: number; number: number; status: string }[] };
+export type TVersion = { id: number; template: number; number: number; status: string; definition: Definition; row_version: number };
+
+/** A deep copy with every "id" dropped (withIds gives the copy fresh ones). */
+export const withoutIds = <T,>(x: T): T => JSON.parse(JSON.stringify(x, (k, v: unknown) => (k === "id" ? undefined : v))) as T;
+/** Copies of these parts with fresh ids, to put beside or instead of the originals. */
+export const freshCopies = (parts: Part[]): Part[] => withIds({ schema: 2, pages: [{ title: "", parts: withoutIds(parts) }] }).pages[0]!.parts;
+
+/** Every part of the definition with its name (for the preview's outlines). */
+export function partNames(d: Definition, sections: Record<string, string> = {}, shared: Record<string, string> = {}): Record<string, string> {
+  const out: Record<string, string> = {};
+  const walk = (parts: Part[]) => parts.forEach((p) => { out[p.id!] = partName(p, sections, shared); if (p.type === "columns") p.columns.forEach((c) => walk(c.parts)); });
+  d.pages.forEach((pg) => walk(pg.parts));
+  return out;
+}
+
+/** The page that holds this part (also inside columns). */
 export function pageOf(d: Definition, partId: string): ReportPage | null {
   return d.pages.find((pg) => JSON.stringify(pg.parts).includes(`"id":"${partId}"`)) ?? null;
 }
@@ -188,7 +226,7 @@ export function pageFromForm(page: FormPage): ReportPage {
   for (const s of page.sections) {
     const ref = `inspection.${s.key}`;
     const multi = page.sections.length > 1;
-    const hasChecks = s.fields.some((f) => !["photo", "video", "file", "signature", "image"].includes(f.type));
+    const hasChecks = s.fields.some((f) => !NO_TEXT_TYPES.includes(f.type));
     const hasPhotos = s.fields.some((f) => f.type === "photo");
     if (hasChecks) parts.push({ id: uid(), type: "table", title: multi ? s.title : "", look: { header: true }, source: { kind: "section", section: ref } });
     if (hasPhotos) parts.push({ id: uid(), type: "photos", title: "", per_row: 3, caption: "check", which: hasChecks ? "issues" : "all", source: { kind: "section", section: ref } });
@@ -240,7 +278,7 @@ export function replaceRef(p: Part, from: string, to: string): Part {
 export function unlinkShared(d: Definition, id: string, parts: Part[]): Definition {
   const w = locate(d, id);
   if (!w) return d;
-  const fresh = withIds({ schema: 2, pages: [{ title: "", parts: JSON.parse(JSON.stringify(parts, (k, v: unknown) => (k === "id" ? undefined : v))) as Part[] }] }).pages[0]!.parts;
+  const fresh = freshCopies(parts);
   return w.set([...w.list.slice(0, w.index), ...fresh, ...w.list.slice(w.index + 1)]);
 }
 

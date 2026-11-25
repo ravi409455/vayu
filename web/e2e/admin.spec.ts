@@ -112,6 +112,7 @@ test.describe("admin screens", () => {
     page.once("dialog", (x) => x.accept());
     await page.locator("tr", { hasText: "ERP" }).getByRole("button", { name: "Actions for ERP" }).click();
     await page.getByRole("menuitem", { name: "Revoke…" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Revoke key" }).click();           // our own dialog, not the browser's
     await expect(page.locator("tr", { hasText: "ERP" })).toContainText("Revoked");
     const gone = await page.request.get(`${API_ROOT}/api/v1/ext/bookings`, { headers: { Authorization: `Api-Key ${key}` } });
     expect(gone.status()).toBe(401);

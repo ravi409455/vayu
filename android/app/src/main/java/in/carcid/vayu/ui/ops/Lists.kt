@@ -1,5 +1,9 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.ReportProblem
+import `in`.carcid.vayu.core.ops.StuckUpload
+import `in`.carcid.vayu.core.api.initials
+
 import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.async
@@ -50,7 +54,7 @@ import `in`.carcid.vayu.core.ops.a
 import `in`.carcid.vayu.core.ops.count
 import kotlinx.serialization.json.JsonObject
 import `in`.carcid.vayu.core.ops.rows
-import `in`.carcid.vayu.core.ops.s
+import `in`.carcid.vayu.core.s
 import `in`.carcid.vayu.ui.components.Avatar
 import `in`.carcid.vayu.ui.components.Segmented
 import `in`.carcid.vayu.ui.components.SoftButton
@@ -60,12 +64,12 @@ import `in`.carcid.vayu.ui.components.Tone
 import `in`.carcid.vayu.ui.components.VayuTopBar
 import `in`.carcid.vayu.ui.components.toneColor
 import `in`.carcid.vayu.ui.expert.time12
+import `in`.carcid.vayu.ui.expert.whenStamp
 import `in`.carcid.vayu.ui.theme.Vayu
 import java.net.URLEncoder
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private fun initials(name: String) = name.split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }
 
 /** Ops' home (variant B): how the day is going, who needs an expert, each expert's jobs. */
 @Composable
@@ -75,8 +79,9 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
     val day = rememberLoad(env, "bookings?date_from=$t&date_to=$t&order=schedule")
     val all = day.value?.data?.rows().orEmpty().map(::Bk).filter { it.stage != "cancelled" }
     var open by rememberSaveable { mutableStateOf(setOf<Int>()) }
-    var pick by rememberSaveable { mutableStateOf<String?>(null) }      // the status chip: null = All
-    val shown = if (pick == null) all else all.filter { it.stage == pick }
+    var pick by rememberSaveable { mutableStateOf<String?>(null) }      // the Status chip: null = All
+    var experts by rememberSaveable { mutableStateOf(setOf<String>()) } // the Experts chip: empty = everyone
+    val shown = all.filter { (pick == null || it.stage == pick) && (experts.isEmpty() || it.expert?.toString() in experts) }
     val online = day.value?.offline == false
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         VayuTopBar("Today", env.me.initials, bellCount = needs, onBell = onBell, onProfile = onProfile)
@@ -87,8 +92,9 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
                 day.error?.takeIf { day.value == null }?.let { Text(it, color = Vayu.colors.bad, modifier = Modifier.padding(top = 12.dp)) }
                 if (all.isNotEmpty()) {
                     DayCard(all)
-                    StatusChips(listOf<Pair<String?, Int>>(null to all.size) + STAGE_WORDS.keys.filter { it != "cancelled" }
-                        .map { k -> k to all.count { it.stage == k } }.filter { it.second > 0 || it.first == pick }, pick) { pick = it }
+                    TodayFilters(listOf<Pair<String?, Int>>(null to all.size) + STAGE_WORDS.keys.filter { it != "cancelled" }
+                        .map { k -> k to all.count { it.stage == k } }.filter { it.second > 0 || it.first == pick }, pick, experts, env.labels,
+                        onStage = { pick = it }, onExperts = { experts = it })
                 }
             }
             val unassigned = shown.filter { it.stage == "draft" }
@@ -132,7 +138,7 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
                                 if (i > 0) HorizontalDivider(color = Vayu.colors.line)
                                 Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(role = Role.Button) { onOpen(b.id) }.padding(vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text(b.time, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink2, fontSize = 14.sp, maxLines = 1, softWrap = false)
+                                    Text(time12(b.time), fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink2, fontSize = 14.sp, maxLines = 1, softWrap = false)
                                     Column(Modifier.weight(1f)) {
                                         Text(b.customer.ifBlank { b.code }, color = Vayu.colors.ink, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         Text(b.code, fontSize = 13.sp, color = Vayu.colors.ink2)
@@ -243,7 +249,9 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
                     BookingRow(b, listOf(env.labels.type(b.type), env.labels.person(b.expert)).filter { it.isNotBlank() }.joinToString(" · "), t, onOpen = { onOpen(b.id) })
                 }
             }
-            if (first == null) item { Text(if (term.isNotEmpty()) "Searching…" else "Loading…", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
+            // the server's reason when it refuses (as the booking page and dashboard do), never "Loading…" for ever
+            if (first == null) item { Text(loads.first().error ?: if (term.isNotEmpty()) "Searching…" else "Loading…",
+                color = if (loads.first().error != null) Vayu.colors.bad else Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
             else if (rows.isEmpty()) item {
                 val dated = filters["dates"] != "all"
                 Column(Modifier.padding(vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -292,7 +300,7 @@ fun NeedsYouScreen(env: OpsEnv, loaded: List<Need>?, onBack: () -> Unit, onOpen:
         LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp)) {
             if (tab == 1) {
                 if (updates.notes.isEmpty()) item {
-                    Text(if (updates.loaded) "Nothing yet. Jobs started, submitted and completed, late starts and new bookings show here." else "Loading…",
+                    Text(if (updates.loaded) "Nothing yet. Bookings started, submitted and completed, late starts and new bookings show here." else "Loading…",
                         color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp))
                 }
                 noteRows(updates.notes, env.today()) { n -> n.booking?.let(onOpen) }
@@ -322,8 +330,7 @@ fun NeedsYouScreen(env: OpsEnv, loaded: List<Need>?, onBack: () -> Unit, onOpen:
 /** One thing that needs a person (web: lib/problems.ts); [group] is its heading in the bell. */
 data class Need(val key: String, val booking: String, val tone: Tone, val title: String, val meta: String, val group: String = "")
 
-/** Every problem queue as one list, in groups, most urgent group first. */
-/** Every problem list; null when none could be read (no signal, nothing saved): keep what shows. */
+/** Every problem queue as one list, in groups, most urgent group first; null when none could be read (no signal, nothing saved): keep what shows. */
 suspend fun loadNeeds(env: OpsEnv): List<Need>? {
     val t = env.today()
     val read = java.util.concurrent.atomic.AtomicInteger()
@@ -334,20 +341,29 @@ suspend fun loadNeeds(env: OpsEnv): List<Need>? {
     // all at once: on a weak signal the wait is the slowest one, not the sum
     val all = kotlinx.coroutines.coroutineScope {
         listOf("bookings?problem=conflict", "bookings?stage=draft&date_from=$t&date_to=$t&order=schedule", "problems/stuck-uploads",
-            "problems/reports", "bookings?problem=type_change", flagged("late"), flagged("quick")).map { async { it?.let { p -> rows(p) }.orEmpty() } }.awaitAll()
+            "problems/reports", "bookings?problem=type_change", flagged("late"), flagged("quick"),
+            // unverified time: this week only (the mark never clears), like the web
+            "bookings?problem=unverified_time&date_from=${t.minusDays(6)}&date_to=$t&order=schedule").map { async { it?.let { p -> rows(p) }.orEmpty() } }.awaitAll()
     }
-    val (c, o, st, pd, ty) = all; val lt = all[5]; val qk = all[6]
+    val (c, o, st, pd, ty) = all; val lt = all[5]; val qk = all[6]; val uv = all[7]
     fun timing(list: List<kotlinx.serialization.json.JsonObject>, f: String, group: String) = list.map(::Bk).mapNotNull { b ->
         b.flags.firstOrNull { it.flag == f }?.let { fl -> Need(f + b.id, b.id, Tone.WARN, "${b.code}: ${fl.words.replaceFirstChar { it.lowercase() }}",
             listOf(slot(b, t), b.customer).filter { it.isNotBlank() }.joinToString(" · "), group) } }
     if (read.get() == 0) return null
     return o.map(::Bk).map { Need("a" + it.id, it.id, Tone.WARN, "${it.code} has no expert", "Today at ${time12(it.time)} · ${it.customer}", "Unassigned today") } +
         c.map(::Bk).map { Need("c" + it.id, it.id, Tone.BAD, "Two experts inspected ${it.code}", "${it.customer} · choose which counts", "Conflicts") } +
-        st.map { Need("s" + it.s("id"), it.s("booking"), Tone.BAD, "Photos stuck: ${it.s("booking_id")}",
-            "${env.labels.byUsername(it.s("expert"))} · ${it.s("field_key").replace('_', ' ').replaceFirstChar { c -> c.uppercase() }}", "Stuck uploads") } +
-        // reports update by themselves; only a failed one is listed (it is tried again by itself)
-        pd.map { Need("p" + it.s("booking"), it.s("booking"), Tone.BAD, "Report failed for ${it.s("booking_id")}",
-            it.s("error").ifBlank { "It is tried again by itself" }, "Reports") } +
+        StuckUpload.list(st).map { Need("s" + it.id, it.booking, Tone.BAD, "Photos stuck: ${it.bookingId}",
+            "${env.labels.byUsername(it.expert)} · ${it.fieldKey.replace('_', ' ').replaceFirstChar { c -> c.uppercase() }}", "Stuck uploads") } +
+        // each row names its problem: failed / stuck (tried again by itself), or out of date (Ops press Regenerate, F-219)
+        ReportProblem.list(pd).map { if (it.problem == "out_of_date")
+                Need("p" + it.booking, it.booking, Tone.WARN, "Report out of date for ${it.bookingId}",
+                    listOfNotNull(it.outOfDateSince?.takeIf { v -> v.isNotBlank() }?.let { v -> "Since ${whenStamp(v, t).replaceFirstChar { c -> c.lowercase() }}" },
+                        "Regenerate it when you're done").joinToString(" · "), "Reports")
+            else Need("p" + it.booking, it.booking, Tone.BAD, "Report failed for ${it.bookingId}",
+                it.error.ifBlank { "It is tried again by itself" }, "Reports") } +
         ty.map(::Bk).map { Need("t" + it.id, it.id, Tone.WARN, "Your type change wasn't applied", "${it.code} · ${it.typeRejected?.let(env.labels::typeRejected) ?: "The expert started another type"}", "Type changes") } +
-        timing(lt, "late", "Started late") + timing(qk, "quick", "Too quick")
+        timing(lt, "late", "Started late") + timing(qk, "quick", "Too quick") +
+        uv.map(::Bk).filter { it.unverifiedTime }.map { Need("u" + it.id, it.id, Tone.WARN, "${it.code}: time not verified",
+            listOf(slot(it, t), "the phone's clock was not checked that day, so its times may be off").filter { s -> s.isNotBlank() }.joinToString(" · "),
+            "Unverified times") }
 }

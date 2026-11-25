@@ -1,5 +1,6 @@
 import re
 import uuid
+from typing import Any
 
 from django.db import models, transaction
 from django.db.models import F, Q
@@ -169,14 +170,14 @@ class DraftOnly(models.Model):
     class Meta:
         abstract = True
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         with transaction.atomic():
             lock_draft(self.version_id)
             self._before_save()
             super().save(*args, **kwargs)
             self._bump_row_version()
 
-    def delete(self, *args, **kwargs):
+    def delete(self, *args: Any, **kwargs: Any) -> Any:
         with transaction.atomic():
             lock_draft(self.version_id)
             self._before_delete()

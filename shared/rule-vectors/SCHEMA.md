@@ -74,3 +74,12 @@ field's type (numbers/dates/text for ordering; lists for `in`/iteration).
 Omitted spec properties take their defaults (`visible: true`, `required: false`, others `null`/`[]`).
 `expected.visible` and `expected.required` are checked only for the keys listed. `errors`, `derived` and
 `defects` are compared exactly.
+
+## Answer checks (`answer_vectors.json`)
+The server's `clean_answer` (backend `apps/forms/fieldtypes.py`) for the field types the phone also
+checks while the expert types: `phone`, `number`, `currency`, `short_text`, `long_text`. Each case is
+`{name, type, config, value, expected}`; `expected` is the server's refusal code (`INVALID_PHONE`,
+`INVALID_TYPE`, `TOO_MANY_DECIMALS`, `OUT_OF_RANGE`, `TOO_LONG`, `PATTERN_MISMATCH`) or `null` when
+the answer is accepted. Empty answers are not cases (they are "needed", not wrong). Text length
+counts characters (code points), as Python does. Patterns are kept to syntax Python and Java share;
+a pattern Java can't compile is left to the server by the phone.

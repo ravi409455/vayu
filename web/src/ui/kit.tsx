@@ -1,28 +1,51 @@
-import { cloneElement, createContext, isValidElement, useCallback, useContext, useId, useState, type InputHTMLAttributes, type ReactElement, type ReactNode } from "react";
-import { Inbox } from "lucide-react";
-import { explain } from "../api/client";
+import { cloneElement, createContext, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState, type InputHTMLAttributes, type ReactElement, type ReactNode } from "react";
+import { Inbox, X } from "lucide-react";
+import { ApiError, explain } from "../api/client";
 import { fmtStamp } from "../lib/format";
 import { InfoTip } from "./InfoTip";
 
+/** A native modal dialog: focus moves in and stays in (the page behind is inert), Escape closes it,
+ *  and focus goes back to what opened it. A click beside it closes it only when nothing can be typed. */
 export function Modal({ title, children, onClose, actions, wide }: { title: string; children: ReactNode; onClose: () => void; actions?: ReactNode; wide?: boolean }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const head = useId();
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const d = ref.current!;
+    const back = document.activeElement as HTMLElement | null;
+    if (!d.open) d.showModal();
+    if (!d.contains(document.activeElement)) (d.querySelector<HTMLElement>("[autofocus], input:not([type=hidden]):not([disabled]), select, textarea") ?? d).focus();
+    return () => { if (d.open) d.close(); back?.focus?.(); };
+  }, []);
   return (
-    <div className="modal-back" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
-      <div className={`modal${wide ? " wide" : ""}`} onClick={(e) => e.stopPropagation()}>
-        <h2>{title}</h2>
+    <dialog ref={ref} className="modal-dlg" aria-labelledby={head} tabIndex={-1}
+      onCancel={(e) => { e.preventDefault(); close.current(); }}
+      onClick={(e) => { if (e.target === ref.current && !ref.current.querySelector("input, select, textarea, [contenteditable]")) close.current(); }}>
+      <div className={`modal${wide ? " wide" : ""}`}>
+        <h2 id={head}>{title}</h2>
         {children}
         <div className="actions">{actions ?? <button onClick={onClose}>Close</button>}</div>
       </div>
-    </div>
+    </dialog>
   );
 }
 
-export function Confirm({ title, children, confirmLabel = "Confirm", danger, onConfirm, onCancel }: {
-  title: string; children: ReactNode; confirmLabel?: string; danger?: boolean; onConfirm: () => void; onCancel: () => void;
+/** Asks before doing something. The button stays disabled while the action runs (`busy`, or the
+ *  promise `onConfirm` returns), so a double click sends it once. */
+export function Confirm({ title, children, confirmLabel = "Confirm", cancelLabel = "Cancel", danger, onConfirm, onCancel, busy }: {
+  title: string; children: ReactNode; confirmLabel?: string; cancelLabel?: string; danger?: boolean; onConfirm: () => void | Promise<unknown>; onCancel: () => void; busy?: boolean;
 }) {
+  const [running, setRunning] = useState(false);
+  const go = () => {
+    if (running || busy) return;
+    const r = onConfirm();
+    if (r instanceof Promise) { setRunning(true); void r.finally(() => setRunning(false)); }
+  };
   return (
     <Modal title={title} onClose={onCancel}
-      actions={<><button onClick={onCancel}>Cancel</button>
-        <button className={danger ? "danger" : "primary"} onClick={onConfirm}>{confirmLabel}</button></>}>
+      actions={<><button onClick={onCancel}>{cancelLabel}</button>
+        <button className={danger ? "danger" : "primary"} disabled={running || busy} onClick={go}>{confirmLabel}</button></>}>
       {children}
     </Modal>
   );
@@ -31,19 +54,36 @@ export function Confirm({ title, children, confirmLabel = "Confirm", danger, onC
 type ToastCtx = { say: (msg: string, bad?: boolean) => void; fail: (e: unknown) => void };
 const Toasts = createContext<ToastCtx>({ say: () => {}, fail: () => {} });
 export const useToast = () => useContext(Toasts);
+/** Good news fades after 4 s; an error stays (and is announced at once) until it is closed. */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [t, setT] = useState<{ msg: string; bad: boolean } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>();
   const say = useCallback((msg: string, bad = false) => {
+    clearTimeout(timer.current);                 // a new toast gets its own time
     setT({ msg, bad });
-    setTimeout(() => setT(null), 4000);
+    if (!bad) timer.current = setTimeout(() => setT(null), 4000);
   }, []);
   const fail = useCallback((e: unknown) => say(explain(e), true), [say]);
   return (
     <Toasts.Provider value={{ say, fail }}>
       {children}
-      {t && <div className={`toast${t.bad ? " bad" : ""}`} role="status">{t.msg}</div>}
+      {t && <Toast key={t.msg + t.bad} msg={t.msg} bad={t.bad} onClose={() => setT(null)} />}
     </Toasts.Provider>
   );
+}
+
+/** In the browser's top layer (a popover), so it shows above an open dialog too. */
+function Toast({ msg, bad, onClose }: { msg: string; bad: boolean; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current as (HTMLDivElement & { showPopover?: () => void }) | null;
+    if (!el?.showPopover) return;                 // no popover support: shown in place
+    el.setAttribute("popover", "manual");
+    try { el.showPopover(); } catch { /* already shown */ }
+  }, []);
+  return bad
+    ? <div ref={ref} className="toast bad" role="alert">{msg}<button className="icon-btn toast-x" aria-label="Close" onClick={onClose}><X size={16} aria-hidden /></button></div>
+    : <div ref={ref} className="toast" role="status">{msg}</div>;
 }
 
 /** A checkbox with a short name; the details go in the little "i", kept outside the label so a
@@ -60,11 +100,14 @@ export function Check({ label, tip, ...input }: { label: string; tip?: ReactNode
 
 /** A labelled input. The label points at the input by id (so the little "i" next to it is not
  *  mistaken for the control). `bare` skips the label element when the content has its own buttons. */
-export function Field({ label, help, error, children, bare, tip }: { label: string; help?: string; error?: string; children: ReactNode; bare?: boolean; tip?: ReactNode }) {
+export function Field({ label, help, error, children, bare, tip, ids }: { label: string; help?: string; error?: string; children: ReactNode; bare?: boolean; tip?: ReactNode; ids?: { help: string; error: string } }) {
   const auto = useId();
   const single = isValidElement<{ id?: string }>(children) && typeof children.type === "string";
   const id = single ? (children.props.id ?? auto) : undefined;
-  const control = single && !bare ? cloneElement(children as ReactElement<{ id?: string }>, { id }) : children;
+  const helpId = ids?.help ?? `${auto}-help`, errorId = ids?.error ?? `${auto}-err`;
+  // the control says which text explains it and whether it is wrong (`ids`: the control is built elsewhere)
+  const described = [help && helpId, error && errorId].filter(Boolean).join(" ") || undefined;
+  const control = single && !bare ? cloneElement(children as ReactElement<Record<string, unknown>>, { id, "aria-describedby": described, "aria-invalid": error ? true : undefined }) : children;
   const head = (
     <span className="label-row">
       {bare || !id ? <span>{label}</span> : <label htmlFor={id}>{label}</label>}
@@ -75,8 +118,8 @@ export function Field({ label, help, error, children, bare, tip }: { label: stri
     <div className="field">
       {head}
       {control}
-      {help && <span className="help">{help}</span>}
-      {error && <span className="error" role="alert">{error}</span>}
+      {help && <span className="help" id={helpId}>{help}</span>}
+      {error && <span className="error" role="alert" id={errorId}>{error}</span>}
     </div>
   );
 }
@@ -100,6 +143,18 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: 
 /** A timestamp as people say it: "Today, 3:30 pm", "Tue 24 Nov, 10:30 am". */
 export function when(iso?: string | null): string {
   return iso ? fmtStamp(iso) : "";
+}
+
+/** A list or page that could not be loaded: never shown as empty. A 404 says "not found". */
+export function LoadError({ error, what, onRetry }: { error: unknown; what: string; onRetry?: () => unknown }) {
+  const missing = error instanceof ApiError && error.status === 404;
+  return (
+    <div className="empty-state load-error" role="alert">
+      <strong>{missing ? `This ${what} could not be found.` : `Could not load ${what}.`}</strong>
+      <span>{missing ? "The link may be wrong, or it was deleted." : explain(error)}</span>
+      {!missing && onRetry && <button onClick={() => void onRetry()}>Try again</button>}
+    </div>
+  );
 }
 
 /** One empty-state pattern: what is (not) here, and the next step when there is one. */
@@ -128,6 +183,7 @@ export function NameDialog({ title, label, onOk, onCancel }: { title: string; la
 /** Page title row, the same on every page: title (and a count) on the left, the page's buttons on the right,
  *  the main one last. A one-line explanation only where a first-time Admin needs it. */
 export function PageHeader({ title, count, subtitle, children }: { title: ReactNode; count?: number; subtitle?: ReactNode; children?: ReactNode }) {
+  usePageTitle(typeof title === "string" ? title : undefined);
   return (
     <header className="page-head">
       <div className="grow">
@@ -140,3 +196,13 @@ export function PageHeader({ title, count, subtitle, children }: { title: ReactN
 }
 
 export { InfoTip };
+
+/** The browser tab says which page this is (R-24). */
+export function usePageTitle(title?: string, app = "Vayu"): void {
+  useEffect(() => {
+    if (!title) return;
+    const before = document.title;
+    document.title = `${title} · ${app}`;
+    return () => { document.title = before; };
+  }, [title, app]);
+}

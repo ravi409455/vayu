@@ -21,7 +21,6 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = False
-PDF_RETRY_DELAY = 0
 CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 REST_FRAMEWORK = {**REST_FRAMEWORK,  # noqa: F405
                   "DEFAULT_THROTTLE_RATES": {"login": "100000/min", "public": "100000/min",
@@ -32,3 +31,4 @@ WEB = os.environ.get("E2E_WEB", "http://localhost:5199")   # the Vite dev server
 PUBLIC_BASE_URL = WEB
 VERIFY_BASE_URL = f"{WEB}/verify"
 CSRF_TRUSTED_ORIGINS = [WEB]
+SERVER_KIND, SERVER_NAME = "local", "local"     # test data may wipe this one

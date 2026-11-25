@@ -1,0 +1,4 @@
+username,name,role,phone,password
+admin,First Admin,admin,,
+ops1,Ops Person,ops,9800000001,
+expert1,Expert Person,expert,9800000002,

@@ -1,15 +1,17 @@
 import { Eye, EyeOff, Pencil } from "lucide-react";
+import { STAGE_LABEL } from "../api/labels";
 import type { Access } from "../api/types";
 import { defaultLevel, effectiveLevel, getCell, PRESETS, ROLES, setCell, STAGES, type Level, type LevelSource } from "../lib/access";
 import { InfoTip } from "./InfoTip";
 
-const STAGE: Record<string, { label: string; tip: string }> = {
-  draft: { label: "Unassigned", tip: "The booking exists but no expert has it yet." },
-  assigned: { label: "Assigned", tip: "An expert has the booking but has not started." },
-  in_progress: { label: "In progress", tip: "The expert is doing the inspection." },
-  submitted: { label: "Uploading", tip: "The expert submitted; photos are still uploading." },
-  completed: { label: "Completed", tip: "Everything arrived and the report was made." },
-  cancelled: { label: "Cancelled", tip: "The booking was cancelled." },
+/** What each stage means, beside its agreed word (STAGE_LABEL). */
+const STAGE_TIP: Record<string, string> = {
+  draft: "The booking exists but no expert has it yet.",
+  assigned: "An expert has the booking but has not started.",
+  in_progress: "The expert is doing the inspection.",
+  submitted: "The expert submitted; photos are still uploading.",
+  completed: "Everything arrived and the report was made.",
+  cancelled: "The booking was cancelled.",
 };
 const ICON = { hidden: EyeOff, view: Eye, edit: Pencil };
 const WORD: Record<Level, string> = { hidden: "Hidden", view: "Can see", edit: "Can edit" };
@@ -30,27 +32,57 @@ export function AccessEditor({ value, onChange, kind, ftype = "short_text", pare
     <div className="access">
       <div className="bar" style={{ marginBottom: 8 }}>
         <strong>Quick setup</strong>
-        <InfoTip>Pick a ready-made rule, or click individual cells below. “Standard” means: experts fill it while working and can read it later; Ops can always edit.{note && <> {note}</>}</InfoTip>
+        <InfoTip>
+          Pick a ready-made rule, or click individual cells below. “Standard” means: experts fill it while working and can read it later;
+          Ops can always edit.{note && <> {note}</>}
+        </InfoTip>
       </div>
       <div className="seg" role="group" aria-label="Quick setup" style={{ marginBottom: 14, flexWrap: "wrap" }}>
-        {PRESETS.map((p) => <button key={p.id} type="button" disabled={disabled} title={p.tip} aria-pressed={matches(p)} onClick={() => onChange(p.apply() ?? {})}>{p.label}</button>)}
+        {PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            disabled={disabled}
+            title={p.tip}
+            aria-pressed={matches(p)}
+            onClick={() => onChange(p.apply() ?? {})}
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
       <table className="access-grid vertical" aria-label="Access by stage and role">
-        <thead><tr><th>Booking stage</th>{ROLES.map((r) => <th key={r}>{r === "expert" ? "Expert" : "Ops"}</th>)}</tr></thead>
+        <thead>
+          <tr>
+            <th>Booking stage</th>
+            {ROLES.map((r) => (
+              <th key={r}>{r === "expert" ? "Expert" : "Ops"}</th>
+            ))}
+          </tr>
+        </thead>
         <tbody>
           {STAGES.map((stage) => (
             <tr key={stage}>
-              <th scope="row">{STAGE[stage]!.label}<InfoTip>{STAGE[stage]!.tip}</InfoTip></th>
+              <th scope="row">
+                {STAGE_LABEL[stage]}
+                <InfoTip>{STAGE_TIP[stage]}</InfoTip>
+              </th>
               {ROLES.map((role) => {
                 const own = getCell(value, role, stage);
                 const eff = effectiveLevel(role, stage, kind, ftype, { field: value, section: parents.section, page: parents.page });
                 const Icon = ICON[eff.level];
                 return (
                   <td key={role}>
-                    <button type="button" className={`cell ${eff.level}${own ? " own" : ""}`} disabled={disabled} aria-label={`${role} ${STAGE[stage]!.label}: ${WORD[eff.level]}`}
+                    <button
+                      type="button"
+                      className={`cell ${eff.level}${own ? " own" : ""}`}
+                      disabled={disabled}
+                      aria-label={`${role} ${STAGE_LABEL[stage]}: ${WORD[eff.level]}`}
                       title={`${WORD[eff.level]} (${FROM[eff.source]}). Click to change.`}
-                      onClick={() => onChange(setCell(value, role, stage, NEXT[own] ?? ""))}>
-                      <Icon size={14} aria-hidden /><span>{WORD[eff.level]}</span>
+                      onClick={() => onChange(setCell(value, role, stage, NEXT[own] ?? ""))}
+                    >
+                      <Icon size={14} aria-hidden />
+                      <span>{WORD[eff.level]}</span>
                     </button>
                   </td>
                 );
@@ -60,8 +92,14 @@ export function AccessEditor({ value, onChange, kind, ftype = "short_text", pare
         </tbody>
       </table>
       <div className="bar" style={{ marginTop: 8 }}>
-        <button type="button" className="link" disabled={disabled || Object.keys(value ?? {}).length === 0} onClick={() => onChange({})}>Reset to inherited</button>
-        <InfoTip label="How to read this table">Solid = set here. Faded = {kind === "booking" ? "the standard rule" : "inherited from the section, the page or the standard rule"}. Experts never see ratings or Key Checks. With nothing set, an expert who is working gets: {WORD[defaultLevel("expert", "in_progress", kind, ftype)]}.</InfoTip>
+        <button type="button" className="link" disabled={disabled || Object.keys(value ?? {}).length === 0} onClick={() => onChange({})}>
+          Reset to inherited
+        </button>
+        <InfoTip label="How to read this table">
+          Solid = set here. Faded = {kind === "booking" ? "the standard rule" : "inherited from the section, the page or the standard rule"}
+          . Experts never see ratings or Key Checks. With nothing set, an expert who is working gets:{" "}
+          {WORD[defaultLevel("expert", "in_progress", kind, ftype)]}.
+        </InfoTip>
       </div>
     </div>
   );

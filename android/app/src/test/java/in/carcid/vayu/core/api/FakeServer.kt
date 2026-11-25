@@ -9,9 +9,9 @@ import okhttp3.mockwebserver.RecordedRequest
 class FakeServer {
     private val routes = mutableMapOf<String, MockResponse>()
     /** Every request received: route and body. */
-    val requests = java.util.Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+    val requests = java.util.concurrent.CopyOnWriteArrayList<Pair<String, String>>()
     /** Every query string received ("date_from=…&stage=…"), to check filters. */
-    val queries = java.util.Collections.synchronizedList(mutableListOf<String>())
+    val queries = java.util.concurrent.CopyOnWriteArrayList<String>()
     private val server = MockWebServer().apply {
         dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {

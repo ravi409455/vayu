@@ -1,6 +1,6 @@
 # Plan: library editor, "update everywhere", and form duplicate / import-as-new
 
-Status: **planned, not started** (re-reviewed after the builder redesign). Depends on `docs/plan-form-types.md` (uses `type = custom`,
+Status: **built** (library page and editor, push, shared items; see `git log -- backend/apps/forms/library*`). Open items: [`plan-fixes.md`](plan-fixes.md). *(Status corrected 2026-11-25.)*
 `use_start` / `use_end`, bundle schema v2). Profile plan comes after (`docs/plan-profile.md`).
 
 ## Agreed requirements

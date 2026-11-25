@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { Booking } from "../api/types";
 import { useAuth } from "../auth";
+import { keys } from "../api/keys";
 
 /** The time limits Admin sets on the Settings page (server: /settings/timing). */
 export type TimingSettings = { late_grace_minutes: number; min_minutes_default: number; min_minutes_by_type: Record<string, number> };
@@ -10,8 +11,8 @@ export const DEFAULT_TIMING: TimingSettings = { late_grace_minutes: 15, min_minu
 /** The limits, for anyone who may see the Settings page (Admin, Ops); the defaults otherwise. */
 export function useTiming(): TimingSettings {
   const { can } = useAuth();
-  const q = useQuery({ queryKey: ["settings", "timing"], enabled: can("settings.view"), staleTime: 60_000,
-    queryFn: () => api<TimingSettings>("settings/timing") });
+  const q = useQuery({ queryKey: keys.settings("timing"), enabled: can("settings.view"), staleTime: 60_000,
+    queryFn: ({ signal }) => api<TimingSettings>("settings/timing", { signal }) });
   return q.data ?? DEFAULT_TIMING;
 }
 

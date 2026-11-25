@@ -1,20 +1,21 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { MasterList } from "../../api/types";
 import { useAuth } from "../../auth";
 import { FIELD_TYPES, slugKey } from "../../lib/fieldTypes";
-import { addFieldTo, asField, isSection, moveField, newFieldDef, previewTree, removeFieldFrom, replaceField, ruleChoices, sameDef, SYSTEM_RULE_FIELDS, withDraft, type Definition, type FieldDef, type SectionDef } from "../../lib/libraryDef";
+import { addFieldTo, asField, isSection, moveField, newFieldDef, previewTree, removeFieldFrom, replaceField, ruleChoices, sameDef, SYSTEM_RULE_FIELDS, withDraft, type Definition, type FieldDef } from "../../lib/libraryDef";
 import { AccessEditor } from "../../ui/AccessEditor";
 import { ConditionBuilder } from "../../ui/ConditionBuilder";
 import { FormRenderer } from "../../ui/FormRenderer";
-import { Empty, Field, Modal, PageHeader, Pill, Tabs, useToast, when } from "../../ui/kit";
-import { FieldEditor, type FieldDraft } from "./FieldEditor";
+import { Empty, Field, LoadError, Modal, PageHeader, Pill, Tabs, useToast, when } from "../../ui/kit";
+import { FieldEditor, type FieldDraft } from "./builder/FieldEditor";
 import { PushReview } from "./library/PushReview";
 import { useCrumb } from "../../ui/crumb";
+import { keys } from "../../api/keys";
 
 type Item = { id: number; kind: "field" | "section"; key: string; name: string; revision: number; archived: boolean; definition: Definition; usages: { form: string; version: number; status: string }[] };
 type Revision = { revision: number; name: string; definition: Definition; changed_keys: string[]; by: string; by_login?: string; at: string };
@@ -27,10 +28,10 @@ export function LibraryEditor() {
   const { can } = useAuth();
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const item = useQuery({ queryKey: ["library-item", id], queryFn: () => api<Item>(`library/${id}`) });
+  const item = useQuery({ queryKey: keys.libraryItem(id), queryFn: ({ signal }) => api<Item>(`library/${id}`, { signal }) });
   useCrumb(item.data?.name);
-  const history = useQuery({ queryKey: ["library-history", id], queryFn: () => api<Revision[]>(`library/${id}/history`) });
-  const lists = useList<MasterList>("master-lists", "master-lists");
+  const history = useQuery({ queryKey: keys.libraryHistory(id), queryFn: ({ signal }) => api<Revision[]>(`library/${id}/history`, { signal }) });
+  const lists = useList<MasterList>(keys.masterLists(), "master-lists");
   const [def, setDef] = useState<Definition | null>(null);
   const [name, setName] = useState("");
   const [pick, setPick] = useState<string | null>(null);              // which field of a section is open
@@ -41,20 +42,21 @@ export function LibraryEditor() {
   const [error, setError] = useState("");
   const [values, setValues] = useState<Record<string, unknown>>({});
   const it = item.data;
-  useEffect(() => { if (it) { setDef(it.definition); setName(it.name); setPick(null); } }, [it?.id, it?.revision]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (it) { setDef(it.definition); setName(it.name); setPick(null); } }, [it?.id, it?.revision]); // eslint-disable-line react-hooks/exhaustive-deps -- reloads the editor only for another item or revision, so a refetch keeps what is being typed
 
   const edit = can("library.edit");
   const dirty = !!it && !!def && (!sameDef(def, it.definition) || name !== it.name);
   const save = useMutation({
     mutationFn: () => api<Item>(`library/${id}`, { method: "PATCH", body: { definition: def, revision: it!.revision, name } }),
-    onSuccess: (r) => { setError(""); say(`Saved as revision ${r.revision}.`); void refresh("library", "library-item", "library-history"); },
+    onSuccess: (r) => { setError(""); say(`Saved as revision ${r.revision}.`); void refresh(keys.library(), keys.libraryItem(), keys.libraryHistory()); },
     onError: (e) => { if (e instanceof ApiError && e.code === "STALE_LIBRARY_ITEM") setStale(true); else setError(e instanceof ApiError ? e.message : "Could not save."); },
   });
   const archive = useMutation({
     mutationFn: () => api(`library/${id}`, { method: "PATCH", body: { archived: !it!.archived } }),
-    onSuccess: () => { say("Done."); void refresh("library", "library-item"); }, onError: fail,
+    onSuccess: () => { say("Done."); void refresh(keys.library(), keys.libraryItem()); }, onError: fail,
   });
   const tree = useMemo(() => (it && def ? previewTree(it.kind, def) : null), [it, def]);
+  if (item.isError) return <LoadError error={item.error} what="library item" onRetry={item.refetch} />;
   if (!it || !def || !tree) return <p className="muted pad">Loading…</p>;
   const section = isSection(def) ? def : null;
   const choices = ruleChoices(it.kind, def, SYSTEM_RULE_FIELDS);
@@ -74,7 +76,7 @@ export function LibraryEditor() {
       </PageHeader>
       {stale && (
         <Modal title="Someone else saved this item" onClose={() => setStale(false)}
-          actions={<><button onClick={() => setStale(false)}>Keep editing</button><button className="primary" onClick={() => { setStale(false); void refresh("library-item", "library-history"); }}>Reload their version</button></>}>
+          actions={<><button onClick={() => setStale(false)}>Keep editing</button><button className="primary" onClick={() => { setStale(false); void refresh(keys.libraryItem(), keys.libraryHistory()); }}>Reload their version</button></>}>
           <p>Another Admin saved a newer revision after you opened it. Reload to see theirs; your unsaved changes here will be replaced.</p>
         </Modal>)}
       <Tabs value={tab} onChange={setTab} tabs={[{ id: "settings", label: "Settings" }, { id: "used", label: `Used in (${it.usages.length})` }, { id: "history", label: "History" }]} />
@@ -102,7 +104,7 @@ export function LibraryEditor() {
             )}
             {openField && (
               <div style={{ marginTop: 14 }}>
-                <FieldEditor field={asField(openField, 1)} choices={choices} lists={catalogue} categories={[]} readOnly={!edit} kind="inspection" onSave={(d) => setField(openField, d)} onDelete={() => {}} />
+                <FieldEditor field={asField(openField, 1)} choices={choices} lists={catalogue} categories={[]} readOnly={!edit} kind="inspection" onSave={(d) => setField(openField, d)} />
               </div>)}
           </div>
           <div className="card" aria-label="Preview">
@@ -120,11 +122,12 @@ export function LibraryEditor() {
       )}
       {tab === "history" && (
         <div className="table-card">
-          <table className="rows"><thead><tr><th>Revision</th><th>Who</th><th>When</th><th>What changed</th><th /></tr></thead>
+          <table className="rows"><thead><tr><th>Revision</th><th>Who</th><th>When</th><th>What changed</th><th><span className="sr-only">Actions</span></th></tr></thead>
             <tbody>{(history.data ?? []).map((h) => (
               <tr key={h.revision}><td>r{h.revision}{h.revision === it.revision && <> <Pill tone="ok">current</Pill></>}</td><td title={h.by_login}>{h.by || "—"}</td><td>{when(h.at)}</td>
                 <td>{h.changed_keys.length ? h.changed_keys.join(", ") : "created"}</td>
-                <td>{edit && h.revision !== it.revision && <button aria-label={`Restore revision ${h.revision}`} onClick={() => { setDef(h.definition); setName(h.name); setTab("settings"); say(`Revision ${h.revision} is loaded. Save to make it the newest.`); }}>Restore</button>}</td></tr>))}</tbody></table>
+                <td>{edit && h.revision !== it.revision && <button aria-label={`Restore revision ${h.revision}`} onClick={() => { setDef(h.definition); setName(h.name); setTab("settings"); say(`Revision ${h.revision} is loaded. Save to make it the newest.`); }}>Restore</button>}</td>
+                  </tr>))}</tbody></table>
         </div>
       )}
       {error && <p className="error" role="alert">{error}</p>}
@@ -136,7 +139,7 @@ export function LibraryEditor() {
         </div>
       )}
       {adding && section && <AddFieldHere onClose={() => setAdding(false)} existing={section.fields.map((f) => f.key)} onAdd={(f) => { setDef(addFieldTo(section, f)); setPick(f.key); setAdding(false); }} />}
-      {review !== null && <PushReview itemId={id} itemName={name} revision={review} onClose={() => setReview(null)} onDone={() => void refresh("library", "library-item", "forms")} />}
+      {review !== null && <PushReview itemId={id} itemName={name} revision={review} onClose={() => setReview(null)} onDone={() => void refresh(keys.library(), keys.libraryItem(), keys.forms())} />}
     </>
   );
 }

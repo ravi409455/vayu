@@ -6,6 +6,7 @@ import { useInspectionTypes } from "../../api/labels";
 import { useAuth } from "../../auth";
 import { useTiming, type TimingSettings } from "../../lib/timing";
 import { Field, PageHeader, useToast } from "../../ui/kit";
+import { keys } from "../../api/keys";
 
 /** Settings Admin changes (Ops may look): today the time limits for late starts and too-quick jobs. */
 export function Settings() {
@@ -19,7 +20,7 @@ export function Settings() {
   useEffect(() => setV(saved), [saved]);
   const save = useMutation({
     mutationFn: () => api("settings/timing", { method: "PUT", body: v }),
-    onSuccess: () => { say("Saved. Flags use the new limits now."); void refresh("settings"); void refresh("bookings-page"); },
+    onSuccess: () => { say("Saved. Flags use the new limits now."); void refresh(keys.settings()); void refresh(keys.bookings()); },
     onError: fail,
   });
   const num = (value: number, set: (n: number) => void, label: string) => (
@@ -37,14 +38,14 @@ export function Settings() {
         {edit && <button className="primary" disabled={save.isPending || JSON.stringify(v) === JSON.stringify(saved)} onClick={() => save.mutate()}>Save</button>}
       </PageHeader>
       <section className="card stack" aria-label="Time limits">
-        <h3>Time limits</h3>
+        <h2 className="sub">Time limits</h2>
         <Field label="Late-start grace (minutes)" help="A booking that starts more than this after its booked date and time shows as “Started late”. Example: booked 10:00, grace 15 → a start after 10:15 is late.">
           {num(v.late_grace_minutes, (n) => setV({ ...v, late_grace_minutes: n }), "Late-start grace (minutes)")}
         </Field>
         <Field label="Minimum inspection time (minutes)" help="A booking finished faster than this (Start to Submit) shows as “Too quick”. Used for any type without its own number below.">
           {num(v.min_minutes_default, (n) => setV({ ...v, min_minutes_default: n }), "Minimum inspection time (minutes)")}
         </Field>
-        <table className="rows"><thead><tr><th>Inspection type</th><th>Minimum minutes</th><th></th></tr></thead>
+        <table className="rows"><thead><tr><th>Inspection type</th><th>Minimum minutes</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>{types.map((t) => {
             const own = v.min_minutes_by_type[t.key];
             return (
@@ -67,12 +68,12 @@ type MediaSettings = { photo_days: number; video_days: number };
 function MediaRetention({ edit }: { edit: boolean }) {
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const q = useQuery({ queryKey: ["settings", "media"], queryFn: () => api<MediaSettings>("settings/media") });
+  const q = useQuery({ queryKey: keys.settings("media"), queryFn: ({ signal }) => api<MediaSettings>("settings/media", { signal }) });
   const [v, setV] = useState<MediaSettings | null>(null);
   useEffect(() => { if (q.data) setV(q.data); }, [q.data]);
   const save = useMutation({
     mutationFn: () => api("settings/media", { method: "PUT", body: v }),
-    onSuccess: () => { say("Saved. Older files are removed within the hour."); void refresh("settings"); },
+    onSuccess: () => { say("Saved. Older files are removed within the hour."); void refresh(keys.settings()); },
     onError: fail,
   });
   if (!v) return null;
@@ -85,11 +86,25 @@ function MediaRetention({ edit }: { edit: boolean }) {
   const bad = (n: number) => n !== 0 && (n < 30 || n > 3650);
   return (
     <section className="card stack" aria-label="Photo and video storage">
-      <div className="bar"><h3 className="grow">Photo and video storage</h3>
-        {edit && <button className="primary" disabled={save.isPending || bad(v.photo_days) || bad(v.video_days) || JSON.stringify(v) === JSON.stringify(q.data)} onClick={() => save.mutate()}>Save</button>}</div>
+      <div className="bar">
+        <h2 className="sub grow">Photo and video storage</h2>
+        {edit && (
+          <button
+            className="primary"
+            disabled={save.isPending || bad(v.photo_days) || bad(v.video_days) || JSON.stringify(v) === JSON.stringify(q.data)}
+            onClick={() => save.mutate()}
+          >
+            Save
+          </button>
+        )}
+      </div>
       {row("photo_days", "Keep photos for (days)")}
       {row("video_days", "Keep videos for (days)")}
-      <p className="muted small">After that, the original photos and videos of completed bookings are deleted from the server for good. Reports already made keep their pictures, but the report's Download photos and Download videos buttons then tell the customer the files are no longer available. Bookings not yet completed are never touched.</p>
+      <p className="muted small">
+        After that, the original photos and videos of completed bookings are deleted from the server for good. Reports already made keep
+        their pictures, but the report's Download photos and Download videos buttons then tell the customer the files are no longer
+        available. Bookings not yet completed are never touched.
+      </p>
     </section>
   );
 }

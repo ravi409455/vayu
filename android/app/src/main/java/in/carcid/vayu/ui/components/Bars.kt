@@ -22,10 +22,10 @@ fun OpsBottomBar(active: OpsTab, onTab: (OpsTab) -> Unit, onRefresh: () -> Unit,
         if (it == 3) onRefresh() else onTab(OpsTab.entries[it])
     }
 
-/** Expert: Jobs · Uploads (count) · Refresh. */
+/** Expert: Leads · Uploads (count) · Refresh. */
 @Composable
 fun ExpertBottomBar(active: ExpertTab, uploads: Int, onTab: (ExpertTab) -> Unit, onRefresh: () -> Unit, refreshing: Boolean = false) =
-    BottomBar(listOf(Triple("Jobs", Icons.Outlined.Work, null),
+    BottomBar(listOf(Triple("Leads", Icons.Outlined.Work, null),
         Triple("Uploads", Icons.Outlined.CloudUpload, uploads),
         Triple("Refresh", Icons.Outlined.Refresh, null)), active.ordinal, spinning = if (refreshing) 2 else -1) {
         if (it == 2) onRefresh() else onTab(ExpertTab.entries[it])

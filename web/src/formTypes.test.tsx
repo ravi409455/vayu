@@ -99,7 +99,7 @@ describe("system fields in the field editor", () => {
   const mode = { id: 9, section: 1, key: "payment_mode", label: "Payment mode", helper_text: "", type: "single_choice", required: false, required_if: null, show_if: null,
     config: { options: [{ key: "cash", label: "Cash" }, { key: "upi", label: "UPI" }] }, visible: true, order: 0, is_system: true, access: {}, locked: false, library: null } as FormField;
   it("lists and lets the Admin change the choices of a system choice field, like any other choice field", async () => {
-    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    const { FieldEditor } = await import("./pages/admin/builder/FieldEditor");
     const onSave = vi.fn();
     const u = userEvent.setup();
     render(<FieldEditor field={mode} choices={[]} lists={[]} categories={[]} onSave={onSave} onDelete={() => {}} readOnly={false} />);
@@ -112,7 +112,7 @@ describe("system fields in the field editor", () => {
     expect(onSave.mock.calls[0]![0].config.options).toEqual([{ key: "cash", label: "Cash" }, { key: "upi", label: "UPI" }, { key: "wallet", label: "Wallet" }]);
   });
   it("still keeps a library-linked field's choices read-only", async () => {
-    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    const { FieldEditor } = await import("./pages/admin/builder/FieldEditor");
     render(<FieldEditor field={{ ...mode, is_system: false, locked: true }} choices={[]} lists={[]} categories={[]} onSave={() => {}} onDelete={() => {}} readOnly />);
     expect(screen.queryByLabelText("Choice key")).toBeNull();
   });

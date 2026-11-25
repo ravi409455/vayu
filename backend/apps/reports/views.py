@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from apps.accounts import audit
 from apps.accounts.permissions import perm, scope_for
 from apps.bookings.models import Booking
 from apps.bookings.services import err
@@ -20,7 +21,7 @@ from apps.forms.access import may_see_submissions
 from apps.forms.models import Form, MasterListItem
 from apps.media import storage
 
-from . import context, service, shared, tasks, transfer
+from . import service, shared, tasks, transfer
 from .definition import validate_definition
 from .models import PdfTemplate, PdfTemplateVersion, Report, SharedItem
 
@@ -93,10 +94,11 @@ class Preview(APIView):
 
     def post(self, request, pk):
         tv = get_object_or_404(PdfTemplateVersion.objects.select_related("template__form"), pk=pk)
+        # template editing is Admin-only now (R-34); kept in case that ever changes
         if scope_for(request.user, "reports.view", request) is None:
             raise err("FORBIDDEN", "Previews use real data, so they need reports.view.", 403)
         booking = _report_booking(request, request.data.get("booking"))
-        insp = context.latest_inspection(booking)
+        insp = booking.counted_inspection()
         if insp is None or insp.form_version.form_id != tv.template.form_id:
             raise err("INVALID_BOOKING", "Pick a submitted booking inspected with this form.")
         if "definition" in request.data:          # the designer: unsaved edits, with positions
@@ -153,10 +155,12 @@ class BookingReport(APIView):
         r = Report.objects.filter(booking=b).first()
         if r is None:
             raise err("NO_REPORT", "No report has been generated yet.", 404)
+        blocked = regenerate_blocked(b, r)
         return Response({"revision": r.revision, "status": r.status,
-                         # being made again after a change (it updates by itself)
-                         "updating": b.stage == "completed" and (r.stale or bool(
-                             r.render_started_at)),
+                         "updating": bool(r.render_started_at),       # being made right now
+                         # something it shows changed since: Ops press Regenerate
+                         "out_of_date": r.stale,
+                         "regenerate": {"allowed": blocked is None, "reason": blocked},
                          "generated_at": r.generated_at, "filename": r.filename, "error": r.error,
                          "verify_url": f"{settings.VERIFY_BASE_URL}/{r.token}",
                          # a download goes through the server so it is logged (who, when)
@@ -165,6 +169,39 @@ class BookingReport(APIView):
                          # same file, shown in the page instead of downloaded
                          "preview_url": storage.presign_get(r.key) if r.status == "ready"
                          else None})
+
+
+def regenerate_blocked(b: Booking, r: Report | None) -> str | None:
+    """Why Regenerate can't be pressed now (None: it can)."""
+    from apps.media.models import MediaAsset
+
+    if b.stage != "completed":
+        return "The report is made when the booking is completed."
+    if b.conflict:
+        return "Choose which inspection counts first."
+    if MediaAsset.objects.filter(booking=b, kind="photo", status="purged").exists():
+        # F-220: a new PDF would lose its photos; the last one is kept as it is
+        return "Its photos were removed by the retention setting, so the last PDF is kept."
+    if r is not None and r.render_started_at is not None:
+        return "The report is being made."
+    return None
+
+
+class Regenerate(APIView):
+    """Ops make the report again after changes (one new PDF, one pdf.ready)."""
+
+    permission_classes = [perm("reports.view"), perm("submissions.edit")]
+
+    def post(self, request, pk):
+        from apps.core import tasks as core_tasks
+
+        b = _report_booking(request, pk)
+        r = Report.objects.filter(booking=b).first()
+        blocked = regenerate_blocked(b, r)
+        if blocked:
+            raise err("CANNOT_REGENERATE", blocked, 409)
+        core_tasks.after_commit(lambda: tasks.render_report.delay(str(b.id)))
+        return Response(status=status.HTTP_202_ACCEPTED)
 
 
 def _ready_report(request, pk) -> Report:
@@ -213,12 +250,24 @@ class Problems(APIView):
 
     def get(self, request):
         killed = timezone.now() - tasks.STUCK_AFTER       # a render that never finished
-        qs = Report.objects.filter(status="failed") | Report.objects.filter(
-            render_started_at__lt=killed)      # changes alone are no problem: they remake it
+        # a failed render (with or without an earlier PDF), one that never finished, and a
+        # completed booking whose PDF is out of date ("edited but not regenerated", REQUIREMENTS
+        # §9: Needs you only, no bell or push)
+        qs = (Report.objects.exclude(error="") | Report.objects.filter(
+            render_started_at__lt=killed) | Report.objects.filter(
+            stale=True, status="ready", booking__stage="completed"))
         if scope_for(request.user, "reports.view", request) == "own":
             qs = qs.filter(booking__in=Booking.objects.filter(own_filter(request.user)))
+
+        def problem(r) -> str:
+            if r.error:
+                return "failed"
+            return "stuck" if r.render_started_at and r.render_started_at < killed \
+                else "out_of_date"
+
         return Response([{"booking": str(r.booking_id), "booking_id": r.booking.booking_id,
-                          "status": r.status, "error": r.error}
+                          "status": r.status, "error": r.error, "problem": problem(r),
+                          "out_of_date_since": r.stale_since if r.stale else None}
                          for r in qs.select_related("booking").distinct()])
 
 
@@ -236,7 +285,7 @@ class Verify(APIView):
         if r is None:
             raise err("NOT_FOUND", "No such report.", 404)
         b = r.booking
-        insp = context.latest_inspection(b)
+        insp = b.counted_inspection()
         car = MasterListItem.objects.filter(list__key="car_make_model", key=b.car_make_model) \
             .values_list("label", flat=True).first() or b.car_make_model
         kind = Form.objects.filter(type="custom", inspection_type=b.inspection_type) \
@@ -299,14 +348,18 @@ class Picture(APIView):
         name = str(request.data.get("name", "")).strip()
         if not name:
             raise ValidationError({"name": "Give the picture a name."})
-        a.name = name[:100]
+        old, a.name = a.name, name[:100]
         a.save(update_fields=["name"])
+        audit.record(request.user, "pdf_picture.rename", "form_asset", a.id,
+                     f"Renamed picture {old} to {a.name}")               # F-232
         return Response(_picture(a))
 
     def delete(self, request, pk):
         a = self._get(pk)
         if _in_use(str(a.id)):
             raise err("PICTURE_IN_USE", "A template or shared theme still uses this picture.", 409)
+        audit.record(request.user, "pdf_picture.delete", "form_asset", a.id,
+                     f"Removed picture {a.name}")
         a.name = ""                       # out of the library; the stored file stays harmless
         a.save(update_fields=["name"])
         return Response(status=status.HTTP_204_NO_CONTENT)

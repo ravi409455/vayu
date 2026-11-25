@@ -188,8 +188,17 @@ def test_unknown_internal_events_are_ignored(ienv, http, booking):
     assert sent(http) == []
 
 
+def test_one_assignment_is_one_booking_updated_delivery(ienv, http, booking):
+    """F-207: booking.assigned is for the bell only; its booking.updated already went."""
+    make(ienv, ienv.form_id, event="booking.updated")
+    from apps.bookings.tests.test_submissions import assign as assign_expert
+
+    assign_expert(ienv, booking)
+    assert [body_of(c)["event"] for c in sent(http)] == ["booking.updated"]
+
+
 @pytest.mark.parametrize("internal,public", [
-    ("booking.assigned", "booking.updated"), ("alert.type_change_rejected", "alert.conflict"),
+    ("alert.late_work", "alert.conflict"), ("alert.type_change_rejected", "alert.conflict"),
     ("alert.conflict", "alert.conflict"), ("alert.stuck_upload", "alert.stuck_upload"),
     ("pdf.ready", "pdf.ready"), ("media.completed", "media.completed")])
 def test_internal_events_map_to_the_public_ones(ienv, http, booking, internal, public):

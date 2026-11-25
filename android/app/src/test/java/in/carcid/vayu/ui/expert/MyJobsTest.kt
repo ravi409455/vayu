@@ -3,6 +3,7 @@ package `in`.carcid.vayu.ui.expert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -99,6 +100,63 @@ class MyJobsTest {
         compose.onNodeWithText("Discard draft").assertIsDisplayed()
     }
 
+    @Test fun discardingADraftFromTheListOrTheLeadAsksFirst() {
+        val moved = j("42", "Zoya Merchant", "20:45").copy(assignedToMe = false)
+        val draft = `in`.carcid.vayu.core.draft.Draft("42", "DEMO-42", "Zoya Merchant", emptyMap(), "tour")
+        val gone = mutableListOf<String>()
+        compose.setContent { VayuTheme(ThemeMode.LIGHT) {
+            ExpertHome(me, JobsState(jobs + moved), today, {}, {}, ExpertExtras(drafts = mapOf("42" to draft), onDiscard = { gone += it }))
+        } }
+        compose.onNodeWithText("Discard draft").performClick()
+        compose.onNodeWithText("Discard DEMO-42?").assertIsDisplayed()
+        compose.onNodeWithText("Keep it").performClick()
+        assertEquals(emptyList<String>(), gone)
+        compose.onNodeWithText("Zoya Merchant").performClick()              // the lead page asks too
+        compose.onNodeWithText("Discard draft").performClick()
+        assertEquals(emptyList<String>(), gone)
+        compose.onAllNodes(hasText("Discard draft")).onLast().performClick()  // the dialog's button
+        assertEquals(listOf("42"), gone)
+    }
+
+    @Test fun aCancelledLeadSaysSoAndWhy() {
+        val gone = j("42", "Zoya Merchant", "20:45", stage = "cancelled").copy(cancelReason = "Customer cancelled")
+        val draft = `in`.carcid.vayu.core.draft.Draft("42", "DEMO-42", "Zoya Merchant", emptyMap(), "tour")
+        compose.setContent { VayuTheme(ThemeMode.LIGHT) {
+            JobDetailScreen(gone, ready = true, today = today, onBack = {}, onStart = {}, draft = draft)
+        } }
+        compose.onNodeWithText("Cancelled").assertIsDisplayed()
+        compose.onNodeWithText("Ops cancelled this lead: Customer cancelled.").assertIsDisplayed()
+        assertEquals(0, compose.onAllNodes(hasText("Ready to work without signal")).fetchSemanticsNodes().size)
+    }
+
+    @Test fun theSubmittedScreenSaysFilesKeepSendingOnlyWhileSomeAreLeft() {
+        fun f(sent: Boolean) = `in`.carcid.vayu.core.draft.LocalFile("p", "inspection", "door", "photo", "p", "image/jpeg", "camera", 1, "x", "Door", sent = sent)
+        val left = androidx.compose.runtime.mutableStateOf(true)
+        compose.setContent { VayuTheme(ThemeMode.LIGHT) {
+            SubmittedScreen(`in`.carcid.vayu.core.draft.Draft("42", "DEMO-42", "Zoya Merchant", emptyMap(), "tour",
+                files = listOf(f(true), f(!left.value)), submitSent = true), onClose = {})
+        } }
+        compose.onNodeWithText("They keep sending in the background, even with the app closed.").assertIsDisplayed()
+        left.value = false
+        compose.onNodeWithText("All files sent").assertIsDisplayed()
+        assertEquals(0, compose.onAllNodes(hasText("They keep sending", substring = true)).fetchSemanticsNodes().size)
+    }
+
+    /** F-194: with the phone's text at 1.3, an overdue lead's date shows in full and the bell count sits clear of the bell. */
+    @Test fun largeTextKeepsDatesWhole() {
+        val late = j("3", "Sunil Das", "10:00", date = "2026-11-22")
+        compose.setContent {
+            val d = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(d.density, 1.3f)) {
+                VayuTheme(ThemeMode.LIGHT) { ExpertHome(me, JobsState(jobs + late), today, {}, {}, ExpertExtras(bell = `in`.carcid.vayu.ui.BellState(unread = 26))) }
+            }
+        }
+        val layout = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithText("22 Nov").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!(layout)
+        assertTrue("the date is cut off", !layout.single().hasVisualOverflow)
+        compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/my_jobs_large_text.png", roborazziOptions = options)
+    }
+
     @Test fun aFieldOpensTheCameraTheFormBuilderChose() {
         fun f(cfg: Map<String, Any?>) = `in`.carcid.vayu.core.forms.Field("p", "P", "photo", "", false, null, null, true, "edit", cfg)
         assertEquals(true, firstCameraIsBack(f(emptyMap())))                 // Back by default
@@ -121,7 +179,7 @@ class MyJobsTest {
         compose.onNodeWithText("Ready to work without signal").assertIsDisplayed()
         compose.onNodeWithText("Start inspection").assertIsDisplayed()
         compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/job_detail.png", roborazziOptions = options)
-        compose.onNodeWithContentDescription("Back to My jobs").performClick()
+        compose.onNodeWithContentDescription("Back to My leads").performClick()
         compose.onNodeWithText("Today · 4").assertIsDisplayed()
     }
 
@@ -229,5 +287,44 @@ class MyJobsTest {
         compose.setContent { `in`.carcid.vayu.AppRoot(vm) }
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Arjun Mehta")).fetchSemanticsNodes().isNotEmpty() }
         server.stop()
+    }
+
+    @Test fun aDraftOfALeadThatLeftTheListIsInUploadsToSendOrDiscard() {
+        val gone = "00000000-0000-0000-0000-000000000009"
+        val d = `in`.carcid.vayu.core.draft.Draft(gone, "DEMO-9", "Ravi Kumar", mapOf("inspection" to 7), "pdi",
+            startedAt = "2026-11-22T10:00:00+05:30", startSent = true)
+        var sent: String? = null
+        compose.setContent {
+            VayuTheme(ThemeMode.LIGHT) {
+                ExpertHome(me, JobsState(jobs), today, {}, {}, ExpertExtras(drafts = mapOf(gone to d), listed = jobs.map { it.id }.toSet(),
+                    onSend = { sent = it }))
+            }
+        }
+        compose.onNodeWithText("Uploads").performClick()
+        compose.onNodeWithText("1 lead not sent yet · 0 files").assertIsDisplayed()       // what sign-out waits for
+        compose.onNodeWithText("Ravi Kumar · No longer on your list · send or discard it").performClick()
+        compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/uploads_left_the_list.png", roborazziOptions = options)
+        compose.onNodeWithText("Send").performClick()
+        compose.onNode(hasText("Send") and androidx.compose.ui.test.hasClickAction() and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.isDialog())).performClick()
+        assertEquals(gone, sent)
+    }
+
+    @Test fun aRefusedFileSaysWhyAndCanBeRemoved() {
+        val f = `in`.carcid.vayu.core.draft.LocalFile("f1", "inspection", "walk_video", "video", "", "video/webm", "gallery", 9, "",
+            "Walk-around video 1", error = "video/webm is not allowed for a video.", refused = true)
+        val d = `in`.carcid.vayu.core.draft.Draft(jobs[0].id, jobs[0].bookingId, jobs[0].customer, mapOf("inspection" to 7), "pdi",
+            submittedAt = "2026-11-24T16:00:00+05:30", submitSent = true, files = listOf(f))
+        var removed: String? = null
+        compose.setContent {
+            VayuTheme(ThemeMode.LIGHT) {
+                ExpertHome(me, JobsState(jobs), today, {}, {}, ExpertExtras(drafts = mapOf(d.bookingId to d), listed = jobs.map { it.id }.toSet(),
+                    onRemoveFile = { _, x -> removed = x.id }))
+            }
+        }
+        compose.onNodeWithText("Uploads").performClick()
+        compose.onNodeWithText("${d.customer} · 1 need you").performClick()
+        compose.onNodeWithText("video/webm is not allowed for a video.").assertIsDisplayed()
+        compose.onNodeWithText("Remove").performClick()
+        assertEquals("f1", removed)
     }
 }

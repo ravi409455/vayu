@@ -62,7 +62,7 @@ test.describe("form builder", () => {
     await page.getByRole("button", { name: "More form actions" }).click();
     await page.getByRole("menuitem", { name: "Discard draft" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Discard draft" }).click();
-    await expect(page.getByRole("status").filter({ hasText: /never been published/ })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: /never been published/ })).toBeVisible();     // an error toast is an alert
   });
 
   test("the library is used from the builder: save a field, then add it to a section", async ({ page }) => {
@@ -120,7 +120,8 @@ test.describe("layout", () => {
     await page.goto("/forms");
     await expect(page.getByRole("link", { name: "Forms" }).getByText("Forms")).toBeVisible();
     await page.getByRole("button", { name: "Collapse the menu" }).click();
-    await expect(page.getByRole("link", { name: "Forms" }).locator(".nav-label")).toBeHidden();
+    // the label is hidden from the eye only: it stays the link's name for screen readers
+    expect(await page.getByRole("link", { name: "Forms" }).locator(".nav-label").evaluate((e) => e.getBoundingClientRect().width)).toBeLessThanOrEqual(1);
     await page.reload();
     await expect(page.getByRole("button", { name: "Expand the menu" })).toBeVisible();      // remembered
     await page.getByRole("button", { name: "Expand the menu" }).click();

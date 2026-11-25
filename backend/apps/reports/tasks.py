@@ -1,11 +1,9 @@
 import logging
-import time
 from datetime import timedelta
 
 from botocore.exceptions import ClientError
 from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
-from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -15,7 +13,7 @@ from apps.core import events
 from apps.media import storage
 
 from . import context, definition, render, shared
-from .models import PdfTemplateVersion, Report
+from .models import PdfTemplateVersion, Report, ReportRender, mark_out_of_date
 
 MAX_RETRIES = 2
 SOFT_LIMIT, HARD_LIMIT = 300, 330        # seconds: 150 photos must fit with room to spare
@@ -25,8 +23,19 @@ logger = logging.getLogger(__name__)
 
 
 def published_template(booking: Booking, insp) -> PdfTemplateVersion | None:
-    return (PdfTemplateVersion.objects.filter(template__form=insp.form_version.form,
-                                              status="published").order_by("-number").first())
+    """The layout made for the inspection's form version (F-119): the newest template version
+    published before the next form version came out, so rows the older form has still print.
+    An inspection on the latest form version gets the newest layout."""
+    from apps.forms.models import FormVersion
+
+    nxt = (FormVersion.objects.filter(form_id=insp.form_version.form_id, status="published",
+                                      number__gt=insp.form_version.number)
+           .order_by("number").values_list("published_at", flat=True).first())
+    live = PdfTemplateVersion.objects.filter(template__form=insp.form_version.form,
+                                             status="published")
+    made_for = live.filter(published_at__lt=nxt) if nxt else live
+    return (made_for.order_by("-number").first()            # pinned to an older version
+            or live.order_by("number").first())             # no layout that old: the oldest
 
 
 def build_pdf(booking: Booking, insp, tv: PdfTemplateVersion, token: str, revision: int,
@@ -63,30 +72,42 @@ def _render_with_retries(booking, insp, tv, token: str, revision: int):
         except SoftTimeLimitExceeded:
             raise                              # out of time: retrying would only be killed
         except Exception:  # noqa: BLE001
+            # tried again at once: sleeping would hold the only PDF worker and eat the time
+            # limit; a lasting failure is tried again later by the sweep (F-093)
             if attempt == MAX_RETRIES:
                 raise
-            time.sleep(settings.PDF_RETRY_DELAY)
     raise AssertionError("unreachable")  # pragma: no cover
+
+
+def _finds(booking: Booking):
+    insp = booking.counted_inspection()
+    return insp, (published_template(booking, insp) if insp else None)
 
 
 @shared_task(soft_time_limit=SOFT_LIMIT, time_limit=HARD_LIMIT)
 def render_report(booking_id: str) -> str:
-    """Make (or remake) the PDF of a completed booking. Latest revision only is kept."""
+    """Make the PDF of a completed booking: once by itself when it completes, then each time Ops
+    press Regenerate. Latest revision only is kept."""
     booking = Booking.objects.get(pk=booking_id)
-    insp = context.latest_inspection(booking)
-    tv = published_template(booking, insp) if insp else None
+    insp, tv = _finds(booking)
     if insp is None or tv is None:
         return "skipped"                          # nothing to render yet
     report, _ = Report.objects.get_or_create(booking=booking)
     now = timezone.now()
-    # one render at a time per booking: a second request while one runs is dropped; edits made
-    # meanwhile set 'stale' again, and the running render then goes once more (see the end)
+    # one render at a time per booking: a second request while one runs is dropped. Claimed
+    # before the data is read (F-118): a change saved after this point marks the new PDF out
+    # of date again, never lost
     claimed = Report.objects.filter(pk=report.pk).filter(
         Q(render_started_at__isnull=True) | Q(render_started_at__lt=now - STUCK_AFTER)
-    ).update(render_started_at=now, stale=False)
+    ).update(render_started_at=now, stale=False, stale_since=None)
     if not claimed:
         return "busy"
     report.refresh_from_db()
+    booking.refresh_from_db()
+    insp, tv = _finds(booking)
+    if insp is None or tv is None:                # changed in between (a conflict arrived)
+        Report.objects.filter(pk=report.pk).update(render_started_at=None)
+        return "skipped"
     revision = report.revision + 1
     try:
         pdf, name, key = _render_with_retries(booking, insp, tv, report.token, revision)
@@ -94,10 +115,17 @@ def render_report(booking_id: str) -> str:
         reason = ("timeout" if isinstance(exc, SoftTimeLimitExceeded)
                   else "storage_failed" if isinstance(exc, ClientError) else "render_failed")
         logger.exception("PDF render failed for booking %s", booking.id)   # detail stays in logs
-        Report.objects.filter(pk=report.pk).update(status="failed", error=reason,
-                                                   render_started_at=None,
+        # a PDF already made stays ready (the customer's QR keeps working, H-18); the failure is
+        # kept beside it for Ops
+        # the last PDF no longer shows the data that asked for a new one: out of date again
+        Report.objects.filter(pk=report.pk).update(status="ready" if report.key else "failed",
+                                                   error=reason, render_started_at=None,
                                                    retry_at=timezone.now() + RETRY_FAILED)
-        if report.status != "failed":                # alert once, not on every retry
+        if report.key:
+            mark_out_of_date(Report.objects.filter(pk=report.pk))
+        ReportRender.objects.create(report_id=report.pk, revision=revision, started_at=now,
+                                    ok=False, error=reason, template_version=tv)
+        if not report.error:                         # alert once, not on every retry
             events.emit("alert.pdf_failed", booking=str(booking.id), reason=reason)
         return "failed"
     with transaction.atomic():
@@ -107,29 +135,26 @@ def render_report(booking_id: str) -> str:
         report.status, report.error, report.render_started_at = "ready", "", None
         report.retry_at = None
         report.template_version, report.generated_at = tv, timezone.now()
+        report.first_generated_at = report.first_generated_at or report.generated_at
         report.save(update_fields=["revision", "key", "filename", "status", "error",
                                    "render_started_at", "template_version", "generated_at",
-                                   "retry_at"])
-        again = report.stale                     # changed while this one was being made
+                                   "retry_at", "first_generated_at"])
+        ReportRender.objects.create(report=report, revision=revision, started_at=now, ok=True,
+                                    template_version=tv)
     if old:
         storage.delete(old)
     events.emit("pdf.ready", booking=str(booking.id), booking_id=booking.booking_id,
                 revision=revision)
-    if again:
-        render_report.delay(booking_id)
     return "ready"
 
 
 @shared_task
 def sweep_reports() -> int:
-    """Every few minutes: make again the reports of completed bookings that missed a render
-    (changed while one was busy, a killed worker) or whose last try failed a while ago."""
+    """Every few minutes: try again the renders that failed a while ago or whose worker was
+    killed. Never a report that is only out of date: Ops regenerate those."""
     now = timezone.now()
     due = Report.objects.filter(booking__stage="completed").filter(
-        (Q(stale=True) & (Q(render_started_at__isnull=True)
-                          | Q(render_started_at__lt=now - STUCK_AFTER)))
-        | Q(render_started_at__lt=now - STUCK_AFTER)
-        | Q(status="failed", retry_at__lte=now))
+        Q(render_started_at__lt=now - STUCK_AFTER) | Q(retry_at__lte=now))
     ids = [str(b) for b in due.values_list("booking_id", flat=True)]
     for b in ids:
         render_report.delay(b)

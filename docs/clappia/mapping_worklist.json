@@ -1,0 +1,1184 @@
+{
+ "new_car_3_0": {
+  "matched": 390,
+  "new": [
+   {
+    "section": "Car Details",
+    "label": "Car Company",
+    "ckey": "car_compan",
+    "kind": "app-select",
+    "required": true,
+    "opts": [
+     "Audi\nBMW\nChevrolet\nCitro\u00ebn\nFiat\nFord\nForce\nHonda\nHyundai\nJaguar\nJeep\nKia\nMahindra\nMaruti Suzuki\nMercedes\nMG\nNissan\nRenault\nSkoda\nTata\nToyota\nVolkswagen\nOthers"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car Company Name",
+    "ckey": "car_compan_1",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "{car_compan}=\"Others\"",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Variant",
+    "ckey": "car_varian",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car Registered State",
+    "ckey": "car_regist_1",
+    "kind": "app-select",
+    "required": true,
+    "opts": [
+     "Andhra Pradesh\nArunachal Pradesh\nAssam\nBihar\nChhattisgarh\nDelhi\nGoa\nGujarat\nHaryana\nHimachal Pradesh\nJharkhand\nKarnataka\nKerala\nLadakh\nMadhya Pradesh\nMaharashtra\nManipur\nMeghalaya\nMizoram\nNagaland\nOdisha\nPunjab\nRajasthan\nSikkim\nTamil Nadu\nTelangana\nTripura\nUttar Pradesh\nUttarakhand\nWest Bengal"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car Registered City",
+    "ckey": "car_regist_2",
+    "kind": "ng:input:text",
+    "required": false,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car KM Current Reading",
+    "ckey": "car_km_cur",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Number of Car Keys Available",
+    "ckey": "number_of_",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Body Frame Accidental Checklist",
+    "label": "Match Chassis No Plate with the Real Body",
+    "ckey": "match_chas",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Matching",
+     "Not Matching",
+     "Not Able To Locate"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Body Frame Accidental Checklist",
+    "label": "Chasis Remark",
+    "ckey": "chasisremark",
+    "kind": "ng:input:text",
+    "required": false,
+    "opts": [],
+    "rule": "OR(SEARCH(\"Not Matching\",{a8247c81b6524f04bd94787b80b59c5b})>0,SEARCH(\"Not Able To Locate\",{a8247c81b6524f04bd94787b80b59c5b})>0)",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Electrical and Interior",
+    "label": "Multi Function Display",
+    "ckey": "multi_func",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Ok",
+     "Not Ok"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Electrical and Interior",
+    "label": "Multi Function Display",
+    "ckey": "multi_func_1",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   },
+   {
+    "section": "Electrical and Interior",
+    "label": "Multi Function Display",
+    "ckey": "multi_func_2",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   },
+   {
+    "section": "Electrical and Interior",
+    "label": "Check All Buttons",
+    "ckey": "check_all_",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "Power Steering Problem",
+    "ckey": "power_stee",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present",
+     "NA"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "ABS Sensor Problem",
+    "ckey": "abs_warnin",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present",
+     "NA"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "Airbag Sensor Problem",
+    "ckey": "airbag_sensor",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present",
+     "NA"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "Battery Problem",
+    "ckey": "battery_wa",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "Low Engine Oil",
+    "ckey": "oil_pressu",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Images From All Directions",
+    "label": "Front",
+    "ckey": "front_view",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   },
+   {
+    "section": "Car Images From All Directions",
+    "label": "Back",
+    "ckey": "rear_view",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   },
+   {
+    "section": "Final Car Result",
+    "label": "Any Issues found in the car?",
+    "ckey": "any_issues",
+    "kind": "app-text-area",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   }
+  ],
+  "pdi_keys_not_used": []
+ },
+ "used_car_3_0": {
+  "matched": 328,
+  "new": [
+   {
+    "section": "Car Details",
+    "label": "Car Company",
+    "ckey": "car_compan",
+    "kind": "app-select",
+    "required": true,
+    "opts": [
+     "Audi\nBMW\nChevrolet\nCitro\u00ebn\nDatsun\nFiat\nFord\nForce\nHonda\nHyundai\nJaguar\nJeep\nKia\nMahindra\nMaruti Suzuki\nMercedes\nMG\nMitsubishi\nNissan\nOthers\nRenault\nSkoda\nTata\nToyota\nVolkswagen"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car Registration Number",
+    "ckey": "car_number",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car Company Name",
+    "ckey": "car_compan_1",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "{car_compan}=\"Others\"",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car Registration Year (Model)",
+    "ckey": "car_regist",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car Variant",
+    "ckey": "car_varian",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car Registered State",
+    "ckey": "car_regist_1",
+    "kind": "app-select",
+    "required": true,
+    "opts": [
+     "Andhra Pradesh\nArunachal Pradesh\nAssam\nBihar\nChhattisgarh\nDelhi\nGoa\nGujarat\nHaryana\nHimachal Pradesh\nJharkhand\nKarnataka\nKerala\nLadakh\nMadhya Pradesh\nMaharashtra\nManipur\nMeghalaya\nMizoram\nNagaland\nOdisha\nPunjab\nRajasthan\nSikkim\nTamil Nadu\nTelangana\nTripura\nUttar Pradesh\nUttarakhand\nWest Bengal"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car Registered City",
+    "ckey": "car_regist_2",
+    "kind": "ng:input:text",
+    "required": false,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car KM Current Reading",
+    "ckey": "car_km_cur",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Number of Car Keys Available",
+    "ckey": "number_of_",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Documents",
+    "label": "Car Purchase Invoice",
+    "ckey": "car_invoice",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Available",
+     "Not Available",
+     "Not Required"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Body Frame Accidental Checklist",
+    "label": "Match Chassis No Plate with the Real Body",
+    "ckey": "match_chas",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Matching",
+     "Not Matching",
+     "Not Able To Locate"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Body Frame Accidental Checklist",
+    "label": "Chasis Remark",
+    "ckey": "chasisremark",
+    "kind": "ng:input:text",
+    "required": false,
+    "opts": [],
+    "rule": "OR(SEARCH(\"Not Matching\",{radiator_c})>0,SEARCH(\"Not Able To Locate\",{radiator_c})>0)",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Engine",
+    "label": "Wiring Image",
+    "ckey": "wiring_ima",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "10",
+    "ours": null
+   },
+   {
+    "section": "Electrical and Interior",
+    "label": "Multi Function Display",
+    "ckey": "multi_func",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Working",
+     "Not Working"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Electrical and Interior",
+    "label": "Multi Function Display",
+    "ckey": "multi_func_1",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "10",
+    "ours": null
+   },
+   {
+    "section": "Electrical and Interior",
+    "label": "Multi Function Display",
+    "ckey": "multi_func_2",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "10",
+    "ours": null
+   },
+   {
+    "section": "Electrical and Interior",
+    "label": "Check All Buttons",
+    "ckey": "check_all_",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "Power Steering Problem",
+    "ckey": "power_stee",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present",
+     "NA"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "ABS Sensor Problem",
+    "ckey": "abs_warnin",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present",
+     "NA"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "Airbag Sensor Problem",
+    "ckey": "airbag_sensor",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present",
+     "NA"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "Battery Problem",
+    "ckey": "battery_wa",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "Low Engine Oil",
+    "ckey": "oil_pressu",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Air Conditioning",
+    "label": "Air Condition Video at Fan Max Speed",
+    "ckey": "air_condit_6",
+    "kind": "app-file",
+    "required": false,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   },
+   {
+    "section": "Axle",
+    "label": "Axle Rotating Video",
+    "ckey": "axle_rotat",
+    "kind": "app-file",
+    "required": false,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   },
+   {
+    "section": "Engine",
+    "label": "Engine Noise Recording",
+    "ckey": "engine_noi_1",
+    "kind": "app-file",
+    "required": false,
+    "opts": [],
+    "rule": "",
+    "max_files": "10",
+    "ours": null
+   },
+   {
+    "section": "Final Car Result",
+    "label": "Any Issues found in the car?",
+    "ckey": "any_issues",
+    "kind": "app-text-area",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Images From All Directions",
+    "label": "Front",
+    "ckey": "front_view",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   },
+   {
+    "section": "Car Images From All Directions",
+    "label": "Back",
+    "ckey": "rear_view",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   },
+   {
+    "section": "Car Images From All Directions",
+    "label": "Car KM Reading",
+    "ckey": "car_km_reading_after_test_drive",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   }
+  ],
+  "pdi_keys_not_used": [
+   "bonnet_photo",
+   "boot_door_photo",
+   "cladding_driver_front_photo",
+   "cladding_driver_rear_photo",
+   "cladding_passenger_front_photo",
+   "cladding_passenger_rear_photo",
+   "doc_accessories",
+   "doc_bifuel_photo",
+   "doc_ext_warranty",
+   "doc_form21",
+   "doc_form22",
+   "doc_manual",
+   "doc_puc",
+   "doc_road_tax",
+   "doc_service_book",
+   "doc_temp_reg",
+   "doc_warranty",
+   "door_driver_back_photo",
+   "door_driver_front_photo",
+   "door_passenger_back_photo",
+   "door_passenger_front_photo",
+   "fender_driver_front_photo",
+   "fender_passenger_front_photo",
+   "fog_lights_photo",
+   "front_bumper_photo",
+   "front_grill_photo",
+   "fuel_flap_photo",
+   "headlight_driver_working_photo",
+   "headlight_passenger_working_photo",
+   "indicator_back_driver_working_photo",
+   "indicator_back_passenger_working_photo",
+   "indicator_front_driver_photo",
+   "indicator_front_passenger_working_photo",
+   "mirror_glass_driver_photo",
+   "mirror_glass_passenger_photo",
+   "mirror_housing_driver_photo",
+   "mirror_housing_passenger_photo",
+   "mud_flap_driver_back_photo",
+   "mud_flap_driver_front_photo",
+   "mud_flap_passenger_back_photo",
+   "mud_flap_passenger_front_photo",
+   "number_plate_front_photo",
+   "number_plate_rear_photo",
+   "quarter_panel_driver_back_photo",
+   "quarter_panel_passenger_back_photo",
+   "rear_bumper_photo",
+   "rear_windshield_photo",
+   "roof_outside_photo",
+   "roof_rail_driver_photo",
+   "roof_rail_passenger_photo",
+   "sill_driver_photo",
+   "sill_passenger_photo",
+   "tail_light_driver_photo",
+   "tail_light_passenger_photo",
+   "taillight_connected_photo",
+   "wheel_arch_driver_front_photo",
+   "wheel_arch_driver_rear_photo",
+   "wheel_arch_passenger_front_photo",
+   "wheel_arch_passenger_rear_photo",
+   "window_driver_back_photo",
+   "window_driver_front_photo",
+   "window_passenger_back_photo",
+   "window_passenger_front_photo",
+   "windshield_photo"
+  ]
+ },
+ "ev_3_0": {
+  "matched": 340,
+  "new": [
+   {
+    "section": "Car Details",
+    "label": "Car Company",
+    "ckey": "car_compan",
+    "kind": "app-select",
+    "required": true,
+    "opts": [
+     "Audi\nBMW\nChevrolet\nCitro\u00ebn\nFiat\nFord\nHonda\nHyundai\nJaguar\nJeep\nKia\nMahindra\nMaruti Suzuki\nMercedes\nMG\nNissan\nRenault\nSkoda\nTata\nToyota\nVolkswagen\nOthers"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car Company Name",
+    "ckey": "car_compan_1",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "{car_compan}=\"Others\"",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Variant",
+    "ckey": "car_varian",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car Registered State",
+    "ckey": "car_regist_1",
+    "kind": "app-select",
+    "required": true,
+    "opts": [
+     "Andhra Pradesh\nArunachal Pradesh\nAssam\nBihar\nChhattisgarh\nDelhi\nGoa\nGujarat\nHaryana\nHimachal Pradesh\nJharkhand\nKarnataka\nKerala\nLadakh\nMadhya Pradesh\nMaharashtra\nManipur\nMeghalaya\nMizoram\nNagaland\nOdisha\nPunjab\nRajasthan\nSikkim\nTamil Nadu\nTelangana\nTripura\nUttar Pradesh\nUttarakhand\nWest Bengal"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car Registered City",
+    "ckey": "car_regist_2",
+    "kind": "ng:input:text",
+    "required": false,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Car KM Current Reading",
+    "ckey": "car_km_cur",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Details",
+    "label": "Number of Car Keys Available",
+    "ckey": "number_of_",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Exterior Body",
+    "label": "Charger Flap",
+    "ckey": "charger_flap12",
+    "kind": "app-check-box",
+    "required": true,
+    "opts": [
+     "Damaged",
+     "Scratches",
+     "Rusted",
+     "Ok"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Exterior Body",
+    "label": "Charger Flap Photos",
+    "ckey": "charger_flap_photos",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "AND({charger_flap12} <> \"Ok\", {charger_flap12} <> \"\")",
+    "max_files": "5",
+    "ours": null
+   },
+   {
+    "section": "Battery, Charger and Hood",
+    "label": "Charger Output (KiloWatts)",
+    "ckey": "charger_ou",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Battery, Charger and Hood",
+    "label": "Charger",
+    "ckey": "charger",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Working",
+     "Not working",
+     "Damaged",
+     "Not Able to Check"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Battery, Charger and Hood",
+    "label": "Charging Port",
+    "ckey": "charger_1",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Working",
+     "Not working",
+     "Damaged"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Battery, Charger and Hood",
+    "label": "Battery Charging on Connecting Charger",
+    "ckey": "charger_2",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Yes",
+     "No",
+     "Not Able to Check"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Battery, Charger and Hood",
+    "label": "Motor",
+    "ckey": "motor",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Ok",
+     "Not Ok"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Battery, Charger and Hood",
+    "label": "Motor Running Video",
+    "ckey": "motor_runn",
+    "kind": "app-file",
+    "required": false,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   },
+   {
+    "section": "Battery, Charger and Hood",
+    "label": "Cables",
+    "ckey": "fuse_box_1",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Ok",
+     "Loose",
+     "Damaged"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Battery, Charger and Hood",
+    "label": "Fuse Box",
+    "ckey": "fuse_box",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Ok",
+     "Not Ok"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Battery, Charger and Hood",
+    "label": "Auxiliary Battery",
+    "ckey": "motor_cool",
+    "kind": "app-radio",
+    "required": false,
+    "opts": [
+     "Ok",
+     "Not Ok"
+    ],
+    "rule": "{enter_book}=\"00145\"",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Body Frame Accidental Checklist",
+    "label": "Match Chassis No Plate with the Real Body",
+    "ckey": "match_chas",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Matching",
+     "Not Matching",
+     "Not Able To Locate"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Body Frame Accidental Checklist",
+    "label": "Chasis Remark",
+    "ckey": "chasisremark",
+    "kind": "ng:input:text",
+    "required": false,
+    "opts": [],
+    "rule": "OR(SEARCH(\"Not Matching\",{a8247c81b6524f04bd94787b80b59c5b})>0,SEARCH(\"Not Able To Locate\",{a8247c81b6524f04bd94787b80b59c5b})>0)",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Electrical and Interior",
+    "label": "Start Button",
+    "ckey": "ignition_s",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Ok",
+     "Not Ok"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Electrical and Interior",
+    "label": "Multi Function Display",
+    "ckey": "multi_func",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Ok",
+     "Not Ok"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Electrical and Interior",
+    "label": "Multi Function Display",
+    "ckey": "multi_func_1",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   },
+   {
+    "section": "Electrical and Interior",
+    "label": "Multi Function Display",
+    "ckey": "multi_func_2",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   },
+   {
+    "section": "Electrical and Interior",
+    "label": "Check All Buttons",
+    "ckey": "check_all_",
+    "kind": "ng:input:text",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "Charging System Warning",
+    "ckey": "charging_war",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "Power Steering Problem",
+    "ckey": "power_stee",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present",
+     "NA"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "ABS Sensor Problem",
+    "ckey": "abs_warnin",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present",
+     "NA"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "Airbag Sensor Problem",
+    "ckey": "airbag_sensor",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present",
+     "NA"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Warning Lights",
+    "label": "Battery Problem",
+    "ckey": "battery_wa",
+    "kind": "app-radio",
+    "required": true,
+    "opts": [
+     "Present",
+     "Not Present"
+    ],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   },
+   {
+    "section": "Car Images From All Directions",
+    "label": "Front",
+    "ckey": "front_view",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   },
+   {
+    "section": "Car Images From All Directions",
+    "label": "Bonnet Open",
+    "ckey": "bonnet_open",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   },
+   {
+    "section": "Car Images From All Directions",
+    "label": "Back",
+    "ckey": "rear_view",
+    "kind": "app-file",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "1",
+    "ours": null
+   },
+   {
+    "section": "Final Car Result",
+    "label": "Any issues found in the car?",
+    "ckey": "any_issues",
+    "kind": "app-text-area",
+    "required": true,
+    "opts": [],
+    "rule": "",
+    "max_files": "",
+    "ours": null
+   }
+  ],
+  "pdi_keys_not_used": [
+   "ac_belt",
+   "ac_compressor_mounting",
+   "adblue_display",
+   "battery",
+   "car_start",
+   "car_start_video",
+   "clutch_pedal",
+   "clutch_rpm_accel",
+   "clutch_rpm_down",
+   "clutch_rpm_up",
+   "cng_fitting",
+   "cng_hydro_test",
+   "cng_plate_photo",
+   "coolant_quality",
+   "dipstick_smoke",
+   "doc_bifuel",
+   "doc_bifuel_photo",
+   "doc_puc",
+   "engine_belt",
+   "engine_cc",
+   "engine_mounting",
+   "engine_no",
+   "engine_noise_video",
+   "engine_oil_cap",
+   "engine_oil_quality",
+   "engine_underbody",
+   "engine_vibration",
+   "exhaust_pipe",
+   "exhaust_sound",
+   "fuel",
+   "fuel_flap",
+   "fuel_flap_photo",
+   "fuel_tank",
+   "gear_shifting",
+   "hoses",
+   "ignition",
+   "obd_fault_codes",
+   "obd_photo",
+   "radiator",
+   "radiator_fan",
+   "shift_4x4",
+   "silencer",
+   "smoke_emission",
+   "smoke_emission_video",
+   "transmission",
+   "transmission_oil_leak",
+   "under_trays",
+   "warn_engine",
+   "wiring"
+  ]
+ }
+}

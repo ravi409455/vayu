@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from celery import shared_task
@@ -20,12 +21,22 @@ def push(ids: list[int]) -> int:
         return 0
     sent = 0
     for n in Notification.objects.filter(pk__in=ids).only("id", "user_id"):
+        ok = failed = 0
         for d in Device.objects.filter(user_id=n.user_id, revoked_at__isnull=True).exclude(
                 push_token=""):
+            # the same phone, signed in by someone else since: only the newest holder (F-141)
+            if d.push_token_at and Device.objects.filter(
+                    push_token=d.push_token, push_token_at__gt=d.push_token_at).exists():
+                continue
             if fcm.send(d.push_token, {"id": str(n.id)}):
-                sent += 1
+                ok += 1
             else:
+                failed += 1
                 Device.objects.filter(pk=d.pk).update(push_token="")
+        Notification.objects.filter(pk=n.pk).update(pushed=ok, push_failed=failed)
+        sent += ok
+    logging.getLogger(__name__).info("pushes sent", extra={"notifications": len(ids),
+                                                           "sent": sent})
     return sent
 
 

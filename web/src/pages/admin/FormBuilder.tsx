@@ -7,9 +7,9 @@ import { useList, useRefresh } from "../../api/hooks";
 import type { Check, FormField, FormPage, FormSummary, FormVersion, MasterList } from "../../api/types";
 import { useAuth } from "../../auth";
 import { photoOfDefault } from "../../lib/fieldTypes";
+import { nsOf, useFieldChoices } from "../../lib/useChoices";
 import { applyDrag, isEmptyBody, reorderBody, type Ref } from "../../lib/tree";
-import { type FieldChoice } from "../../ui/ConditionBuilder";
-import { Confirm, Field, InfoTip, Modal, NameDialog, PageHeader, Pill, Tabs, useToast } from "../../ui/kit";
+import { Confirm, Field, InfoTip, LoadError, Modal, NameDialog, PageHeader, Pill, Tabs, useToast } from "../../ui/kit";
 import { AddFieldDialog, AddSectionDialog } from "./builder/AddDialogs";
 import { Canvas, type Sel } from "./builder/Canvas";
 import { Ratings } from "./builder/FormExtras";
@@ -17,10 +17,11 @@ import { KeyChecks } from "./builder/KeyChecks";
 import { ContainerEditor } from "./builder/Inspector";
 import { LibraryBox } from "./builder/LibraryBox";
 import { PreviewDialog } from "./builder/PreviewDialog";
-import { DuplicateDialog } from "./ImportForm";
-import { FieldEditor, type FieldDraft, type ValidationDraft } from "./FieldEditor";
+import { DuplicateDialog } from "./builder/ImportForm";
+import { FieldEditor, type FieldDraft, type ValidationDraft } from "./builder/FieldEditor";
 import { useCrumb } from "../../ui/crumb";
 import { MoreMenu } from "../../ui/Menu";
+import { keys } from "../../api/keys";
 
 type Issue = { path: string; code: string; message: string };
 
@@ -29,13 +30,13 @@ export function FormBuilder() {
   const { can } = useAuth();
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const form = useQuery({ queryKey: ["form", id], queryFn: () => api<FormSummary>(`forms/${id}`) });
+  const form = useQuery({ queryKey: keys.form(id), queryFn: ({ signal }) => api<FormSummary>(`forms/${id}`, { signal }) });
   const f = form.data;
   useCrumb(f?.name);
   const vid = f?.draft_version?.id ?? f?.published_version?.id;
   const draft = !!f?.draft_version;
-  const version = useQuery({ queryKey: ["version", vid], enabled: !!vid, queryFn: () => api<FormVersion>(`form-versions/${vid}`) });
-  const lists = useList<MasterList>("master-lists", "master-lists");
+  const version = useQuery({ queryKey: keys.formVersion(vid), enabled: !!vid, queryFn: ({ signal }) => api<FormVersion>(`form-versions/${vid}`, { signal }) });
+  const lists = useList<MasterList>(keys.masterLists(), "master-lists");
   const v = version.data;
   const [local, setLocal] = useState<FormPage[] | null>(null);
   const [sel, setSel] = useState<Sel>(null);
@@ -50,8 +51,8 @@ export function FormBuilder() {
   const [visibility, setVisibility] = useState<string[] | null>(null);
   const [confirmDel, setConfirmDel] = useState<null | (() => void)>(null);
   const edit = can("forms.edit") && draft;
-  const pages: FormPage[] = local ?? v?.pages ?? [];
-  const reload = async () => { await Promise.all([refresh("version"), refresh("form"), refresh("forms")]); setLocal(null); };
+  const pages: FormPage[] = useMemo(() => local ?? v?.pages ?? [], [local, v?.pages]);
+  const reload = async () => { await refresh(keys.formVersion(), keys.forms()); setLocal(null); };
   const run = async (fn: () => Promise<unknown>, done?: string) => {
     try { await fn(); if (done) say(done); await reload(); } catch (e) { setLocal(null); fail(e); await reload(); }
   };
@@ -81,6 +82,7 @@ export function FormBuilder() {
     onError: (e) => { setDiscard(false); fail(e); },
   });
 
+  if (form.isError) return <LoadError error={form.error} what="form" onRetry={form.refetch} />;
   if (!f) return <p className="muted pad">Loading…</p>;
 
   function onSelect(r: Ref) {
@@ -191,7 +193,7 @@ export function FormBuilder() {
             </div>
           )}
           {tab === "keychecks" && <KeyChecks version={v} choices={choices} edit={edit} run={(fn) => void run(fn, "Key Checks saved.")} />}
-          {tab === "ratings" && <Ratings version={v} sections={pages.flatMap((p) => p.sections.map((s) => s.title))} edit={edit} run={(fn) => void run(fn)} />}
+          {tab === "ratings" && <Ratings version={v} sections={pages.flatMap((p) => p.sections.filter((s) => s.key).map((s) => ({ key: s.key!, title: s.title || s.key! })))} edit={edit} run={(fn) => void run(fn)} />}
         </>
       )}
       {adding?.kind === "page" && <NameDialog title="Add a page" label="Page name" onCancel={() => setAdding(null)} onOk={(title) => { setAdding(null); void run(() => api(`form-versions/${v!.id}/pages`, { body: { title } })); }} />}
@@ -225,7 +227,8 @@ export function FormBuilder() {
       {renaming !== null && (
         <Modal title="Rename this form" onClose={() => setRenaming(null)}
           actions={<><button onClick={() => setRenaming(null)}>Cancel</button>
-            <button className="primary" disabled={!renaming.trim() || renaming.trim() === f.name} onClick={async () => { try { await api(`forms/${id}`, { method: "PATCH", body: { name: renaming.trim() } }); say("Renamed."); setRenaming(null); await reload(); } catch (e) { fail(e); } }}>Save</button></>}>
+            <button className="primary" disabled={!renaming.trim() || renaming.trim() === f.name} onClick={async () => { try { await api(`forms/${id}`, { method: "PATCH", body: { name: renaming.trim() } }); say("Renamed."); setRenaming(null); await reload(); } catch (e) { fail(e); } }}>Save</button>
+              </>}>
           <Field label="Name" help={f.type === "custom" ? "This is what Ops pick from when they create a booking." : "Only the name changes. This form stays the form of its kind."}>
             <input aria-label="Name" value={renaming} onChange={(e) => setRenaming(e.target.value)} /></Field>
         </Modal>)}
@@ -261,27 +264,6 @@ export function PublishDialog({ state, onClose, onPublish }: { state: { issues: 
 }
 
 
-/** Field names a condition can point at: this form's fields plus the other forms' (booking, start,
- *  end). A custom form only offers start / end while it begins / ends with them. */
-export function useFieldChoices(f: FormSummary | undefined, v: FormVersion | undefined): FieldChoice[] {
-  const forms = useList<FormSummary>("forms", "forms");
-  const wanted = (x: FormSummary) => x.type !== "custom" && x.type !== f?.type && !!x.published_version
-    && !(f?.type === "custom" && ((x.type === "start" && v?.use_start === false) || (x.type === "end" && v?.use_end === false)));
-  const others = (forms.data ?? []).filter(wanted);
-  const tree = useQuery({
-    queryKey: ["choice-trees", others.map((o) => o.published_version!.id).join(",")],
-    enabled: others.length > 0,
-    queryFn: async () => Promise.all(others.map(async (o) => ({ ns: o.type as string, v: await api<FormVersion>(`form-versions/${o.published_version!.id}`) }))),
-  });
-  return useMemo(() => {
-    const out: FieldChoice[] = [];
-    const add = (ns: string, ver: FormVersion | undefined) => ver?.pages.forEach((p) => p.sections.forEach((s) => s.fields.forEach((fl: FormField) => out.push({ value: `${ns}.${fl.key}`, label: `${ns}: ${fl.label || fl.key}`, type: fl.type }))));
-    add(f ? nsOf(f.type) : "inspection", v);
-    (tree.data ?? []).filter((t) => others.some((o) => o.type === t.ns)).forEach((t) => add(t.ns, t.v));
-    return out;
-  }, [f?.type, v, tree.data, others.length]); // eslint-disable-line react-hooks/exhaustive-deps
-}
-
 /** Saves a field's validations: removed ones are deleted, new ones created, changed ones updated. */
 async function saveValidations(versionId: number, before: Check[], after: ValidationDraft[]) {
   for (const c of before) if (!after.some((a) => a.id === c.id)) await api(`checks/${c.id}`, { method: "DELETE" });
@@ -292,5 +274,3 @@ async function saveValidations(versionId: number, before: Check[], after: Valida
   }
 }
 
-/** The name a form's answers go by in rules: the custom form is "inspection". */
-export const nsOf = (type: string) => (type === "custom" ? "inspection" : type) as "booking" | "start" | "end" | "inspection";

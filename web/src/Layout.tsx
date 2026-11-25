@@ -2,8 +2,8 @@ import {
   AlertTriangle, BarChart3, BookOpen, Briefcase, ChevronsLeft, ChevronsRight, FileOutput, FileText, KeyRound,
   ClipboardList, Home, List, Rocket, ScrollText, Shield, SlidersHorizontal, Users, Webhook, type LucideIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useLayoutEffect, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "./auth";
 import { loadJSON, saveJSON } from "./lib/store";
 import { useNeeds } from "./lib/problems";
@@ -56,12 +56,16 @@ export function visibleNav(role: string, can: (p: string) => boolean): { title: 
 
 export function Layout() {
   const { me, can } = useAuth();
-  const { needs } = useNeeds();
+  const { total } = useNeeds();
   const [collapsed, setCollapsed] = useState(() => loadJSON<boolean>("vayu:nav:collapsed", false));
+  // the staff app's name in the tab; a page's own title (PageHeader, usePageTitle) comes after it
+  const { pathname } = useLocation();
+  useLayoutEffect(() => { document.title = "Vayu"; }, [pathname]);
   useEffect(() => saveJSON("vayu:nav:collapsed", collapsed), [collapsed]);
   if (!me) return null;
   return (
     <CrumbProvider>
+      <a className="skip-link" href="#main">Skip to content</a>
       <div className={`shell${collapsed ? " collapsed" : ""}`}>
         <nav className="side" aria-label="Main">
           <div className="side-top">
@@ -73,9 +77,9 @@ export function Layout() {
             <div key={g.title}>
               <div className="group">{collapsed ? "·" : g.title}</div>
               {g.items.map((i) => (
-                <NavLink key={i.to} to={i.to} title={i.label} aria-label={i.label}>
+                <NavLink key={i.to} to={i.to} title={i.label}>
                   <i.icon size={18} aria-hidden /><span className="nav-label">{i.label}</span>
-                  {i.to === "/problems" && needs.length > 0 && <span className="nav-badge" aria-label={`${needs.length} need you`}>{needs.length}</span>}
+                  {i.to === "/problems" && total > 0 && <span className="nav-badge">{total}</span>}
                 </NavLink>
               ))}
             </div>
@@ -83,7 +87,7 @@ export function Layout() {
         </nav>
         <div className="body">
           <TopBar />
-          <main className="main"><Outlet /></main>
+          <main className="main" id="main" tabIndex={-1}><Outlet /></main>
         </div>
       </div>
     </CrumbProvider>

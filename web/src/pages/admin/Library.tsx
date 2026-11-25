@@ -6,7 +6,8 @@ import { useList, useRefresh } from "../../api/hooks";
 import { useAuth } from "../../auth";
 import { slugKey } from "../../lib/fieldTypes";
 import { newFieldDef } from "../../lib/libraryDef";
-import { Empty, Field, Modal, PageHeader, Pill, useToast } from "../../ui/kit";
+import { Empty, Field, LoadError, Modal, PageHeader, Pill, useToast } from "../../ui/kit";
+import { keys } from "../../api/keys";
 
 type Item = { id: number; kind: "field" | "section"; key: string; name: string; revision: number; archived: boolean; used_in: number };
 
@@ -18,12 +19,12 @@ export function Library() {
   const [q, setQ] = useState("");
   const [kind, setKind] = useState("");
   const [archived, setArchived] = useState(false);
-  const items = useList<Item>("library", "library", { q: q || undefined, kind: kind || undefined, include_archived: archived ? 1 : undefined });
+  const items = useList<Item>(keys.library(), "library", { q: q || undefined, kind: kind || undefined, include_archived: archived ? 1 : undefined });
   const [creating, setCreating] = useState(false);
   const [n, setN] = useState({ kind: "section", name: "", key: "" });
   const create = useMutation({
     mutationFn: () => api<Item>("library", { body: { kind: n.kind, key: n.key, name: n.name, definition: n.kind === "field" ? newFieldDef(n.key, n.name, "short_text") : { title: n.name, visible: true, fields: [newFieldDef("first_field", "First field", "short_text")] } } }),
-    onSuccess: (r) => { void refresh("library"); nav(`/library/${r.id}`); },
+    onSuccess: (r) => { void refresh(keys.library()); nav(`/library/${r.id}`); },
     onError: fail,
   });
   const rows = items.data ?? [];
@@ -31,6 +32,7 @@ export function Library() {
     <>
       <PageHeader title="Library" subtitle="Reusable fields and sections: built once, used in many forms, and updated everywhere from one place.">
         {can("library.edit") && <button className="primary" onClick={() => setCreating(true)}>New item</button>}</PageHeader>
+      {items.isError && <LoadError error={items.error} what="the library" onRetry={items.refetch} />}
       <div className="filters">
         <input aria-label="Search the library" className="filter-search" placeholder="Search by name or key" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="seg" role="group" aria-label="Kind">{([["", "All"], ["field", "Fields"], ["section", "Sections"]] as const).map(([k, l]) => <button key={k} aria-pressed={kind === k} onClick={() => setKind(k)}>{l}</button>)}</div>
@@ -38,7 +40,7 @@ export function Library() {
       </div>
       {rows.length === 0 && <Empty title={q || kind ? "Nothing matches" : "The library is empty"}>{q || kind ? "Try another search." : "Create an item here, or open a form in the builder and choose “Save to library” on a field or a section."}</Empty>}
       {rows.length > 0 && (
-        <div className="table-card"><table className="rows"><thead><tr><th>Name</th><th>Kind</th><th>Revision</th><th>Used in</th><th /></tr></thead>
+        <div className="table-card"><table className="rows"><thead><tr><th>Name</th><th>Kind</th><th>Revision</th><th>Used in</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>{rows.map((i) => (
             <tr key={i.id} className="click" onClick={() => nav(`/library/${i.id}`)}>
               <td><Link className="cell-main" to={`/library/${i.id}`} onClick={(e) => e.stopPropagation()}>{i.name}</Link><div className="cell-sub mono">{i.key}</div></td>

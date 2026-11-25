@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.core.forms
 
+import `in`.carcid.vayu.core.s
+
 import `in`.carcid.vayu.core.rules.FormRules
 import `in`.carcid.vayu.core.rules.JsonLogic
 import kotlinx.serialization.json.JsonArray
@@ -23,20 +25,22 @@ data class Field(
     val config: Map<String, Any?>,
 ) {
     @Suppress("UNCHECKED_CAST")
-    val options: List<Option> get() = (config["options"] as? List<Map<String, Any?>>).orEmpty().map {
-        Option(it["key"] as String, (it["label"] as? String) ?: (it["key"] as String),
-            it["is_defect"] == true, it["severity"] as? String)
-    }
-    val editable: Boolean get() = level == "edit" && type !in SYSTEM_MADE
+    val options: List<Option> by lazy { (config["options"] as? List<Map<String, Any?>>).orEmpty().mapNotNull {
+        val key = it["key"] as? String ?: return@mapNotNull null          // a broken option is left out, not a crash
+        Option(key, (it["label"] as? String) ?: key, it["is_defect"] == true, it["severity"] as? String)
+    } }
+    /** What this type is (FieldTypes: one place per type). */
+    val fieldType: FieldType get() = FieldTypes.of(type)
+    val editable: Boolean get() = level == "edit" && !fieldType.systemMade
     /** Never typed by the expert: computed, or only shown. */
-    val answerable: Boolean get() = type !in SYSTEM_MADE && type != "image"
-    val isMedia: Boolean get() = type in MEDIA
-    val maxCount: Int get() = if (type == "signature") 1
-        else (config["max_count"] as? Number)?.toInt() ?: if (type == "video") 3 else 10
+    val answerable: Boolean get() = fieldType.answerable
+    val isMedia: Boolean get() = fieldType.media
+    /** "Most files" for this field; one when the form doesn't say (the agreed default, same as the server). */
+    val maxCount: Int get() = if (type == "signature") 1 else (config["max_count"] as? Number)?.toInt() ?: 1
 
     companion object {
-        val MEDIA = setOf("photo", "video", "file", "signature")
-        val SYSTEM_MADE = setOf("derived", "rating")
+        val MEDIA: Set<String> = FieldTypes.all.filter { it.media }.map { it.key }.toSet()
+        val SYSTEM_MADE: Set<String> = FieldTypes.all.filter { it.systemMade }.map { it.key }.toSet()
     }
 }
 
@@ -64,11 +68,10 @@ data class FormTree(val id: Int, val pages: List<Page>, val checks: List<FormRul
     companion object {
         @Suppress("UNCHECKED_CAST")
         fun parse(o: JsonObject): FormTree {
-            fun JsonObject.s(k: String) = (this[k] as? JsonPrimitive)?.contentOrNull ?: ""
             fun JsonObject.b(k: String, d: Boolean) = (this[k] as? JsonPrimitive)?.booleanOrNull ?: d
             fun JsonObject.logic(k: String) = this[k]?.let { JsonLogic.fromJson(it) }
             val pages = (o["pages"] as? JsonArray).orEmpty().map { it.jsonObject }.map { p ->
-                Page((p["id"] as JsonPrimitive).intOrNull ?: 0, p.s("title"), p.b("visible", true), p.b("gate", false), p.logic("show_if"),
+                Page((p["id"] as? JsonPrimitive)?.intOrNull ?: 0, p.s("title"), p.b("visible", true), p.b("gate", false), p.logic("show_if"),
                     (p["sections"] as? JsonArray).orEmpty().map { it.jsonObject }.map { s ->
                         Section((s["id"] as JsonPrimitive).intOrNull ?: 0, s.s("title"), s.b("visible", true), s.logic("show_if"),
                             (s["fields"] as? JsonArray).orEmpty().map { it.jsonObject }.map { f ->

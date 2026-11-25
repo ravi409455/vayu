@@ -2,19 +2,19 @@ import { ChevronDown, ChevronLeft, ChevronRight, Plus, Users } from "lucide-reac
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { api, type Page } from "../../api/client";
-import { useList, useRefresh } from "../../api/hooks";
-import { useLabels } from "../../api/labels";
+import { fetchAll, useList, useRefresh } from "../../api/hooks";
+import { STAGE_LABEL, useLabels } from "../../api/labels";
 import type { Booking, User } from "../../api/types";
 import { useAuth } from "../../auth";
-import { fmtTime, today } from "../../lib/format";
+import { fmtTime, ist, today } from "../../lib/format";
+import { useCount, viewQuery } from "../../lib/bookingViews";
 import { loadJSON, saveJSON } from "../../lib/store";
 import { clampStart, DAY_END, DAY_START, dayWindow, hm, hoursOf, jobSpan, rangeLabel, spanFacts, spanTitle, stackRows, WINDOW_HOURS, windowStarts, type Span } from "../../lib/schedule";
 import { useTiming } from "../../lib/timing";
 import { Avatar } from "../../ui/Avatar";
-import { Empty, PageHeader, useToast } from "../../ui/kit";
-import { Actions } from "./Booking";
-import { useCount, viewQuery } from "./Bookings";
+import { Empty, LoadError, PageHeader, useToast } from "../../ui/kit";
+import { Actions } from "./booking/Actions";
+import { keys } from "../../api/keys";
 
 const SLOT_PX = 76;                // width of 30 minutes; the day scrolls sideways
 const LANE_W = 200;                // the expert column, kept in view while scrolling
@@ -22,9 +22,7 @@ const GUTTER = 36;                 // room at each end of the grid so a time lab
 const CHOSEN = "vayu:today-experts";  // the experts picked in the Experts menu, kept per browser
 
 const LANE_H = 76;                 // height of one row of boxes; a lane with overlapping jobs gets more rows
-export { dayWindow };
 
-const STAGE_NAME: Record<string, string> = { draft: "Unassigned", assigned: "Assigned", in_progress: "In progress", submitted: "Uploading", completed: "Completed" };
 const KIND: Record<string, string> = { draft: "open", assigned: "next", in_progress: "prog", submitted: "prog", completed: "done", cancelled: "off" };
 
 /** Ops' home: what today looks like and who is where. What needs a person is in the bell and the "Needs you" menu. */
@@ -34,14 +32,14 @@ export function Today() {
   const { say, fail } = useToast();
   const refresh = useRefresh();
   const t = today();
-  const q = useQuery({ queryKey: ["bookings-page", "today-home", t], refetchInterval: 60_000,
-    queryFn: () => api<Page<Booking>>("bookings", { query: { date_from: t, date_to: t, order: "schedule" } }) });
-  const experts = useList<User>("experts", "users", { role: "expert" });
+  const q = useQuery({ queryKey: keys.bookings("today-home", t), refetchInterval: 60_000,      // the whole day, every page
+    queryFn: ({ signal }) => fetchAll<Booking>("bookings", { date_from: t, date_to: t, order: "schedule" }, signal) });
+  const experts = useList<User>(keys.users(), "users", { role: "expert" });
   const scroller = useRef<HTMLDivElement>(null);
   const car = useLabels("car_make_model");
   const city = useLabels("city");
   const [assigning, setAssigning] = useState<Booking | null>(null);
-  const all = (q.data?.results ?? []).filter((b) => b.stage !== "cancelled");
+  const all = (q.data ?? []).filter((b) => b.stage !== "cancelled");
   const by = (stage: string) => all.filter((b) => b.stage === stage).length;
   // Every number is the count of the very list its card opens (same question, same answer).
   const todayN = useCount(viewQuery("today", new Date()));
@@ -49,14 +47,15 @@ export function Today() {
   const unassigned = useCount(viewQuery("unassigned"));
   const inProgress = useCount(viewQuery("in_progress"));
   const uploading = useCount(viewQuery("uploading"));
-  const cancelled = (q.data?.results ?? []).length - all.length;
+  const cancelled = (q.data ?? []).length - all.length;
   const grace = useTiming().late_grace_minutes;
   const seesTiming = can("bookings.review_timing");
   const lateToday = useCount({ ...viewQuery("today", new Date()), ...viewQuery("late") }, seesTiming);
   const quickToday = useCount({ ...viewQuery("today", new Date()), ...viewQuery("quick") }, seesTiming);
   const kpis = [
-    { label: "Today's bookings", value: todayN ?? "—", sub: `${by("completed")} done · ${by("in_progress")} in progress${cancelled ? ` · ${cancelled} cancelled` : ""}`, to: "/bookings?all=1" },
-    { label: "Unassigned", value: unassigned ?? "—", sub: unassigned ? "on any day, need an expert" : "all assigned", to: "/bookings?view=unassigned&all=1", tone: unassigned ? "warn" : "" },
+    { label: "Today's bookings", value: todayN ?? "—", sub: q.data ? `${by("completed")} of ${all.length} completed · ${by("in_progress")} in progress${cancelled ? ` · ${cancelled} cancelled` : ""}` : "", to: "/bookings?all=1" },
+    // "all assigned" only when the server said 0, never when the number is unknown
+    { label: "Unassigned", value: unassigned ?? "—", sub: unassigned === undefined ? "" : unassigned ? "on any day, need an expert" : "all assigned", to: "/bookings?view=unassigned&all=1", tone: unassigned ? "warn" : "" },
     { label: "In progress", value: inProgress ?? "—", sub: "experts on site", to: "/bookings?view=in_progress&all=1", tone: "info" },
     { label: "Uploading", value: uploading ?? "—", sub: "files still coming", to: "/bookings?view=uploading&all=1" },
     { label: "Completed", value: doneToday ?? "—", sub: "today", to: "/bookings?view=today&stage=completed&all=1", tone: "ok" },
@@ -71,7 +70,7 @@ export function Today() {
   const spans = new Map(all.map((b) => [b.id, jobSpan(b, now, grace)]));
   const [lo, hi] = dayWindow([...spans.values()]);
   const slots = (hi - lo) * 2;                          // one column per 30 minutes
-  const nowAt = now.getHours() + now.getMinutes() / 60;
+  const nowAt = ist(now).hours;
 
   // Who is on the schedule: every expert, or just the ones chosen in the Experts menu.
   const everyone = [
@@ -116,7 +115,7 @@ export function Today() {
     const el = scroller.current;
     if (el) el.scrollTo({ left: Math.max(0, (clampStart(start, lo, hi) - lo) * 2 * slotPx), behavior: smooth ? "smooth" : "auto" });
   };
-  useEffect(() => { goTo(want.current ?? left.current ?? nowAt - 1, false); want.current = null; }, [slotPx, hasJobs]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { goTo(want.current ?? left.current ?? nowAt - 1, false); want.current = null; }, [slotPx, hasJobs]); // eslint-disable-line react-hooks/exhaustive-deps -- scrolls only when the slot width or the lanes change; goTo reads the latest values
   const onScroll = (el: HTMLDivElement) => { const h = lo + el.scrollLeft / (2 * slotPx); left.current = h; setLeftH(h); };
   const pick = (start: number) => { if (mode === "day") { want.current = start; setMode("3h"); } else goTo(start); };
   const step = (dir: number) => goTo(Math.round(leftH) + dir);
@@ -142,8 +141,8 @@ export function Today() {
       </section>
       <section className="card schedule-card" aria-label="Schedule by expert">
         <div className="sheet-head" style={{ padding: "0 0 10px", border: 0 }}>
-          <h3>Schedule by expert</h3>
-          <span className="legend done">Done</span><span className="legend prog">In progress</span><span className="legend next">To start</span><span className="legend open">Unassigned</span><span className="legend late">Started late</span>
+          <h2>Schedule by expert</h2>
+          <span className="legend done">Completed</span><span className="legend prog">In progress</span><span className="legend next">Assigned</span><span className="legend open">Unassigned</span><span className="legend late">Started late</span>
           <div className="sched-menu" ref={menuRef}>
             <button className="sm" aria-haspopup="listbox" aria-expanded={menu} onClick={() => setMenu(!menu)}><Users size={14} aria-hidden /> {sel.length ? `${sel.length} expert${sel.length === 1 ? "" : "s"}` : "All experts"} <ChevronDown size={14} aria-hidden /></button>
             {menu && (
@@ -172,6 +171,7 @@ export function Today() {
             {mode === "3h" && <button className="sm icon" aria-label="One hour later" onClick={() => step(1)}><ChevronRight size={15} aria-hidden /></button>}
             <button className={`sm${mode === "day" ? " on" : ""}`} aria-pressed={mode === "day"} onClick={() => setMode(mode === "day" ? "3h" : "day")}>Full day</button>
           </div>)}
+        {q.isError && <LoadError error={q.error} what="today's bookings" onRetry={q.refetch} />}
         {all.length === 0 && q.data && <Empty title="Nothing booked for today">New bookings for today show here.</Empty>}
         {hasJobs && (
           <div className="sched-body">
@@ -216,12 +216,12 @@ export function Today() {
                           const sp = spans.get(b.id)!;
                           return (
                             <Link key={b.id} to={`/booking/${b.id}`} className={`job-block ${KIND[b.stage]}${sp.late ? " late" : ""}`}
-                              aria-label={`${b.booking_id}, ${String(b.answers.customer_name ?? "")}. ${spanTitle(sp).replace("\n", ". ")}`}
                               onMouseEnter={(e) => showTip(e.currentTarget, b, sp, l.name)} onMouseLeave={() => setTip(null)}
                               onFocus={(e) => showTip(e.currentTarget, b, sp, l.name)} onBlur={() => setTip(null)}
                               style={{ left: GUTTER + (sp.start - lo) * 2 * slotPx + 2, width: (sp.end - sp.start) * 2 * slotPx - 4, top: laid.row[i]! * LANE_H + 8, height: LANE_H - 16, bottom: "auto" }}>
                               <span className="jb-top"><b>{b.booking_id}</b><span>{hm(sp.start)}</span></span>
                               <span className="jb-sub">{String(b.answers.customer_name ?? "")}</span>
+                              <span className="sr-only">. {spanTitle(sp).replace("\n", ". ")}</span>
                               <span className="jb-sub">{car(b.answers.car_make_model)} · {city(b.answers.city)}</span>
                             </Link>);
                         })}
@@ -234,7 +234,7 @@ export function Today() {
       </section>
       {tip && (
         <div className="job-tip" role="tooltip" style={{ left: tip.x, top: tip.y, transform: tip.up ? "translateY(-100%)" : undefined }}>
-          <div className="job-tip-head"><b>{tip.b.booking_id}</b><span className={`job-tip-pill ${KIND[tip.b.stage]}`}>{STAGE_NAME[tip.b.stage] ?? tip.b.stage}</span></div>
+          <div className="job-tip-head"><b>{tip.b.booking_id}</b><span className={`job-tip-pill ${KIND[tip.b.stage]}`}>{STAGE_LABEL[tip.b.stage] ?? tip.b.stage}</span></div>
           <div className="job-tip-name">{String(tip.b.answers.customer_name ?? "")}</div>
           <div className="job-tip-sub">{car(tip.b.answers.car_make_model)} · {city(tip.b.answers.city)}</div>
           <dl>
@@ -242,7 +242,7 @@ export function Today() {
             {spanFacts(tip.sp, hoursOf(tip.b.answers.inspection_time), nowAt).map((f) => <Fragment key={f.label}><dt>{f.label}</dt><dd className={f.bad ? "bad" : ""}>{f.value}</dd></Fragment>)}
           </dl>
         </div>)}
-      {assigning && <Actions kind="assign" booking={assigning} experts={experts.data ?? []} onClose={() => setAssigning(null)} fail={fail} onDone={() => { setAssigning(null); say("Assigned."); void refresh("bookings-page"); }} />}
+      {assigning && <Actions kind="assign" booking={assigning} experts={experts.data ?? []} onClose={() => setAssigning(null)} fail={fail} onDone={() => { setAssigning(null); say("Assigned."); void refresh(keys.bookings()); }} />}
     </>
   );
 }

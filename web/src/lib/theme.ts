@@ -12,10 +12,6 @@ export function resolveTheme(choice: ThemeChoice, deviceIsDark: boolean): "light
 
 const deviceIsDark = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-color-scheme: dark)").matches;
 
-export function cachedTheme(): ThemeChoice | null {
-  try { const v = localStorage.getItem(THEME_KEY); return isChoice(v) ? v : null; } catch { return null; }
-}
-
 /** Show this choice now. Pass `remember: false` for the signed-out look (it must not be saved). */
 export function applyTheme(choice: ThemeChoice, remember = true): "light" | "dark" {
   const resolved = resolveTheme(choice, deviceIsDark());

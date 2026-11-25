@@ -19,6 +19,22 @@ def _cfg(version) -> dict:
             "thresholds": cfg.get("thresholds", DEFAULT_CONFIG["thresholds"])}
 
 
+def section_keys(version, cfg: dict) -> dict:
+    """The rating config with each category's sections named by their permanent key (F-045). A
+    section given by its title (an older client, a setup file) is turned into its key; a name
+    that matches no section is left as it is for publish validation to report."""
+    from apps.forms.models import Section
+
+    rows = list(Section.objects.filter(version=version).values_list("key", "title"))
+    keys, by_title = {k for k, _ in rows}, {t: k for k, t in rows}
+    cats = (cfg or {}).get("categories")
+    if not isinstance(cats, list):
+        return cfg
+    return {**cfg, "categories": [
+        {**c, "sections": [s if s in keys else by_title.get(s, s) for s in c.get("sections") or []]}
+        if isinstance(c, dict) else c for c in cats]}
+
+
 def compute(insp) -> dict:
     version, cfg = insp.form_version, _cfg(insp.form_version)
     overrides = insp.overrides or {}
@@ -28,7 +44,7 @@ def compute(insp) -> dict:
     day = (timezone.localtime(insp.submitted_at).date().isoformat() if insp.submitted_at
            else timezone.localdate().isoformat())
     result = evaluate_form(spec_from_version(version), answers, day, overrides.get("derived", {}))
-    by_title = {t: c["key"] for c in cfg["categories"] for t in c["sections"]}
+    by_section = {s: c["key"] for c in cfg["categories"] for s in c["sections"]}
     severities: dict[str, list[str]] = {c["key"]: [] for c in cfg["categories"]}
     any_critical = False
     fields = list(Field.objects.filter(version=version).select_related("section"))
@@ -41,8 +57,8 @@ def compute(insp) -> dict:
             option = options.get(chosen)
             if option and option.get("is_defect"):
                 any_critical |= option["severity"] == "critical"
-                if f.section.title in by_title:
-                    severities[by_title[f.section.title]].append(option["severity"])
+                if f.section.key in by_section:
+                    severities[by_section[f.section.key]].append(option["severity"])
     given = overrides.get("ratings", {})
     ratings: dict[str, dict] = {}
     for c in cfg["categories"]:
@@ -150,12 +166,12 @@ def config_issues(version) -> list[tuple[str, str, str]]:
     """(path, code, message) problems of a version's rating config, for publish validation."""
     from apps.forms.models import Section
 
-    cfg = _cfg(version)
-    titles = set(Section.objects.filter(version=version).values_list("title", flat=True))
+    cfg = section_keys(version, _cfg(version))
+    keys = set(Section.objects.filter(version=version).values_list("key", flat=True))
     out = []
     for c in cfg["categories"]:
         for t in c["sections"]:
-            if t not in titles:
+            if t not in keys:
                 out.append((f"rating_config.categories.{c['key']}", "UNKNOWN_SECTION",
                             f"Category '{c['key']}' uses section '{t}' which does not exist."))
     known = {c["key"] for c in cfg["categories"]}

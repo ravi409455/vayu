@@ -1,4 +1,6 @@
 import { useNavigate } from "react-router-dom";
+import { useSignOut } from "../ui/SignOut";
+import { usePageTitle } from "../ui/kit";
 import { useAuth } from "../auth";
 import { homeFor } from "../guards";
 import { PasswordForm } from "../ui/PasswordForm";
@@ -6,7 +8,9 @@ import { Logo } from "../ui/Logo";
 
 /** The forced "choose your own password" screen (first sign-in, or after an Admin reset). */
 export function ChangePassword() {
-  const { me, refresh, logout } = useAuth();
+  usePageTitle("Change password");
+  const { me, refresh } = useAuth();
+  const signOut = useSignOut();
   const nav = useNavigate();
   return (
     <div style={{ maxWidth: 420, margin: "10vh auto", padding: 16 }}>
@@ -15,7 +19,7 @@ export function ChangePassword() {
       {me?.must_change_password && <p className="muted" style={{ marginTop: 0 }}>Welcome{me.name ? `, ${me.name.split(" ")[0]}` : ""}. Set your own password before you continue.</p>}
       <div className="card">
         <PasswordForm onDone={async () => { await refresh(); nav(homeFor(me?.role ?? "expert"), { replace: true }); }}
-          secondary={<button type="button" onClick={() => logout()}>Sign out</button>} />
+          secondary={<><button type="button" onClick={signOut.start}>Sign out</button>{signOut.dialog}</>} />
       </div>
     </div>
   );

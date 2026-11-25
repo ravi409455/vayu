@@ -61,12 +61,14 @@ export type Booking = {
   assigned_expert: number | null; answers: Record<string, unknown>; row_version: number;
   started_at: string | null; finished_at?: string | null; cancel_reason: string; last_edited_by: string | null;
   last_edited_at: string | null; created_at: string; conflict?: string; alerts?: { code: string; detail: string; at: string }[];
+  /** a time on it was stamped by a phone whose clock was not checked with the server that day (F-222) */
+  unverified_time?: boolean;
   /** Admin / Ops only: started late, finished too quickly (server clock, minutes). */
   timing?: { late_minutes: number | null; duration_minutes: number | null; late: boolean; quick: boolean; min_minutes: number; grace_minutes: number;
     late_reviewed_by: string | null; late_reviewed_at: string | null; quick_reviewed_by: string | null; quick_reviewed_at: string | null };
 };
 export type Inspection = {
-  id: string; booking: string; expert: number; status: string; answers: { inspection?: Record<string, unknown>; start?: Record<string, unknown>; end?: Record<string, unknown> };
+  id: string; booking: string; expert: number; status: string; unverified_time?: boolean; answers: { inspection?: Record<string, unknown>; start?: Record<string, unknown>; end?: Record<string, unknown> };
   scores?: Scores; overrides?: Record<string, unknown>; row_version: number; form_version: number; start_version?: number | null; end_version?: number | null;
   submitted_at: string | null; last_edited_by?: string | null; last_edited_at?: string | null;
 };
@@ -92,6 +94,4 @@ export type ApiKeyRow = {
   id: string; name: string; prefix: string; scope: { forms: Record<string, string[]> };
   allow_delete: boolean; revoked_at: string | null; last_used_at: string | null; key?: string;
 };
-export type AuditRow = { id: number; actor_name?: string; actor?: string; action: string; target_type: string; target_id: string; summary: string; created_at: string };
 export type PermissionRow = { key: string; group: string; label: string; scoped: boolean; grantable: boolean };
-export type Role_ = { role: string; permissions: Record<string, "all" | "own"> };

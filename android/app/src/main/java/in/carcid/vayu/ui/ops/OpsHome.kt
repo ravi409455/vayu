@@ -11,7 +11,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -28,8 +30,8 @@ import `in`.carcid.vayu.ui.theme.Vayu
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
-/** A screen pushed on top of the Ops tabs. */
-sealed interface Route {
+/** A screen pushed on top of the Ops tabs; saved with the screen (Serializable), so Android closing the app in the background keeps Ops' place. */
+sealed interface Route : java.io.Serializable {
     data object Needs : Route
     data class Booking(val id: String) : Route
     data class Detail(val id: String, val part: Part, val group: String = "inspection") : Route
@@ -49,46 +51,34 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     var tab by rememberSaveable { mutableStateOf(OpsTab.TODAY) }
     // Bookings' filters live here, so they stay across tabs; a Dashboard tile sets them (dates, stage, late / quick, expert)
     var bookingFilters by rememberSaveable { mutableStateOf(mapOf<String, String>()) }
-    var tick by remember { mutableStateOf(0) }
-    val stack = remember { mutableStateListOf<Route>() }
-    var assigning by remember { mutableStateOf<Bk?>(null) }
-    var labels by remember { mutableStateOf(Labels()) }
-    var namesFresh by remember { mutableStateOf(false) }
-    val env = OpsEnv(me, data, labels, today, tick, refresh = { tick++ }, say = { scope.launch { snack.showSnackbar(it) } })
-    // null until the first load is back (so the bell never says "All clear" too early)
-    var needs by remember { mutableStateOf<List<Need>?>(null) }
-    var refreshing by remember { mutableStateOf(false) }
-    var asked by remember { mutableStateOf(false) }
-    // one load per Refresh: names first, then the lists (a second key here restarted it half-way)
-    LaunchedEffect(tick) {
-        refreshing = true
-        if (labels.people.isEmpty()) Labels.saved(data).takeIf { it.people.isNotEmpty() }?.let { labels = it }
-        // names (types, people, cities, cars) rarely change: once per session, and again on Refresh
-        if (asked || !namesFresh) Labels.load(data).takeIf { it.people.isNotEmpty() || it.cities.isNotEmpty() || it.types.isNotEmpty() }
-            ?.let { labels = it; namesFresh = true }
-        loadNeeds(env.copy(labels = labels))?.let { needs = it }
-        // Refresh says what happened (a fresh answer, or the saved copy without signal)
-        if (asked) {
-            asked = false
-            val online = try { data.api.get("problems/reports"); true } catch (e: `in`.carcid.vayu.core.api.ApiError) { false }
-            env.say(if (online) "Updated." else "No signal. Showing what was saved; changes need signal.")
-        }
-        refreshing = false
+    // loading, names and Needs you live in OpsModel (F-018); one per signed-in person
+    val model: OpsModel = androidx.lifecycle.viewmodel.compose.viewModel(key = "ops-${me.id}") { OpsModel(data, me, today) }
+    val tick by model.tick.collectAsState()
+    val labels by model.labels.collectAsState()
+    val needs by model.needs.collectAsState()
+    val refreshing by model.refreshing.collectAsState()
+    LaunchedEffect(model) { model.messages.collect { snack.showSnackbar(it) } }
+    val stack = rememberSaveable(saver = androidx.compose.runtime.saveable.listSaver(save = { it.toList() }, restore = { it.toMutableStateList() })) {
+        mutableStateListOf<Route>()
     }
+    var assigning by remember { mutableStateOf<Bk?>(null) }
+    model.me = me
+    val env = remember(me, labels, tick) { model.env(me, labels, tick) }
     LaunchedEffect(opening) { opening?.let { stack.clear(); stack.add(Route.Booking(it)); onOpened() } }
     // a new notification (a push, or the bell read on coming back) means something changed: reload
     var newest by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(bell.notes.firstOrNull()?.id) {
         val id = bell.notes.firstOrNull()?.id
-        if (newest != null && id != null && id != newest) tick++
+        if (newest != null && id != null && id != newest) model.reload()
         newest = id
     }
     // fresh again whenever the app comes back to the front (and on Refresh, and after every change)
-    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { tick++; onPauseOrDispose {} }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { model.reload(); onPauseOrDispose {} }
     val push = { r: Route -> stack.add(r) }
     val pop = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
-    val bar = @Composable { OpsBottomBar(tab, { tab = it; stack.clear() }, { asked = true; tick++ }, refreshing) }   // every tap counts (it restarts a load already running)
+    val bar = @Composable { OpsBottomBar(tab, { tab = it; stack.clear() }, { model.reload(asked = true) }, refreshing) }   // every tap counts (it restarts a load already running)
     if (stack.isNotEmpty()) BackHandler { pop() }
+    else BackHandler(tab != OpsTab.TODAY) { tab = OpsTab.TODAY }        // Back from Bookings or Dashboard: Today first, then out
 
     Box(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
         when (val r = stack.lastOrNull()) {
@@ -115,7 +105,7 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
                 pop()
                 if (r.id == null) push(Route.Booking(saved))
                 if (assign) scope.launch {
-                    runCatching { data.load("bookings/$saved") }.getOrNull()?.let { assigning = Bk(it.data as kotlinx.serialization.json.JsonObject) }
+                    `in`.carcid.vayu.core.attempt { data.load("bookings/$saved") }.getOrNull()?.let { (it.data as? kotlinx.serialization.json.JsonObject)?.let { o -> assigning = Bk(o) } }
                 }
             }
         }
@@ -123,12 +113,8 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     }
     assigning?.let { b ->
         AssignSheet(env, b, onClose = { assigning = null }) { expert ->
-            scope.launch {
-                try {
-                    data.act("POST", "bookings/${b.id}/assign", kotlinx.serialization.json.buildJsonObject { put("expert", kotlinx.serialization.json.JsonPrimitive(expert)) })
-                    assigning = null; env.say("Assigned to ${labels.person(expert)}."); tick++
-                } catch (e: `in`.carcid.vayu.core.api.ApiError) { env.say(e.message) }
-            }
+            env.actions.send("POST", "bookings/${b.id}/assign", kotlinx.serialization.json.buildJsonObject { put("expert", kotlinx.serialization.json.JsonPrimitive(expert)) },
+                "Assigned to ${labels.person(expert)}.") { assigning = null }
         }
     }
 }

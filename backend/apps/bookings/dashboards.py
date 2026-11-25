@@ -1,8 +1,9 @@
 """Volume dashboards: bookings per period x dimension, with CSV export."""
 import csv
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import date, timedelta
 
+from django.db.models import Avg, Count, Q
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -121,29 +122,36 @@ def _bounds(q) -> tuple[date, date]:
         raise ValidationError({"detail": "Use YYYY-MM-DD for date_from and date_to."}) from e
     if start > end:
         raise ValidationError({"detail": "date_from must not be after date_to."})
+    if (end - start).days > MAX_DAYS:
+        raise ValidationError({"detail": f"Choose at most {MAX_DAYS} days."})
     return start, end
+
+
+MAX_DAYS = 366                     # one span a dashboard reads at once (F-092)
 
 
 def _pct(n: int, of: int) -> int | None:
     return round(100 * n / of) if of else None
 
 
-def _stats(bookings: list[Booking], cfg: dict) -> dict:
+def _aggregates(cfg: dict) -> dict:
+    """The counts one row of headline numbers needs, worked out by the database (F-092)."""
+    return {"total": Count("id"), "done": Count("id", filter=Q(stage="completed")),
+            "cancelled": Count("id", filter=Q(stage="cancelled")),
+            "avg": Avg("duration_minutes"), "timed": Count("duration_minutes"),
+            "started": Count("late_minutes"), "late": Count("id", filter=timing.late_q(cfg)),
+            "quick": Count("id", filter=timing.quick_q(cfg))}
+
+
+def _stats(r: dict) -> dict:
     """Headline numbers for one set of bookings (server-clock minutes, see timing.py)."""
-    total = len(bookings)
-    done = sum(b.stage == "completed" for b in bookings)
-    cancelled = sum(b.stage == "cancelled" for b in bookings)
-    minutes = [b.duration_minutes for b in bookings if b.duration_minutes is not None]
-    started = [b for b in bookings if b.late_minutes is not None]
-    flags = [timing.flags(b, cfg) for b in bookings]
-    late, quick = sum(f["late"] for f in flags), sum(f["quick"] for f in flags)
-    live = total - cancelled
-    return {"bookings": total, "completed": done, "cancelled": cancelled,
-            "completion_rate": round(100 * done / live, 1) if live else None,
-            "avg_minutes": round(sum(minutes) / len(minutes)) if minutes else None,
-            "on_time": _pct(len(started) - late, len(started)),
-            "late": late, "late_pct": _pct(late, len(started)),
-            "quick": quick, "quick_pct": _pct(quick, len(minutes))}
+    live = r["total"] - r["cancelled"]
+    return {"bookings": r["total"], "completed": r["done"], "cancelled": r["cancelled"],
+            "completion_rate": round(100 * r["done"] / live, 1) if live else None,
+            "avg_minutes": round(r["avg"]) if r["avg"] is not None else None,
+            "on_time": _pct(r["started"] - r["late"], r["started"]),
+            "late": r["late"], "late_pct": _pct(r["late"], r["started"]),
+            "quick": r["quick"], "quick_pct": _pct(r["quick"], r["timed"])}
 
 
 # on_time is 100 - late_pct, so it is timing data too
@@ -153,19 +161,15 @@ TIMING_KEYS = ("on_time", "late", "late_pct", "quick", "quick_pct")
 def summary(start: date, end: date) -> dict:
     days = (end - start).days + 1
     prev_start = start - timedelta(days=days)
-    qs = list(Booking.objects.filter(inspection_date__gte=prev_start, inspection_date__lte=end)
-              .select_related("late_reviewed_by", "quick_reviewed_by"))
     cfg = timing.config()
-    now = [b for b in qs if b.inspection_date and b.inspection_date >= start]
-    before = [b for b in qs if b.inspection_date and b.inspection_date < start]
-    by_expert: dict = defaultdict(list)
-    for b in now:
-        if b.assigned_expert_id and b.stage != "cancelled":
-            by_expert[b.assigned_expert_id].append(b)
-    experts = [{"expert": eid, **_stats(rows, cfg)} for eid, rows in by_expert.items()]
-    experts.sort(key=lambda r: -r["bookings"])
+    agg = _aggregates(cfg)
+    now = Booking.objects.filter(inspection_date__gte=start, inspection_date__lte=end)
+    before = Booking.objects.filter(inspection_date__gte=prev_start, inspection_date__lt=start)
+    rows = (now.exclude(stage="cancelled").filter(assigned_expert__isnull=False)
+            .values("assigned_expert").annotate(**agg).order_by("-total", "assigned_expert"))
+    experts = [{"expert": r["assigned_expert"], **_stats(r)} for r in rows]
     return {"date_from": start.isoformat(), "date_to": end.isoformat(),
-            "period": _stats(now, cfg), "previous": _stats(before, cfg),
+            "period": _stats(now.aggregate(**agg)), "previous": _stats(before.aggregate(**agg)),
             "by_expert": experts}
 
 

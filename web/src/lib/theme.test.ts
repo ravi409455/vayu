@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applySignedOut, applyTheme, cachedTheme, isChoice, resolveTheme, THEME_KEY } from "./theme";
+import { applySignedOut, applyTheme, isChoice, resolveTheme, THEME_KEY } from "./theme";
+
+// what applyTheme left in storage (the app reads it back in index.html before React starts)
+const cachedTheme = () => { try { const v = localStorage.getItem(THEME_KEY); return isChoice(v) ? v : null; } catch { return null; } };
 
 const media = (dark: boolean) => vi.stubGlobal("matchMedia", (q: string) => ({ matches: dark && q.includes("dark"), addEventListener() {}, removeEventListener() {} }));
 

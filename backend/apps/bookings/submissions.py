@@ -1,5 +1,6 @@
 """Start, submit and Ops edits of inspections, including the offline conflict rules."""
 from datetime import timedelta
+from typing import NoReturn
 
 from django.conf import settings
 from django.db import transaction
@@ -8,13 +9,15 @@ from django.utils import timezone
 
 from apps.core import events
 from apps.core import tasks as core_tasks
-from apps.forms.access import STAGES, levels_for, may_see_submissions
+from apps.core.errors import CodedError
+from apps.forms.access import STAGES, levels_for, role_may_see_submissions
 from apps.forms.models import PARTS, Field, Form, FormType, FormVersion, VersionStatus
 from apps.forms.rules import validate_answers
 from apps.forms.serializers import VersionTreeSerializer
 from apps.scoring import service as scoring
 
 from . import activity, timing
+from .changes import check_fresh, stamp
 from .models import Booking, Inspection
 from .services import (
     _changed,
@@ -63,10 +66,6 @@ def current_versions(booking: Booking) -> dict:
     return insp.pinned() if insp else versions_to_pin(inspection_version(booking.inspection_type))
 
 
-class _Role:
-    """Just a role name, so the visibility rule can be asked about a role without a user."""
-    def __init__(self, role: str):
-        self.role = role
 
 
 def own_filter(user) -> Q:
@@ -87,7 +86,11 @@ def deliver_filter(user) -> Q:
     to them if the new expert has not started, else a conflict for Ops. Never used for lists."""
     recent = timezone.localdate() - timedelta(days=MOVED_DAYS)
     return own_filter(user) | Q(activity__changes__assigned_expert__0=user.pk,
-                                inspection_date__gte=recent)
+                                inspection_date__gte=recent) | Q(
+        # a draft Ops force-released may still arrive (then a conflict for Ops), as long as a job
+        # moved away does
+        inspections__expert_id=user.pk, inspections__status="released",
+        inspection_date__gte=recent)
 
 
 def form_for_role(version: FormVersion, role: str, stage: str) -> dict:
@@ -124,16 +127,123 @@ def _alert(b: Booking, code: str, detail: str) -> None:
     b.alerts = [*b.alerts, {"code": code, "detail": detail, "at": timezone.now().isoformat()}]
 
 
-@transaction.atomic
+# a phone's clock may be a few minutes off the server's (it is corrected at each sync)
+CLOCK_ALLOWANCE = timedelta(minutes=10)
+
+
+class _OldVersion(Exception):
+    """The phone filled a version that was already replaced when the expert started."""
+
+
+def _replaced_by(version: FormVersion):
+    """When the next published version of the same form came out (None: it is the latest)."""
+    return (FormVersion.objects.filter(form_id=version.form_id, status=VersionStatus.PUBLISHED,
+                                       number__gt=version.number)
+            .order_by("number").values_list("published_at", flat=True).first())
+
+
+def _was_latest(version: FormVersion, at) -> bool:
+    """Was [version] the newest published version of its form at [at], give or take the clock
+    allowance?"""
+    newer = _replaced_by(version)
+    return ((version.published_at or at) <= at + CLOCK_ALLOWANCE
+            and (newer is None or newer > at - CLOCK_ALLOWANCE))
+
+
+def _kept_notes(version: FormVersion) -> list[str]:
+    """What Ops are told when work arrives on a version that is no longer the one a new start
+    would get (each case is allowed, but rare enough to be looked at)."""
+    notes = [] if version.form.is_active else ["the form was switched off since."]
+    if _replaced_by(version) is not None:
+        notes.append(f"version {version.number} kept: a newer one was published since.")
+    return notes
+
+
+def _named_version(raw, forms) -> FormVersion | None:
+    """A published version of one of [forms] that the phone named (None when it named none)."""
+    if raw is None:
+        return None
+    version = FormVersion.objects.filter(pk__in=[raw] if type(raw) is int else [], form__in=forms,
+                                         status=VersionStatus.PUBLISHED).select_related("form")
+    if not version:
+        raise err("INVALID_VERSION", "That form version is not one this lead can use.")
+    return version[0]
+
+
+def phone_pins(b: Booking, named: dict, at) -> tuple[dict, list[str]]:
+    """The versions a start pins. The phone names those it pinned when the expert started (offline
+    perhaps): each is kept if it was the latest published at that time, else _OldVersion. When it
+    names none (older apps), the latest. Returns (pinned, notes for Ops: see _kept_notes)."""
+    custom = Form.objects.filter(type=FormType.CUSTOM, inspection_type=b.inspection_type)
+    phone = _named_version(named.get("inspection"), custom)
+    if phone is None:
+        return versions_to_pin(inspection_version(b.inspection_type)), []
+    # a start / end version is looked at only when this version goes through that form
+    start_v = (_named_version(named.get("start"), Form.objects.filter(type=FormType.START))
+               if phone.use_start else None)
+    end_v = (_named_version(named.get("end"), Form.objects.filter(type=FormType.END))
+             if phone.use_end else None)
+    if not all(_was_latest(v, at) for v in (phone, start_v, end_v) if v is not None):
+        raise _OldVersion
+    return {"inspection": phone,
+            "start": (start_v or system_version(FormType.START)) if phone.use_start else None,
+            "end": (end_v or system_version(FormType.END)) if phone.use_end else None}, \
+        _kept_notes(phone)
+
+
+def _before_too_old(at) -> bool:
+    """Was the phone's start before its app version became too old? The minimum only rises once a
+    build that meets it exists, so work started before that build was published was started on an
+    allowed app."""
+    # ponytail: the first qualifying build's upload time is a lower bound for when the minimum
+    # rose (that moment is not recorded); record it if work started in between gets refused
+    from apps.notify.models import AppRelease
+
+    first = (AppRelease.objects.filter(version_code__gte=settings.MIN_APP_VERSION)
+             .order_by("created_at").values_list("created_at", flat=True).first())
+    return first is not None and at < first
+
+
+def _late_work(b: Booking, code: str, detail: str) -> None:
+    """Ops are told about work that arrived late (alert on the booking, bell, push, webhook)."""
+    _alert(b, code, detail)
+    events.emit("alert.late_work", booking=str(b.id), booking_id=b.booking_id, code=code)
+
+
 def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, app_version,
-          start_answers=None):
+          start_answers=None, versions=None):
+    """[versions]: what the phone pinned when the expert started ({inspection, start, end} ids)."""
+    try:
+        return _start(actor, b, client_uuid, client_started_at, inspection_type, app_version,
+                      start_answers, versions or {})
+    except _OldVersion:
+        _refuse_old(b)
+
+
+def _refuse_old(b: Booking) -> NoReturn:
+    with transaction.atomic():        # the refusal rolled the request back; the alert stays
+        b = _lock(b)
+        if "FORM_VERSION_REFUSED" not in [a["code"] for a in b.alerts]:    # retries: once
+            _late_work(b, "FORM_VERSION_REFUSED",
+                       "The expert filled a form version replaced before they started.")
+            b.save(update_fields=["alerts"])
+    raise err("FORM_VERSION_OLD", "This lead was filled on a form that had already been "
+              "replaced. Ops have been told.", 409) from None
+
+
+@transaction.atomic
+def _start(actor, b: Booking, client_uuid, client_started_at, inspection_type, app_version,
+           start_answers, versions: dict):
     b = _lock(b)
     existing = Inspection.objects.filter(client_start_uuid=client_uuid).first()
     if existing is not None:
         if existing.booking_id != b.id or existing.expert_id != actor.pk:
             raise err("UUID_CONFLICT", "That request ID belongs to another request.", 409)
         return b, existing
-    if app_version is not None and app_version < settings.MIN_APP_VERSION:
+    # the phone's clock is trusted only back to when the booking existed: nobody started it before
+    at = max(client_started_at or timezone.now(), b.created_at - CLOCK_ALLOWANCE)
+    too_old = app_version is not None and app_version < settings.MIN_APP_VERSION
+    if too_old and not _before_too_old(at):
         raise err("APP_TOO_OLD", "Update the app to start new leads.", 426)
     if b.assigned_expert_id != actor.pk:
         raise err("NOT_ASSIGNED", "This lead is no longer assigned to you.", 409)
@@ -154,20 +264,31 @@ def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, ap
         changes["inspection_type"] = [b.inspection_type, inspection_type]
         _alert(b, "TYPE_CHANGE_REJECTED",
                f"Type change to {b.inspection_type} rejected: expert started {inspection_type}")
-        events.emit("alert.type_change_rejected", booking=str(b.id), booking_id=b.booking_id)
         b.answers = {**b.answers, "inspection_type": inspection_type}
         sync_columns(b)
-    pinned = versions_to_pin(inspection_version(b.inspection_type))
+        b.save()                          # webhooks read the booking as it is now
+        # after the type is the expert's: it goes to that type's integrations (F-239)
+        events.emit("alert.type_change_rejected", booking=str(b.id), booking_id=b.booking_id)
+    pinned, notes = phone_pins(b, versions, at)
+    if notes:
+        _late_work(b, "LATE_WORK", "Started offline; " + " ".join(notes))
+    if too_old:
+        _late_work(b, "LATE_WORK", f"Started on app version {app_version} before it had to be "
+                   "updated.")
+    checked_in: dict = {}
     if pinned["start"] is not None:
         # a job is only "in progress" once the check-in is done (nothing changes if it is not)
         check_shape({"start": start_answers})
-        _clean_all(b, {**pinned, "inspection": None, "end": None}, {"start": start_answers or {}})
+        checked_in = _clean_all(b, {**pinned, "inspection": None, "end": None},
+                                {"start": start_answers or {}})["start"]
     b.stage, b.started_at = "in_progress", timezone.now()
     timing.stamp_late(b)
     insp = Inspection.objects.create(booking=b, expert=actor, form_version=pinned["inspection"],
                                      start_version=pinned["start"], end_version=pinned["end"],
                                      client_start_uuid=client_uuid,
-                                     client_started_at=client_started_at)
+                                     client_started_at=client_started_at,
+                                     # kept from now on: Ops see the arrival proof (F-241)
+                                     answers={"start": checked_in} if checked_in else {})
     _changed(actor, b, changes)
     events.emit("inspection.started", booking=str(b.id), inspection=str(insp.id))
     return b, insp
@@ -188,12 +309,14 @@ def stamp_auto(version: FormVersion | None, answers: dict) -> dict:
     return out
 
 
-def _clean_all(b: Booking, pinned: dict, answers: dict):
+def _clean_all(b: Booking, pinned: dict, answers: dict, kept: dict | None = None):
     """Validate each part against the version it was started on. A part with no version (its
-    form is not used) holds no answers. Returns (cleaned by part, errors)."""
+    form is not used) holds no answers. [kept]: the answers stored before an Ops edit (see
+    validate_answers). Returns (cleaned by part, errors)."""
     raw = {part: answers.get(part) or {} for part in PARTS}
     cleaned: dict[str, dict] = {}
     errors: dict = {}
+    messages: dict = {}
     unused = [part for part, v in pinned.items() if v is None and raw[part]]
     if unused:
         raise err("INVALID_ANSWERS", "This inspection does not use that form.",
@@ -204,14 +327,17 @@ def _clean_all(b: Booking, pinned: dict, answers: dict):
             cleaned[part] = {}
             continue
         context = {"booking": b.answers, **{p: (cleaned.get(p) or raw[p]) for p in PARTS}}
-        cleaned[part], e = validate_answers(version, {**context, part: raw[part]}, today())
+        cleaned[part], e = validate_answers(version, {**context, part: raw[part]}, today(),
+                                            kept=None if kept is None else kept.get(part) or {},
+                                            messages=messages)
         errors = {**errors, **e}
     from apps.media.services import reference_errors
 
     errors = {**errors, **reference_errors(
         b, [(pinned[p], cleaned[p]) for p in PARTS if pinned[p] is not None])}
     if errors:
-        raise err("INVALID_ANSWERS", "Some answers are invalid.", errors=errors)
+        raise err("INVALID_ANSWERS", "Some answers are invalid.", errors=errors,
+                  messages={k: messages.get(k, v) for k, v in errors.items()})
     return cleaned
 
 
@@ -229,8 +355,22 @@ def _locked_keys(role: str, stage: str, pinned: dict, answers: dict, old: dict) 
     return sorted(locked)
 
 
-@transaction.atomic
+def mark_unverified_time(b: Booking, insp: Inspection) -> None:
+    """The phone says its clock was not checked when it stamped this work: once true, it stays
+    true, for the inspection and its booking (F-222)."""
+    Inspection.objects.filter(pk=insp.pk).update(unverified_time=True)
+    Booking.objects.filter(pk=b.pk).update(unverified_time=True)
+
+
 def submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id=None):
+    try:
+        return _submit(actor, b, submission_uuid, answers, form_version_id)
+    except _OldVersion:
+        _refuse_old(b)
+
+
+@transaction.atomic
+def _submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id):
     check_shape(answers)
     b = _lock(b)
     done = Inspection.objects.filter(client_submission_uuid=submission_uuid).first()
@@ -238,17 +378,30 @@ def submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id=No
         if done.booking_id != b.id or done.expert_id != actor.pk:
             raise err("UUID_CONFLICT", "That request ID belongs to another request.", 409)
         return b, done
-    insp = b.inspections.filter(expert=actor, status="draft").first()
+    # their open draft; else the one Ops force-released while they worked (it still counts)
+    insp = (b.inspections.filter(expert=actor, status="draft").first()
+            or b.inspections.filter(expert=actor, status="released").order_by("-created_at")
+            .first())
+    if insp is None and b.inspections.filter(expert=actor,
+                                             status__in=("submitted", "superseded")).exists():
+        # a new request id for work already sent (a reinstalled app): never a second inspection
+        raise err("ALREADY_SUBMITTED", "Already submitted; Ops can edit it.", 409)
     if insp is None:
         # an offline start that never reached us: the phone names its pinned version, but it must
-        # belong to the form that handles this booking's type (no shopping for a weaker form)
-        form = Form.objects.filter(type=FormType.CUSTOM, is_active=True,
-                                   inspection_type=b.inspection_type).first()
-        version = (FormVersion.objects.filter(pk=form_version_id, form=form,
-                                              status=VersionStatus.PUBLISHED).first()
-                   if form_version_id and form else None)
+        # belong to a form that handles this booking's type (no shopping for another type's form)
+        version = FormVersion.objects.filter(
+            pk=form_version_id, status=VersionStatus.PUBLISHED, form__type=FormType.CUSTOM,
+            form__inspection_type=b.inspection_type).select_related("form").first() \
+            if form_version_id else None
         if version is None:
             raise err("NOT_STARTED", "Start the inspection first.", 409)
+        # it must have been the latest at some moment since the booking existed (start unknown)
+        replaced = _replaced_by(version)
+        if replaced is not None and replaced <= b.created_at - CLOCK_ALLOWANCE:
+            raise _OldVersion
+        notes = _kept_notes(version)          # e.g. the form was switched off since (R-35)
+        if notes:
+            _late_work(b, "LATE_WORK", "Submitted without its start; " + " ".join(notes))
         pinned = versions_to_pin(version)
         insp = Inspection.objects.create(booking=b, expert=actor, form_version=version,
                                          start_version=pinned["start"],
@@ -257,6 +410,9 @@ def submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id=No
     locked = _locked_keys(actor.role, "in_progress", pinned, answers, {})
     if locked:
         raise err("FIELD_ACCESS", "You cannot change these fields.", 403, keys=locked)
+    # a submit without the check-in keeps the one sent at start
+    if "start" not in answers:
+        answers = {**answers, "start": (insp.answers or {}).get("start")}
     answers = {p: stamp_auto(pinned[p], answers.get(p) or {}) for p in PARTS}
     insp.answers = _clean_all(b, pinned, answers)
     insp.status, insp.submitted_at = "submitted", timezone.now()
@@ -341,17 +497,14 @@ def _check_files(actor, b: Booking, pinned, old: dict, new: dict, changed) -> No
 def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) -> Inspection:
     check_shape(answers)
     insp = Inspection.objects.select_for_update().get(pk=insp.pk)
-    if row_version != insp.row_version:
-        raise err("STALE_INSPECTION", "Someone changed this inspection since you opened it.", 409,
-                  changed_by=insp.last_change.get("by"), changed_at=insp.last_change.get("at"),
-                  changed_keys=insp.last_change.get("keys", []), row_version=insp.row_version)
+    check_fresh(insp, row_version, "STALE_INSPECTION", "inspection")
     b = insp.booking
     pinned = insp.pinned()
     locked = _locked_keys(actor.role, b.stage, pinned, answers, insp.answers)
     if locked:
         raise err("FIELD_ACCESS", "You cannot change these fields at this stage.", 403, keys=locked)
     merged = {k: {**(insp.answers.get(k) or {}), **(answers.get(k) or {})} for k in PARTS}
-    new = _clean_all(b, pinned, merged)
+    new = _clean_all(b, pinned, merged, kept=insp.answers)
     changed = [(part, k) for part in PARTS
                for k in sorted(set(new[part]) | set(insp.answers.get(part) or {}))
                if new[part].get(k) != (insp.answers.get(part) or {}).get(k)]
@@ -359,10 +512,7 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
     keys = sorted(k for _, k in changed)
     if keys:
         insp.answers = new
-        insp.row_version += 1
-        insp.last_edited_by, insp.last_edited_at = actor, timezone.now()
-        insp.last_change = {"by": actor.shown_name, "at": insp.last_edited_at.isoformat(),
-                            "keys": keys}
+        stamp(insp, actor, keys)
         insp.save()
         scoring.recompute(insp)
         chassis = new["inspection"].get("chassis_no")
@@ -386,7 +536,7 @@ def searchable_stages(role: str) -> dict[str, list[str]]:
         return {c: list(STAGES) for c in columns}
     try:
         booking_version = booking_form_version()
-    except Exception:  # noqa: BLE001 - no booking form yet means no bookings either
+    except CodedError:                  # no booking form yet means no bookings either
         return {}
     by_stage = {s: levels_for(booking_version, role, s) for s in STAGES}
     out = {c: [s for s in STAGES if by_stage[s].get(key, "hidden") != "hidden"]  # fail closed
@@ -396,7 +546,7 @@ def searchable_stages(role: str) -> dict[str, list[str]]:
     chassis = {s: [levels_for(v, role, s).get("chassis_no", "hidden") for v in versions]
                or ["hidden"] for s in STAGES}                    # no form to say: closed
     out["chassis_no"] = [s for s in STAGES if "hidden" not in chassis[s]]
-    if any(not may_see_submissions(_Role(role), f) for f in Form.objects.filter(
+    if any(not role_may_see_submissions(role, f) for f in Form.objects.filter(
             type=FormType.CUSTOM)):
         out["chassis_no"] = []                  # a hidden submission must not be searchable
     return out
@@ -405,29 +555,25 @@ def searchable_stages(role: str) -> dict[str, list[str]]:
 @transaction.atomic
 def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Inspection:
     insp = Inspection.objects.select_for_update().get(pk=insp.pk)
-    if row_version != insp.row_version:
-        raise err("STALE_INSPECTION", "Someone changed this inspection since you opened it.", 409,
-                  changed_by=insp.last_change.get("by"), changed_at=insp.last_change.get("at"),
-                  changed_keys=insp.last_change.get("keys", []), row_version=insp.row_version)
+    check_fresh(insp, row_version, "STALE_INSPECTION", "inspection")
     try:
         scoring.validate_overrides(insp.form_version, body)
     except ValueError as e:
         raise err("INVALID_OVERRIDES", str(e)) from e
-    texts = body.get("key_checks") or {}
-    if texts and insp.booking.stage not in ("submitted", "completed"):
-        raise err("NOT_SUBMITTED", "Key Checks can be filled once the expert submits.", 409)
+    # no review of work nobody has sent (F-238), nor Key Check texts while it is being inspected
+    if insp.status != "submitted" or (body.get("key_checks") and insp.booking.stage not in (
+            "submitted", "completed")):
+        raise err("NOT_SUBMITTED", "Ratings and Key Checks can be set once the expert submits.",
+                  409)
     before = {k: v["value"] for k, v in ((insp.scores or {}).get("key_checks") or {}).items()}
     insp.overrides = scoring.apply_overrides(insp.overrides, body)
-    insp.row_version += 1
-    insp.last_edited_by, insp.last_edited_at = actor, timezone.now()
-    insp.last_change = {"by": actor.shown_name, "at": insp.last_edited_at.isoformat(),
-                        "keys": ["overrides"]}
+    stamp(insp, actor, ["overrides"])
     insp.save()
     scoring.recompute(insp)
     if set(body) - {"key_checks"}:
         activity.log(insp.booking, actor, "ratings_changed", keys=[], inspection=insp)
     after = {k: v["value"] for k, v in insp.scores.get("key_checks", {}).items()}
-    moved = {f"check.{k}": [before.get(k), after.get(k)] for k in texts
+    moved = {f"check.{k}": [before.get(k), after.get(k)] for k in body.get("key_checks") or {}
              if before.get(k) != after.get(k)}
     if moved:
         activity.log(insp.booking, actor, "key_checks_changed", moved, inspection=insp)
@@ -461,7 +607,16 @@ def resolve_conflict(actor, b: Booking, inspection_id) -> Booking:
     scoring.recompute(keep)
     events.emit("inspection.updated", booking=str(b.id), inspection=str(keep.id),
                 keys=["conflict_resolved"])
-    from apps.media.services import check_completion
-
-    core_tasks.after_commit(lambda: check_completion(b.id))
+    core_tasks.after_commit(lambda: _after_resolving(b.id))
     return b
+
+
+def _after_resolving(booking_id) -> None:
+    """The kept inspection now counts: a booking waiting for it completes (its first report is
+    made then); one already completed gets its report made again once, from the kept one."""
+    from apps.media.services import check_completion
+    from apps.reports.tasks import render_report
+
+    if not check_completion(booking_id) and Booking.objects.filter(
+            pk=booking_id, stage="completed").exists():
+        render_report.delay(str(booking_id))

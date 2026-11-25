@@ -2,6 +2,7 @@
 // custom form's pages, then the end form's pages, then the review. A form with nothing visible is
 // skipped. Pure, so the order and the skipping can be tested without a browser.
 import type { FormPage, FormVersion } from "../api/types";
+import { maxFiles, MEDIA_TYPES } from "./fieldTypes";
 import { visiblePages, type Answers, type Ctx } from "./formSpec";
 
 export type Part = "start" | "inspection" | "end";
@@ -37,32 +38,30 @@ export function unvisited(steps: Step[], visited: string[]): Step[] {
 /** A file the server holds for this job (from `bookings/{id}/media`). */
 export type ServerMedia = { id: string; field_key: string; kind: string; status: string };
 export type MediaAdd = { part: Part; key: string; id: string; single: boolean };
-const MEDIA_TYPES = ["photo", "video", "file", "signature"];
 
 /** A phone that lost its draft (another device, cleared storage) must not lose the files already
- *  on the server. Finished files go back into the answers; files that never finished and are not
- *  being sent from this phone are dropped, so they stop counting towards the field's limit. */
-export function reconcileMedia(trees: Trees, answers: Record<Part, Answers>, server: ServerMedia[], tracked: (id: string) => boolean): { add: MediaAdd[]; discard: string[] } {
+ *  on the server: finished files go back into the answers. Files that have not finished are left
+ *  alone: another device or tab may still be sending them (the server's stuck-upload check reports
+ *  the ones that never arrive). */
+export function reconcileMedia(trees: Trees, answers: Record<Part, Answers>, server: ServerMedia[], tracked: (id: string) => boolean): { add: MediaAdd[] } {
   const fields = new Map<string, { part: Part; type: string; max: number }>();
   for (const part of ["start", "inspection", "end"] as const)
     for (const p of trees[part]?.pages ?? []) for (const s of p.sections) for (const f of s.fields)
-      if (MEDIA_TYPES.includes(f.type)) fields.set(f.key, { part, type: f.type, max: f.type === "signature" ? 1 : Number(f.config.max_count ?? (f.type === "video" ? 3 : 10)) });
+      if (MEDIA_TYPES.includes(f.type)) fields.set(f.key, { part, type: f.type, max: maxFiles(f) });
   const used = new Set<string>();
   for (const part of ["start", "inspection", "end"] as const)
     for (const v of Object.values(answers[part] ?? {})) for (const id of Array.isArray(v) ? v : [v]) if (typeof id === "string") used.add(id);
   const room = new Map<string, number>();
   const add: MediaAdd[] = [];
-  const discard: string[] = [];
   for (const m of server) {
     const f = fields.get(m.field_key);
-    if (!f || used.has(m.id) || tracked(m.id)) continue;
-    if (m.status !== "uploaded" && m.status !== "verified") { discard.push(m.id); continue; }
+    if (!f || used.has(m.id) || tracked(m.id) || (m.status !== "uploaded" && m.status !== "verified")) continue;
     const have = room.get(m.field_key) ?? (() => { const v = answers[f.part]?.[m.field_key]; return Array.isArray(v) ? v.length : v ? 1 : 0; })();
     if (have >= f.max) continue;
     room.set(m.field_key, have + 1);
     add.push({ part: f.part, key: m.field_key, id: m.id, single: f.type === "signature" });
   }
-  return { add, discard };
+  return { add };
 }
 
 export function applyMedia<T extends Record<Part, Answers>>(draft: T, add: MediaAdd[]): T {

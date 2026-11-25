@@ -1,4 +1,4 @@
-# Android: experts say "lead", Ops say "booking" (to do)
+# Android: experts say "lead", Ops say "booking" (done: batch 4, fix/b4-android)
 
 The web and the server are done. Rules and decisions: docs/plan-leads-bookings-words.md (read it
 first). In short:

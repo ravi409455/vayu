@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
 import `in`.carcid.vayu.ui.expert.ExpertExtras
 import `in`.carcid.vayu.ui.expert.ExpertHome
 import `in`.carcid.vayu.ui.expert.InspectionEnv
@@ -28,7 +27,6 @@ import androidx.compose.ui.platform.LocalContext
 import `in`.carcid.vayu.ui.AdminRefusedScreen
 import `in`.carcid.vayu.ui.AppViewModel
 import `in`.carcid.vayu.ui.ChangePasswordScreen
-import `in`.carcid.vayu.ui.HomeScreen
 import `in`.carcid.vayu.ui.ProfileScreen
 import `in`.carcid.vayu.ui.Screen
 import `in`.carcid.vayu.ui.SignInScreen
@@ -37,28 +35,34 @@ import `in`.carcid.vayu.ui.theme.Vayu
 import `in`.carcid.vayu.ui.theme.VayuTheme
 
 class MainActivity : ComponentActivity() {
+    private val factory = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T =
+            AppViewModel((application as VayuApp).graph, Build.MODEL, appVersion = BuildConfig.VERSION_CODE,
+                elapsed = android.os.SystemClock::elapsedRealtime) as T
+    }
+    private val vm: AppViewModel by lazy { ViewModelProvider(this, factory)[AppViewModel::class.java] }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                AppViewModel((application as VayuApp).graph, Build.MODEL, pushToken = Notices::token, appVersion = BuildConfig.VERSION_CODE) as T
-        }
+        // a tapped notice: read here, not in a composable effect (after Android closed the app, the
+        // tap arrives before the first frame and would be lost)
+        if (savedInstanceState == null) opened(intent, vm)
         setContent {
-            val vm: AppViewModel = viewModel(factory = factory)
-            androidx.compose.runtime.LaunchedEffect(vm) { opened(intent, vm) }
-            androidx.compose.runtime.DisposableEffect(vm) {
-                val l = androidx.core.util.Consumer<android.content.Intent> { opened(it, vm) }
-                addOnNewIntentListener(l); onDispose { removeOnNewIntentListener(l) }
-            }
             androidx.lifecycle.compose.LifecycleResumeEffect(vm) { vm.onForeground(); onPauseOrDispose {} }
             AppRoot(vm)
         }
     }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        opened(intent, vm)
+    }
 }
 
-/** A tapped notice opens its job or booking. */
+/** A tapped notice opens its lead or booking. */
 private fun opened(intent: android.content.Intent?, vm: AppViewModel) {
     intent?.getStringExtra(Notices.EXTRA_BOOKING)?.let { vm.opening.value = it; intent.removeExtra(Notices.EXTRA_BOOKING) }
 }
@@ -76,7 +80,7 @@ fun AppRoot(vm: AppViewModel) {
     val showUpdate by vm.showUpdate.collectAsState()
     VayuTheme(themeOf(screen)) {
         // status bar icons follow the app's own light / dark look, not the phone's setting
-        val activity = androidx.compose.ui.platform.LocalContext.current as? ComponentActivity
+        val activity = androidx.activity.compose.LocalActivity.current as? ComponentActivity
         val dark = Vayu.colors.bg.luminance() < 0.5f
         androidx.compose.runtime.LaunchedEffect(dark) {
             val clear = android.graphics.Color.TRANSPARENT
@@ -87,7 +91,8 @@ fun AppRoot(vm: AppViewModel) {
         val u = update
         if (u != null && showUpdate && (screen is Screen.Home || screen is Screen.Profile)) {
             BackHandler { vm.showUpdate.value = false }
-            `in`.carcid.vayu.ui.UpdateScreen(u, onLater = { vm.showUpdate.value = false })
+            val dl by vm.updateDownload.collectAsState()
+            `in`.carcid.vayu.ui.UpdateScreen(u, onLater = { vm.showUpdate.value = false }, state = dl, onDownload = { f -> vm.downloadUpdate(u, f) })
             return@VayuTheme
         }
         when (val s = screen) {
@@ -150,13 +155,16 @@ private fun expertExtras(vm: AppViewModel, me: `in`.carcid.vayu.core.api.Me): Ex
             inspection = { job ->
                 val verified = vm.jobs.verified()
                 InspectionModel.begin(drafts, job, verified)
-                InspectionEnv(InspectionModel(drafts, store, job.id, vm.jobs::now, vm.graph.kick), drafts, me.name.ifBlank { me.username },
+                InspectionEnv(InspectionModel(drafts, store, job.id, vm.jobs::now, vm.graph.kick, vm.jobs::verified), drafts, me.name.ifBlank { me.username },
                     verified, vm.jobs::now, store::list, store.types(),
                     asset = { id -> loadAsset(ctx.cacheDir, id, vm.graph.api::formAsset) },
                     opsChanges = vm.jobs.notices().filter { it.first == job.id }.map { it.second })
             },
             onDiscard = { drafts.discard(it) },
             onClearSent = { drafts.clearSentCopies() },
+            listed = jobs.jobs.map { it.id }.toSet(),
+            onSend = { id -> InspectionModel(drafts, store, id, vm.jobs::now, vm.graph.kick).submit() },
+            onRemoveFile = { d, f -> InspectionModel(drafts, store, d.bookingId, vm.jobs::now, vm.graph.kick).removeFile(f.part, f.field, f.id) },
             phones = jobs.jobs.associate { it.id to it.phone },
             bell = bell, onBell = vm.bell::refresh, onRead = vm.bell::read,
             opening = vm.opening.value, onOpened = { vm.opening.value = null },

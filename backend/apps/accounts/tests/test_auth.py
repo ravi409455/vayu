@@ -37,11 +37,11 @@ def test_wrong_password_and_unknown_user_look_identical(make_user, login):
 
 
 @pytest.mark.parametrize("password", [PASSWORD, "wrong-pass-1"])
-def test_inactive_user_gets_same_403_whatever_the_password(make_user, login, password):
+def test_inactive_user_gets_the_same_answer_as_a_wrong_password(make_user, login, password):
     make_user(username="gone", is_active=False)
     r = login(APIClient(), "gone", password=password)
-    assert r.status_code == 403
-    assert r.json()["code"] == "ACCOUNT_DISABLED"
+    assert r.status_code == 401
+    assert r.json()["code"] == "INVALID_CREDENTIALS"
 
 
 def test_forced_password_change_blocks_everything_else(make_user, login):

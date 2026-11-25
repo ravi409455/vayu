@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import qrcode
+from botocore.exceptions import ClientError
 from markupsafe import Markup
 
 from apps.forms.models import FormAsset
@@ -63,10 +64,13 @@ def print_image(media_id: str, edge: int = PRINT_EDGE) -> str | None:
     if edge <= 480 and asset.preview_key:
         return _jpeg_uri(storage.read(asset.preview_key))
     key = f"print/{asset.id}-{edge}.jpg"
-    if storage.exists(key):
+    try:                       # the copy made by an earlier render: one call, not two (F-093)
         return _jpeg_uri(storage.read(key))
+    except ClientError:
+        pass
     try:
-        image = ImageOps.exif_transpose(Image.open(io.BytesIO(storage.read(asset.key))))
+        image = ImageOps.exif_transpose(Image.open(io.BytesIO(storage.read(
+            asset.jpeg_key or asset.key))))
     except (OSError, ValueError, Image.DecompressionBombError):
         return None
     image.thumbnail((edge, edge))
@@ -261,10 +265,13 @@ def part_html(part: dict, width_mm: float, ctx: dict) -> str:
     elif t == "verify":
         size = part.get("size", 40)
         url = ctx["verify_url"]
+        link = f'<div class="url">{e(url)}</div>' if part.get("show_url", True) else ""
         inner = (f'<div class="verify"><img src="{qr_uri(url)}" style="width:{size}mm;'
-                 f'height:{size}mm"><div class="url">{e(url)}</div></div>')
+                 f'height:{size}mm">{link}</div>')
     elif t == "button":
         href = ctx.get("links", {}).get(part["link"], "")
+        if not href:                       # a link that expired (R-09) is left out, not dead
+            return ""
         inner = (f'<div class="btnrow" style="text-align:{part.get("align", "center")}">'
                  f'<a class="btn" href="{e(href)}">{e(part["label_out"])}</a></div>')
     elif t == "columns":
@@ -404,7 +411,8 @@ h1, h2, h3, h4, h5, h6 {{ bookmark-level: none }}
 .slot {{ display: flex; align-items: center; gap: 2.6mm }}
 .center .slot {{ justify-content: center }} .right .slot {{ justify-content: flex-end }}
 .stack {{ display: inline-block; line-height: 1.15 }} .stack .line {{ display: block }}
-.band strong {{ font-family: var(--head); font-weight: 700; letter-spacing: .06em; font-size: 1.35em }}
+.band strong {{ font-family: var(--head); font-weight: 700; letter-spacing: .06em; font-size: 1.35em;
+               text-transform: uppercase }}
 .band .large {{ font-family: var(--head); font-weight: 700; letter-spacing: .08em; font-size: 2.1em }}
 .band .small {{ font-size: .8em; letter-spacing: .16em; opacity: .85 }}
 .logo {{ display: block }} .logo.tile {{ background: #fff; border-radius: 1.4mm; padding: .8mm }}

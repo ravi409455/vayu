@@ -6,13 +6,16 @@ from django.db.models import DateTimeField, OuterRef, Q, Subquery, Value
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, mixins, status, viewsets
+from rest_framework import serializers as s_
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from apps.accounts.permissions import perm, scope_for
 from apps.forms.access import hidden_inspection_forms
+from apps.platform.schema import obj
 
 from . import services, submissions, sync, timing
 from .models import Booking, Inspection
@@ -26,7 +29,8 @@ ACTION_PERMISSIONS = {
     "resolve_conflict": "bookings.edit", "activity": "bookings.view",
     "start": "submissions.fill", "forms": "submissions.fill", "submit": "submissions.fill",
     "inspections": "submissions.view", "timing_review": "bookings.review_timing",
-    "answer_fields": "submissions.view",
+    "answer_fields": "submissions.view", "clear_alert": "bookings.edit",
+    "count": "bookings.view",
 }
 
 
@@ -55,7 +59,7 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
             rule = (submissions.deliver_filter if self.action in ("start", "submit")
                     else submissions.own_filter)
             qs = qs.filter(rule(self.request.user)).distinct()
-        if self.action != "list":
+        if self.action not in ("list", "count"):
             return qs
         # only submissions this user may see, the same rule as the `inspections` action
         done = Inspection.objects.filter(booking=OuterRef("pk"), status="submitted").exclude(
@@ -86,8 +90,10 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
             qs = qs.exclude(conflict="")
         elif problem == "type_change":
             qs = qs.filter(alerts__contains=[{"code": "TYPE_CHANGE_REJECTED"}])
+        elif problem == "unverified_time":            # stamped on an unchecked phone clock
+            qs = qs.filter(unverified_time=True)
         elif problem:
-            raise ValidationError({"problem": "Use conflict or type_change."})
+            raise ValidationError({"problem": "Use conflict, type_change or unverified_time."})
         if p.get("timing") or p.get("reviewed"):          # started late / finished too quickly
             if scope_for(self.request.user, "bookings.review_timing", self.request) is None:
                 raise PermissionDenied("You may not see timing flags.")
@@ -164,6 +170,12 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         return self._out(services.cancel(request.user, self.get_object(),
                                          request.data.get("reason")))
 
+    @action(detail=False, methods=["get"])
+    def count(self, request):
+        """How many bookings the list would give for the same filters, without loading them (the
+        Bookings filter's counts, F-085)."""
+        return Response({"count": self.get_queryset().count()})
+
     @action(detail=False, methods=["get"], url_path="answer-fields")
     def answer_fields(self, request):
         """Fields Bookings can be filtered by (choice and yes/no answers this person may see)."""
@@ -188,6 +200,13 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         return self._out(services.review_timing(request.user, self.get_object(),
                                                 request.data.get("flag")))
 
+    @action(detail=True, methods=["post"], url_path="clear-alert")
+    def clear_alert(self, request, pk=None):
+        """Ops looked at an alert ({"code": "TYPE_CHANGE_REJECTED"}): it leaves "Needs you" and
+        the timeline says who cleared it (F-221)."""
+        return self._out(services.clear_alert(request.user, self.get_object(),
+                                              request.data.get("code")))
+
     @action(detail=True, methods=["post"], url_path="change-type")
     def change_type(self, request, pk=None):
         return self._out(services.change_type(request.user, self.get_object(),
@@ -202,13 +221,23 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
 
     @action(detail=True, methods=["post"])
     def start(self, request, pk=None):
+        """Start a lead with its check-in. ``form_version``, ``start_version``, ``end_version``:
+        the versions the phone pinned when the expert started, kept if each was the latest
+        published one at ``client_started_at`` (give or take 10 minutes); an older one is refused
+        (409 ``FORM_VERSION_OLD``, Ops alerted). Left out: the latest published versions."""
         raw = request.headers.get("X-App-Version", "")
         app_version = int(raw) if raw.isdigit() else None
         started = request.data.get("client_started_at")
         b, insp = submissions.start(
             request.user, self.get_object(), self._uuid("client_uuid"),
             parse_datetime(started) if isinstance(started, str) else None,
-            request.data.get("inspection_type"), app_version, request.data.get("start_answers"))
+            request.data.get("inspection_type"), app_version, request.data.get("start_answers"),
+            {part: request.data.get(key) for part, key in (
+                ("inspection", "form_version"), ("start", "start_version"),
+                ("end", "end_version"))})
+        if request.data.get("unverified_time") is True:
+            submissions.mark_unverified_time(b, insp)
+            insp.refresh_from_db()
         ctx = self.get_serializer_context()
         return Response({
             "booking": BookingSerializer(Booking.objects.get(pk=b.pk), context=ctx).data,
@@ -236,6 +265,9 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         b, insp = submissions.submit(
             request.user, self.get_object(), self._uuid("client_submission_uuid"),
             request.data.get("answers") or {}, version if isinstance(version, int) else None)
+        if request.data.get("unverified_time") is True:        # sent on every submit (F-222)
+            submissions.mark_unverified_time(b, insp)
+            insp.refresh_from_db()
         ctx = self.get_serializer_context()
         return Response({
             "booking": BookingSerializer(Booking.objects.get(pk=b.pk), context=ctx).data,
@@ -251,8 +283,10 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
 
     @action(detail=True, methods=["get"])
     def inspections(self, request, pk=None):
-        qs = self.get_object().inspections.exclude(
-            form_version__form_id__in=hidden_inspection_forms(request.user))
+        qs = self.get_object().inspections.select_related(
+            "booking", "form_version__form", "start_version__form", "end_version__form",
+            "last_edited_by",
+        ).exclude(form_version__form_id__in=hidden_inspection_forms(request.user))
         if scope_for(request.user, "submissions.view", request) == "own":
             qs = qs.filter(expert_id=request.user.pk)
         return Response(InspectionSerializer(qs, many=True,
@@ -299,19 +333,26 @@ class InspectionOverrides(generics.GenericAPIView):
         return Response(InspectionSerializer(insp, context=self.get_serializer_context()).data)
 
 
+@extend_schema(responses=obj(  # the phone's main call: its shape must not drift (F-161)
+    "SyncJobs", server_time=s_.DateTimeField(), jobs=s_.ListField(child=s_.DictField()),
+    types=s_.DictField(child=s_.CharField()), forms=s_.DictField(child=s_.DictField()),
+    lists=s_.DictField(child=s_.ListField(child=s_.DictField())),
+    changes=s_.ListField(child=s_.DictField())))
 class SyncJobs(generics.GenericAPIView):
     """The expert's jobs and everything needed to inspect them offline (see apps/bookings/sync.py).
-    ``have`` lists form version ids the phone already holds; ``since`` is the last sync's
-    ``server_time`` (returns what Ops changed after it)."""
+    ``have`` lists form version ids the phone already holds; ``drafts`` the ones its open drafts
+    are pinned to (sent when missing, even if no listed job uses them); ``since`` is the last
+    sync's ``server_time`` (returns what Ops changed after it)."""
 
     permission_classes = [perm("submissions.fill")]
 
     def get(self, request):
-        have_raw = request.query_params.get("have", "")
         since_raw = request.query_params.get("since")
         since = parse_datetime(since_raw) if since_raw else None
-        parts = [p for p in have_raw.split(",") if p]
-        if (since_raw and since is None) or not all(p.isdigit() for p in parts):
-            raise services.err("INVALID_QUERY", "have must be version ids, since a date-time.")
-        return Response(sync.payload(request.user, {int(p) for p in parts}, since,
-                                     self.get_serializer_context()))
+        have, drafts = ([p for p in request.query_params.get(name, "").split(",") if p]
+                        for name in ("have", "drafts"))
+        if (since_raw and since is None) or not all(p.isdigit() for p in have + drafts):
+            raise services.err("INVALID_QUERY",
+                               "have and drafts must be version ids, since a date-time.")
+        return Response(sync.payload(request.user, {int(p) for p in have}, since,
+                                     self.get_serializer_context(), {int(p) for p in drafts}))

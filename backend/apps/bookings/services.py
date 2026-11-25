@@ -1,11 +1,14 @@
 from datetime import date
+from typing import Any
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.accounts import audit
 from apps.accounts.models import Role, User
+from apps.accounts.permissions import scope_for
 from apps.core import events
+from apps.core import tasks as core_tasks
 from apps.core.errors import CodedError
 from apps.forms.access import levels_for
 from apps.forms.fieldtypes import AnswerError, clean_answer
@@ -13,7 +16,8 @@ from apps.forms.models import Field, Form, FormType, FormVersion, MasterListItem
 from apps.forms.rules import validate_answers
 
 from . import activity
-from .models import Booking, RescheduleLog
+from .changes import check_fresh, stamp
+from .models import Booking, Inspection, RescheduleLog
 from .stages import can_transition
 
 COLUMNS = {"customer_name": "customer_name", "customer_phone": "customer_phone", "city": "city",
@@ -22,7 +26,7 @@ COLUMNS = {"customer_name": "customer_name", "customer_phone": "customer_phone",
 ACTION_ONLY = ("assigned_expert", "inspection_type")  # changed through their own actions
 
 
-def err(code: str, message: str, status: int = 400, **extra) -> CodedError:
+def err(code: str, message: str, status: int = 400, **extra: Any) -> CodedError:
     return CodedError(code, message, status, **extra)
 
 
@@ -49,10 +53,14 @@ def active_inspection_type(key: str) -> bool:
                                versions__status=VersionStatus.PUBLISHED).exists()
 
 
-def clean(version: FormVersion, answers: dict) -> dict:
-    cleaned, errors = validate_answers(version, {"booking": answers}, today())
+def clean(version: FormVersion, answers: dict[str, Any],
+          kept: dict[str, Any] | None = None) -> dict[str, Any]:
+    messages: dict[str, Any] = {}
+    cleaned, errors = validate_answers(version, {"booking": answers}, today(), kept=kept,
+                                       messages=messages)
     if errors:
-        raise err("INVALID_ANSWERS", "Some answers are invalid.", errors=errors)
+        raise err("INVALID_ANSWERS", "Some answers are invalid.", errors=errors,
+                  messages=messages)
     return cleaned
 
 
@@ -64,7 +72,7 @@ def sync_columns(b: Booking) -> None:
                          if a.get("inspection_date") else None)
 
 
-def _ensure_unique(booking_id: str, exclude=None) -> None:
+def _ensure_unique(booking_id: str, exclude: Any=None) -> None:
     qs = Booking.objects.filter(booking_id__iexact=booking_id.strip())
     if exclude is not None:
         qs = qs.exclude(pk=exclude.pk)
@@ -80,16 +88,17 @@ def _save(b: Booking) -> None:
         raise err("DUPLICATE_BOOKING_ID", "That booking ID is already used.") from e
 
 
-def _touch(b: Booking, actor, keys: list[str]) -> None:
-    b.row_version += 1
-    b.last_edited_by, b.last_edited_at = actor, timezone.now()
-    b.last_change = {"by": actor.shown_name, "at": b.last_edited_at.isoformat(), "keys": keys}
+def _touch(b: Booking, actor: Any, keys: list[str]) -> None:
+    stamp(b, actor, keys)
 
 
-def create(actor, answers: dict) -> Booking:
+@transaction.atomic
+def create(actor: Any, answers: dict[str, Any]) -> Booking:
     version = booking_form_version()
     cleaned = clean(version, answers)
     _ensure_unique(cleaned["booking_id"])
+    if cleaned.get("assigned_expert") and scope_for(actor, "bookings.assign") is None:
+        raise err("FORBIDDEN", "Choosing the expert needs the assign permission.", 403)  # F-057
     b = Booking(answers=cleaned, created_by=actor, last_edited_by=actor,
                 last_edited_at=timezone.now())
     sync_columns(b)
@@ -102,12 +111,9 @@ def create(actor, answers: dict) -> Booking:
 
 
 @transaction.atomic
-def edit(actor, b: Booking, new_answers: dict, row_version: int) -> Booking:
+def edit(actor: Any, b: Booking, new_answers: dict[str, Any], row_version: int) -> Booking:
     b = Booking.objects.select_for_update().get(pk=b.pk)
-    if row_version != b.row_version:
-        raise err("STALE_BOOKING", "Someone changed this booking since you opened it.", 409,
-                  changed_by=b.last_change.get("by"), changed_at=b.last_change.get("at"),
-                  changed_keys=b.last_change.get("keys", []), row_version=b.row_version)
+    check_fresh(b, row_version, "STALE_BOOKING", "booking")
     forbidden = [k for k in new_answers if k in ACTION_ONLY]
     if forbidden:
         raise err("USE_ACTION", f"{', '.join(forbidden)} change through their own actions.")
@@ -122,7 +128,7 @@ def edit(actor, b: Booking, new_answers: dict, row_version: int) -> Booking:
     if locked:  # checked before validation
         raise err("FIELD_ACCESS", "You cannot change these fields at this stage.", 403, keys=locked)
     merged = {**b.answers, **new_answers}
-    cleaned = clean(version, merged)
+    cleaned = clean(version, merged, kept=b.answers)
     changes = {k: [b.answers.get(k), cleaned.get(k)] for k in set(cleaned) | set(b.answers)
                if b.answers.get(k) != cleaned.get(k)}
     if "booking_id" in changes:
@@ -143,7 +149,7 @@ def _lock(b: Booking) -> Booking:
     return Booking.objects.select_for_update().get(pk=b.pk)
 
 
-def _changed(actor, b: Booking, changes: dict) -> None:
+def _changed(actor: Any, b: Booking, changes: dict[str, Any]) -> None:
     _touch(b, actor, sorted(changes))
     _save(b)
     activity.log(b, actor, "changed", changes)
@@ -152,11 +158,13 @@ def _changed(actor, b: Booking, changes: dict) -> None:
 
 
 @transaction.atomic
-def assign(actor, b: Booking, expert_id) -> Booking:
+def assign(actor: Any, b: Booking, expert_id: Any) -> Booking:
     b = _lock(b)
     expert = User.objects.filter(pk=expert_id, role=Role.EXPERT, is_active=True).first()
     if expert is None:
         raise err("INVALID_EXPERT", "Choose an active expert.")
+    if b.stage == "assigned" and b.assigned_expert_id == expert.id:
+        return b                    # a double click: no second "New lead", no new timeline row
     if b.stage == "in_progress":
         raise err("ALREADY_STARTED", "The expert has started; force-release the booking first.",
                   409)
@@ -171,7 +179,7 @@ def assign(actor, b: Booking, expert_id) -> Booking:
 
 
 @transaction.atomic
-def reschedule(actor, b: Booking, date_, time_, reason) -> Booking:
+def reschedule(actor: Any, b: Booking, date_: Any, time_: Any, reason: Any) -> Booking:
     b = _lock(b)
     if b.stage not in ("draft", "assigned"):
         raise err("INVALID_STAGE", f"A {b.stage} booking cannot be rescheduled.", 409)
@@ -194,7 +202,7 @@ def reschedule(actor, b: Booking, date_, time_, reason) -> Booking:
 
 
 @transaction.atomic
-def cancel(actor, b: Booking, reason) -> Booking:
+def cancel(actor: Any, b: Booking, reason: Any) -> Booking:
     b = _lock(b)
     if not isinstance(reason, str) or not active_item("cancel_reason", reason):
         raise err("INVALID_REASON", "Choose a cancel reason from the list.")
@@ -207,13 +215,16 @@ def cancel(actor, b: Booking, reason) -> Booking:
 
 
 @transaction.atomic
-def force_release(actor, b: Booking) -> Booking:
+def force_release(actor: Any, b: Booking) -> Booking:
     b = _lock(b)
     if b.stage != "in_progress":
         raise err("NOT_STARTED", "Only a started booking can be force-released.", 409)
     b.stage, b.started_at, b.late_minutes = "assigned", None, None
     b.late_reviewed_by = b.late_reviewed_at = None     # the next start is judged afresh
     b.released_by, b.released_at, b.released_draft_expected = actor, timezone.now(), True
+    # the expert's draft is closed: a new start opens a new one; the old one may still arrive
+    Inspection.objects.filter(booking=b, expert_id=b.assigned_expert_id, status="draft").update(
+        status="released")
     audit.record(actor, "booking.force_release", "booking", b.id,
                  f"Force-released {b.booking_id} from expert {b.assigned_expert_id}")
     _changed(actor, b, {"stage": ["in_progress", "assigned"]})
@@ -221,7 +232,7 @@ def force_release(actor, b: Booking) -> Booking:
 
 
 @transaction.atomic
-def review_timing(actor, b: Booking, flag) -> Booking:
+def review_timing(actor: Any, b: Booking, flag: Any) -> Booking:
     """Mark one flag ("late" or "quick") as looked at; the other stays open."""
     if flag not in ("late", "quick"):
         raise err("INVALID_FLAG", "Say which flag: late or quick.")
@@ -234,7 +245,19 @@ def review_timing(actor, b: Booking, flag) -> Booking:
 
 
 @transaction.atomic
-def change_type(actor, b: Booking, inspection_type) -> Booking:
+def clear_alert(actor: Any, b: Booking, code: Any) -> Booking:
+    b = _lock(b)
+    kept = [a for a in b.alerts if a.get("code") != code]
+    if len(kept) == len(b.alerts):
+        raise err("NO_ALERT", "This booking has no such alert.", 409)
+    b.alerts = kept
+    b.save(update_fields=["alerts"])
+    activity.log(b, actor, "alert_cleared", {"alert": [code, None]})
+    return b
+
+
+@transaction.atomic
+def change_type(actor: Any, b: Booking, inspection_type: Any) -> Booking:
     b = _lock(b)
     if b.started_at is not None or b.stage not in ("draft", "assigned"):
         raise err("TYPE_LOCKED", "The inspection type is locked once the booking has started.", 409)
@@ -247,11 +270,23 @@ def change_type(actor, b: Booking, inspection_type) -> Booking:
     return b
 
 
-def delete(actor, b: Booking) -> None:
-    """Admin may delete any booking; anyone else only a draft that nobody has worked on."""
+@transaction.atomic
+def delete(actor: Any, b: Booking) -> None:
+    """Admin may delete any booking; anyone else only a draft that nobody has worked on. Its
+    files (originals, previews, copies, the PDF, ZIPs) go from storage once it is gone (H-02)."""
+    from apps.media.models import MediaZip
+    from apps.media.services import asset_keys
+    from apps.media.tasks import delete_files
+    from apps.reports.models import Report
+
+    b = _lock(b)                                       # no assign can slip in meanwhile (F-121)
     if actor.role != Role.ADMIN and (b.stage != "draft" or b.inspections.exists()):
         raise err("DELETE_NOT_ALLOWED", "Only an Admin can delete a booking that has been "
                   "assigned or worked on. Cancel it instead.", 403)
+    keys = [k for a in b.media.all() for k in asset_keys(a)]
+    keys += [k for k in Report.objects.filter(booking=b).values_list("key", flat=True) if k]
+    keys += [k for k in MediaZip.objects.filter(booking=b).values_list("key", flat=True) if k]
     audit.record(actor, "booking.delete", "booking", b.id, f"Deleted booking {b.booking_id}")
     events.emit("booking.deleted", booking=str(b.id), booking_id=b.booking_id)
     b.delete()
+    core_tasks.after_commit(lambda: delete_files.delay(keys))

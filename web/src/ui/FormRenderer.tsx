@@ -1,14 +1,18 @@
 import { Camera, Image as ImageIcon, ImageOff, MapPin, Paperclip, Video as VideoIcon } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { maxFiles } from "../lib/fieldTypes";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, ApiError } from "../api/client";
-import { asList } from "../api/hooks";
+import { ApiError } from "../api/client";
+import { fetchAll } from "../api/hooks";
+import { ist } from "../lib/format";
+import { LINK_REFRESH_MS } from "./MediaThumb";
 import { useInspectionTypes } from "../api/labels";
 import type { FormField, FormPage, FormVersion, MasterListItem, Option, User } from "../api/types";
-import { addFile, discardFile, useUploads } from "../lib/uploadManager";
+import { addFile, discardFile, isLocalId, uploadFor, useUploads } from "../lib/uploadManager";
 import { evaluateTree, type Answers, type Ctx, type Kind } from "../lib/formSpec";
 import { CameraCapture } from "./CameraCapture";
 import { Field } from "./kit";
+import { keys } from "../api/keys";
 
 export type RenderProps = {
   kind: Kind;
@@ -60,61 +64,66 @@ export function FormRenderer(p: RenderProps) {
   );
 }
 
+type InputArgs = { f: FormField; value: unknown; str: string | number; derived: unknown; readOnly: boolean; onChange: (v: unknown) => void; p: RenderProps; common: Record<string, unknown> };
+const textInput = ({ common, str, onChange }: InputArgs) => <input {...common} value={String(str)} onChange={(e) => onChange(e.target.value)} />;
+const stamp = (type: "date" | "time" | "datetime", input: (a: InputArgs) => ReactNode) => (a: InputArgs) => a.f.config.auto === true
+  ? <AutoStamp type={type} value={a.value as string | undefined} label={a.f.label || a.f.key} disabled={a.readOnly} preview={a.p.preview} onChange={a.onChange} />
+  : input(a);
+const number = ({ f, common, str, onChange }: InputArgs) => <input {...common} type="number" inputMode="decimal" value={String(str)} placeholder={f.type === "currency" ? "₹" : String(f.config.unit ?? "")}
+  onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))} />;
+const media = ({ f, value, readOnly, onChange, p }: InputArgs) => <MediaField f={f} value={value} readOnly={readOnly} onChange={onChange} p={p} />;
+
+/** The input for each field type (lib/fieldTypes TYPES has the rest of what a type is; "image" is
+ *  a picture shown above, not an input). */
+export const INPUTS: Record<string, (a: InputArgs) => ReactNode> = {
+  short_text: textInput,
+  long_text: ({ common, str, onChange }) => <textarea {...common} value={String(str)} onChange={(e) => onChange(e.target.value)} />,
+  number, currency: number,
+  phone: ({ common, str, onChange }) => <input {...common} type="tel" value={String(str)} onChange={(e) => onChange(e.target.value)} />,
+  date: stamp("date", ({ common, str, onChange }) => <input {...common} type="date" value={String(str)} onChange={(e) => onChange(e.target.value)} />),
+  time: stamp("time", ({ common, str, onChange }) => <input {...common} type="time" value={String(str)} onChange={(e) => onChange(e.target.value)} />),
+  datetime: stamp("datetime", ({ common, str, onChange }) => <input {...common} type="datetime-local" value={String(str).slice(0, 16)} onChange={(e) => onChange(e.target.value)} />),
+  yes_no: ({ f, value, readOnly, onChange }) => <Choices name={f.key} disabled={readOnly} label={f.label} value={value === true ? "yes" : value === false ? "no" : ""} plain options={[{ key: "yes", label: "Yes" }, { key: "no", label: "No" }]} onChange={(k) => onChange(k === "yes")} />,
+  single_choice: ({ f, value, str, readOnly, onChange, common }) => {
+    const opts = (f.config.options as Option[]) ?? [];
+    return f.config.display === "dropdown" || (f.config.display !== "buttons" && opts.length > 5)
+      ? <select {...common} value={String(str)} onChange={(e) => onChange(e.target.value || null)}><option value="">Choose…</option>{opts.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select>
+      : <Choices name={f.key} disabled={readOnly} label={f.label} value={String(str)} options={opts} onChange={(k) => onChange(value === k ? null : k)} />;
+  },
+  multi_choice: ({ f, value, readOnly, onChange }) => {
+    const opts = (f.config.options as Option[]) ?? [];
+    const chosen = Array.isArray(value) ? (value as string[]) : [];
+    return <div role="group" aria-label={f.label}>{opts.map((o) => (
+      <label className="check" key={o.key}><input type="checkbox" disabled={readOnly} checked={chosen.includes(o.key)}
+        onChange={(e) => onChange(e.target.checked ? [...chosen, o.key] : chosen.filter((x) => x !== o.key))} /> {o.label}</label>))}</div>;
+  },
+  form_choice: ({ f, str, readOnly, onChange }) => <TypeSelect value={String(str)} disabled={readOnly} label={f.label} onChange={(v) => onChange(v || null)} />,
+  master_list: ({ f, str, readOnly, onChange }) => <ListSelect list={String(f.config.list ?? "")} value={String(str)} disabled={readOnly} label={f.label} onChange={(v) => onChange(v || null)} />,
+  user_picker: ({ f, value, readOnly, onChange }) => <UserSelect role={String(f.config.role ?? "expert")} value={value as number | null} disabled={readOnly} label={f.label} onChange={onChange} />,
+  gps: ({ f, value, readOnly, onChange, p }) => <Gps value={value as { lat: number; lng: number } | undefined} disabled={readOnly} onChange={onChange} preview={p.preview} auto={f.config.auto !== false} />,
+  photo: media, video: media, file: media, signature: media,
+  derived: ({ f, derived }) => <p><strong>{derived === true ? String(f.config.true_label ?? "Yes") : String(f.config.false_label ?? "No")}</strong></p>,
+  rating: () => <p className="muted">Calculated from the defects found.</p>,
+};
+
 function FieldInput({ f, value, derived, required, error, readOnly, onChange, p }: {
   f: FormField; value: unknown; derived: unknown; required: boolean; error?: string; readOnly: boolean; onChange: (v: unknown) => void; p: RenderProps;
 }) {
   const label = `${f.label || f.key}${required ? " *" : ""}`;
   const err = error === "required" ? "This is needed." : error;
-  const common = { disabled: readOnly, "aria-label": f.label || f.key };
+  const uid = useId();
+  const ids = { help: `${uid}-help`, error: `${uid}-err` };
+  // the control says it is required, whether it is wrong, and which text explains it (F-179)
+  const described = [f.helper_text && ids.help, err && ids.error].filter(Boolean).join(" ") || undefined;
+  const common = { disabled: readOnly, "aria-label": f.label || f.key, "aria-required": required || undefined, "aria-invalid": err ? true : undefined, "aria-describedby": described };
   const str = (value ?? "") as string | number;
-  let input: ReactNode;
-  switch (f.type) {
-    case "long_text": input = <textarea {...common} value={String(str)} onChange={(e) => onChange(e.target.value)} />; break;
-    case "number": case "currency":
-      input = <input {...common} type="number" inputMode="decimal" value={String(str)} placeholder={f.type === "currency" ? "₹" : String(f.config.unit ?? "")}
-        onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))} />; break;
-    case "phone": input = <input {...common} type="tel" value={String(str)} onChange={(e) => onChange(e.target.value)} />; break;
-    case "date": case "time": case "datetime":
-      input = f.config.auto === true
-        ? <AutoStamp type={f.type} value={value as string | undefined} label={f.label || f.key} disabled={readOnly} preview={p.preview} onChange={onChange} />
-        : f.type === "date" ? <input {...common} type="date" value={String(str)} onChange={(e) => onChange(e.target.value)} />
-        : f.type === "time" ? <input {...common} type="time" value={String(str)} onChange={(e) => onChange(e.target.value)} />
-        : <input {...common} type="datetime-local" value={String(str).slice(0, 16)} onChange={(e) => onChange(e.target.value)} />;
-      break;
-    case "image": {
-      if (p.role !== "expert" && !p.preview) return null;                 // shown to the expert, not in Ops' views
-      const asset = typeof f.config.asset === "string" ? f.config.asset : "";
-      return <div className="field"><span className="label-row">{f.label}</span>{asset ? <img className="static-image" src={`/api/v1/form-assets/${asset}`} alt={f.label || "Picture"} /> : <p className="muted">No picture yet.</p>}{f.helper_text && <span className="help">{f.helper_text}</span>}</div>;
-    }
-    case "yes_no":
-      input = <Choices name={f.key} disabled={readOnly} label={f.label} value={value === true ? "yes" : value === false ? "no" : ""} plain options={[{ key: "yes", label: "Yes" }, { key: "no", label: "No" }]} onChange={(k) => onChange(k === "yes")} />; break;
-    case "single_choice": {
-      const opts = (f.config.options as Option[]) ?? [];
-      input = f.config.display === "dropdown" || (f.config.display !== "buttons" && opts.length > 5)
-        ? <select {...common} value={String(str)} onChange={(e) => onChange(e.target.value || null)}><option value="">Choose…</option>{opts.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select>
-        : <Choices name={f.key} disabled={readOnly} label={f.label} value={String(str)} options={opts} onChange={(k) => onChange(value === k ? null : k)} />;
-      break;
-    }
-    case "multi_choice": {
-      const opts = (f.config.options as Option[]) ?? [];
-      const chosen = Array.isArray(value) ? (value as string[]) : [];
-      input = <div role="group" aria-label={f.label}>{opts.map((o) => (
-        <label className="check" key={o.key}><input type="checkbox" disabled={readOnly} checked={chosen.includes(o.key)}
-          onChange={(e) => onChange(e.target.checked ? [...chosen, o.key] : chosen.filter((x) => x !== o.key))} /> {o.label}</label>))}</div>;
-      break;
-    }
-    case "form_choice": input = <TypeSelect value={String(str)} disabled={readOnly} label={f.label} onChange={(v) => onChange(v || null)} />; break;
-    case "master_list": input = <ListSelect list={String(f.config.list ?? "")} value={String(str)} disabled={readOnly} label={f.label} onChange={(v) => onChange(v || null)} />; break;
-    case "user_picker": input = <UserSelect role={String(f.config.role ?? "expert")} value={value as number | null} disabled={readOnly} label={f.label} onChange={onChange} />; break;
-    case "gps": input = <Gps value={value as { lat: number; lng: number } | undefined} disabled={readOnly} onChange={onChange} preview={p.preview} auto={f.config.auto !== false} />; break;
-    case "photo": case "video": case "file": case "signature":
-      input = <MediaField f={f} value={value} readOnly={readOnly} onChange={onChange} p={p} />; break;
-    case "derived":
-      input = <p><strong>{derived === true ? String(f.config.true_label ?? "Yes") : String(f.config.false_label ?? "No")}</strong></p>; break;
-    case "rating": input = <p className="muted">Calculated from the defects found.</p>; break;
-    default: input = <input {...common} value={String(str)} onChange={(e) => onChange(e.target.value)} />;
+  if (f.type === "image") {
+    if (p.role !== "expert" && !p.preview) return null;                 // shown to the expert, not in Ops' views
+    const asset = typeof f.config.asset === "string" ? f.config.asset : "";
+    return <div className="field"><span className="label-row">{f.label}</span>{asset ? <img className="static-image" src={`/api/v1/form-assets/${asset}`} alt={f.label || "Picture"} /> : <p className="muted">No picture yet.</p>}{f.helper_text && <span className="help">{f.helper_text}</span>}</div>;
   }
-  return <Field bare label={label} help={f.helper_text || undefined} error={err}>{input}</Field>;
+  const input = (INPUTS[f.type] ?? INPUTS.short_text!)({ f, value, str, derived, readOnly, onChange, p, common });
+  return <Field bare label={label} help={f.helper_text || undefined} error={err} ids={ids}>{input}</Field>;
 }
 
 /** Picked answers read at a glance: green when fine, red only for a defect; Yes / No stays neutral. */
@@ -130,7 +139,7 @@ function Choices({ name, options, value, onChange, disabled, label, plain }: { n
 }
 
 function ListSelect({ list, value, onChange, disabled, label }: { list: string; value: string; onChange: (v: string) => void; disabled: boolean; label: string }) {
-  const q = useQuery({ queryKey: ["list-items", list], enabled: !!list, staleTime: 300_000, queryFn: async () => asList<MasterListItem>(await api(`master-lists/${list}/items`)) });
+  const q = useQuery({ queryKey: keys.listItems(list), enabled: !!list, staleTime: 300_000, queryFn: ({ signal }) => fetchAll<MasterListItem>(`master-lists/${list}/items`, undefined, signal) });
   const items = (q.data ?? []).filter((i) => !i.archived || i.key === value);
   return <select aria-label={label} disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Choose…</option>{items.map((i) => <option key={i.key} value={i.key}>{i.label}</option>)}</select>;
 }
@@ -141,7 +150,7 @@ function TypeSelect({ value, onChange, disabled, label }: { value: string; onCha
 }
 
 function UserSelect({ role, value, onChange, disabled, label }: { role: string; value: number | null | undefined; onChange: (v: unknown) => void; disabled: boolean; label: string }) {
-  const q = useQuery({ queryKey: ["users-by-role", role], retry: false, staleTime: 300_000, queryFn: async () => asList<User>(await api("users", { query: { role } })) });
+  const q = useQuery({ queryKey: keys.users({ role }), retry: false, staleTime: 300_000, queryFn: ({ signal }) => fetchAll<User>("users", { role }, signal) });
   if (q.isError) return <input aria-label={label} disabled value={value ?? ""} readOnly />;
   return <select aria-label={label} disabled={disabled} value={value ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
     <option value="">Choose…</option>{(q.data ?? []).filter((u) => u.is_active).map((u) => <option key={u.id} value={u.id}>{u.name || u.username}</option>)}</select>;
@@ -150,14 +159,12 @@ function UserSelect({ role, value, onChange, disabled, label }: { role: string; 
 /** Browser location, taken by itself as soon as the field appears. If it is refused or not
  *  available the field just says so (and offers another try): it never blocks the job. */
 const pad = (n: number) => String(n).padStart(2, "0");
-/** "Now" in the shapes the server stores: 2026-11-23, 15:30, 2026-11-23T15:30:00+05:30. */
+/** "Now" in the shapes the server stores, in India time: 2026-11-23, 15:30, 2026-11-23T15:30:00+05:30. */
 export function nowAs(type: string, d = new Date()): string {
-  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  if (type === "date") return date;
-  if (type === "time") return time;
-  const off = -d.getTimezoneOffset();
-  return `${date}T${time}:${pad(d.getSeconds())}${off >= 0 ? "+" : "-"}${pad(Math.floor(Math.abs(off) / 60))}:${pad(Math.abs(off) % 60)}`;
+  const at = ist(d);
+  if (type === "date") return at.day;
+  if (type === "time") return at.hhmm;
+  return `${at.day}T${at.hhmm}:${pad(at.seconds)}+05:30`;
 }
 
 /** A date or time the Admin set to "automatic": stamped when the page opens, never typed. */
@@ -167,7 +174,7 @@ function AutoStamp({ type, value, label, disabled, preview, onChange }: { type: 
     if (done.current || value || disabled || preview) return;
     done.current = true;
     onChange(nowAs(type));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- stamps once when the page opens, never again
   const shown = value ? (type === "datetime" ? new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : value) : preview ? "Stamped when the expert opens this page" : "…";
   return <p className="auto-stamp" data-testid={`auto-${label}`}>{shown} <span className="muted small">(automatic)</span></p>;
 }
@@ -186,7 +193,7 @@ function Gps({ value, onChange, disabled, preview, auto = true }: { value?: { la
     if (asked.current || value || disabled || preview || !auto) return;
     asked.current = true;
     capture();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- asks for the location once when the page opens, never again
   return (
     <div aria-live="polite">
       {value ? <p className="ok" data-testid="gps-value"><MapPin size={14} aria-hidden /> {value.lat}, {value.lng}{value.accuracy !== undefined && <span className="muted small"> (±{value.accuracy} m)</span>}</p>
@@ -202,9 +209,9 @@ function Gps({ value, onChange, disabled, preview, auto = true }: { value?: { la
 function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: unknown; readOnly: boolean; onChange: (v: unknown) => void; p: RenderProps }) {
   const single = f.type === "signature";
   const ids = (single ? (value ? [String(value)] : []) : Array.isArray(value) ? (value as string[]) : []);
-  const max = single ? 1 : Number(f.config.max_count ?? (f.type === "video" ? 3 : 10));
+  const max = maxFiles(f);
   const mode = f.type === "file" ? "upload" : String(f.config.capture ?? "both");     // both | camera | upload
-  const uploads = useUploads(p.bookingId);
+  useUploads(p.bookingId);                       // re-render as the files' uploads move on
   const input = useRef<HTMLInputElement>(null);
   const cam = useRef<HTMLInputElement>(null);
   const [err, setErr] = useState("");
@@ -219,26 +226,29 @@ function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: 
     let next = [...ids];
     for (const file of Array.from(files).slice(0, Math.max(0, max - ids.length))) {
       try {
-        const id = p.preview ? `preview-${Date.now()}-${next.length}` : await addFile({ bookingId: p.bookingId!, fieldKey: f.key, kind: f.type as "photo", file, name: file.name, source });
+        const id = p.preview ? `preview-${Date.now()}-${next.length}` : await addFile({ bookingId: p.bookingId!, fieldKey: f.key, kind: f.type as "photo", file, name: file.name, source, keepOffline: true });
         next = single ? [id] : [...next, id];
         onChange(single ? id : next);
       } catch (e) { setErr(e instanceof ApiError && e.status < 500 && e.code !== "HTTP_" + e.status ? e.message : "That file could not be added. Check its type and size, then try again."); }
     }
   }
-  const mine = new Map(uploads.map((u) => [u.assetId, u]));
   const room = ids.length < max;
   const noun = f.type === "video" ? "video" : f.type === "file" ? "file" : "photo";
   return (
     <div>
       <div className="photo-grid">
         {ids.map((id) => {
-          const u = mine.get(id);
+          const u = uploadFor(id);
           return (
             <div key={id} data-testid="media-item" style={{ position: "relative" }}>
-              {u?.preview ? <img src={u.preview} alt="" /> : id.startsWith("preview-") ? <div className="fake-photo"><ImageIcon size={22} aria-hidden /></div> : <RemoteThumb id={id} kind={f.type} mediaUrl={p.mediaUrl} />}
-              {u && u.status !== "done" && <div className="progress" aria-label={`Upload ${u.status}`}><div style={{ width: `${Math.round(u.progress * 100)}%` }} /></div>}
-              {u?.status === "failed" && <span className="error small">Will retry</span>}
-              {!readOnly && <button type="button" className="link" aria-label="Remove" onClick={() => { const rest = ids.filter((x) => x !== id); onChange(single ? null : rest); p.onMediaRemove?.(f, id); if (!p.preview && p.bookingId && !id.startsWith("preview-")) void discardFile(id); }}>Remove</button>}
+              {u?.preview ? <img src={u.preview} alt="" /> : id.startsWith("preview-") || isLocalId(id) ? <div className="fake-photo"><ImageIcon size={22} aria-hidden /></div> : <RemoteThumb id={id} kind={f.type} mediaUrl={p.mediaUrl} />}
+              {u && u.status !== "done" && <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(u.progress * 100)} aria-label={`Upload ${u.status}`}><div style={{ width: `${Math.round(u.progress * 100)}%` }} /></div>}
+              {u?.status === "failed" && <span className="error small">{u.permanent ? `Not accepted: ${u.error}. Remove it and try another.` : isLocalId(u.assetId) ? "No connection: kept on this device, sent when you are back online" : "Not sent yet: will retry"}</span>}
+              {u?.deviceOnly && u.status !== "done" && <span className="error small">This browser could not store it: kept only while this tab is open</span>}
+              {!readOnly && <button type="button" className="link" aria-label="Remove" onClick={() => {
+                const rest = ids.filter((x) => x !== id);
+                onChange(single ? null : rest); p.onMediaRemove?.(f, id);
+                if (!p.preview && p.bookingId && !id.startsWith("preview-")) void discardFile(id); }}>Remove</button>}
             </div>
           );
         })}
@@ -263,9 +273,9 @@ function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: 
 }
 
 function RemoteThumb({ id, kind, mediaUrl }: { id: string; kind: string; mediaUrl?: RenderProps["mediaUrl"] }) {
-  const q = useQuery({ queryKey: ["media-url", id], enabled: !!mediaUrl, staleTime: 600_000, queryFn: () => mediaUrl!(id) });
+  const q = useQuery({ queryKey: keys.mediaUrl(id), enabled: !!mediaUrl, staleTime: 600_000, refetchInterval: LINK_REFRESH_MS, queryFn: () => mediaUrl!(id) });
   const u = q.data?.preview_url ?? q.data?.url;
   if (q.data?.removed) return <div className="fake-photo" title="Deleted after the storage time set in Settings" aria-label="Deleted after the storage time set in Settings"><ImageOff size={22} aria-hidden /></div>;
-  if (!u) return <div style={{ aspectRatio: "4/3", background: "#eee", borderRadius: 8 }} aria-label="Preview not ready" />;
+  if (!u) return <div style={{ aspectRatio: "4/3", background: "var(--hover)", borderRadius: 8 }} role="img" aria-label="Preview not ready" />;
   return kind === "video" ? <video src={q.data!.url} controls preload="metadata" /> : <img src={u} alt="" />;
 }

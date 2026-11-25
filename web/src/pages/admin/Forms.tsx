@@ -5,11 +5,12 @@ import { api } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { FormSummary, FormType } from "../../api/types";
 import { useAuth } from "../../auth";
-import { Empty, Field, Modal, Pill, useToast, PageHeader } from "../../ui/kit";
+import { Empty, Field, LoadError, Modal, PageHeader, Pill, useToast } from "../../ui/kit";
 import { slugKey } from "../../lib/fieldTypes";
-import { ImportDialog } from "./ImportForm";
+import { ImportDialog } from "./builder/ImportForm";
+import { keys } from "../../api/keys";
 
-export const TYPE_LABEL: Record<FormType, string> = { booking: "Booking form", start: "Start form", end: "End form", custom: "Custom form" };
+const TYPE_LABEL: Record<FormType, string> = { booking: "Booking form", start: "Start form", end: "End form", custom: "Custom form" };
 const SYSTEM_ORDER: FormType[] = ["booking", "start", "end"];
 
 function Versions({ x }: { x: FormSummary }) {
@@ -24,7 +25,7 @@ export function Forms() {
   const { fail } = useToast();
   const nav = useNavigate();
   const refresh = useRefresh();
-  const forms = useList<FormSummary>("forms", "forms");
+  const forms = useList<FormSummary>(keys.forms(), "forms");
   const [open, setOpen] = useState(false);
   const file = useRef<HTMLInputElement>(null);
   const [bundle, setBundle] = useState<unknown>(null);
@@ -32,7 +33,7 @@ export function Forms() {
   const [keyEdited, setKeyEdited] = useState(false);     // until the Admin types a key, it follows the name
   const create = useMutation({
     mutationFn: () => api<FormSummary>("forms", { body: f }),
-    onSuccess: (r) => { void refresh("forms"); nav(`/forms/${r.id}`); },
+    onSuccess: (r) => { void refresh(keys.forms()); nav(`/forms/${r.id}`); },
     onError: fail,
   });
   const system = SYSTEM_ORDER.map((t) => (forms.data ?? []).find((x) => x.type === t)).filter((x): x is FormSummary => !!x);
@@ -42,6 +43,7 @@ export function Forms() {
       <PageHeader title="Forms">
         {can("forms.promote") && <button onClick={() => file.current?.click()}>Import</button>}
         {can("forms.edit") && <button className="primary" onClick={() => setOpen(true)}>New custom form</button>}</PageHeader>
+      {forms.isError && <LoadError error={forms.error} what="forms" onRetry={forms.refetch} />}
       <input ref={file} type="file" accept="application/json,.json" aria-label="Form file to import" hidden onChange={async (e) => {
         const f = e.target.files?.[0];
         e.target.value = "";

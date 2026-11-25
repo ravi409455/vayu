@@ -6,14 +6,32 @@ import { asList, useList, useRefresh } from "../../../api/hooks";
 import type { Booking, FormSummary, Integration } from "../../../api/types";
 import { bodyText, cleanPairs, EVENT_LABEL, eventsFor, hasBody, METHODS, parseBody, pickerHint, STARTER_BODY, type CatalogueEntry } from "../../../lib/integrationDef";
 import { useCrumb } from "../../../ui/crumb";
-import { Field, PageHeader, useToast } from "../../../ui/kit";
+import { Field, LoadError, PageHeader, useToast } from "../../../ui/kit";
 import { JsonEditor } from "./JsonEditor";
 import { FieldChecklist, PairRows } from "./Rows";
 import { PickerHint, ValueInput } from "./ValueInput";
+import { keys } from "../../../api/keys";
 
 /** `bodyText` is what is in the JSON editor; `body` is the last text that parsed. */
 type Draft = Omit<Integration, "id" | "form_key" | "broken_refs"> & { id?: string; bodyText: string };
-const blank = (form: number, event: string): Draft => ({ form, name: "", event, method: "POST", url: "", query: [], headers: [], body_mode: "standard", body: {}, bodyText: "", include_data: true, include_pdf: event === "pdf.ready", include_image_zip: false, include_video_zip: false, fields: [], is_active: true });
+const blank = (form: number, event: string): Draft => ({
+  form,
+  name: "",
+  event,
+  method: "POST",
+  url: "",
+  query: [],
+  headers: [],
+  body_mode: "standard",
+  body: {},
+  bodyText: "",
+  include_data: true,
+  include_pdf: event === "pdf.ready",
+  include_image_zip: false,
+  include_video_zip: false,
+  fields: [],
+  is_active: true,
+});
 
 /** What goes to the server (and to the preview): half-built rows are left out. */
 export const configOf = (d: Draft) => ({
@@ -32,10 +50,10 @@ export function IntegrationEditor() {
   const nav = useNavigate();
   const { say } = useToast();
   const refresh = useRefresh();
-  const forms = useList<FormSummary>("forms", "forms");
+  const forms = useList<FormSummary>(keys.forms(), "forms");
   const eligible = (forms.data ?? []).filter((f) => f.type === "booking" || f.type === "custom");
   const source = id && id !== "new" ? id : copy;
-  const loaded = useQuery({ queryKey: ["integration", source], queryFn: () => api<Integration>(`integrations/${source}`), enabled: !!source });
+  const loaded = useQuery({ queryKey: keys.integration(source), queryFn: ({ signal }) => api<Integration>(`integrations/${source}`, { signal }), enabled: !!source });
   const [d, setD] = useState<Draft | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -50,16 +68,17 @@ export function IntegrationEditor() {
     }
   }, [d, source, loaded.data, eligible, id]);
   const form = eligible.find((f) => f.id === d?.form);
-  const catalogue = useQuery({ queryKey: ["catalogue", d?.form, d?.event], queryFn: () => api<CatalogueEntry[]>("integrations/catalogue", { query: { form: d!.form, event: d!.event } }), enabled: !!d?.form && !!d?.event });
+  const catalogue = useQuery({ queryKey: keys.catalogue(d?.form, d?.event), queryFn: ({ signal }) => api<CatalogueEntry[]>("integrations/catalogue", { query: { form: d!.form, event: d!.event }, signal }), enabled: !!d?.form && !!d?.event });
   // every field of the form, whatever the event: the checklist of the standard body lists these
-  const everything = useQuery({ queryKey: ["catalogue", d?.form, "all"], queryFn: () => api<CatalogueEntry[]>("integrations/catalogue", { query: { form: d!.form } }), enabled: !!d?.form });
+  const everything = useQuery({ queryKey: keys.catalogue(d?.form, "all"), queryFn: ({ signal }) => api<CatalogueEntry[]>("integrations/catalogue", { query: { form: d!.form }, signal }), enabled: !!d?.form });
   useCrumb(d?.id ? d.name : "New integration");
 
   const save = useMutation({
     mutationFn: (v: Draft) => (v.id ? api<Integration>(`integrations/${v.id}`, { method: "PATCH", body: configOf(v) }) : api<Integration>("integrations", { body: configOf(v) })),
-    onSuccess: () => { say("Saved."); void refresh("integrations", "integration"); nav("/integrations"); },
+    onSuccess: () => { say("Saved."); void refresh(keys.integrations(), keys.integration()); nav("/integrations"); },
     onError: (e) => setError(e instanceof ApiError ? e.message : "Could not save."),
   });
+  if (loaded.isError) return <LoadError error={loaded.error} what="integration" onRetry={loaded.refetch} />;
   if (!d) return <p className="muted pad">Loading…</p>;
   const set = (p: Partial<Draft>) => { setError(""); setD({ ...d, ...p }); };
   const cat = catalogue.data ?? [];
@@ -84,12 +103,12 @@ export function IntegrationEditor() {
             <Field label="Method"><select aria-label="Method" value={d.method} onChange={(e) => set({ method: e.target.value })}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select></Field>
             <Field label="URL" help="Values can go in the path after the address, e.g. https://crm.example.com/leads/ + Booking ID."><ValueInput label="URL" value={d.url} catalogue={cat} placeholder="https://" onChange={(v) => set({ url: v })} /></Field>
           </div>
-          <h3>Query parameters</h3>
+          <h2 className="sub">Query parameters</h2>
           <PairRows what="Parameter" namePlaceholder="name" rows={d.query} catalogue={cat} onChange={(query) => set({ query })} />
-          <h3>Headers</h3>
+          <h2 className="sub">Headers</h2>
           <PairRows what="Header" namePlaceholder="e.g. Authorization" rows={d.headers} catalogue={cat} onChange={(headers) => set({ headers })} />
           <p className="muted small">There is no signature: put the token the other system expects in a header, and use https.</p>
-          <h3>Body</h3>
+          <h2 className="sub">Body</h2>
           {!hasBody(d.method) ? <p className="muted">No body is sent with {d.method}.</p> : (
             <>
               <div className="seg" role="group" aria-label="Body type">
@@ -146,7 +165,7 @@ function Preview({ d, onError }: { d: Draft; onError: (m: string) => void }) {
   }
   return (
     <div className="card request-preview" aria-label="Request preview">
-      <h3>Preview</h3>
+      <h2 className="sub">Preview</h2>
       <div className="bar">
         <input aria-label="Preview with booking" placeholder="Booking ID (default: latest)" value={ref} onChange={(e) => setRef(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void find(); }} />
         <button type="button" onClick={() => void find()}>Use</button>

@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.ui.expert.answered
+
 import `in`.carcid.vayu.core.ops.rows
 import `in`.carcid.vayu.ui.expert.whenStamp
 import kotlinx.serialization.json.Json
@@ -12,6 +14,18 @@ import java.time.ZoneId
 
 /** The words Ops screens show for server values (found testing on a phone). */
 class OpsTextTest {
+    /** F-051: a place answer missing its longitude shows as it is, never a crash. */
+    @Test fun aPlaceWithoutLongitudeDoesNotCrash() {
+        assertEquals("12.9716, 77.5946", shown(mapOf("lat" to 12.9716, "lng" to 77.5946)))
+        assertEquals("{lat=12.9716}", shown(mapOf("lat" to 12.9716)))
+    }
+
+    /** F-037: Ops count an answer the way the expert's page and the rules do (spaces or an empty place are not answers). */
+    @Test fun opsCountAnswersLikeTheExpertPage() {
+        assertEquals(listOf(false, false, false, false, true, true),
+            listOf(null, "  ", emptyList<String>(), emptyMap<String, Any>(), "ok", 0).map { answered(it) })
+    }
+
     @Test fun minutesReadLikeTheWeb() {
         assertEquals("40 min", fmtMinutes(40)); assertEquals("2 h 5 min", fmtMinutes(125)); assertEquals("2 h", fmtMinutes(120))
         assertEquals("4 days 22 h", fmtMinutes(7125)); assertEquals("1 day", fmtMinutes(1440)); assertEquals("—", fmtMinutes(null))

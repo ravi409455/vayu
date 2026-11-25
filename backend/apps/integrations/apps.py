@@ -5,7 +5,7 @@ class IntegrationsConfig(AppConfig):
     name = "apps.integrations"
     default_auto_field = "django.db.models.BigAutoField"
 
-    def ready(self):
+    def ready(self) -> None:
         from apps.core import events
 
         from . import webhooks

@@ -1,21 +1,45 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { Avatar } from "../../ui/Avatar";
-import { Confirm, Empty, Field, Modal, Pill, useToast, PageHeader } from "../../ui/kit";
+import { Confirm, Empty, Field, LoadError, Modal, PageHeader, Pill, useToast } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
 import { fmtStamp } from "../../lib/format";
+import { keys } from "../../api/keys";
 
 const ROLE: Record<string, string> = { admin: "Admin", ops: "Ops", expert: "Expert" };
+
+/** What their signed-in phones last reported (server: users/{id}/phone). */
+type PhoneState = { devices: number; drafts: number; files: number; unknown: boolean; last_seen_at: string | null };
+const n = (k: number, one: string) => `${k} ${one}${k === 1 ? "" : "s"}`;
+
+/** What signing this person out would lose, from their phone's own report (F-243). */
+export function phoneWords(p: PhoneState | undefined): string {
+  if (!p) return "Checking their phone…";
+  if (p.devices === 0) return "They have no phone signed in, so nothing on a phone is lost.";
+  const seen = p.last_seen_at ? ` (last heard from ${fmtStamp(p.last_seen_at)})` : "";
+  if (p.drafts || p.files) {
+    const what = [p.drafts ? n(p.drafts, "unfinished booking") : "", p.files ? n(p.files, "file") : ""].filter(Boolean).join(" and ");
+    return `Their phone still holds ${what} not yet on the server${seen}. These are lost.${p.unknown ? " Another phone has not said what it holds." : ""}`;
+  }
+  if (p.unknown) return "Their phone has not said what it holds: anything not yet sent may be lost.";
+  return `Their phone has sent everything${seen}. Nothing is lost.`;
+}
+
+function PhoneWarning({ user }: { user: User }) {
+  const q = useQuery({ queryKey: keys.userPhone(user.id), staleTime: 0, retry: false,
+    queryFn: ({ signal }) => api<PhoneState>(`users/${user.id}/phone`, { signal }) });
+  return <p>{q.isError ? "Could not check their phone: anything not yet sent may be lost." : phoneWords(q.data)}</p>;
+}
 
 export function Users() {
   const { can } = useAuth();
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const users = useList<User>("users", "users");
+  const users = useList<User>(keys.users(), "users");
   const [form, setForm] = useState<Partial<User> & { password?: string } | null>(null);
   const [reset, setReset] = useState<User | null>(null);
   const [pw, setPw] = useState("");
@@ -33,12 +57,12 @@ export function Users() {
     mutationFn: (u: Partial<User> & { password?: string }) =>
       u.id ? api(`users/${u.id}`, { method: "PATCH", body: { name: u.name, email: u.email, role: u.role, phone: u.phone ?? "" } })
            : api("users", { body: u }),
-    onSuccess: () => { setForm(null); say("Saved."); void refresh("users"); },
+    onSuccess: () => { setForm(null); say("Saved."); void refresh(keys.users()); },
     onError: fail,
   });
   const toggle = useMutation({
     mutationFn: (u: User) => api(`users/${u.id}`, { method: "PATCH", body: { is_active: !u.is_active } }),
-    onSuccess: () => { setDeactivate(null); say("Done."); void refresh("users"); },
+    onSuccess: () => { setDeactivate(null); say("Done."); void refresh(keys.users()); },
     onError: (e) => { setDeactivate(null); fail(e); },
   });
   const resetPw = useMutation({
@@ -48,7 +72,7 @@ export function Users() {
   });
   const removePicture = useMutation({
     mutationFn: (u: User) => api(`users/${u.id}/picture`, { method: "DELETE" }),
-    onSuccess: () => { setForm((f) => (f ? { ...f, avatar_url: null } : f)); say("Picture removed. Their initials show instead."); void refresh("users"); },
+    onSuccess: () => { setForm((f) => (f ? { ...f, avatar_url: null } : f)); say("Picture removed. Their initials show instead."); void refresh(keys.users()); },
     onError: fail,
   });
   const out = useMutation({
@@ -61,6 +85,7 @@ export function Users() {
     <>
       <PageHeader title="Users" count={shown.length}>
         {manage && <button className="primary" onClick={() => setForm({ role: "expert" })}>New user</button>}</PageHeader>
+      {users.isError && <LoadError error={users.error} what="users" onRetry={users.refetch} />}
       <div className="filters">
         <input aria-label="Find a user" className="filter-search" placeholder="Find by name, username or email" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="seg" role="group" aria-label="Role">
@@ -70,7 +95,7 @@ export function Users() {
       </div>
       <div className="table-card">
         <table className="rows">
-          <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Last sign-in</th><th aria-label="Actions" /></tr></thead>
+          <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Last sign-in</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {shown.map((u) => (
               <tr key={u.id} className={manage ? "click" : ""} onClick={() => manage && setForm(u)}>
@@ -97,7 +122,7 @@ export function Users() {
       {form && (
         <Modal title={form.id ? "Edit user" : "New user"} onClose={() => setForm(null)}
           actions={<><button onClick={() => setForm(null)}>Cancel</button>
-            <button className="primary" disabled={!form.name || !form.username && !form.id} onClick={() => save.mutate(form)}>Save</button></>}>
+            <button className="primary" disabled={!form.name || !form.username && !form.id || save.isPending} onClick={() => save.mutate(form)}>Save</button></>}>
           <Field label="Name"><input value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
           {!form.id && <Field label="Username" help="Cannot be changed later."><input value={form.username ?? ""} onChange={(e) => setForm({ ...form, username: e.target.value })} /></Field>}
           <Field label="Email"><input value={form.email ?? ""} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
@@ -123,13 +148,13 @@ export function Users() {
       )}
       {signOut && (
         <Confirm title={`Sign ${signOut.username} out of every device?`} confirmLabel="Sign out" danger onCancel={() => setSignOut(null)} onConfirm={() => out.mutate()}>
-          <p>Any data that was not yet synced from their phone may be lost.</p>
+          <PhoneWarning user={signOut} />
         </Confirm>
       )}
       {deactivate && (
         <Confirm title={`${deactivate.is_active ? "Deactivate" : "Reactivate"} ${deactivate.username}?`} confirmLabel={deactivate.is_active ? "Deactivate" : "Reactivate"}
           danger={deactivate.is_active} onCancel={() => setDeactivate(null)} onConfirm={() => toggle.mutate(deactivate)}>
-          {deactivate.is_active ? <p>They are signed out of every device and cannot sign in. Unsynced data on their phone may be lost.</p> : <p>They can sign in again.</p>}
+          {deactivate.is_active ? <><p>They are signed out of every device and cannot sign in.</p><PhoneWarning user={deactivate} /></> : <p>They can sign in again.</p>}
         </Confirm>
       )}
     </>

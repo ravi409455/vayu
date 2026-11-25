@@ -24,10 +24,6 @@ import com.google.firebase.messaging.RemoteMessage
 import `in`.carcid.vayu.core.alerts.reminders
 import `in`.carcid.vayu.core.alerts.stuck
 import `in`.carcid.vayu.core.api.ApiError
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import java.time.Duration
@@ -43,7 +39,9 @@ object Notices {
 
     private fun channels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(JOBS, "Jobs and updates", NotificationManager.IMPORTANCE_DEFAULT))
+        // the name is the signed-in person's word (Settings shows it); the id never changes
+        val ops = (ctx.applicationContext as? VayuApp)?.graph?.tokens?.me()?.get("role") == "ops"
+        nm.createNotificationChannel(NotificationChannel(JOBS, if (ops) "Bookings and updates" else "Leads and updates", NotificationManager.IMPORTANCE_DEFAULT))
         nm.createNotificationChannel(NotificationChannel(PROBLEMS, "Problems", NotificationManager.IMPORTANCE_HIGH))
     }
 
@@ -58,6 +56,10 @@ object Notices {
             .setSmallIcon(R.drawable.ic_notice)
             .setContentTitle(title).setContentText(body).setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
+            // the lock screen says a notice came, not whose car or where (customer name and address)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(NotificationCompat.Builder(ctx, if (problem) PROBLEMS else JOBS).setSmallIcon(R.drawable.ic_notice)
+                .setContentTitle("Vayu").setContentText("New notice. Unlock to see it.").build())
             .setContentIntent(PendingIntent.getActivity(ctx, tag.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
             .build()
         runCatching { NotificationManagerCompat.from(ctx).notify(tag, 0, n) }
@@ -73,12 +75,10 @@ object Notices {
 
 /** Pushes from the server. Each one is shown, and what it is about is fetched (a sync). */
 class VayuMessaging : FirebaseMessagingService() {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     override fun onNewToken(token: String) {
         val graph = (application as VayuApp).graph
         if (graph.signedInId() == null) return             // sent at the next sign-in instead
-        scope.launch { runCatching { graph.api.pushToken(token) } }
+        graph.sendPushToken()
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -103,7 +103,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         if (graph.tokens.me()?.get("role") != "expert") return Result.success()
         return try {
             val store = graph.jobs(user)
-            store.apply(graph.api.syncJobs(store.haveVersions(), store.since()), System.currentTimeMillis())
+            val keep = graph.pinned(user)
+            store.apply(graph.api.syncJobs(store.haveVersions(), store.since(), keep), System.currentTimeMillis(),
+                keep = keep, elapsed = android.os.SystemClock.elapsedRealtime())
             Reminders.schedule(applicationContext, graph, user)
             Result.success()
         } catch (e: ApiError) {
@@ -114,6 +116,28 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     companion object {
         fun enqueue(ctx: Context) = WorkManager.getInstance(ctx).enqueueUniqueWork("sync", ExistingWorkPolicy.REPLACE,
             OneTimeWorkRequestBuilder<SyncWorker>().setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build())
+    }
+}
+
+/** Send this phone's push token to the server, retried until it gets there (offline at sign-in, server down). */
+class PushTokenWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val graph = (applicationContext as VayuApp).graph
+        if (graph.signedInId() == null) return Result.success()
+        // no token yet (Play services starting): a few more tries; none at all on phones without them
+        val token = Notices.token() ?: return if (runAttemptCount < 5) Result.retry() else Result.success()
+        return try {
+            graph.api.pushToken(token); Result.success()
+        } catch (e: ApiError) {
+            if (`in`.carcid.vayu.core.draft.transient(e) && e.code != "DEVICE_REVOKED") Result.retry() else Result.success()
+        }
+    }
+
+    companion object {
+        fun enqueue(ctx: Context) = WorkManager.getInstance(ctx).enqueueUniqueWork("push-token", ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<PushTokenWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).build())
     }
 }
 
@@ -134,6 +158,17 @@ object Reminders {
     }
 
     fun cancel(ctx: Context) { WorkManager.getInstance(ctx).cancelAllWorkByTag(TAG) }
+}
+
+/**
+ * Signed out: nothing of that person's stays (F-077). Notices off the screen, reminders cancelled and
+ * their rows (customer, address) pruned from WorkManager, stuck-photo marks forgotten.
+ */
+fun forgetLeftovers(ctx: Context) {
+    androidx.core.app.NotificationManagerCompat.from(ctx).cancelAll()
+    Reminders.cancel(ctx)
+    WorkManager.getInstance(ctx).pruneWork()
+    ctx.getSharedPreferences("vayu.stuck", Context.MODE_PRIVATE).edit().clear().apply()
 }
 
 class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {

@@ -139,16 +139,18 @@ def test_complete_verifies_and_makes_a_preview(job, settings):
 
 def test_a_huge_photo_is_stored_at_most_2048px(job, settings):
     env, b = job
-    r = upload(env.expert, b["id"], jpeg(4000, 3000), settings)
+    data = jpeg(4000, 3000)
+    r = upload(env.expert, b["id"], data, settings)
     assert r.status_code == 200
     a = MediaAsset.objects.get()
-    assert max(Image.open(io.BytesIO(storage.read(a.key))).size) == 2048
+    assert storage.read(a.key) == data                    # the original is never rewritten (F-107)
+    assert max(Image.open(io.BytesIO(storage.read(a.jpeg_key))).size) == 2048   # the copy is
 
 
 def test_resume_lists_uploaded_parts_and_completes_the_rest(job, settings):
     env, b = job
     settings.MEDIA_PART_SIZE = 5 * 1024 * 1024
-    data = b"v" * (11 * 1024 * 1024)
+    data = mp4(11 * 1024 * 1024)
     init = env.expert.post("/api/v1/media/initiate", initiate_body(
         b["id"], data, field_key="clip", kind="video", content_type="video/mp4"),
         format="json").json()
@@ -194,7 +196,8 @@ def test_a_corrupted_upload_fails_the_checksum_and_can_be_restarted(job, setting
     init = env.expert.post("/api/v1/media/initiate", body, format="json").json()
     parts = put_parts(init, bad, settings)                      # bytes differ from the declared hash
     r = env.expert.post(f"/api/v1/media/{init['id']}/complete", {"parts": parts}, format="json")
-    assert r.status_code == 409 and r.json()["code"] == "CHECKSUM_MISMATCH"
+    # checked in the background (F-162): the answer is read from the status, never a 409
+    assert r.status_code == 200 and r.json()["status"] == "failed"
     a = MediaAsset.objects.get()
     assert a.status == "failed" and not storage.exists(a.key)
     again = env.expert.post("/api/v1/media/initiate", body, format="json")   # same client_uuid
@@ -464,7 +467,6 @@ def test_zip_needs_media_download_and_a_valid_kind_and_media(job, settings):
 def test_stuck_uploads_are_listed_and_alerted_once(job, settings):
     from datetime import timedelta
 
-    from django.core.management import call_command
     from django.utils import timezone
 
     from apps.core import events
@@ -477,11 +479,46 @@ def test_stuck_uploads_are_listed_and_alerted_once(job, settings):
     assert len(rows) == 1 and rows[0]["booking_id"] == "MD1" and rows[0]["field_key"] == "photo_a"
     assert [r["id"] for r in env.expert.get("/api/v1/problems/stuck-uploads").json()] == [
         rows[0]["id"]]                                  # experts see only their own
+    from apps.media.tasks import flag_stuck_uploads
+    from apps.notify.models import Notification
+
+    env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg(color=(1, 1, 1))),
+                    format="json")                                 # a second file, same job
+    MediaAsset.objects.update(created_at=timezone.now() - timedelta(hours=7))
     with events.capture() as seen:
-        call_command("flag_stuck_uploads")
-        call_command("flag_stuck_uploads")
+        assert flag_stuck_uploads() == 1                           # one alert per booking
+        assert flag_stuck_uploads() == 0                           # told once
     assert [n for n, _ in seen] == ["alert.stuck_upload"]
+    assert Notification.objects.filter(user=env.ops_user, kind="problem",
+                                       title__startswith="Photos stuck").count() == 1
     assert sha(b"x")
+
+
+def test_the_stuck_upload_check_runs_every_hour():
+    from django.conf import settings as s
+
+    entry = next(e for e in s.CELERY_BEAT_SCHEDULE.values()
+                 if e["task"] == "apps.media.tasks.flag_stuck_uploads")
+    assert entry["schedule"] == 3600.0
+
+
+@pytest.mark.parametrize("why", ["completed", "cancelled", "failed", "replaced"])
+def test_the_stuck_list_forgets_files_nobody_waits_for(job, settings, why):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    env, b = job
+    env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()), format="json")
+    MediaAsset.objects.update(created_at=timezone.now() - timedelta(hours=7))
+    assert len(env.ops.get("/api/v1/problems/stuck-uploads").json()) == 1
+    if why in ("completed", "cancelled"):
+        Booking.objects.filter(pk=b["id"]).update(stage=why)
+    elif why == "failed":
+        MediaAsset.objects.update(status="failed")
+    else:
+        MediaAsset.objects.update(replaced_at=timezone.now())
+    assert env.ops.get("/api/v1/problems/stuck-uploads").json() == []
 
 
 def test_experts_download_only_their_own_media(job, settings):
@@ -562,3 +599,118 @@ def test_the_expert_can_list_the_files_on_the_booking_and_others_cannot(job, set
 
     Field.objects.filter(key="photo_a").update(access={"expert": {"in_progress": "hidden"}})
     assert env.expert.get(f"/api/v1/bookings/{b['id']}/media").json() == []
+
+
+# ---------------------------------------------------------------- plan batch 3 (F-122, F-244)
+
+def mp4(size=4096) -> bytes:
+    """The start of a real MP4: an ftyp box, then filler."""
+    head = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2"
+    return head + b"\x00" * (size - len(head))
+
+
+def test_a_failed_upload_does_not_use_up_the_experts_place_on_the_field(job, settings):
+    env, b = job
+    for _ in range(2):                                    # photo_a takes 2: both fail the checksum
+        init = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),
+                               format="json").json()
+        parts = put_parts(init, jpeg(color=(1, 2, 3)), settings)
+        env.expert.post(f"/api/v1/media/{init['id']}/complete", {"parts": parts}, format="json")
+    assert MediaAsset.objects.filter(status="failed").count() == 2
+    assert upload(env.expert, b["id"], jpeg(), settings).status_code == 200   # a retake fits
+
+
+@pytest.mark.parametrize("ctype", ["video/mp4", "video/quicktime"])
+def test_a_video_that_is_not_a_video_fails_verification(job, settings, ctype):
+    env, b = job
+    r = upload(env.expert, b["id"], jpeg(), settings, field_key="clip", kind="video",
+               content_type=ctype)
+    assert r.status_code == 200 and r.json()["status"] == "failed"
+    a = MediaAsset.objects.get()
+    assert a.status == "failed" and not storage.exists(a.key)
+
+
+@pytest.mark.parametrize("box", [b"ftyp", b"moov", b"mdat", b"wide", b"free", b"skip"])
+def test_a_real_mp4_or_mov_is_verified(job, settings, box):
+    env, b = job
+    data = b"\x00\x00\x00\x08" + box + mp4()[8:]
+    r = upload(env.expert, b["id"], data, settings, field_key="clip", kind="video",
+               content_type="video/quicktime")
+    assert r.status_code == 200 and r.json()["status"] == "verified"
+
+
+def test_a_video_shorter_than_a_box_header_fails(job, settings):
+    env, b = job
+    r = upload(env.expert, b["id"], b"\x00\x00", settings, field_key="clip", kind="video",
+               content_type="video/mp4")
+    assert r.json()["status"] == "failed" and MediaAsset.objects.get().status == "failed"
+
+
+def test_an_abandoned_pending_upload_stops_holding_a_place_after_the_stuck_limit(job, settings):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    env, b = job
+    for _ in range(2):                                    # photo_a takes 2: both never finished
+        assert env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),
+                               format="json").status_code == 201
+    fresh = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),
+                            format="json")
+    assert fresh.status_code == 409 and fresh.json()["code"] == "TOO_MANY"   # may still arrive
+    MediaAsset.objects.update(created_at=timezone.now() - timedelta(
+        hours=settings.STUCK_UPLOAD_HOURS, minutes=1))
+    assert upload(env.expert, b["id"], jpeg(), settings).status_code == 200   # a retake fits
+
+
+# ---------------------------------------------------------------- plan batch 2 (F-107, F-110)
+
+def heic(w=64, h=48) -> bytes:
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+    buf = io.BytesIO()
+    Image.new("RGB", (w, h), (10, 200, 30)).save(buf, "HEIF")
+    return buf.getvalue()
+
+
+def test_an_iphone_heic_photo_gets_a_jpeg_copy_for_previews_and_the_pdf(job, settings):
+    from apps.reports.render import print_image
+
+    env, b = job
+    data = heic()
+    r = upload(env.expert, b["id"], data, settings, content_type="image/heic")
+    assert r.status_code == 200 and r.json()["status"] == "verified"
+    a = MediaAsset.objects.get()
+    assert storage.read(a.key) == data and a.content_type == "image/heic"    # kept as sent
+    copy = Image.open(io.BytesIO(storage.read(a.jpeg_key)))
+    assert copy.format == "JPEG" and copy.size == (64, 48)
+    assert Image.open(io.BytesIO(storage.read(a.preview_key))).format == "JPEG"
+    assert (print_image(str(a.id)) or "").startswith("data:image/jpeg;base64,")
+
+
+def test_verifying_twice_is_safe_and_never_rewrites_the_original(job, settings):
+    from apps.media.tasks import verify_asset
+
+    env, b = job
+    data = jpeg(4000, 3000)
+    a = MediaAsset.objects.get(pk=upload(env.expert, b["id"], data, settings).json()["id"])
+    assert verify_asset(str(a.id)) == "verified"                    # a second run: nothing done
+    MediaAsset.objects.filter(pk=a.pk).update(status="verifying")   # a run in progress
+    assert verify_asset(str(a.id)) == "verifying"
+    assert storage.read(a.key) == data
+
+
+def test_a_storage_error_while_verifying_leaves_the_file_to_be_checked_again(job, settings):
+    from unittest import mock
+
+    from apps.media.tasks import verify_asset
+
+    env, b = job
+    a = MediaAsset.objects.get(pk=upload(env.expert, b["id"], jpeg(), settings).json()["id"])
+    MediaAsset.objects.filter(pk=a.pk).update(status="uploaded")
+    with mock.patch("apps.media.storage.stream", side_effect=OSError("R2 down")), \
+            pytest.raises(OSError):
+        verify_asset(str(a.id))
+    assert MediaAsset.objects.get(pk=a.pk).status == "uploaded"
+    assert verify_asset(str(a.id)) == "verified"

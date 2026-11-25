@@ -1,5 +1,6 @@
 """One place that turns "the client sent something odd" into a clean 400 instead of a 500."""
 import logging
+from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import DataError
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 BAD_VALUE = {"22001", "22003", "22021", "22P02", "22007", "22008"}
 
 
-def handler(exc, context):
+def handler(exc: Any, context: Any) -> Any:
     if isinstance(exc, DjangoValidationError):      # e.g. a malformed UUID in a lookup
         exc = CodedError("INVALID_INPUT", "; ".join(exc.messages), 400)
     elif isinstance(exc, DataError) and (
@@ -27,13 +28,38 @@ def handler(exc, context):
                      getattr(exc.__cause__, "sqlstate", None),
                      getattr(context.get("request"), "path", "?"))
         exc = CodedError("INVALID_INPUT", "A value is not acceptable.", 400)
-    return exception_handler(exc, context)
+    response = exception_handler(exc, context)
+    if response is not None:
+        response.data = one_shape(response.data, exc, response.status_code)
+    return response
+
+
+# Django's own Http404 / PermissionDenied carry no DRF code
+BY_STATUS = {404: "NOT_FOUND", 403: "PERMISSION_DENIED"}
+
+
+def one_shape(data: Any, exc: Any, status: int = 400) -> dict[str, Any]:
+    """Every error body has a code and a detail (F-160), whoever raised it. A DRF field error
+    keeps its keys and adds them under fields; "Not found." etc. get DRF's own code."""
+    if isinstance(data, dict) and "code" in data and "detail" in data:
+        return data                                          # a CodedError already
+    code = str(getattr(exc, "default_code", None) or BY_STATUS.get(status, "error")).upper()
+    if isinstance(data, dict) and set(data) == {"detail"}:
+        return {"code": code, "detail": str(data["detail"])}
+    if isinstance(data, dict):
+        fields = {k: v if isinstance(v, list) else [v] for k, v in data.items()}
+        first = next(iter(fields.values()), [""])
+        return {**data, "code": "INVALID" if code == "INVALID" else code,
+                "detail": str(first[0]) if first else "Some values are invalid.",
+                "fields": fields}
+    return {"code": code, "detail": " ".join(str(x) for x in data) if isinstance(data, list)
+            else str(data)}
 
 
 class ObjectJSONParser(JSONParser):
     """Every endpoint reads request.data like a dict; a top-level list or string is a 400."""
 
-    def parse(self, stream, media_type=None, parser_context=None):
+    def parse(self, stream: Any, media_type: Any=None, parser_context: Any=None) -> Any:
         data = super().parse(stream, media_type, parser_context)
         if not isinstance(data, dict):
             raise ParseError("The request body must be a JSON object.")

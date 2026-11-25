@@ -22,7 +22,7 @@ SECTION_SETTINGS = ("title", "visible", "show_if", "access")
 
 
 class _DryRun(Exception):
-    def __init__(self, result: dict):
+    def __init__(self, result: dict[str, Any]):
         self.result = result
 
 
@@ -45,19 +45,20 @@ def affected(item: LibraryItem) -> list[tuple[Form, FormVersion]]:
     return out
 
 
-def _diff_settings(target: str, obj: Any, wanted: dict, names: tuple[str, ...]) -> list[dict]:
+def _diff_settings(target: str, obj: Any, wanted: dict[str, Any],
+                   names: tuple[str, ...]) -> list[dict[str, Any]]:
     return [{"target": target, "setting": n, "from": getattr(obj, n), "to": wanted[n]}
             for n in names if getattr(obj, n) != wanted[n]]
 
 
-def _wanted_field(d: dict) -> dict:
+def _wanted_field(d: dict[str, Any]) -> dict[str, Any]:
     return {"label": d["label"], "helper_text": d.get("helper_text", ""),
             "config": d.get("config", {}), "required": d.get("required", False),
             "required_if": d.get("required_if"), "show_if": d.get("show_if"),
             "visible": d.get("visible", True), "access": d.get("access", {})}
 
 
-def _changes(obj: Field | Section, item: LibraryItem) -> list[dict]:
+def _changes(obj: Field | Section, item: LibraryItem) -> list[dict[str, Any]]:
     """Every setting that accepting the update would change on this linked field / section."""
     d = item.definition
     if isinstance(obj, Field):
@@ -80,7 +81,7 @@ def _changes(obj: Field | Section, item: LibraryItem) -> list[dict]:
     return out
 
 
-def _problems(form: Form, draft: FormVersion) -> list[dict]:
+def _problems(form: Form, draft: FormVersion) -> list[dict[str, Any]]:
     from apps.reports.service import latest_layout_issues
 
     issues = [i.__dict__ for i in validate_version(draft) + services.system_field_issues(draft)]
@@ -89,10 +90,10 @@ def _problems(form: Form, draft: FormVersion) -> list[dict]:
             for i in issues]
 
 
-def _run(actor, item: LibraryItem, *, publish: bool, commit: bool) -> dict:
+def _run(actor: Any, item: LibraryItem, *, publish: bool, commit: bool) -> dict[str, Any]:
     """Do the push inside a transaction. Returns the report; commits only when `commit` and
     nothing is wrong."""
-    result: dict = {"forms": [], "skipped": [], "blocked": False}
+    result: dict[str, Any] = {"forms": [], "skipped": [], "blocked": False}
     with transaction.atomic():
         pairs = affected(item)
         ids = [f.id for f, _ in pairs]
@@ -127,14 +128,15 @@ def _run(actor, item: LibraryItem, *, publish: bool, commit: bool) -> dict:
     return result
 
 
-def preview(actor, item: LibraryItem) -> dict:
+def preview(actor: Any, item: LibraryItem) -> dict[str, Any]:
     try:
         return _run(actor, item, publish=False, commit=False)
     except _DryRun as e:
         return e.result
 
 
-def push(actor, item: LibraryItem, *, revision: Any, publish: bool, confirm: bool) -> dict:
+def push(actor: Any, item: LibraryItem, *, revision: Any, publish: bool,
+         confirm: bool) -> dict[str, Any]:
     if revision != item.revision:
         raise CodedError("STALE_LIBRARY_ITEM", "This item changed since you looked at it; "
                          "reload and review again.", 409, revision=item.revision)

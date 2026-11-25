@@ -7,7 +7,16 @@ from typing import Any
 
 import jsonlogic_rs
 
-from .fieldtypes import AnswerError, ConfigError, clean_answer, is_empty, validate_config
+from .fieldtypes import (
+    CHOICES,
+    NOT_VALUES,
+    AnswerError,
+    ConfigError,
+    clean_answer,
+    is_empty,
+    validate_config,
+)
+from .fieldtypes import SYSTEM_FILLED as TYPE_SYSTEM_FILLED
 
 FORMS = ("booking", "start", "end", "inspection")
 # Deliberately small. Everything form logic needs (conditions, "is empty", defect counts) fits in
@@ -17,10 +26,10 @@ ALLOWED_OPS = {"var", "==", "!=", "===", "!==", "<", "<=", ">", ">=", "!", "!!",
                "in", "some", "all", "none", "filter", "reduce", "+"}
 BANNED_OPS = {"missing", "missing_some", "-", "*", "/", "%", "min", "max", "cat", "substr", "map"}
 ITERATING_OPS = {"some", "all", "none", "filter", "reduce"}
-CHOICE_TYPES = {"single_choice", "multi_choice"}
-SYSTEM_FILLED = {"derived", "rating"}
+CHOICE_TYPES = CHOICES
+SYSTEM_FILLED = TYPE_SYSTEM_FILLED
 SPECIAL_VARS = {"_today", "_defects"}
-MEDIA = {"photo", "video", "file", "signature", "image"}   # not checks: a photo cannot show one
+MEDIA = NOT_VALUES   # not checks: a photo cannot show one (the field-type registry)
 
 
 # ------------------------------------------------------------------ evaluation
@@ -185,18 +194,34 @@ def spec_from_version(version) -> FormSpec:
     return FormSpec(form=version.form.ns, containers=containers, fields=fields, checks=checks)
 
 
-def validate_answers(version, answers: dict, today: str,
-                     overrides: dict | None = None) -> tuple[dict, dict]:
-    """Full server-side validation of one form's answers. Returns (cleaned, errors).
+# what a value stored earlier may have become since: still accepted unchanged in an edit (H-07)
+GONE_STALE = {"ARCHIVED_OPTION", "INVALID_USER"}
 
-    Type errors win over rule errors; answers to hidden fields are dropped unchecked."""
+
+# the words for the codes rules give (field checks bring their own words, AnswerError)
+RULE_WORDS = {"required": "This is required.", "UNKNOWN_FIELD": "Not a field of this form.",
+              "check_failed": "This answer does not pass the form's check."}
+
+
+def validate_answers(version, answers: dict, today: str, overrides: dict | None = None,
+                     kept: dict | None = None,
+                     messages: dict | None = None) -> tuple[dict, dict]:
+    """Full server-side validation of one form's answers. Returns (cleaned, errors).
+    [messages], when given, is filled with the words for each error (F-007): the field's own
+    (a pattern's message), the Admin's check message, or the rule's, so no client rewrites them.
+
+    Type errors win over rule errors; answers to hidden fields are dropped unchecked. [kept]: the
+    values stored before an edit; one sent back unchanged whose option was archived or whose user
+    was deactivated since is accepted (every other check, rules included, still runs)."""
     from .models import Field
 
     own = version.form.ns
     fields = {f.key: f for f in Field.objects.filter(version=version)}
     raw = answers.get(own) or {}
     errors: dict[str, str] = {k: "UNKNOWN_FIELD" for k in raw if k not in fields}
+    words: dict[str, str] = {}
     if errors:
+        _say(messages, errors, words)
         return {}, errors
     cleaned: dict[str, Any] = {}
     type_errors: dict[str, str] = {}
@@ -206,7 +231,10 @@ def validate_answers(version, answers: dict, today: str,
         try:
             cleaned[key] = clean_answer(fields[key], value)
         except AnswerError as e:
-            type_errors[key] = e.code
+            if e.code in GONE_STALE and kept is not None and kept.get(key) == value:
+                cleaned[key] = value
+            else:
+                type_errors[key], words[key] = e.code, str(e)
     result = evaluate_form(spec_from_version(version), {**answers, own: cleaned}, today,
                            overrides)
     visible_type_errors = {k: c for k, c in type_errors.items() if result.visible[k]}
@@ -217,7 +245,15 @@ def validate_answers(version, answers: dict, today: str,
         if failed and check.message and not truthy(check.rule, result.data):
             for k in failed:
                 rule_errors[k] = check.message
-    return cleaned, {**rule_errors, **visible_type_errors}
+    out = {**rule_errors, **visible_type_errors}
+    _say(messages, out, words)
+    return cleaned, out
+
+
+def _say(messages: dict | None, errors: dict, words: dict) -> None:
+    if messages is not None:
+        messages.update({k: words.get(k) or RULE_WORDS.get(code, code)
+                         for k, code in errors.items()})
 
 
 # ------------------------------------------------------------------ design time

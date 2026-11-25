@@ -11,15 +11,71 @@ interface TokenStore {
     /** The signed-in person, kept so the app opens without signal. */
     fun me(): Map<String, String>? = null
     fun saveMe(fields: Map<String, String>) {}
+    /** The refresh token of a sign-out the server never heard of (no signal then); kept through clear(). */
+    fun pendingLogout(): String? = null
+    fun setPendingLogout(refresh: String?) {}
 }
 
-/** App-private storage (other apps can't read it). */
-class PrefsTokenStore(context: Context) : TokenStore {
+/** Seals text with a key only this app on this phone can use. */
+interface Sealer {
+    fun seal(plain: String): String
+    fun open(sealed: String): String
+}
+
+/**
+ * An AES-256-GCM key kept in the Android Keystore (it never leaves it; not in backups, so a copied
+ * file is useless on another phone). Sealed text is base64 of the 12-byte IV and the cipher text.
+ */
+class KeystoreSealer(private val alias: String = "vayu.tokens") : Sealer {
+    private fun key(): javax.crypto.SecretKey {
+        val ks = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (ks.getKey(alias, null) as? javax.crypto.SecretKey)?.let { return it }
+        return javax.crypto.KeyGenerator.getInstance(android.security.keystore.KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
+            init(android.security.keystore.KeyGenParameterSpec.Builder(alias,
+                android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or android.security.keystore.KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256).build())
+        }.generateKey()
+    }
+    override fun seal(plain: String): String {
+        val c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding").apply { init(javax.crypto.Cipher.ENCRYPT_MODE, key()) }
+        return android.util.Base64.encodeToString(c.iv + c.doFinal(plain.toByteArray()), android.util.Base64.NO_WRAP)
+    }
+    override fun open(sealed: String): String {
+        val b = android.util.Base64.decode(sealed, android.util.Base64.NO_WRAP)
+        val c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            .apply { init(javax.crypto.Cipher.DECRYPT_MODE, key(), javax.crypto.spec.GCMParameterSpec(128, b, 0, 12)) }
+        return String(c.doFinal(b, 12, b.size - 12))
+    }
+}
+
+/**
+ * App-private storage (other apps can't read it), tokens sealed with [sealer] (R-19). Tokens an older
+ * app saved in plain text are moved over on the first start, so nobody is signed out by the update
+ * (an expert offline must stay signed in). If the phone's key fails, tokens stay as they were.
+ */
+class PrefsTokenStore(context: Context, private val sealer: Sealer = KeystoreSealer()) : TokenStore {
     private val prefs = context.getSharedPreferences("vayu.auth", Context.MODE_PRIVATE)
-    override fun access() = prefs.getString("access", null)
-    override fun refresh() = prefs.getString("refresh", null)
+
+    init {
+        val old = listOf("access", "refresh").mapNotNull { k -> prefs.getString(k, null)?.let { k to it } }
+        if (old.isNotEmpty()) runCatching { old.map { (k, v) -> k to sealer.seal(v) } }.onSuccess { sealed ->
+            prefs.edit().apply { sealed.forEach { (k, v) -> putString("$k.s", v); remove(k) } }.commit()
+        }
+    }
+
+    private fun read(k: String): String? =
+        prefs.getString("$k.s", null)?.let { runCatching { sealer.open(it) }.getOrNull() } ?: prefs.getString(k, null)
+
+    override fun access() = read("access")
+    override fun refresh() = read("refresh")
     override fun save(access: String, refresh: String) {
-        prefs.edit().putString("access", access).putString("refresh", refresh).apply()
+        val sealed = runCatching { sealer.seal(access) to sealer.seal(refresh) }.getOrNull()
+        prefs.edit().apply {
+            if (sealed != null) putString("access.s", sealed.first).putString("refresh.s", sealed.second).remove("access").remove("refresh")
+            else putString("access", access).putString("refresh", refresh).remove("access.s").remove("refresh.s")
+        }.apply()
     }
     override fun clear() { prefs.edit().clear().apply() }
     override fun me(): Map<String, String>? = prefs.getString("me.username", null)?.let {
@@ -27,6 +83,13 @@ class PrefsTokenStore(context: Context) : TokenStore {
     }
     override fun saveMe(fields: Map<String, String>) {
         prefs.edit().apply { fields.forEach { (k, v) -> putString("me.$k", v) } }.apply()
+    }
+    private val ended = context.getSharedPreferences("vayu.signout", Context.MODE_PRIVATE)
+    override fun pendingLogout() = ended.getString("refresh.s", null)?.let { runCatching { sealer.open(it) }.getOrNull() }
+        ?: ended.getString("refresh", null)
+    override fun setPendingLogout(refresh: String?) {
+        val sealed = refresh?.let { r -> runCatching { sealer.seal(r) }.getOrNull() }
+        ended.edit().putString("refresh.s", sealed).putString("refresh", if (sealed == null) refresh else null).apply()
     }
 }
 
@@ -40,4 +103,7 @@ class MemoryTokenStore : TokenStore {
     override fun refresh() = r
     override fun save(access: String, refresh: String) { a = access; r = refresh }
     override fun clear() { a = null; r = null; m = null }
+    private var ended: String? = null
+    override fun pendingLogout() = ended
+    override fun setPendingLogout(refresh: String?) { ended = refresh }
 }

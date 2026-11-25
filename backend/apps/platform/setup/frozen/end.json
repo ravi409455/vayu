@@ -1,0 +1,230 @@
+{
+ "made_from": "Clappia read-out end (docs/clappia)",
+ "notes": [],
+ "spec": {
+  "pages": [
+   {
+    "title": "Wrap-up",
+    "sections": [
+     {
+      "title": "Payment Details",
+      "fields": [
+       {
+        "key": "taking_payment",
+        "label": "Taking Payment?",
+        "config": {},
+        "required": true,
+        "helper_text": "",
+        "clappia": "taking_pay",
+        "type": "yes_no"
+       },
+       {
+        "key": "payment_amount",
+        "label": "Payment Amount",
+        "config": {},
+        "required": true,
+        "helper_text": "",
+        "clappia": "payment_am",
+        "type": "currency",
+        "show_if": {
+         "==": [
+          {
+           "var": "end.taking_payment"
+          },
+          true
+         ]
+        }
+       },
+       {
+        "key": "payment_mode",
+        "label": "Payment Mode",
+        "config": {
+         "options": [
+          {
+           "key": "cash",
+           "label": "Cash"
+          },
+          {
+           "key": "upi",
+           "label": "UPI"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "clappia": "payment_mo",
+        "type": "single_choice",
+        "show_if": {
+         "==": [
+          {
+           "var": "end.taking_payment"
+          },
+          true
+         ]
+        }
+       },
+       {
+        "key": "pay_qr",
+        "label": "CarCID QR Code",
+        "type": "image",
+        "config": {
+         "asset": "@pay_qr"
+        },
+        "required": false,
+        "show_if": {
+         "and": [
+          {
+           "==": [
+            {
+             "var": "end.taking_payment"
+            },
+            true
+           ]
+          },
+          {
+           "==": [
+            {
+             "var": "end.payment_mode"
+            },
+            "upi"
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "key": "payment_screenshot",
+        "label": "Payment Screenshot",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "clappia": "payment_sc",
+        "type": "photo",
+        "show_if": {
+         "and": [
+          {
+           "==": [
+            {
+             "var": "end.taking_payment"
+            },
+            true
+           ]
+          },
+          {
+           "==": [
+            {
+             "var": "end.payment_mode"
+            },
+            "upi"
+           ]
+          }
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "title": "Google Review",
+      "fields": [
+       {
+        "key": "taking_google_review",
+        "label": "Taking Google Review",
+        "config": {},
+        "required": false,
+        "helper_text": "Turn this on, if you are taking a google review from customer",
+        "clappia": "pdi_taking_goo",
+        "type": "yes_no"
+       },
+       {
+        "key": "review_qr",
+        "label": "Google Review QR",
+        "type": "image",
+        "config": {
+         "asset": "@review_qr"
+        },
+        "required": false,
+        "show_if": {
+         "==": [
+          {
+           "var": "end.taking_google_review"
+          },
+          true
+         ]
+        }
+       },
+       {
+        "key": "review_screenshot",
+        "label": "Review Screenshot",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "clappia": "review_scr",
+        "type": "photo",
+        "show_if": {
+         "==": [
+          {
+           "var": "end.taking_google_review"
+          },
+          true
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "title": "Car Perfume",
+      "fields": [
+       {
+        "key": "are_you_giving_car_perfume",
+        "label": "Are you giving Car Perfume",
+        "config": {
+         "options": [
+          {
+           "key": "yes",
+           "label": "Yes"
+          },
+          {
+           "key": "no",
+           "label": "No"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "clappia": "are_you_gi",
+        "type": "single_choice"
+       },
+       {
+        "key": "photo",
+        "label": "Photo",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "clappia": "review_scr_1",
+        "type": "photo",
+        "show_if": {
+         "==": [
+          {
+           "var": "end.are_you_giving_car_perfume"
+          },
+          "yes"
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "extra": {}
+}

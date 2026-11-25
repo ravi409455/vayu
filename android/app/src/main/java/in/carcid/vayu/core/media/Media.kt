@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.core.media
 
+import androidx.compose.ui.graphics.asImageBitmap
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
@@ -78,13 +80,16 @@ fun stampPhoto(src: File, dest: File, lines: List<String>) {
     val m = Matrix().apply { postScale(scale, scale); postRotate(turn) }
     val img = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true).copy(Bitmap.Config.ARGB_8888, true)
     if (img !== raw) raw.recycle()
-    drawStamp(img, lines)
+    if (lines.isNotEmpty()) drawStamp(img, lines)
     for (quality in listOf(85, 75, 65)) {
         FileOutputStream(dest).use { img.compress(Bitmap.CompressFormat.JPEG, quality, it) }
         if (dest.length() <= 700_000) break
     }
     img.recycle()
 }
+
+/** A gallery photo: resized and turned upright like a camera shot, but never stamped (it isn't proof of this visit). */
+fun shrinkPhoto(src: File, dest: File) = stampPhoto(src, dest, emptyList())
 
 private fun drawStamp(img: Bitmap, lines: List<String>) {
     val c = Canvas(img)
@@ -103,3 +108,12 @@ fun copyIn(ctx: Context, uri: Uri, dest: File): String? {
     ctx.contentResolver.openInputStream(uri)?.use { input -> FileOutputStream(dest).use { input.copyTo(it) } } ?: return null
     return type
 }
+
+/** A small picture of the image at [path], decoded at about [size] px (whole-power-of-two sampling); null if it can't be read. */
+fun thumb(path: String, size: Int): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
+    val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, o)
+    var s = 1
+    while (o.outWidth / (s * 2) >= size && o.outHeight / (s * 2) >= size) s *= 2
+    BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = s })?.asImageBitmap()
+}.getOrNull()

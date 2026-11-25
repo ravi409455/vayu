@@ -1,4 +1,5 @@
-import { Bell, ChevronDown, LogOut, Search, UserRound } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Search, Smartphone, UserRound } from "lucide-react";
+import { useSignOut } from "./SignOut";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -10,6 +11,7 @@ import { Avatar } from "./Avatar";
 import { useCrumbText } from "./crumb";
 import { envName } from "./Logo";
 import { useNeeds } from "../lib/problems";
+import { keys } from "../api/keys";
 
 /** Section of the app for each first path segment; detail pages name their parent list. */
 const SECTION: Record<string, [string, string]> = {
@@ -58,8 +60,8 @@ function GlobalSearch() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  const res = useQuery({ queryKey: ["global-search", q], enabled: q.length >= 2, staleTime: 15_000,
-    queryFn: () => api<Page<Booking>>("bookings", { query: { search: q } }) });
+  const res = useQuery({ queryKey: keys.bookings("search", q), enabled: q.length >= 2, staleTime: 15_000,
+    queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query: { search: q }, signal }) });
   const hits = (res.data?.results ?? []).slice(0, 6);
   const go = (to: string) => { setOpen(false); setTerm(""); box.current?.blur(); nav(to); };
   const onKey = (e: React.KeyboardEvent) => {
@@ -97,7 +99,8 @@ function GlobalSearch() {
 }
 
 function AccountMenu() {
-  const { me, logout } = useAuth();
+  const { me } = useAuth();
+  const signOut = useSignOut();
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -112,23 +115,25 @@ function AccountMenu() {
   const name = me.name || me.username;
   return (
     <div className="menu-wrap" ref={wrap}>
-      <button className="acct-btn who-name" aria-label="Account menu" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <Avatar who={me} size={28} /><span>{name.split(" ")[0]}</span><ChevronDown size={14} aria-hidden />
+      <button className="acct-btn who-name" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Avatar who={me} size={28} decorative /><span>{name.split(" ")[0]}</span><span className="sr-only"> account menu</span><ChevronDown size={14} aria-hidden />
       </button>
       {open && (
         <div className="menu" role="menu">
           <div className="menu-head"><strong>{name}</strong><div className="muted small" style={{ textTransform: "capitalize" }}>{me.role}</div></div>
           <Link role="menuitem" to="/profile" onClick={() => setOpen(false)}><UserRound size={16} aria-hidden /> Your profile</Link>
-          <button role="menuitem" onClick={() => logout()}><LogOut size={16} aria-hidden /> Sign out</button>
+          <Link role="menuitem" to="/app" onClick={() => setOpen(false)}><Smartphone size={16} aria-hidden /> Get the Android app</Link>
+          <button role="menuitem" onClick={() => { setOpen(false); signOut.start(); }}><LogOut size={16} aria-hidden /> Sign out</button>
         </div>
       )}
+      {signOut.dialog}
     </div>
   );
 }
 
 /** The bell: how many things need a person, and the list itself one click away. */
 function NeedsBell() {
-  const { needs } = useNeeds();
+  const { needs, total, error, refetch } = useNeeds();
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -140,20 +145,21 @@ function NeedsBell() {
   }, [open]);
   return (
     <div className="menu-wrap" ref={wrap}>
-      <button className="icon-btn bell" aria-label={needs.length ? `Needs you: ${needs.length}` : "Needs you: nothing"} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)}>
-        <Bell size={18} aria-hidden />{needs.length > 0 && <span className="bell-dot">{needs.length}</span>}
+      <button className="icon-btn bell" aria-label={total ? `Needs you: ${total}` : "Needs you: nothing"} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)}>
+        <Bell size={18} aria-hidden />{total > 0 && <span className="bell-dot">{total}</span>}
       </button>
       {open && (
         <div className="menu needs-pop" role="dialog" aria-label="Needs you">
-          <div className="needs-head"><strong className="grow">Needs you</strong><span className="muted small">{needs.length || "Nothing"}</span></div>
-          {needs.length === 0 && <p className="muted small" style={{ padding: "6px 10px" }}>All clear. Nothing needs a person right now.</p>}
+          <div className="needs-head"><strong className="grow">Needs you</strong><span className="muted small">{total || "Nothing"}</span></div>
+          {error ? <p className="error small" role="alert" style={{ padding: "6px 10px" }}>Could not check what needs you. <button className="link" onClick={() => void refetch()}>Try again</button></p>
+            : needs.length === 0 && <p className="muted small" style={{ padding: "6px 10px" }}>All clear. Nothing needs a person right now.</p>}
           {needs.slice(0, 7).map((n) => (
             <Link key={n.key} to={n.to} className="need-item" onClick={() => setOpen(false)}>
               <span className={`dot ${n.tone}`} aria-hidden="true" />
               <span className="grow" style={{ minWidth: 0 }}><span className="need-title">{n.title}</span><span className="need-meta">{n.meta}</span></span>
               <span className="need-act">{n.action}</span>
             </Link>))}
-          <Link to="/problems" className="needs-all" onClick={() => setOpen(false)}>{needs.length > 7 ? `See all ${needs.length}` : "Open the list"}</Link>
+          <Link to="/problems" className="needs-all" onClick={() => setOpen(false)}>{total > 7 ? `See all ${total}` : "Open the list"}</Link>
         </div>)}
     </div>
   );

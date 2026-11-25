@@ -5,9 +5,11 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.roborazzi)
     alias(libs.plugins.kover)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.sentry.gradle)
 }
 
 roborazzi { outputDir.set(file("src/test/screenshots")) }
@@ -22,7 +24,7 @@ kover {
 
 android {
     namespace = "in.carcid.vayu"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         // one processor type only (smaller APK to copy to a test phone): -Pvayu.abi=arm64-v8a
@@ -73,9 +75,14 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
+    // lint runs in CI; known false positives and old warnings live in the baseline (new ones fail)
+    lint {
+        baseline = file("lint-baseline.xml")
+        abortOnError = true
+        checkDependencies = false
+    }
 }
 
 dependencies {
@@ -96,12 +103,10 @@ dependencies {
     implementation(libs.camera.video)
     implementation(libs.mlkit.text)
     implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.lifecycle.runtime)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons)
-    implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
 
@@ -150,3 +155,30 @@ tasks.withType<Test>().configureEach {
     systemProperty("robolectric.offline", "true")
     systemProperty("robolectric.dependency.dir", robolectricDir.get().asFile.absolutePath)
 }
+
+// F-218: release crash reports readable. Every release build carries the ID of its R8 mapping; the
+// mapping itself goes to Sentry only when SENTRY_AUTH_TOKEN (and SENTRY_ORG / SENTRY_PROJECT) are set,
+// so builds without the token (CI, local) work as before. The SDK stays the one above (no auto-install,
+// no instrumentation of app code).
+sentry {
+    includeProguardMapping.set(true)
+    autoUploadProguardMapping.set(System.getenv("SENTRY_AUTH_TOKEN") != null)
+    org.set(System.getenv("SENTRY_ORG"))
+    projectName.set(System.getenv("SENTRY_PROJECT") ?: "vayu-android")
+    authToken.set(System.getenv("SENTRY_AUTH_TOKEN"))
+    includeSourceContext.set(false)
+    includeNativeSources.set(false)
+    uploadNativeSymbols.set(false)
+    autoInstallation { enabled.set(false) }
+    tracingInstrumentation { enabled.set(false) }
+    includeDependenciesReport.set(false)
+    telemetry.set(false)
+}
+
+// F-169: unit tests run on the debug variant only (the Compose test activity is a debug-only
+// dependency), so the obvious `./gradlew test` is green instead of 48 red release tests.
+androidComponents {
+    beforeVariants(selector().withBuildType("release")) { it.hostTests.forEach { (_, t) -> t.enable = false } }
+}
+
+kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }

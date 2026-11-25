@@ -77,7 +77,11 @@ def test_rating_config_is_stored_returned_and_copied_to_new_drafts(senv):
     t = senv.admin.get(f"/api/v1/form-versions/{senv.version_id}").json()
     assert t["rating_config"]["categories"][0]["key"] == "engine"
     d = senv.admin.post(f"/api/v1/forms/{senv.form_id}/drafts").json()["id"]
-    assert senv.admin.get(f"/api/v1/form-versions/{d}").json()["rating_config"] == CFG
+    copied = senv.admin.get(f"/api/v1/form-versions/{d}").json()["rating_config"]
+    assert copied == t["rating_config"]                        # copied as it went live
+    # stored by section key, whatever the title it was given by (F-045)
+    assert [c["sections"] for c in copied["categories"]] == [
+        [s.lower() for s in c["sections"]] for c in CFG["categories"]]
 
 
 def test_rating_config_is_validated_and_draft_only(senv):
@@ -285,3 +289,20 @@ def test_only_experts_lose_the_rating_config_from_the_form_payload(senv):
     version = FormVersion.objects.get(pk=senv.version_id)
     assert "rating_config" in submissions.form_for_role(version, "ops", "submitted")
     assert "rating_config" not in submissions.form_for_role(version, "expert", "in_progress")
+
+
+def test_the_migration_turns_section_titles_into_keys_and_back(senv):
+    """F-045."""
+    from importlib import import_module
+
+    from django.apps import apps as django_apps
+
+    from apps.forms.models import FormVersion
+
+    m = import_module("apps.forms.migrations.0021_ratings_by_section_key")
+    FormVersion.objects.filter(pk=senv.version_id).update(rating_config=CFG)
+    m.to_keys(django_apps, None)
+    keyed = FormVersion.objects.get(pk=senv.version_id).rating_config
+    assert [c["sections"] for c in keyed["categories"]] == [["engine"], ["exterior"]]
+    m.to_titles(django_apps, None)
+    assert FormVersion.objects.get(pk=senv.version_id).rating_config == CFG

@@ -4,29 +4,28 @@ import { useState } from "react";
 import { api, uploadFile } from "../../../api/client";
 import { useRefresh } from "../../../api/hooks";
 import { Field, useToast } from "../../../ui/kit";
-import type { Definition, Part } from "./model";
+import { slugKey } from "../../../lib/fieldTypes";
+import { withoutIds, type Definition, type Part } from "./model";
+import { keys } from "../../../api/keys";
 
 export type Picture = { id: string; name: string; size: number; url: string };
 export type Usage = { template: number; form: string; draft?: number; published?: number };
 export type SharedItem = { id: number; kind: "theme" | "snippet"; key: string; name: string; revision: number; used_by: Usage[]; content?: unknown };
 
 export function usePictures() {
-  return useQuery({ queryKey: ["pdf-pictures"], queryFn: () => api<Picture[]>("pdf-pictures") });
+  return useQuery({ queryKey: keys.pdfPictures(), queryFn: ({ signal }) => api<Picture[]>("pdf-pictures", { signal }) });
 }
 export function useShared() {
-  return useQuery({ queryKey: ["pdf-shared"], queryFn: () => api<SharedItem[]>("pdf-shared") });
+  return useQuery({ queryKey: keys.pdfShared(), queryFn: ({ signal }) => api<SharedItem[]>("pdf-shared", { signal }) });
 }
 /** One version of a shared item's content (what a template using it shows). */
 export function useSharedContent<T>(item: SharedItem | undefined, revision: number | undefined) {
-  return useQuery({ queryKey: ["pdf-shared", item?.id, revision], enabled: !!item && !!revision,
+  return useQuery({ queryKey: keys.pdfShared(item?.id, revision), enabled: !!item && !!revision,
     queryFn: async () => (await api<SharedItem>(`pdf-shared/${item!.id}`, { query: { revision: String(revision) } })).content as T });
 }
 
 /** "a-z, 0-9, _" key from a name: "Car C.I.D. theme" -> car_c_i_d_theme. */
-export function keyOf(name: string): string {
-  const k = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
-  return /^[a-z]/.test(k) ? k : `x_${k}`.slice(0, 60);
-}
+export const keyOf = (name: string): string => slugKey(name, "x_", 60);
 
 /** Choose a picture from the library, or upload a new one into it. */
 export function PicturePicker({ label, onPick }: { label: string; onPick: (id: string) => void }) {
@@ -36,7 +35,7 @@ export function PicturePicker({ label, onPick }: { label: string; onPick: (id: s
   const upload = async (file: File) => {
     try {
       const r = await uploadFile<Picture>("pdf-pictures", file, "POST", { name: file.name.replace(/\.[^.]+$/, "") });
-      await refresh("pdf-pictures");
+      await refresh(keys.pdfPictures());
       onPick(r.id);
     } catch (e) { fail(e); }
   };
@@ -58,7 +57,7 @@ export function PictureLibrary({ readOnly }: { readOnly: boolean }) {
   const refresh = useRefresh();
   const pictures = usePictures();
   const [name, setName] = useState("");
-  const act = async (fn: () => Promise<unknown>) => { try { await fn(); await refresh("pdf-pictures"); } catch (e) { fail(e); } };
+  const act = async (fn: () => Promise<unknown>) => { try { await fn(); await refresh(keys.pdfPictures()); } catch (e) { fail(e); } };
   return (
     <>
       <p className="muted small">Pictures here can be used in any template's header, footer or watermark. The same picture uploaded twice is kept once.</p>
@@ -99,7 +98,7 @@ export function ShareForm({ kind, items, content, onSaved, label }: {
   const save = async () => {
     try {
       const r = await api<SharedItem & { updated: string[] }>("pdf-shared", { body: { kind, key: existing?.key ?? keyOf(name), name: existing?.name ?? name.trim(), content } });
-      await refresh("pdf-shared");
+      await refresh(keys.pdfShared());
       setName(""); setTarget("");
       onSaved(r);
     } catch (e) { fail(e); }
@@ -121,7 +120,7 @@ export function ShareForm({ kind, items, content, onSaved, label }: {
 
 /** What a shared part holds, saved from one part of a template. */
 export function snippetContent(part: Part): { parts: Part[] } {
-  return { parts: [JSON.parse(JSON.stringify(part, (k, v: unknown) => (k === "id" ? undefined : v))) as Part] };
+  return { parts: [withoutIds(part)] };
 }
 
 export type ThemeContent = Pick<Definition, "theme" | "bands" | "watermark">;

@@ -1,9 +1,11 @@
 """ZIP of a booking's media: built once in the background, cached 7 days, opened through a
 signed link that shows 'Preparing...' until it is ready."""
+import logging
 import os
 import re
 import tempfile
 import zipfile
+from datetime import timedelta
 
 from celery import shared_task
 from django.conf import settings
@@ -59,7 +61,8 @@ def entry_names(places: dict, assets: list) -> list[str]:
     for a in assets:
         seen[a.field_key] = seen.get(a.field_key, 0) + 1
         k = seen[a.field_key]
-        ext = {"image/jpeg": "jpg", "image/png": "png", "application/pdf": "pdf",
+        ext = {"image/jpeg": "jpg", "image/png": "png", "image/heic": "heic",
+               "application/pdf": "pdf",
                "video/mp4": "mp4", "video/quicktime": "mov"}.get(a.content_type, "bin")
         if a.field_key in places:
             _, section, label = places[a.field_key]
@@ -89,34 +92,43 @@ def zip_from_token(token: str) -> MediaZip | None:
     return MediaZip.objects.filter(pk=zip_id).first()
 
 
+# a build still "building" after this was killed (a restart, a lost task): it counts as failed
+BUILD_STUCK = timedelta(minutes=30)
+
+
 def fresh(z: MediaZip) -> bool:
     return (timezone.now() - z.created_at).days < settings.ZIP_LINK_DAYS
 
 
-def request_zip(booking, kind: str, excluded: list[str] | None = None) -> MediaZip:
-    """The cached ZIP if there is a fresh one with the same left-out fields, else start building.
-    Fields the requester may not see never go into their ZIP."""
-    excluded = sorted(excluded or [])
-    z = MediaZip.objects.filter(booking=booking, kind=kind,
-                                excluded=excluded).order_by("-created_at").first()
-    if z is not None and z.status != "failed" and fresh(z):
+def failed(z: MediaZip) -> bool:
+    """F-080 / F-108: a failed or abandoned build is shown as failed and made again on request."""
+    return z.status == "failed" or (z.status == "building"
+                                    and timezone.now() - z.created_at > BUILD_STUCK)
+
+
+def request_zip(booking, kind: str, excluded: list[str] | None = None,
+                only: list[str] | None = None) -> MediaZip:
+    """The cached ZIP if there is a fresh one with the same left-out fields and files, else start
+    building. Fields the requester may not see never go into their ZIP; [only]: the files it may
+    hold (none given: every file)."""
+    excluded, only = sorted(excluded or []), sorted(only or [])
+    z = MediaZip.objects.filter(booking=booking, kind=kind, excluded=excluded,
+                                only=only).order_by("-created_at").first()
+    if z is not None and not failed(z) and fresh(z):
         return z
-    z = MediaZip.objects.create(booking=booking, kind=kind, excluded=excluded)
+    z = MediaZip.objects.create(booking=booking, kind=kind, excluded=excluded, only=only)
     build_zip.delay(str(z.id))
-    z.refresh_from_db()
-    return z
+    return MediaZip.objects.filter(pk=z.pk).first() or z      # gone: its booking was deleted
 
 
 @shared_task
 def build_zip(zip_id: str) -> None:
     z = MediaZip.objects.select_related("booking").get(pk=zip_id)
-    assets = list(MediaAsset.objects.filter(booking=z.booking, status="verified",
-                                            replaced_at__isnull=True,
-                                            kind__in=KIND_TYPES[z.kind])
-                  .exclude(field_key__in=z.excluded).order_by("created_at"))
+    qs = MediaAsset.objects.filter(booking=z.booking, status="verified", replaced_at__isnull=True,
+                                   kind__in=KIND_TYPES[z.kind]).exclude(field_key__in=z.excluded)
+    assets = list((qs.filter(pk__in=z.only) if z.only else qs).order_by("created_at"))
     if not assets:
-        z.status = "failed"
-        z.save()
+        MediaZip.objects.filter(pk=z.pk).update(status="failed")   # never re-made if gone
         return
     places = _places(z.booking)
     assets.sort(key=lambda a: (places.get(a.field_key, (10**9,))[0], a.created_at))
@@ -124,16 +136,29 @@ def build_zip(zip_id: str) -> None:
     fd, path = tempfile.mkstemp(suffix=".zip")
     os.close(fd)
     try:
-        with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as archive:
-            for n, (a, name) in enumerate(zip(assets, names, strict=True), start=1):
-                with archive.open(name, "w") as out:
-                    for chunk in storage.stream(a.key):
-                        out.write(chunk)
-                z.progress = int(100 * n / len(assets))
-                z.save(update_fields=["progress"])
-        z.key = f"zips/{z.id}.zip"
-        storage.upload_file(path, z.key, "application/zip")
-        z.status, z.built_at, z.progress = "ready", timezone.now(), 100
-        z.save()
+        _write(z, assets, names, path)
+    except Exception:
+        z.status = "failed"                   # never "Preparing..." for 7 days (F-108)
+        MediaZip.objects.filter(pk=z.pk).update(status="failed")
+        logging.getLogger(__name__).exception("ZIP build failed", extra={
+            "booking": str(z.booking_id), "zip": str(z.id), "kind": z.kind})
+        raise
     finally:
         os.unlink(path)
+
+
+def _write(z: MediaZip, assets: list, names: list[str], path: str) -> None:
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as archive:
+        for n, (a, name) in enumerate(zip(assets, names, strict=True), start=1):
+            with archive.open(name, "w") as out:
+                for chunk in storage.stream(a.key):
+                    out.write(chunk)
+            z.progress = int(100 * n / len(assets))
+            MediaZip.objects.filter(pk=z.pk).update(progress=z.progress)
+    z.key = f"zips/{z.id}.zip"
+    storage.upload_file(path, z.key, "application/zip")
+    z.status, z.built_at, z.progress = "ready", timezone.now(), 100
+    saved = MediaZip.objects.filter(pk=z.pk).update(key=z.key, status=z.status,
+                                                    built_at=z.built_at, progress=100)
+    if not saved:                 # its booking was deleted while it was built: no orphan object
+        storage.delete(z.key)

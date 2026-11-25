@@ -705,3 +705,17 @@ def test_the_form_of_an_integration_can_be_changed_with_its_event(ienv):
         "form": booking_form_id(), "event": "booking.updated", "body": {"c": "{{booking.city}}"}},
         format="json")
     assert ok.status_code == 200 and ok.json()["form"] == booking_form_id()
+
+
+def test_a_list_works_out_each_forms_field_keys_once(ienv):
+    """Two standard integrations of one form share the list's cache (F-089)."""
+    from unittest import mock
+
+    for name in ("std1", "std2"):
+        make(ienv, ienv.form_id, name=name, event="inspection.submitted", fields=["odometer"])
+    cache: dict = {}
+    with mock.patch.object(values, "versions", wraps=values.versions) as spy:
+        out = [values.broken_refs(i, cache=cache)
+               for i in Integration.objects.filter(form_id=ienv.form_id, name__in=["std1", "std2"])]
+    assert out == [[], []]
+    assert spy.call_count == 2          # once for the values, once for the field keys (not 4)

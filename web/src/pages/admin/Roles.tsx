@@ -4,32 +4,32 @@ import { api } from "../../api/client";
 import { useRefresh } from "../../api/hooks";
 import type { PermissionRow } from "../../api/types";
 import { useToast, PageHeader } from "../../ui/kit";
+import { keys } from "../../api/keys";
 
 type Grants = Record<string, "all" | "own">;
 type RoleRow = { role: string; locked: boolean; permissions: Grants };
 
-/** Next grant for one permission: off -> own -> all -> off (unscoped permissions: off <-> all). */
-export function nextGrant(scoped: boolean, now: "own" | "all" | undefined): "own" | "all" | undefined {
-  if (!now) return scoped ? "own" : "all";
-  if (now === "own") return "all";
-  return undefined;
-}
-
 const ROLES = ["ops", "expert"] as const;
+/** Permissions nothing on the web shows Ops (their pages are Today, Bookings, Needs you, Dashboards,
+ *  Settings; the rest are Admin pages), so the screen does not offer them to Ops (F-224). The
+ *  server makes the Admin-only ones (keys, integrations, templates, lists) not grantable. A grant Ops
+ *  already hold is still shown, so the Admin can see it and take it away. */
+export const OPS_NOT_ON_WEB = new Set(["users.sign_out_devices", "audit.view", "master_lists.manage", "integrations.manage", "api_keys.manage",
+  "forms.edit", "forms.publish", "forms.promote", "library.view", "pdf_templates.view", "pdf_templates.edit"]);
 type R = (typeof ROLES)[number];
 
 export function Roles() {
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const perms = useQuery({ queryKey: ["permissions"], queryFn: () => api<PermissionRow[]>("permissions") });
-  const roles = useQuery({ queryKey: ["roles"], queryFn: () => api<RoleRow[]>("roles") });
+  const perms = useQuery({ queryKey: keys.permissions(), queryFn: ({ signal }) => api<PermissionRow[]>("permissions", { signal }) });
+  const roles = useQuery({ queryKey: keys.roles(), queryFn: ({ signal }) => api<RoleRow[]>("roles", { signal }) });
   const saved = (r: R): Grants => roles.data?.find((x) => x.role === r)?.permissions ?? {};
   const [draft, setDraft] = useState<Record<R, Grants>>({ ops: {}, expert: {} });
-  useEffect(() => { if (roles.data) setDraft({ ops: saved("ops"), expert: saved("expert") }); }, [roles.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (roles.data) setDraft({ ops: saved("ops"), expert: saved("expert") }); }, [roles.data]); // eslint-disable-line react-hooks/exhaustive-deps -- the draft resets only when the server's roles arrive, not on every render
   const dirty = ROLES.filter((r) => JSON.stringify(draft[r]) !== JSON.stringify(saved(r)));
   const save = useMutation({
     mutationFn: () => Promise.all(dirty.map((r) => api(`roles/${r}/permissions`, { method: "PUT", body: { permissions: draft[r] } }))),
-    onSuccess: () => { say("Permissions saved."); void refresh("roles"); },
+    onSuccess: () => { say("Permissions saved."); void refresh(keys.roles()); },
     onError: fail,
   });
   const set = (r: R, key: string, v: "own" | "all" | undefined) => {
@@ -51,7 +51,7 @@ export function Roles() {
                 <tr key={p.key}>
                   <td>{p.label}</td>
                   {ROLES.map((r) => (
-                    <td key={r}>{p.grantable ? (
+                    <td key={r}>{r === "ops" && OPS_NOT_ON_WEB.has(p.key) && !draft.ops[p.key] ? <span className="muted small">Not for Ops</span> : p.grantable ? (
                       <div className="seg" role="radiogroup" aria-label={`${p.label} (${r === "ops" ? "Ops" : "Expert"})`}>
                         {(["off", ...(p.scoped ? ["own"] : []), "all"] as ("off" | "own" | "all")[]).map((o) => {
                           const v = draft[r][p.key] ?? "off";

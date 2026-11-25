@@ -1,5 +1,8 @@
 import re
 import uuid
+from typing import Any
+
+from rest_framework.request import Request
 
 from .logging import request_id_var
 
@@ -7,10 +10,10 @@ _VALID_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")
 
 
 class RequestIdMiddleware:
-    def __init__(self, get_response):
+    def __init__(self, get_response: Any) -> None:
         self.get_response = get_response
 
-    def __call__(self, request):
+    def __call__(self, request: Request) -> Any:
         rid = request.headers.get("X-Request-ID", "")
         if not _VALID_ID.fullmatch(rid):  # never reflect or log arbitrary client input
             rid = uuid.uuid4().hex

@@ -115,12 +115,14 @@ class FormSerializer(serializers.ModelSerializer):
                                             "switched off.", 400)
         return attrs
 
+    # read from the prefetched versions (the forms list prefetches them, F-089)
     def get_draft_version(self, obj):
-        return _version_ref(obj.versions.filter(status=VersionStatus.DRAFT).first())
+        return _version_ref(next((v for v in obj.versions.all()
+                                  if v.status == VersionStatus.DRAFT), None))
 
     def get_published_version(self, obj):
-        return _version_ref(obj.versions.filter(status=VersionStatus.PUBLISHED)
-                            .order_by("-number").first())
+        live = [v for v in obj.versions.all() if v.status == VersionStatus.PUBLISHED]
+        return _version_ref(max(live, key=lambda v: v.number) if live else None)
 
 
 def _library_info(obj, context) -> dict | None:
@@ -223,17 +225,7 @@ class SectionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Sections can only move within the same version.")
         return page
 
-    def update(self, instance, validated_data):
-        from django.db import transaction
 
-        from .ratings import rename_section_title
-
-        old = instance.title
-        with transaction.atomic():
-            section = super().update(instance, validated_data)
-            if section.title != old:
-                rename_section_title(section.version_id, old, section.title)
-        return section
 
 
 class PageSerializer(serializers.ModelSerializer):
@@ -296,7 +288,10 @@ class LibraryItemSerializer(serializers.ModelSerializer):
         fields = ["id", "kind", "key", "name", "definition", "revision", "archived", "used_in"]
 
     def get_used_in(self, obj):
-        """How many forms use this item."""
+        """How many forms use this item (counted once for a whole list, F-089)."""
+        counts = self.context.get("used_in")
+        if counts is not None:
+            return counts.get(obj.id, 0)
         return len({u["form"] for u in library.usages(obj)})
 
 

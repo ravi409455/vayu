@@ -6,7 +6,9 @@ from django.db import transaction
 from django.http import HttpResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
-from rest_framework import status, viewsets
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers, status, viewsets
+from rest_framework import serializers as s_
 from rest_framework.decorators import action
 from rest_framework.exceptions import MethodNotAllowed, ValidationError
 from rest_framework.parsers import MultiPartParser
@@ -17,12 +19,13 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.core.errors import CodedError
+from apps.platform.schema import obj
 
 from . import audit, avatars, roles, services
 from .authentication import DeviceCheckedRefreshSerializer
 from .catalog import CATALOG
 from .models import AuditLog, Device, Role, Theme, User
-from .permissions import PasswordChangeNotRequired, grants_for, perm, scope_for
+from .permissions import PasswordChangeNotRequired, grants_for, perm, perm_any, scope_for
 from .serializers import (
     AuditLogSerializer,
     ChangePasswordSerializer,
@@ -33,6 +36,22 @@ from .serializers import (
 )
 
 
+def _same_origin(request) -> None:
+    """Login CSRF (F-058): a browser posting from another site may not sign it in. Browsers send
+    Origin on every cross-site POST; an app or a script sends none."""
+    from urllib.parse import urlparse
+
+    from django.conf import settings
+
+    origin = request.headers.get("Origin")
+    if origin and urlparse(origin).netloc != request.get_host() and origin not in getattr(
+            settings, "CSRF_TRUSTED_ORIGINS", []):
+        raise CodedError("BAD_ORIGIN", "Sign in from the Vayu page itself.", 403)
+
+
+@extend_schema(responses=obj(
+    "Login", user=s_.DictField(), must_change_password=s_.BooleanField(),
+    access=s_.CharField(required=False), refresh=s_.CharField(required=False)))
 class LoginView(APIView):
     authentication_classes: list = []
     permission_classes = [AllowAny]
@@ -42,7 +61,10 @@ class LoginView(APIView):
     def post(self, request):
         s = LoginSerializer(data=request.data)
         s.is_valid(raise_exception=True)
-        user = services.authenticate(s.validated_data["username"], s.validated_data["password"])
+        if s.validated_data["client"] == "web":
+            _same_origin(request)
+        user = services.authenticate(s.validated_data["username"], s.validated_data["password"],
+                                     self.get_throttles()[0].get_ident(request))
         data = {"user": UserSerializer(user).data,
                 "must_change_password": user.must_change_password}
         if s.validated_data["client"] == "web":
@@ -64,6 +86,8 @@ class DeviceCheckedRefreshView(TokenRefreshView):
     serializer_class = DeviceCheckedRefreshSerializer
 
 
+@extend_schema(responses=obj("Me", id=s_.IntegerField(), username=s_.CharField(),
+                             role=s_.CharField(), permissions=s_.DictField(child=s_.CharField())))
 class MeView(APIView):
     allow_password_change_pending = True
 
@@ -169,7 +193,11 @@ class HeartbeatView(APIView):
         if any(type(v) is not int or v < 0 for v in counts.values()):
             raise CodedError("INVALID_COUNTS", "drafts and files must be whole numbers, 0 or more.",
                              400)
-        Device.objects.filter(pk=device_id).update(unsynced=counts, last_seen_at=timezone.now())
+        seen: dict = {"unsynced": counts, "last_seen_at": timezone.now()}
+        version = body.get("app_version")
+        if isinstance(version, str) and version.strip():      # optional; kept for metrics (F-247)
+            seen["app_version"] = version.strip()[:32]
+        Device.objects.filter(pk=device_id).update(**seen)
         return Response({"server_time": timezone.now(),
                          "min_app_version": settings.MIN_APP_VERSION})
 
@@ -225,6 +253,8 @@ class UserViewSet(viewsets.ModelViewSet):
             return [perm("users.view")()]
         if self.action == "sign_out_devices":
             return [perm("users.sign_out_devices")()]
+        if self.action == "phone":                     # read before deactivating or signing out
+            return [perm_any("users.manage", "users.sign_out_devices")()]
         return [perm("users.manage")()]
 
     def perform_create(self, serializer):
@@ -246,7 +276,10 @@ class UserViewSet(viewsets.ModelViewSet):
             admins = list(User.objects.select_for_update().filter(role=Role.ADMIN, is_active=True))
             if not [a for a in admins if a.pk != user.pk]:
                 raise CodedError("LAST_ADMIN", "There must always be one active admin.", 400)
+        was_role = user.role
         user = serializer.save()
+        if user.role != was_role:            # the app's tokens carry the old role (F-056)
+            services.revoke_devices(user)
         if was_active and not user.is_active:
             services.revoke_devices(user)
             audit.record(self.request.user, "user.deactivate", "user", user.id,
@@ -308,6 +341,25 @@ class UserViewSet(viewsets.ModelViewSet):
                      f"Signed out {count} device(s) of {user.username}")
         return Response({"revoked": count,
                          "warning": "Any unsynced data on those devices may be lost."})
+
+
+    @extend_schema(responses=inline_serializer("PhoneState", {
+        "devices": serializers.IntegerField(), "drafts": serializers.IntegerField(),
+        "files": serializers.IntegerField(), "unknown": serializers.BooleanField(),
+        "last_seen_at": serializers.DateTimeField(allow_null=True)}))
+    @action(detail=True, methods=["get"])
+    def phone(self, request, pk=None):
+        """What the person's signed-in phones last said they still hold (F-243), so the deactivate
+        and sign-out warnings say what would be lost. unknown: a phone never reported."""
+        user = self.get_object()
+        devices = list(Device.objects.filter(user=user, revoked_at__isnull=True))
+        reported = [d.unsynced for d in devices if d.unsynced is not None]
+        seen = [d.last_seen_at for d in devices if d.last_seen_at]
+        return Response({"devices": len(devices),
+                         "drafts": sum(int(u.get("drafts", 0) or 0) for u in reported),
+                         "files": sum(int(u.get("files", 0) or 0) for u in reported),
+                         "unknown": len(reported) < len(devices),
+                         "last_seen_at": max(seen) if seen else None})
 
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):

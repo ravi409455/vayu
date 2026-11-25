@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.core.phone import InvalidPhone, normalize
 
-from .models import AuditLog, Role, User
+from .models import AuditLog, User
 from .services import validate_new_password
 
 
@@ -93,4 +93,3 @@ class AuditLogSerializer(serializers.ModelSerializer):
                   "target_id", "summary", "created_at"]
 
 
-ROLE_VALUES = [r.value for r in Role]

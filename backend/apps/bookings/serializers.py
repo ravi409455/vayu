@@ -27,7 +27,8 @@ class BookingSerializer(serializers.ModelSerializer):
         fields = ["id", "booking_id", "stage", "ops_status", "inspection_type", "assigned_expert",
                   "answers", "row_version", "started_at", "finished_at", "cancel_reason",
                   "released_by", "released_draft_expected", "last_edited_by", "last_edited_at",
-                  "reschedules", "created_at", "conflict", "alerts", "withdrawn_expert"]
+                  "reschedules", "created_at", "conflict", "alerts", "withdrawn_expert",
+                  "unverified_time"]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -64,15 +65,16 @@ class InspectionSerializer(serializers.ModelSerializer):
         model = Inspection
         fields = ["id", "booking", "expert", "status", "answers", "scores", "overrides",
                   "row_version", "form_version", "start_version", "end_version", "submitted_at",
-                  "last_edited_by",
-                  "last_edited_at", "created_at"]
+                  "last_edited_by", "last_edited_at", "created_at", "unverified_time"]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get("request")
         if request is not None:
             role, stage = request.user.role, instance.booking.stage
-            hidden = self.context.setdefault("_hidden_forms", hidden_inspection_forms(request.user))
+            if "_hidden_forms" not in self.context:          # once per request, not per row
+                self.context["_hidden_forms"] = hidden_inspection_forms(request.user)
+            hidden = self.context["_hidden_forms"]
             if instance.form_version.form_id in hidden:        # not theirs to see
                 data["answers"], data["scores"], data["overrides"] = {}, None, None
                 return data
@@ -80,21 +82,27 @@ class InspectionSerializer(serializers.ModelSerializer):
                 data.pop("scores", None)
                 data.pop("overrides", None)
             if "scores" in data and role != "admin":
-                self._hide_scores(data["scores"], instance, role, stage)
+                self._hide_scores(data["scores"], self._levels(instance.form_version, role, stage))
             for part, version in instance.pinned().items():
                 if part not in data["answers"]:
                     continue
                 if version is not None:
                     data["answers"][part] = visible_answers(
-                        levels_for(version, role, stage), data["answers"][part], role)
+                        self._levels(version, role, stage), data["answers"][part], role)
                 elif role != "admin":   # no form to say what is visible: fail closed
                     del data["answers"][part]
         return data
 
+    def _levels(self, version, role: str, stage: str) -> dict:
+        """levels_for, once per version, role and stage in a request (F-090)."""
+        cache = self.context.setdefault("_inspection_levels", {})
+        if (version.id, role, stage) not in cache:
+            cache[(version.id, role, stage)] = levels_for(version, role, stage)
+        return cache[(version.id, role, stage)]
+
     @staticmethod
-    def _hide_scores(scores: dict, instance, role: str, stage: str) -> None:
+    def _hide_scores(scores: dict, levels: dict) -> None:
         """Key Checks and rating fields follow the same field access as answers."""
-        levels = levels_for(instance.form_version, role, stage)
 
         def shown(key: str) -> bool:
             return levels.get(key, "hidden") != "hidden"

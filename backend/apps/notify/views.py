@@ -1,9 +1,12 @@
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema
+from rest_framework import serializers as s_
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import Device
 from apps.core.errors import CodedError
+from apps.platform.schema import obj
 
 from .models import Notification
 
@@ -17,7 +20,8 @@ def _device_id(request):
 class PushTokenView(APIView):
     """The phone's Firebase token, saved on this signed-in device only (never anyone else's row).
     If an earlier person's device on the same phone still holds it, pushes go only to the device
-    that sent it last (see tasks.push), so their notices never reach whoever uses the phone now."""
+    that sent it last (tasks.push skips a device whose token a newer device holds), so their
+    notices never reach whoever uses the phone now (F-061, F-141)."""
 
     allow_password_change_pending = True
 
@@ -39,6 +43,8 @@ def _row(n: Notification) -> dict:
             "created_at": n.created_at, "read": n.read_at is not None}
 
 
+@extend_schema(responses=obj("Notifications", unread=s_.IntegerField(),
+                             results=s_.ListField(child=s_.DictField())))
 class NotificationsView(APIView):
     """The bell: the person's latest notifications, newest first, and how many are unread."""
 
@@ -70,6 +76,11 @@ def _latest():
     return AppRelease.objects.order_by("-version_code").first()
 
 
+@extend_schema(responses=obj(
+    "AppLatest", version_code=s_.IntegerField(allow_null=True), version_name=s_.CharField(
+        required=False), size=s_.IntegerField(required=False), sha256=s_.CharField(
+        required=False), notes=s_.ListField(child=s_.CharField(), required=False),
+    url=s_.CharField(required=False), min_version=s_.IntegerField()))
 class AppLatestView(APIView):
     """What the phone needs to offer an update: the newest build, its checksum, and the oldest
     version still allowed to start jobs."""

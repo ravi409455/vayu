@@ -46,10 +46,14 @@ def send(token: str, data: dict[str, str]) -> bool:
     cred = credential()
     if cred is None:
         return True
-    r = requests.post(
-        f"https://fcm.googleapis.com/v1/projects/{cred['project_id']}/messages:send", timeout=10,
-        headers={"Authorization": f"Bearer {_access_token(cred)}"},
-        json={"message": {"token": token, "data": data, "android": {"priority": "HIGH"}}})
+    try:
+        r = requests.post(
+            f"https://fcm.googleapis.com/v1/projects/{cred['project_id']}/messages:send",
+            timeout=10, headers={"Authorization": f"Bearer {_access_token(cred)}"},
+            json={"message": {"token": token, "data": data, "android": {"priority": "HIGH"}}})
+    except requests.RequestException as e:      # one slow call never stops the rest (F-140)
+        log.warning("FCM push failed: %s", type(e).__name__)
+        return True
     if r.status_code in (400, 404) and any(g in r.text for g in GONE):
         return False
     if r.status_code >= 400:

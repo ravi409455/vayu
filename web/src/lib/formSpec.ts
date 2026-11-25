@@ -2,13 +2,15 @@
 // questions screens ask: what is visible, what is still missing, which page holds it.
 import type { FormPage, FormVersion } from "../api/types";
 import { evaluateForm, isEmpty, type FieldSpec, type FormSpec, type Result } from "../rules/rules";
+import { today } from "./format";
+import { NOT_ASKED_TYPES } from "./fieldTypes";
 
 /** The name a form's answers go by in rules: the custom form is "inspection". */
 export type Kind = "booking" | "start" | "end" | "inspection";
 export type Answers = Record<string, unknown>;
 export type Ctx = { booking?: Answers; start?: Answers; end?: Answers; inspection?: Answers };
 
-const today = () => new Date().toISOString().slice(0, 10);
+// `_today` is India's today (format.ts), as on the server; not UTC, which is yesterday before 05:30 IST
 
 export function specFromTree(kind: Kind, tree: Pick<FormVersion, "pages" | "checks">): FormSpec {
   const containers: FormSpec["containers"] = [];
@@ -43,7 +45,7 @@ export function missingFields(kind: Kind, tree: Pick<FormVersion, "pages" | "che
   tree.pages.forEach((p, i) =>
     p.sections.forEach((s) =>
       s.fields.forEach((f) => {
-        if (f.type === "derived" || f.type === "rating" || f.type === "image") return;
+        if (NOT_ASKED_TYPES.includes(f.type)) return;
         if (r.visible[f.key] && r.required[f.key] && isEmpty(values[f.key]))
           out.push({ key: f.key, label: f.label || f.key, page: i, pageTitle: p.title });
       })));
@@ -61,7 +63,7 @@ export function submittable(kind: Kind, tree: Pick<FormVersion, "pages" | "check
   const r = evaluateTree(kind, tree, values, ctx);
   const out: Answers = {};
   for (const p of tree.pages) for (const s of p.sections) for (const f of s.fields) {
-    if (f.type === "derived" || f.type === "rating" || f.type === "image") continue;
+    if (NOT_ASKED_TYPES.includes(f.type)) continue;
     const v = values[f.key];
     if (r.visible[f.key] && !isEmpty(v)) out[f.key] = v;
   }

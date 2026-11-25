@@ -85,6 +85,13 @@ class Command(BaseCommand):
                 start = time.monotonic()
                 pdf, _name = tasks.build_pdf(b, insp, tv, "bench", 1)
                 took = time.monotonic() - start
+                # a PDF without the photos proves nothing (F-082): each one is an image in it
+                import pypdf
+
+                drawn = sum(len(p.images) for p in pypdf.PdfReader(io.BytesIO(pdf)).pages)
+                if drawn < photos:
+                    raise CommandError(f"Only {drawn} of {photos} photos are in the PDF: is "
+                                       f"'{field}' a photo field the report shows?")
                 verdict = "PASS" if took <= LIMIT_SECONDS else "TOO SLOW"
                 self.stdout.write(f"{photos} photos -> {len(pdf) / 1e6:.1f} MB PDF in {took:.1f} s "
                                   f"({verdict}: target {LIMIT_SECONDS} s)")

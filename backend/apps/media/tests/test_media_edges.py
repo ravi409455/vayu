@@ -55,16 +55,23 @@ def test_ops_cannot_add_to_a_full_field_by_attach(job, settings):
     assert r.status_code == 409 and r.json()["code"] == "TOO_MANY"
 
 
-def test_a_late_ops_file_on_a_completed_booking_remakes_the_report(job, settings):
+def test_a_late_ops_file_on_a_completed_booking_marks_the_report_out_of_date(job, settings):
+    """Reports are made again only by Regenerate (plan-fixes F-219): a late file marks the PDF out of
+    date and nothing renders by itself."""
+    from apps.reports.models import Report
+
     env, b = job
     [a] = submitted(env, b, settings)
     a_asset = MediaAsset.objects.get(pk=a)
     a_asset.booking.stage = "completed"
     a_asset.booking.save(update_fields=["stage"])
+    Report.objects.update_or_create(booking=a_asset.booking,
+                                    defaults={"status": "ready", "stale": False})
     MediaAsset.objects.filter(pk=a).update(status="uploaded")
     with mock.patch("apps.reports.tasks.render_report.delay") as render:
         assert tasks.verify_asset(a) == "verified"
-    render.assert_called_once_with(str(a_asset.booking_id))
+    render.assert_not_called()
+    assert Report.objects.get(booking=a_asset.booking).stale is True
 
 
 def test_zip_places_are_empty_when_the_booking_has_no_form(job):

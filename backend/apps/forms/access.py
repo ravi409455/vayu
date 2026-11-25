@@ -3,6 +3,8 @@ or edit. Separate from action permissions (apps/accounts/catalog.py). The most s
 that defines a role+stage wins; if none does, the caller's default policy applies."""
 from typing import Any
 
+from .fieldtypes import SYSTEM_FILLED  # the field-type registry
+
 ROLES = ("expert", "ops", "admin")
 STAGES = ("draft", "assigned", "in_progress", "submitted", "completed", "cancelled")
 LEVELS = ("hidden", "view", "edit")
@@ -32,7 +34,6 @@ def resolve(role: str, stage: str, *layers: dict) -> str | None:
     return None
 
 
-SYSTEM_FILLED = ("derived", "rating")
 
 
 def default_level(role: str, stage: str, kind: str, ftype: str) -> str:
@@ -79,7 +80,11 @@ def visible_answers(levels: dict[str, str], answers: dict, role: str) -> dict:
 
 def may_see_submissions(user, form) -> bool:
     """Admin always; others only if the form's "who can see submissions" list names their role."""
-    return user.role == "admin" or user.role in (form.submission_roles or [])
+    return role_may_see_submissions(user.role, form)
+
+
+def role_may_see_submissions(role: str, form) -> bool:
+    return role == "admin" or role in (form.submission_roles or [])
 
 
 def hidden_inspection_forms(user) -> list[int]:

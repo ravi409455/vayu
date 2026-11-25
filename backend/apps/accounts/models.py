@@ -1,4 +1,5 @@
 import uuid
+from typing import Any
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.db import models
@@ -23,7 +24,8 @@ class UserManager(BaseUserManager):
         # the picture bytes are only ever read by the picture endpoint, never by ordinary queries
         return super().get_queryset().defer("avatar")
 
-    def create_user(self, username, password, role, **extra):
+    def create_user(self, username: str, password: str | None, role: str,
+                    **extra: Any) -> "User":
         user: User = self.model(username=username, role=role, **extra)  # type: ignore[assignment]
         user.set_password(password)
         user.save(using=self._db)
@@ -78,6 +80,7 @@ class Device(models.Model):
     # what the phone last said it still holds: {"drafts": n, "files": n}; null = never reported
     unsynced = models.JSONField(null=True, blank=True)
     last_seen_at = models.DateTimeField(null=True, blank=True)
+    app_version = models.CharField(max_length=32, blank=True)   # from the heartbeat (F-247)
     push_token = models.CharField(max_length=4096, blank=True)   # Firebase token; "" = none
     push_token_at = models.DateTimeField(null=True, blank=True)  # when this device last sent it
 
@@ -120,10 +123,10 @@ class AuditLog(models.Model):
 
     objects = AppendOnlyQuerySet.as_manager()
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if not self._state.adding:
             raise RuntimeError("AuditLog is append-only")
         super().save(*args, **kwargs)
 
-    def delete(self, *args, **kwargs):
+    def delete(self, *args: Any, **kwargs: Any) -> Any:
         raise RuntimeError("AuditLog is append-only")
