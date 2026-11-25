@@ -247,7 +247,7 @@ def test_ops_cannot_upload_to_a_field_read_only_for_them(job, settings):
 
 
 def test_loose_ops_uploads_are_capped(job, settings):
-    from apps.media.services import uploads as services       # where the cap is read
+    from apps.media.services import uploads as services  # where the cap is read
 
     env, b = job
     [a] = submitted(env, b, settings)
