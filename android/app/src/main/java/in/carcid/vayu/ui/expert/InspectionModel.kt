@@ -125,7 +125,7 @@ class InspectionModel(
 
     /** Lock the answers and queue them for sending. */
     fun submit() {
-        commit { it.copy(submittedAt = stamp("datetime", now())) }
+        commit { it.copy(submittedAt = stamp("datetime", now()), unverifiedTime = it.unverifiedTime || !verified()) }
         kick()
     }
 

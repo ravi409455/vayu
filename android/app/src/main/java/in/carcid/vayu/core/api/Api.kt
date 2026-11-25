@@ -129,11 +129,11 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
 
     /** Submit the answers (idempotent by [submissionUuid]). */
     suspend fun submit(bookingId: String, submissionUuid: String, formVersion: Int?, answers: JsonObject,
-                       /** Only when the start never reached the server (it carries it otherwise). */
-                       unverifiedTime: Boolean? = null): JsonObject =
+                       /** The phone's clock was unreliable at some point of this inspection (the server keeps "true"). */
+                       unverifiedTime: Boolean = false): JsonObject =
         call("POST", "bookings/$bookingId/submit", buildJsonObject {
             put("client_submission_uuid", submissionUuid)
-            if (unverifiedTime != null) put("unverified_time", unverifiedTime)
+            put("unverified_time", unverifiedTime)
             if (formVersion != null) put("form_version", formVersion)
             put("answers", answers)
         })

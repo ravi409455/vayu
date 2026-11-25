@@ -732,6 +732,10 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
     var rep by remember(r.value) { mutableStateOf(r.value?.data as? JsonObject) }
     val online = r.value?.offline != true
     val updating = rep?.s("updating") == "true"
+    val outOfDate = rep?.s("out_of_date") == "true"
+    // the server says whether Regenerate can be pressed now, and why not
+    val regen = rep?.o("regenerate")
+    var sending by remember { mutableStateOf(false) }
     // while a new revision is being made, look again every few seconds until it's done
     LaunchedEffect(updating, id) {
         while (rep?.s("updating") == "true") {
@@ -772,10 +776,11 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
             rep == null -> if (b.stage == "completed") "Being made" else "Made when the booking is completed"
             updating -> "Updating…"
             failed -> "Couldn't be made · tried again by itself"
-            rep!!.s("status") == "ready" -> "Ready" + (rep!!.s("generated_at").takeIf { it.isNotBlank() }?.let { " · made ${whenStamp(it, env.today()).replaceFirstChar { c -> c.lowercase() }}" } ?: "")
+            rep!!.s("status") == "ready" -> (if (outOfDate) "Out of date" else "Ready") + (rep!!.s("generated_at").takeIf { it.isNotBlank() }?.let { " · made ${whenStamp(it, env.today()).replaceFirstChar { c -> c.lowercase() }}" } ?: "")
             else -> "Being made"
         }, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
         if (failed && rep?.s("error")?.isNotBlank() == true) Note(rep!!.s("error"), Vayu.colors.badTint)
+        if (outOfDate && !updating) Note("Something it shows changed since it was made. Regenerate it when you're done.", Vayu.colors.warnTint)
         if (rep?.s("url")?.isNotBlank() == true) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CardButton("Open", Modifier.weight(1f), online) { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }
             CardButton("Share", Modifier.weight(1f), online) { scope.launch {
@@ -789,6 +794,20 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
                 if (!logShared("check_link")) return@launch
                 ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, rep!!.s("verify_url")), "Share the check link"))
             } }
+        }
+        // F-219: reports are made again only when Ops press Regenerate (one tap, one request)
+        if (rep != null && env.can("submissions.edit")) {
+            val allowed = regen?.s("allowed") == "true"
+            CardButton(if (sending) "Regenerating…" else "Regenerate", Modifier.fillMaxWidth(), online && allowed && !sending) {
+                sending = true
+                scope.launch {
+                    try {
+                        env.data.act("POST", "bookings/$id/report/regenerate")
+                        rep = (env.data.api.get("bookings/$id/report") as? JsonObject) ?: rep
+                    } catch (e: ApiError) { env.say(e.message) } finally { sending = false }
+                }
+            }
+            if (!allowed && regen?.s("reason")?.isNotBlank() == true) Text(regen.s("reason"), fontSize = 13.sp, color = Vayu.colors.muted)
         }
     }
 }
