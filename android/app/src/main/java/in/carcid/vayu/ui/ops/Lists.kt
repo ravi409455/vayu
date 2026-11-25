@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.ReportProblem
+import `in`.carcid.vayu.core.ops.StuckUpload
 import `in`.carcid.vayu.core.api.initials
 
 import androidx.compose.ui.text.style.TextOverflow
@@ -346,15 +348,15 @@ suspend fun loadNeeds(env: OpsEnv): List<Need>? {
     if (read.get() == 0) return null
     return o.map(::Bk).map { Need("a" + it.id, it.id, Tone.WARN, "${it.code} has no expert", "Today at ${time12(it.time)} · ${it.customer}", "Unassigned today") } +
         c.map(::Bk).map { Need("c" + it.id, it.id, Tone.BAD, "Two experts inspected ${it.code}", "${it.customer} · choose which counts", "Conflicts") } +
-        st.map { Need("s" + it.s("id"), it.s("booking"), Tone.BAD, "Photos stuck: ${it.s("booking_id")}",
-            "${env.labels.byUsername(it.s("expert"))} · ${it.s("field_key").replace('_', ' ').replaceFirstChar { c -> c.uppercase() }}", "Stuck uploads") } +
+        StuckUpload.list(st).map { Need("s" + it.id, it.booking, Tone.BAD, "Photos stuck: ${it.bookingId}",
+            "${env.labels.byUsername(it.expert)} · ${it.fieldKey.replace('_', ' ').replaceFirstChar { c -> c.uppercase() }}", "Stuck uploads") } +
         // each row names its problem: failed / stuck (tried again by itself), or out of date (Ops press Regenerate, F-219)
-        pd.map { if (it.s("problem") == "out_of_date")
-                Need("p" + it.s("booking"), it.s("booking"), Tone.WARN, "Report out of date for ${it.s("booking_id")}",
-                    listOfNotNull(it.s("out_of_date_since").takeIf { v -> v.isNotBlank() }?.let { v -> "Since ${whenStamp(v, t).replaceFirstChar { c -> c.lowercase() }}" },
+        ReportProblem.list(pd).map { if (it.problem == "out_of_date")
+                Need("p" + it.booking, it.booking, Tone.WARN, "Report out of date for ${it.bookingId}",
+                    listOfNotNull(it.outOfDateSince?.takeIf { v -> v.isNotBlank() }?.let { v -> "Since ${whenStamp(v, t).replaceFirstChar { c -> c.lowercase() }}" },
                         "Regenerate it when you're done").joinToString(" · "), "Reports")
-            else Need("p" + it.s("booking"), it.s("booking"), Tone.BAD, "Report failed for ${it.s("booking_id")}",
-                it.s("error").ifBlank { "It is tried again by itself" }, "Reports") } +
+            else Need("p" + it.booking, it.booking, Tone.BAD, "Report failed for ${it.bookingId}",
+                it.error.ifBlank { "It is tried again by itself" }, "Reports") } +
         ty.map(::Bk).map { Need("t" + it.id, it.id, Tone.WARN, "Your type change wasn't applied", "${it.code} · ${it.typeRejected?.let(env.labels::typeRejected) ?: "The expert started another type"}", "Type changes") } +
         timing(lt, "late", "Started late") + timing(qk, "quick", "Too quick") +
         uv.map(::Bk).filter { it.unverifiedTime }.map { Need("u" + it.id, it.id, Tone.WARN, "${it.code}: time not verified",

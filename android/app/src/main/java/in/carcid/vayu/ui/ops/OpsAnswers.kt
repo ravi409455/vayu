@@ -249,7 +249,7 @@ fun opsFieldEnv(env: OpsEnv, lists: Map<String, List<Pair<String, String>>> = em
     files = emptyMap(), now = { java.time.Instant.now() },
     onCamera = {}, onGallery = {}, onPickFile = {}, onSign = {}, onScan = {}, onOpenFile = { _, _ -> }, onLocate = { _, done -> done(null) },
     asset = { null },
-    people = env.labels.people.map { Triple(it.s("id"), it.s("name").ifBlank { it.s("username") }, it.s("role")) })
+    people = env.labels.people.map { Triple(it.id?.toString().orEmpty(), it.shown, it.role) })
 
 private fun answerText(f: Field, v: Any?, env: OpsEnv): String = when (f.type) {
     "single_choice" -> f.options.firstOrNull { it.key == v }?.label ?: shown(v)

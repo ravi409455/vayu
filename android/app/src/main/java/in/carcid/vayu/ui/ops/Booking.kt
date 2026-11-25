@@ -253,7 +253,7 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
                     Icon(Icons.Outlined.PersonAdd, if (b.expert == null) "Assign an expert" else "Reassign", tint = if (online) Vayu.colors.ink else Vayu.colors.muted)
                 }
                 // call the expert straight from the job
-                env.labels.people.firstOrNull { it.int("id") == b.expert }?.s("phone")?.filter { it in '0'..'9' || it == '+' }?.takeIf { it.isNotEmpty() }?.let { ph ->
+                env.labels.people.firstOrNull { it.id == b.expert }?.phone?.filter { it in '0'..'9' || it == '+' }?.takeIf { it.isNotEmpty() }?.let { ph ->
                     IconButton(onClick = { uri.openUri("tel:$ph") }) { Icon(Icons.Outlined.Call, "Call the expert", tint = Vayu.colors.ink) }
                 }
             }
@@ -390,12 +390,12 @@ fun AssignSheet(env: OpsEnv, b: Bk, onClose: () -> Unit, onAssign: (Int) -> Unit
             Spacer(Modifier.height(12.dp))
             SoftField(find, { find = it }, "Find an expert", icon = Icons.Outlined.Search)
             LazyColumn(Modifier.heightIn(max = 520.dp)) {
-                items(env.labels.experts.filter { find.isBlank() || it.s("name").contains(find, true) || it.s("username").contains(find, true) },
-                    key = { it.s("id") }) { u ->
-                    val uid = u.int("id") ?: return@items
+                items(env.labels.experts.filter { find.isBlank() || it.name.contains(find, true) || it.username.contains(find, true) },
+                    key = { it.id ?: it.username }) { u ->
+                    val uid = u.id ?: return@items
                     val theirs = jobs.filter { it.expert == uid && it.id != b.id }
                     val clash = at?.let { a -> theirs.firstOrNull { o -> runCatching { LocalTime.parse(o.time) }.getOrNull()?.let { java.time.Duration.between(it, a).abs().toMinutes() < 90 } == true } }
-                    val name = u.s("name").ifBlank { u.s("username") }
+                    val name = u.shown
                     Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(12.dp))
                         .background(if (pick == uid) Vayu.colors.soft else Vayu.colors.bg).clickable(role = Role.RadioButton) { pick = uid }.padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

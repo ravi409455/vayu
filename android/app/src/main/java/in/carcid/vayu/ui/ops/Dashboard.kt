@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.DashSummary
+import `in`.carcid.vayu.core.ops.VolumeRow
 import `in`.carcid.vayu.core.api.initials
 
 import `in`.carcid.vayu.ui.components.SoftButton
@@ -117,15 +119,15 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
     val (from, to) = dashPeriod(choice, env.today())
     val days = java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1
     val load = rememberLoad(env, "dashboards/summary?date_from=$from&date_to=$to")
-    val sum = load.value?.data as? JsonObject
-    val now = sum?.o("period"); val before = sum?.o("previous")
+    val sum = DashSummary.from(load.value?.data)
+    val now = sum?.period; val before = sum?.previous
     val perDay = rememberLoad(env, if (choice == 0) null else "dashboards/volume?group=${if (choice == 1) "day" else "week"}&by=stage&date_from=$from&date_to=$to")
-        .value?.data?.rows().orEmpty()
-    val splitRows = rememberLoad(env, "dashboards/volume?group=month&by=$split&date_from=$from&date_to=$to").value?.data?.rows().orEmpty()
+        .value?.data?.rows().orEmpty().let(VolumeRow::list)
+    val splitRows = VolumeRow.list(rememberLoad(env, "dashboards/volume?group=month&by=$split&date_from=$from&date_to=$to").value?.data?.rows().orEmpty())
     val dates = mapOf("date_from" to from.toString(), "date_to" to to.toString())
     // started late / too quick only for those who may see timing flags (the server leaves them out too)
     val timing = env.can("bookings.review_timing")
-    fun num(o: JsonObject?, k: String) = o?.s(k)?.toDoubleOrNull()
+    fun n(v: Number?) = v?.toDouble()
     fun label(k: String) = when (split) {
         "type" -> env.labels.type(k); "city" -> env.labels.city(k); "expert" -> env.labels.person(k.toIntOrNull()).ifBlank { "Unassigned" }
         else -> STAGE_WORDS[k] ?: k
@@ -136,7 +138,7 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
             if (env.can("dashboards.export")) IconButton(onClick = { exportScope.launch {
                 val f = File(File(ctx.cacheDir, "reports").apply { mkdirs() }, "vayu-$from-$to-by-$split.csv")
                 // built and written off the main thread (fsync can stall a cheap phone)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { writeAtomically(f, ("$split,count\n" + splitRows.groupBy { it.s("key") }.map { (k, r) -> k to r.sumOf { it.s("count").toIntOrNull() ?: 0 } }
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { writeAtomically(f, ("$split,count\n" + splitRows.groupBy { it.key }.map { (k, r) -> k to r.sumOf { it.count } }
                     .sortedByDescending { it.second }.joinToString("\n") { (k, n) ->
                         listOf(label(k), "$n").joinToString(",") { v -> "\"" + v.replace("\"", "\"\"").let { if (it.firstOrNull() in setOf('=', '+', '-', '@', '\t', '\r', '\n')) "'$it" else it } + "\"" }
                     }).toByteArray()) }
@@ -155,27 +157,27 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
 
             Section("Bookings")
             Tiles(listOf(
-                TileData("Bookings", "${now?.s("bookings")}", change(num(now, "bookings"), num(before, "bookings"))) { onOpenList(dates) },
-                TileData("Completed", "${now?.s("completed")}", change(num(now, "completed"), num(before, "completed"))) { onOpenList(dates + ("stage" to "completed")) },
-                TileData("Completion", num(now, "completion_rate")?.let { "${it.toInt()}%" } ?: "—",
-                    change(num(now, "completion_rate"), num(before, "completion_rate"), " pts")) { onOpenList(dates + ("stage" to "completed")) },
-                TileData("Cancelled", "${now?.s("cancelled")}", change(num(now, "cancelled"), num(before, "cancelled"), moreIsBetter = false)) { onOpenList(dates + ("stage" to "cancelled")) },
+                TileData("Bookings", (now?.bookings?.toString() ?: ""), change(n(now?.bookings), n(before?.bookings))) { onOpenList(dates) },
+                TileData("Completed", (now?.completed?.toString() ?: ""), change(n(now?.completed), n(before?.completed))) { onOpenList(dates + ("stage" to "completed")) },
+                TileData("Completion", n(now?.completionRate)?.let { "${it.toInt()}%" } ?: "—",
+                    change(n(now?.completionRate), n(before?.completionRate), " pts")) { onOpenList(dates + ("stage" to "completed")) },
+                TileData("Cancelled", (now?.cancelled?.toString() ?: ""), change(n(now?.cancelled), n(before?.cancelled), moreIsBetter = false)) { onOpenList(dates + ("stage" to "cancelled")) },
             ))
             Section("On site")
             Tiles(listOf(
-                TileData("Avg time", num(now, "avg_minutes")?.let { fmtMinutes(it.toInt()) } ?: "—",
-                    change(num(now, "avg_minutes"), num(before, "avg_minutes"), " min").copy(good = null)) { onOpenList(dates + ("stage" to "completed")) },
+                TileData("Avg time", n(now?.avgMinutes)?.let { fmtMinutes(it.toInt()) } ?: "—",
+                    change(n(now?.avgMinutes), n(before?.avgMinutes), " min").copy(good = null)) { onOpenList(dates + ("stage" to "completed")) },
             ) + if (!timing) emptyList() else listOf(
-                TileData("On time", num(now, "on_time")?.let { "${it.toInt()}%" } ?: "—", change(num(now, "on_time"), num(before, "on_time"), " pts")) { onOpenList(dates) },
-                TileData("Started late", "${now?.s("late")}", change(num(now, "late"), num(before, "late"), moreIsBetter = false),
-                    bad = (num(now, "late") ?: 0.0) > 0) { onOpenList(dates + ("timing" to "late")) },
-                TileData("Too quick", "${now?.s("quick")}", change(num(now, "quick"), num(before, "quick"), moreIsBetter = false),
-                    bad = (num(now, "quick") ?: 0.0) > 0) { onOpenList(dates + ("timing" to "quick")) },
+                TileData("On time", n(now?.onTime)?.let { "${it.toInt()}%" } ?: "—", change(n(now?.onTime), n(before?.onTime), " pts")) { onOpenList(dates) },
+                TileData("Started late", (now?.late?.toString() ?: ""), change(n(now?.late), n(before?.late), moreIsBetter = false),
+                    bad = (n(now?.late) ?: 0.0) > 0) { onOpenList(dates + ("timing" to "late")) },
+                TileData("Too quick", (now?.quick?.toString() ?: ""), change(n(now?.quick), n(before?.quick), moreIsBetter = false),
+                    bad = (n(now?.quick) ?: 0.0) > 0) { onOpenList(dates + ("timing" to "quick")) },
             ))
 
             if (choice != 0) {
                 Section(if (choice == 1) "Bookings per day" else "Bookings per week")
-                val totals = perDay.groupBy { it.s("period") }.map { (p, r) -> p to r.sumOf { it.s("count").toIntOrNull() ?: 0 } }.sortedBy { it.first }
+                val totals = perDay.groupBy { it.period }.map { (p, r) -> p to r.sumOf { it.count } }.sortedBy { it.first }
                 // every day of the week shows, a quiet one as 0
                 val bars = if (choice == 1) (0 until 7).map { i -> from.plusDays(i.toLong()).let { d -> d.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.uppercase() } to (totals.firstOrNull { it.first == d.toString() }?.second ?: 0) } }
                     else totals.map { periodLabel(it.first) to it.second }
@@ -184,7 +186,7 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
 
             Section("Split by")
             SingleChoice("Split by", SPLITS.map { Option(it.first, it.second, false, null) }, split, false, { if (it != null) split = it as String })
-            val parts = splitRows.groupBy { it.s("key") }.map { (k, r) -> k to r.sumOf { it.s("count").toIntOrNull() ?: 0 } }.sortedByDescending { it.second }
+            val parts = splitRows.groupBy { it.key }.map { (k, r) -> k to r.sumOf { it.count } }.sortedByDescending { it.second }
             val total = parts.sumOf { it.second }.coerceAtLeast(1); val top = (parts.maxOfOrNull { it.second } ?: 0).coerceAtLeast(1)
             Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 parts.forEach { (k, n) ->
@@ -202,22 +204,22 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
                 if (parts.isEmpty()) Text("Nothing in this period yet.", color = Vayu.colors.muted)
             }
 
-            val experts = sum.a("by_expert").map { it as JsonObject }
+            val experts = sum.byExpert
             if (experts.isNotEmpty()) {
                 Section("By expert")
                 (if (allExperts) experts else experts.take(5)).forEach { e ->
-                    val id = e.int("expert"); val name = env.labels.person(id)
+                    val id = e.expert; val name = env.labels.person(id)
                     Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).clickable(role = Role.Button) { onOpenList(dates + ("expert" to "$id")) }.padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Avatar(initials(name), size = 36)
                         Column(Modifier.weight(1f)) {
                             Text(name, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(listOfNotNull("${e.s("bookings")} booking${if (e.s("bookings") == "1") "" else "s"}", e.s("on_time").ifBlank { null }?.let { "$it% on time" })
+                            Text(listOfNotNull("${e.bookings ?: ""} booking${if (e.bookings == 1) "" else "s"}", e.onTime?.let { "$it% on time" })
                                 .joinToString(" · "), fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         if (timing) {
-                            e.int("late")?.takeIf { it > 0 }?.let { Badge("$it late") }
-                            e.int("quick")?.takeIf { it > 0 }?.let { Badge("$it quick") }
+                            e.late?.takeIf { it > 0 }?.let { Badge("$it late") }
+                            e.quick?.takeIf { it > 0 }?.let { Badge("$it quick") }
                         }
                     }
                     HorizontalDivider(color = Vayu.colors.line)

@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.ListItem
+import `in`.carcid.vayu.core.ops.Person
 import `in`.carcid.vayu.core.ops.Booking
 import kotlinx.coroutines.async
 import androidx.compose.foundation.background
@@ -117,15 +119,15 @@ fun opsStatus(b: Bk): Pair<String, Tone> = when {
 /** Names for keys: cities, car models, types, people. Loaded once, kept for offline. */
 @androidx.compose.runtime.Immutable
 class Labels(val cities: Map<String, String> = emptyMap(), val cars: Map<String, String> = emptyMap(),
-             val types: List<Triple<String, String, Boolean>> = emptyList(), val people: List<JsonObject> = emptyList()) {
+             val types: List<Triple<String, String, Boolean>> = emptyList(), val people: List<Person> = emptyList()) {
     fun city(k: String) = cities[k] ?: k
     fun car(k: String) = cars[k] ?: k
     // a type that's no longer offered still reads as words ("ev" -> "EV", "used_car" -> "Used car")
     fun type(k: String) = types.firstOrNull { it.first == k }?.second
         ?: if (k.length <= 3) k.uppercase() else k.replace('_', ' ').replaceFirstChar { it.uppercase() }
-    fun person(id: Int?) = people.firstOrNull { (it["id"] as? JsonPrimitive)?.intOrNull == id }?.let { it.s("name").ifBlank { it.s("username") } } ?: if (id == null) "" else "#$id"
-    val experts get() = people.filter { it.s("role") == "expert" && it.s("is_active") != "false" }
-    fun byUsername(u: String) = people.firstOrNull { it.s("username") == u }?.s("name")?.ifBlank { null } ?: u
+    fun person(id: Int?) = people.firstOrNull { it.id == id }?.shown ?: if (id == null) "" else "#$id"
+    val experts get() = people.filter { it.role == "expert" && it.isActive }
+    fun byUsername(u: String) = people.firstOrNull { it.username == u }?.name?.ifBlank { null } ?: u
 
     /** The server's "Type change to pdi rejected: expert started ev" in words, with type names. */
     fun typeRejected(detail: String): String {
@@ -136,20 +138,20 @@ class Labels(val cities: Map<String, String> = emptyMap(), val cars: Map<String,
     companion object {
         /** The names as last saved on this phone (read in the background), to show at once. */
         suspend fun saved(data: OpsData): Labels = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            fun list(k: String) = data.saved("master-lists/$k/items")?.data?.rows().orEmpty().associate { it.s("key") to it.s("label") }
+            fun list(k: String) = ListItem.list(data.saved("master-lists/$k/items")?.data?.rows().orEmpty()).associate { it.key to it.label }
             Labels(list("city"), list("car_make_model"),
-                data.saved("inspection-types")?.data?.rows().orEmpty().map { Triple(it.s("key"), it.s("label"), it.s("available") != "false") },
-                data.saved("users")?.data?.rows().orEmpty())
+                ListItem.list(data.saved("inspection-types")?.data?.rows().orEmpty()).map { Triple(it.key, it.label, it.available) },
+                Person.list(data.saved("users")?.data?.rows().orEmpty()))
         }
 
         suspend fun load(data: OpsData): Labels {
             // failures count as empty; cancellation is never swallowed (ApiError only)
             suspend fun <T> soft(empty: T, f: suspend () -> T): T = try { f() } catch (e: ApiError) { empty }
-            suspend fun list(k: String) = soft(emptyMap()) { data.load("master-lists/$k/items").data.rows().associate { it.s("key") to it.s("label") } }
+            suspend fun list(k: String) = soft(emptyMap()) { ListItem.list(data.load("master-lists/$k/items").data.rows()).associate { it.key to it.label } }
             // all four at once: the wait is the slowest one, not the sum
             return kotlinx.coroutines.coroutineScope {
-                val types = async { soft(emptyList()) { data.load("inspection-types").data.rows().map { Triple(it.s("key"), it.s("label"), it.s("available") != "false") } } }
-                val people = async { soft(emptyList()) { data.load("users").data.rows() } }
+                val types = async { soft(emptyList()) { ListItem.list(data.load("inspection-types").data.rows()).map { Triple(it.key, it.label, it.available) } } }
+                val people = async { soft(emptyList()) { Person.list(data.load("users").data.rows()) } }
                 val cities = async { list("city") }; val cars = async { list("car_make_model") }
                 Labels(cities.await(), cars.await(), types.await(), people.await())
             }

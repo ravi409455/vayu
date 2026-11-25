@@ -73,4 +73,17 @@ class OpsDataTest {
             as kotlinx.serialization.json.JsonArray).map { it as kotlinx.serialization.json.JsonObject }
         assertEquals(listOf(MediaItem("m1", "front", "photo", "verified")), MediaItem.list(rows))
     }
+
+    @Test fun namesProblemsAndDashboardsAreReadIntoTypedModels() {
+        fun rows(j: String) = (kotlinx.serialization.json.Json.parseToJsonElement(j) as kotlinx.serialization.json.JsonArray).map { it as kotlinx.serialization.json.JsonObject }
+        val p = Person.list(rows("""[{"id":4,"username":"meera","name":"","role":"expert","is_active":true,"phone":null}]""")).single()
+        assertEquals("meera", p.shown); assertEquals("", p.phone)
+        assertEquals(listOf("pune" to "Pune"), ListItem.list(rows("""[{"key":"pune","label":"Pune","archived":false}]""")).map { it.key to it.label })
+        assertEquals("out_of_date", ReportProblem.list(rows("""[{"booking":"b","booking_id":"D-1","status":"ready","error":"","problem":"out_of_date","out_of_date_since":"2026-11-24T10:00:00+05:30"}]""")).single().problem)
+        assertEquals("front", StuckUpload.list(rows("""[{"id":"s","booking":"b","booking_id":"D-1","field_key":"front","status":"pending","expert":"Meera","created_at":"x"}]""")).single().fieldKey)
+        val d = DashSummary.from(kotlinx.serialization.json.Json.parseToJsonElement("""{"period":{"bookings":12,"completion_rate":91.7,"on_time":null},"previous":{"bookings":10},
+            "by_expert":[{"expert":4,"bookings":1,"on_time":92,"late":0}]}"""))!!
+        assertEquals(12, d.period.bookings); assertEquals(91.7, d.period.completionRate!!, 0.0); assertNull(d.period.onTime); assertEquals(92, d.byExpert.single().onTime)
+        assertEquals(listOf(VolumeRow("2026-W48", "pdi", 14)), VolumeRow.list(rows("""[{"period":"2026-W48","key":"pdi","count":14}]""")))
+    }
 }

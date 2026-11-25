@@ -121,3 +121,85 @@ data class MediaItem(
         fun list(rows: List<JsonObject>): List<MediaItem> = rows.mapNotNull { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
     }
 }
+
+/** A person (GET users): Ops see names, roles and phones to assign and call. */
+@Serializable
+data class Person(
+    val id: Int? = null,
+    val username: String = "",
+    val name: String = "",
+    val role: String = "",
+    @SerialName("is_active") val isActive: Boolean = true,
+    val phone: String = "",
+) {
+    /** The name to show: the full name, else the username. */
+    val shown: String get() = name.ifBlank { username }
+
+    companion object {
+        fun list(rows: List<JsonObject>): List<Person> = rows.mapNotNull { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
+    }
+}
+
+/** One entry of a master list (GET master-lists/{key}/items) or of the inspection types (GET inspection-types). */
+@Serializable
+data class ListItem(val key: String = "", val label: String = "", val archived: Boolean = false, val available: Boolean = true) {
+    companion object {
+        fun list(rows: List<JsonObject>): List<ListItem> = rows.mapNotNull { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
+    }
+}
+
+/** A file the server has waited on too long (GET problems/stuck-uploads); [expert] is who sent it. */
+@Serializable
+data class StuckUpload(
+    val id: String = "",
+    val booking: String = "",
+    @SerialName("booking_id") val bookingId: String = "",
+    @SerialName("field_key") val fieldKey: String = "",
+    val expert: String = "",
+) {
+    companion object {
+        fun list(rows: List<JsonObject>): List<StuckUpload> = rows.mapNotNull { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
+    }
+}
+
+/** A report that needs Ops (GET problems/reports): [problem] is "failed", "stuck" or "out_of_date". */
+@Serializable
+data class ReportProblem(
+    val booking: String = "",
+    @SerialName("booking_id") val bookingId: String = "",
+    val error: String = "",
+    val problem: String = "",
+    @SerialName("out_of_date_since") val outOfDateSince: String? = null,
+) {
+    companion object {
+        fun list(rows: List<JsonObject>): List<ReportProblem> = rows.mapNotNull { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
+    }
+}
+
+/** Numbers for one period or one expert (GET dashboards/summary); the timing ones only for those who may see them. */
+@Serializable
+data class DashStats(
+    val expert: Int? = null,
+    val bookings: Int? = null, val completed: Int? = null, val cancelled: Int? = null,
+    val late: Int? = null, val quick: Int? = null,
+    @SerialName("completion_rate") val completionRate: Double? = null,
+    @SerialName("avg_minutes") val avgMinutes: Int? = null,
+    @SerialName("on_time") val onTime: Int? = null,
+)
+
+/** GET dashboards/summary: this period, the one before, and per expert. */
+@Serializable
+data class DashSummary(val period: DashStats = DashStats(), val previous: DashStats = DashStats(),
+                       @SerialName("by_expert") val byExpert: List<DashStats> = emptyList()) {
+    companion object {
+        fun from(e: JsonElement?): DashSummary? = (e as? JsonObject)?.let { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
+    }
+}
+
+/** One count of GET dashboards/volume: [key] (a type, city, expert or stage) in [period]. */
+@Serializable
+data class VolumeRow(val period: String = "", val key: String = "", val count: Int = 0) {
+    companion object {
+        fun list(rows: List<JsonObject>): List<VolumeRow> = rows.mapNotNull { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
+    }
+}
