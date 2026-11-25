@@ -51,3 +51,5 @@ with that file loaded:
 ```bash
 cd backend && uv run --env-file .env.local python manage.py runserver
 ```
+
+Before changing anything, read `docs/engineering-standards.md` (rules and the verification checklist).
