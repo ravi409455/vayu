@@ -6,7 +6,10 @@ import { slugKey } from "../../../lib/fieldTypes";
 
 const DEFAULT_RATING: RatingConfig = { categories: [], deductions: { minor: 0.25, major: 1, critical: 3 }, thresholds: { excellent: 4.5, good: 3.5, average: 2.5 } };
 
-export function Ratings({ version, sections, edit, run }: { version: FormVersion; sections: string[]; edit: boolean; run: (fn: () => Promise<unknown>) => void }) {
+/** A section a category can count: stored by its key (F-045), shown by its title. */
+export type RatedSection = { key: string; title: string };
+
+export function Ratings({ version, sections, edit, run }: { version: FormVersion; sections: RatedSection[]; edit: boolean; run: (fn: () => Promise<unknown>) => void }) {
   const [cfg, setCfg] = useState<RatingConfig>({ ...DEFAULT_RATING, ...(version.rating_config ?? {}) });
   const cats = cfg.categories ?? [];
   const setCat = (i: number, p: Partial<NonNullable<RatingConfig["categories"]>[number]>) => setCfg({ ...cfg, categories: cats.map((c, j) => (j === i ? { ...c, ...p } : c)) });
@@ -21,9 +24,13 @@ export function Ratings({ version, sections, edit, run }: { version: FormVersion
           </div>
           <div className="field"><span className="label-row">Sections counted in this category</span>
             <div className="chip-row" role="group" aria-label={`Sections counted in ${c.label || "this category"}`}>
-              {sections.map((s) => { const on = c.sections.includes(s); return (
-                <button key={s} type="button" className="chip-toggle" aria-pressed={on} disabled={!edit}
-                  onClick={() => setCat(i, { sections: on ? c.sections.filter((x) => x !== s) : [...c.sections, s] })}>{on ? "✓ " : ""}{s}</button>); })}
+              {sections.map((s) => {
+                // the server stores keys; a config saved before F-045 may still name the title
+                const on = c.sections.includes(s.key) || c.sections.includes(s.title);
+                return (
+                  <button key={s.key} type="button" className="chip-toggle" aria-pressed={on} disabled={!edit}
+                    onClick={() => setCat(i, { sections: on ? c.sections.filter((x) => x !== s.key && x !== s.title) : [...c.sections, s.key] })}>
+                    {on ? "✓ " : ""}{s.title}</button>); })}
             </div>
             <span className="help">{c.sections.length ? `${c.sections.length} section${c.sections.length === 1 ? "" : "s"}` : "Pick the sections whose defects count here."}</span></div>
           {edit && <button className="link" onClick={() => setCfg({ ...cfg, categories: cats.filter((_, j) => j !== i) })}>Remove category</button>}

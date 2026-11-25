@@ -123,7 +123,7 @@ export function ZipPage() {
 type ReportMedia = { booking_id: string; link: "photos" | "videos"; count: number; zip: string };
 
 /** Behind "Download all photos / videos" in a report: one ZIP, in folders by section. The link
- *  works for as long as the report does. */
+ *  works for 30 days after the report is first made (then 410 LINK_EXPIRED, R-09). */
 export function ReportMediaPage() {
   const { token, link } = useParams();
   const ok = validToken(token) && (link === "photos" || link === "videos");
@@ -133,6 +133,7 @@ export function ReportMediaPage() {
     if (!ok) return;
     api<ReportMedia>(`verify/${encodeURIComponent(token)}/${link}`).then(setInfo)
       .catch((e) => setBad(e instanceof ApiError && e.code === "NO_MEDIA" ? `This report has no ${link}.`
+        : e instanceof ApiError && e.code === "LINK_EXPIRED" ? "This link has expired. Photo and video links work for 30 days after the report is made. Ask Car C.I.D. for a new report."
         : e instanceof ApiError && e.code === "MEDIA_REMOVED" ? `These ${link} are no longer available. Files are kept on our server for a limited time after the inspection.`
           : notFound(e) ? "We could not find this report. The link may be wrong."
             : "We could not get the download ready right now. Please try again in a moment."));

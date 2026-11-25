@@ -193,7 +193,7 @@ export function FormBuilder() {
             </div>
           )}
           {tab === "keychecks" && <KeyChecks version={v} choices={choices} edit={edit} run={(fn) => void run(fn, "Key Checks saved.")} />}
-          {tab === "ratings" && <Ratings version={v} sections={pages.flatMap((p) => p.sections.map((s) => s.title))} edit={edit} run={(fn) => void run(fn)} />}
+          {tab === "ratings" && <Ratings version={v} sections={pages.flatMap((p) => p.sections.filter((s) => s.key).map((s) => ({ key: s.key!, title: s.title || s.key! })))} edit={edit} run={(fn) => void run(fn)} />}
         </>
       )}
       {adding?.kind === "page" && <NameDialog title="Add a page" label="Page name" onCancel={() => setAdding(null)} onOk={(title) => { setAdding(null); void run(() => api(`form-versions/${v!.id}/pages`, { body: { title } })); }} />}

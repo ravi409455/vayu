@@ -308,6 +308,17 @@ describe("download links", () => {
     expect(await screen.findByText("This report has no videos.")).toBeTruthy();
     vi.restoreAllMocks();
   });
+  it("an expired photo link says so and offers no retry (R-09: 30 days after the first PDF)", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const { MemoryRouter, Route, Routes } = await import("react-router-dom");
+    const { ReportMediaPage } = await import("./pages/Public");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ code: "LINK_EXPIRED", detail: "x" }), { status: 410, headers: { "Content-Type": "application/json" } }));
+    render(<MemoryRouter initialEntries={["/verify/tok/photos"]}><Routes><Route path="/verify/:token/:link" element={<ReportMediaPage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByText(/This link has expired. Photo and video links work for 30 days after the report is made. Ask Car C.I.D. for a new report./)).toBeTruthy();
+    expect(screen.queryByText(/try again/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /try again|retry/i })).toBeNull();
+    vi.restoreAllMocks();
+  });
 });
 
 describe("photo and video storage setting", () => {
