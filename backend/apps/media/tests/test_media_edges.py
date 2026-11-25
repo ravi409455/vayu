@@ -1,5 +1,6 @@
 """Edge paths of uploads, Ops attach / remove, ZIP places and the retention purge that the main
 media tests don't reach (they keep the apps.media 100% branch-coverage gate honest)."""
+from typing import cast
 from unittest import mock
 
 import pytest
@@ -27,7 +28,7 @@ def test_files_are_added_only_after_the_expert_submits(job):
 
     with pytest.raises(CodedError) as e:
         services.submitted_answer(Booking.objects.get(pk=b["id"]), f)
-    assert e.value.detail["code"] == "NOT_SUBMITTED"
+    assert cast(dict, e.value.detail)["code"] == "NOT_SUBMITTED"
 
 
 def test_a_file_id_that_is_not_a_uuid_finds_nothing(job):
