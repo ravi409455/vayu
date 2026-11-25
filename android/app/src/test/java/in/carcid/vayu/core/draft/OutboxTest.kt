@@ -240,6 +240,17 @@ class OutboxTest {
         assertNotNull(drafts.get(other)!!.problem)                              // the bad one says so
     }
 
+    /** F-222: a check-in made on a phone whose clock wasn't checked that day says so to the server. */
+    @Test fun theStartAndSubmitSayWhetherThePhoneTimeWasChecked() = runBlocking {
+        ready()
+        drafts.update(BOOKING) { it.copy(unverifiedTime = true) }
+        outbox.run()
+        val start = Json.parseToJsonElement(server.bodiesOf("POST bookings/$BOOKING/start").single()).jsonObject
+        val submit = Json.parseToJsonElement(server.bodiesOf("POST bookings/$BOOKING/submit").single()).jsonObject
+        assertEquals("true", start["unverified_time"]!!.jsonPrimitive.content)
+        assertEquals("true", submit["unverified_time"]!!.jsonPrimitive.content)
+    }
+
     @Test fun theStartSendsTheFormVersionsThePhonePinned() = runBlocking {
         ready()
         outbox.run()
