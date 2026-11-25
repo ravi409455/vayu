@@ -71,7 +71,7 @@ export function Profile() {
             <h2 style={{ marginTop: 0 }}>How the app looks</h2>
             <div role="radiogroup" aria-label="Theme" className="theme-tiles">
               {THEMES.map((t) => (
-                <label key={t.id} className="theme-tile" aria-checked={theme === t.id}>
+                <label key={t.id} className="theme-tile">
                   <input className="sr-only" type="radio" name="theme" checked={theme === t.id} onChange={() => void chooseTheme(t.id)} />
                   <span className="swatch" aria-hidden="true" style={{ background: t.id === "dark" ? "#0a0f1a" : t.id === "light" ? "#f6f7f9" : "linear-gradient(90deg, #f6f7f9 50%, #0a0f1a 50%)" }}>
                     <span style={{ width: 18, background: t.id === "dark" ? "#121a2a" : "#fff" }} /><span style={{ flex: 1, background: t.id === "dark" ? "#1b2538" : "#fff", border: "1px solid rgba(127,127,127,.25)" }} />

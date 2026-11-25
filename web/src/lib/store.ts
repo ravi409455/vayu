@@ -38,3 +38,22 @@ async function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
 export const putJob = (j: PendingUpload) => tx("readwrite", (s) => s.put(j));
 export const deleteJob = (id: string) => tx("readwrite", (s) => s.delete(id));
 export const allJobs = () => tx<PendingUpload[]>("readonly", (s) => s.getAll());
+const clearJobs = () => tx("readwrite", (s) => s.clear());
+
+/** What this browser holds that the server does not have yet: inspection drafts and files not sent
+ *  (or not checked) yet. Sign-out warns about these first (REQUIREMENTS §6). */
+const WORK = ["vayu:draft:", "vayu:job:"];
+const workKeys = (): string[] => {
+  if (!hasLS()) return [];
+  try { return Object.keys(localStorage).filter((k) => WORK.some((p) => k.startsWith(p))); } catch { return []; }
+};
+export async function unsentWork(): Promise<{ drafts: number; files: number }> {
+  const files = (await allJobs().catch(() => [])).length;
+  return { drafts: workKeys().filter((k) => k.startsWith("vayu:draft:")).length, files };
+}
+/** Sign-out on a shared computer: nothing of the inspections stays behind (R-06). Settings such as the
+ *  theme or a remembered filter stay; they hold no customer data. */
+export async function wipeWork(): Promise<void> {
+  for (const k of workKeys()) removeKey(k);
+  await clearJobs().catch(() => {});
+}

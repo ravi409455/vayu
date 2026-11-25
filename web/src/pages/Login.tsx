@@ -4,10 +4,11 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { homeFor } from "../guards";
 import { explain } from "../api/client";
-import { Field } from "../ui/kit";
+import { Field, usePageTitle } from "../ui/kit";
 import { envName, Logo } from "../ui/Logo";
 
 export function Login() {
+  usePageTitle("Sign in");
   const { login } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();

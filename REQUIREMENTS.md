@@ -144,6 +144,7 @@ forms at the end of the day; the app keeps its generic nature").
 - **Force-release** closes the expert's draft (released): a new start opens a new draft (one open draft per expert per booking); the released one is still accepted if it arrives, as a conflict.
 - **A second submit** by the same expert on a lead they already submitted is **refused** ("Already submitted; Ops can edit it"); the same request id still returns the first result.
 - **Logout is blocked while data is unsynced.** If Admin disables an account with unsynced data, the Admin sees a data-loss warning.
+- **Web sign-out** first says what the browser still holds that has not reached the office (inspection drafts, photos and files not sent or not checked yet); signing out anyway deletes them. Every sign-out clears the inspection drafts and queued files from that browser, so nothing stays behind on a shared computer.
 - **Time:** server-corrected using the offset from the last sync. If there's been no sync that day, the last known offset is used and the time is **flagged "unverified"**.
 
 ## 7. PDF reports

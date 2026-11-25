@@ -5,7 +5,7 @@ import { useList, useRefresh } from "../../api/hooks";
 import type { User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { Avatar } from "../../ui/Avatar";
-import { Confirm, Empty, Field, Modal, Pill, useToast, PageHeader } from "../../ui/kit";
+import { Confirm, Empty, Field, LoadError, Modal, PageHeader, Pill, useToast } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
 import { fmtStamp } from "../../lib/format";
 
@@ -61,6 +61,7 @@ export function Users() {
     <>
       <PageHeader title="Users" count={shown.length}>
         {manage && <button className="primary" onClick={() => setForm({ role: "expert" })}>New user</button>}</PageHeader>
+      {users.isError && <LoadError error={users.error} what="users" onRetry={users.refetch} />}
       <div className="filters">
         <input aria-label="Find a user" className="filter-search" placeholder="Find by name, username or email" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="seg" role="group" aria-label="Role">
@@ -70,7 +71,7 @@ export function Users() {
       </div>
       <div className="table-card">
         <table className="rows">
-          <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Last sign-in</th><th aria-label="Actions" /></tr></thead>
+          <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Last sign-in</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {shown.map((u) => (
               <tr key={u.id} className={manage ? "click" : ""} onClick={() => manage && setForm(u)}>
@@ -97,7 +98,7 @@ export function Users() {
       {form && (
         <Modal title={form.id ? "Edit user" : "New user"} onClose={() => setForm(null)}
           actions={<><button onClick={() => setForm(null)}>Cancel</button>
-            <button className="primary" disabled={!form.name || !form.username && !form.id} onClick={() => save.mutate(form)}>Save</button></>}>
+            <button className="primary" disabled={!form.name || !form.username && !form.id || save.isPending} onClick={() => save.mutate(form)}>Save</button></>}>
           <Field label="Name"><input value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
           {!form.id && <Field label="Username" help="Cannot be changed later."><input value={form.username ?? ""} onChange={(e) => setForm({ ...form, username: e.target.value })} /></Field>}
           <Field label="Email"><input value={form.email ?? ""} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>

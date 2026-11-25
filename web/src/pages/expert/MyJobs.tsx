@@ -1,21 +1,23 @@
 import { MapPin, Phone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { useList } from "../../api/hooks";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { fetchAll } from "../../api/hooks";
 import { STAGE_LABEL, STAGE_TONE, useLabels, useTypeLabels } from "../../api/labels";
 import type { Booking } from "../../api/types";
 import { addDays, fmtDay, fmtPhone, fmtTime, mapsUrl, today } from "../../lib/format";
-import { Empty, Pill, PageHeader } from "../../ui/kit";
+import { Empty, LoadError, Pill, PageHeader } from "../../ui/kit";
 import { loadJSON, saveJSON } from "../../lib/store";
 
 const OPEN = ["assigned", "in_progress", "submitted"];
 
-/** Which heading a job sits under: Today, Tomorrow, Later (still to do) or Earlier (done). */
-export function groupOf(b: Pick<Booking, "stage" | "answers">, now = new Date()): "Today" | "Tomorrow" | "Later" | "Earlier" {
+/** Which heading a lead sits under: Overdue, Today, Tomorrow, Later (still to do) or Earlier (done). */
+export function groupOf(b: Pick<Booking, "stage" | "answers">, now = new Date()): "Overdue" | "Today" | "Tomorrow" | "Later" | "Earlier" {
   if (!OPEN.includes(b.stage)) return "Earlier";
   const d = String(b.answers.inspection_date ?? "");
   const t = today(now);
-  if (d <= t) return "Today";                 // overdue jobs stay on top, with today's
+  if (d < t) return "Overdue";                // on top, and not counted as today's (F-190)
+  if (d === t) return "Today";
   return d === addDays(t, 1) ? "Tomorrow" : "Later";
 }
 
@@ -38,8 +40,16 @@ export function matchesJob(b: Pick<Booking, "stage" | "answers">, f: JobFilter, 
   }
 }
 
+/** Every open lead (however old), plus everything booked from `since` on (finished ones too). */
+async function myLeads(since: string): Promise<Booking[]> {
+  const lists = await Promise.all([...OPEN.map((stage) => fetchAll<Booking>("bookings", { stage })), fetchAll<Booking>("bookings", { date_from: since })]);
+  return [...new Map(lists.flat().map((b) => [b.id, b])).values()];
+}
+
 export function MyJobs() {
-  const jobs = useList<Booking>("my-jobs", "bookings");
+  const [days, setDays] = useState(30);
+  const since = addDays(today(), -days);
+  const jobs = useQuery({ queryKey: ["my-jobs", since], queryFn: () => myLeads(since), refetchInterval: 60_000, placeholderData: keepPreviousData });
   const car = useLabels("car_make_model");
   const city = useLabels("city");
   const type = useTypeLabels();
@@ -53,7 +63,7 @@ export function MyJobs() {
   const all = everything.filter((b) => matchesJob(b, filter) && (!needle || [b.booking_id, b.answers.customer_name, car(b.answers.car_make_model), city(b.answers.city), b.answers.address]
     .some((x) => String(x ?? "").toLowerCase().includes(needle))));
   const countOf = (f: JobFilter) => everything.filter((b) => matchesJob(b, f)).length;
-  const groups = (["Today", "Tomorrow", "Later", "Earlier"] as const).map((g) => ({ g, rows: g === "Earlier" ? all.filter((b) => groupOf(b) === g).reverse() : all.filter((b) => groupOf(b) === g) })).filter((x) => x.rows.length);
+  const groups = (["Overdue", "Today", "Tomorrow", "Later", "Earlier"] as const).map((g) => ({ g, rows: g === "Earlier" ? all.filter((b) => groupOf(b) === g).reverse() : all.filter((b) => groupOf(b) === g) })).filter((x) => x.rows.length);
   const current = all.find((b) => b.id === sel) ?? groups[0]?.rows[0];
   return (
     <>
@@ -66,13 +76,16 @@ export function MyJobs() {
           <input aria-label="Find a lead" className="filter-search" placeholder="Find: customer, booking ID, car, area" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>)}
       {jobs.isLoading && <p className="muted">Loading…</p>}
-      {!jobs.isLoading && everything.length === 0 && <Empty title="No leads right now">New leads show here as soon as Ops assign them to you.</Empty>}
+      {jobs.isError && <LoadError error={jobs.error} what="your leads" onRetry={jobs.refetch} />}
+      {!jobs.isLoading && !jobs.isError && everything.length === 0 && <Empty title="No leads right now">New leads show here as soon as Ops assign them to you.</Empty>}
       {!jobs.isLoading && everything.length > 0 && all.length === 0 && <Empty title="Nothing here">{needle ? "No lead matches what you typed." : "No leads in this view."}</Empty>}
+      {!jobs.isLoading && !groups.some((x) => x.g === "Earlier") && (filter === "done" || filter === "all") && <p><button className="link" disabled={jobs.isFetching} onClick={() => setDays((d) => d + 30)}>Show leads booked before {fmtDay(since)}</button></p>}
       <div className="split-view">
         <div className="job-list">
           {groups.map(({ g, rows }) => (
             <section key={g} aria-label={g}>
               <h2 className="gallery-h">{g} <span className="muted small">{rows.length}</span></h2>
+              {g === "Earlier" && <p className="muted small">Finished leads booked since {fmtDay(since)}.</p>}
               <div className="table-card">
                 {rows.map((b) => (
                   <Link key={b.id} to={`/jobs/${b.id}`} aria-label={`Lead ${b.booking_id}`} className={`job-row${current?.id === b.id ? " on" : ""}`}
@@ -84,6 +97,7 @@ export function MyJobs() {
                     <Pill tone={STAGE_TONE[b.stage]}>{STAGE_LABEL[b.stage] ?? b.stage}</Pill>
                   </Link>))}
               </div>
+              {g === "Earlier" && <button className="link" disabled={jobs.isFetching} onClick={() => setDays((d) => d + 30)}>Show older leads</button>}
             </section>))}
         </div>
         {current && (

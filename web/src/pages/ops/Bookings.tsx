@@ -1,17 +1,19 @@
 import { LayoutGrid, List, Plus } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type Page } from "../../api/client";
-import { asList, useList, useRefresh } from "../../api/hooks";
+import { fetchAll, useList, useRefresh } from "../../api/hooks";
 import { STAGE_LABEL, STAGE_TONE, useInspectionTypes, useLabels, useTypeLabels } from "../../api/labels";
 import type { Booking, MasterListItem, User } from "../../api/types";
 import { useAuth } from "../../auth";
+import { allowedActions } from "../../lib/actions";
+import { useDebounced } from "../../lib/useDebounced";
 import { addDays, fmtSlot, today } from "../../lib/format";
 import { loadJSON, saveJSON } from "../../lib/store";
 import { fmtMinutes } from "../../lib/timing";
 import { ExpertCell } from "../../ui/ExpertCell";
-import { Confirm, Empty, PageHeader, Pill, useToast } from "../../ui/kit";
+import { Confirm, Empty, LoadError, PageHeader, Pill, useToast } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
 import { Actions } from "./Booking";
 
@@ -93,11 +95,14 @@ export function Bookings() {
   const set = (p: Partial<Filters>) => { setF({ ...f, ...p }); setPage(1); };
   const pick = (v: View) => { setSp(v === "today" ? {} : { view: v }); setPage(1); };
   // an answer filter counts only once its value is chosen too
-  const own = Object.fromEntries(Object.entries(f).filter(([k, v]) => v !== "" && !((k === "answer" || k === "value") && !(f.type && f.answer && f.value))));
+  // typing in the filter asks the server once it pauses, not on every key (F-085)
+  const search = useDebounced(f.search, 250);
+  const own = Object.fromEntries(Object.entries({ ...f, search }).filter(([k, v]) => v !== "" && !((k === "answer" || k === "value") && !(f.type && f.answer && f.value))));
   const query = { ...own, ...viewQuery(view), page };
-  const q = useQuery({ queryKey: ["bookings-page", query], queryFn: () => api<Page<Booking>>("bookings", { query }) });
+  // a new filter keeps the rows on screen until its answer arrives (no flash, an open menu stays put)
+  const q = useQuery({ queryKey: ["bookings-page", query], queryFn: () => api<Page<Booking>>("bookings", { query }), placeholderData: keepPreviousData });
   const experts = useList<User>("experts", "users", { role: "expert" });
-  const cities = useQuery({ queryKey: ["list-items", "city"], queryFn: async () => asList<MasterListItem>(await api("master-lists/city/items")) });
+  const cities = useQuery({ queryKey: ["list-items", "city"], queryFn: () => fetchAll<MasterListItem>("master-lists/city/items") });
   const types = useInspectionTypes();
   // an answer is picked once a type is: only that type's questions (plus check-in and wrap-up)
   const answerFields = useQuery({ queryKey: ["answer-fields", f.type], enabled: can("submissions.view") && !!f.type,
@@ -112,14 +117,16 @@ export function Bookings() {
     onError: (e) => { setDeleting(null); fail(e); },
   });
   const rows = q.data?.results ?? [];
+  // the server's page size: a full page has more after it; the last page follows full ones (F-036)
+  const size = !q.data ? 0 : q.data.next || page === 1 ? rows.length : Math.round((q.data.count - rows.length) / (page - 1));
   const filtered = Object.keys(own).some((k) => k !== "search");
   const menu = (b: Booking) => {
-    const live = b.stage !== "cancelled" && b.stage !== "completed";
+    const allowed = allowedActions(b, can);
     return [
       { label: "Open booking", onClick: () => nav(`/booking/${b.id}`) },
-      { label: b.assigned_expert ? "Reassign expert" : "Assign expert", onClick: () => setActing({ kind: "assign", b }), hidden: !can("bookings.assign") || !live || b.stage === "in_progress" || b.stage === "submitted" },
-      { label: "Reschedule", onClick: () => setActing({ kind: "reschedule", b }), hidden: !can("bookings.reschedule") || !(b.stage === "draft" || b.stage === "assigned") },
-      { label: "Cancel booking…", danger: true, onClick: () => setActing({ kind: "cancel", b }), hidden: !can("bookings.cancel") || !live },
+      { label: b.assigned_expert ? "Reassign expert" : "Assign expert", onClick: () => setActing({ kind: "assign", b }), hidden: !allowed.has("assign") },
+      { label: "Reschedule", onClick: () => setActing({ kind: "reschedule", b }), hidden: !allowed.has("reschedule") },
+      { label: "Cancel booking…", danger: true, onClick: () => setActing({ kind: "cancel", b }), hidden: !allowed.has("cancel") },
       { label: "Delete…", danger: true, onClick: () => setDeleting(b), hidden: !(can("bookings.delete") && canDelete(me?.role ?? "", b.stage)) },
     ];
   };
@@ -154,7 +161,7 @@ export function Bookings() {
       {layout === "list" ? (
         <div className="table-card">
           <table className="rows">
-            <thead><tr><th>Booking</th><th>Car</th><th>When</th><th className="opt">Where</th><th>Expert</th><th>Status</th><th aria-label="Actions" /></tr></thead>
+            <thead><tr><th>Booking</th><th>Car</th><th>When</th><th className="opt">Where</th><th>Expert</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
             <tbody>{rows.map((b) => (
               <tr key={b.id} className="click" onClick={() => nav(`/booking/${b.id}`)}>
                 <td><Link to={`/booking/${b.id}`} className="cell-main" onClick={(e) => e.stopPropagation()}>{b.booking_id}</Link><div className="cell-sub">{String(b.answers.customer_name ?? "")}</div></td>
@@ -162,13 +169,14 @@ export function Bookings() {
                 <td className="nowrap">{fmtSlot(b.answers.inspection_date, b.answers.inspection_time) || "—"}</td>
                 <td className="opt">{city(b.answers.city)}</td>
                 <td>{assignBtn(b)}</td>
-                <td><Pill tone={STAGE_TONE[b.stage]}>{STAGE_LABEL[b.stage] ?? b.stage}</Pill>{b.conflict && <> <Pill tone="bad">Conflict</Pill></>}{timingPills(b).map((t) => <Fragment key={t}> <Pill tone="bad">{t}</Pill></Fragment>)}</td>
+                <td><Pill tone={STAGE_TONE[b.stage]}>{STAGE_LABEL[b.stage] ?? b.stage}</Pill>{b.conflict && <> <Pill tone="bad">Conflict</Pill></>}{timingPills(b).map((t) => <Fragment key={t}> <Pill tone="warn">{t}</Pill></Fragment>)}</td>
                 <td style={{ textAlign: "right" }}><MoreMenu label={`Actions for ${b.booking_id}`} items={menu(b)} /></td>
               </tr>))}</tbody>
           </table>
+          {q.isError && <LoadError error={q.error} what="bookings" onRetry={q.refetch} />}
           {q.data && rows.length === 0 && <Empty title="No bookings here">{filtered || f.search ? "Nothing matches these filters." : view === "today" ? "Nothing is booked for today." : "Nothing in this view right now."}</Empty>}
           {q.data && (q.data.next || q.data.previous) && <div className="table-foot">
-            <span className="muted grow">{(page - 1) * 50 + 1}–{(page - 1) * 50 + rows.length} of {q.data.count}</span>
+            <span className="muted grow">{(page - 1) * size + 1}–{(page - 1) * size + rows.length} of {q.data.count}</span>
             <button className="sm" disabled={!q.data.previous} onClick={() => setPage(page - 1)}>Previous</button>
             <button className="sm" disabled={!q.data.next} onClick={() => setPage(page + 1)}>Next</button></div>}
         </div>
@@ -193,7 +201,7 @@ export function Bookings() {
       )}
       {acting && <Actions kind={acting.kind} booking={acting.b} experts={experts.data ?? []} onClose={() => setActing(null)} fail={fail} onDone={() => { setActing(null); say("Done."); void refresh("bookings-page"); }} />}
       {deleting && (
-        <Confirm title={`Delete ${deleting.booking_id}?`} danger confirmLabel="Delete booking" onCancel={() => setDeleting(null)} onConfirm={() => remove.mutate(deleting)}>
+        <Confirm title={`Delete ${deleting.booking_id}?`} danger confirmLabel="Delete booking" busy={remove.isPending} onCancel={() => setDeleting(null)} onConfirm={() => remove.mutate(deleting)}>
           <p>The booking{deleting.stage === "draft" ? "" : " and everything recorded on it"} is removed for good. This cannot be undone and is written to the audit log.</p>
           {me?.role !== "admin" && <p className="muted small">Ops can only delete a draft that nobody has worked on. To stop a booking that is under way, cancel it instead.</p>}
         </Confirm>)}

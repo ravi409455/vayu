@@ -73,6 +73,26 @@ describe("problem queue", () => {
     render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><AuthProvider><Problems /></AuthProvider></MemoryRouter></QueryClientProvider>);
     expect(await screen.findByText("All clear")).toBeInTheDocument();
   });
+  it("a server error is never shown as all clear (H-17)", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => String(url).includes("auth/me")
+      ? new Response(JSON.stringify({ id: 1, username: "o", name: "O", role: "ops", permissions: { "bookings.view": "all" } }), { status: 200, headers: { "Content-Type": "application/json" } })
+      : new Response("{}", { status: 500, headers: { "Content-Type": "application/json" } }));
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><AuthProvider><Problems /></AuthProvider></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByText("Could not load what needs you.")).toBeInTheDocument();
+    expect(screen.queryByText("All clear")).toBeNull();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+  it("the count is the server's, not the first page's (F-153)", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const u = String(url);
+      const body = u.includes("auth/me") ? { id: 1, username: "o", name: "O", role: "ops", permissions: { "bookings.view": "all" } }
+        : u.includes("problem=conflict") ? { count: 60, next: "x", previous: null, results: [{ id: "b4", booking_id: "B4", conflict: "TWO_EXPERTS", stage: "submitted", alerts: [], answers: {} }] }
+        : u.includes("problem=") || u.includes("stage=draft") ? { count: 0, next: null, previous: null, results: [] } : [];
+      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    });
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><AuthProvider><Problems /></AuthProvider></MemoryRouter></QueryClientProvider>);
+    await waitFor(() => expect(screen.getByRole("heading", { name: /Needs you/ })).toHaveTextContent("60"));
+  });
 });
 
 describe("dashboard table", () => {

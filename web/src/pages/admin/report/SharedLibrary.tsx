@@ -53,7 +53,7 @@ export function SharedLibrary({ templates, forms, editable }: { templates: Templ
     <section className="card stack" aria-label={title}>
       <div><h3>{title}</h3><p className="muted small">{hint}</p></div>
       {group(kind).length === 0 ? <p className="muted small">None yet. In a report, use “Share with other reports”.</p> : (
-        <table className="rows"><thead><tr><th>Name</th><th>Version</th><th>Used by</th><th /></tr></thead>
+        <table className="rows"><thead><tr><th>Name</th><th>Version</th><th>Used by</th><th><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>{group(kind).map((i) => (
             <tr key={i.id}><td><Icon size={14} aria-hidden /> <strong>{i.name}</strong></td><td>v{i.revision}</td>
               <td className="small">{i.used_by.length ? usedBy(i.used_by) : <span className="muted">not used</span>}</td>

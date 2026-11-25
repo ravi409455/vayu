@@ -63,18 +63,26 @@ describe("a phone that lost its draft picks the server's files up again", () => 
   const never = () => false;
 
   it("finished files go back into the answers, in the part their field belongs to", () => {
-    const { add, discard } = reconcileMedia(trees, answers(), [m("a", "selfie"), m("b", "front"), m("c", "front"), m("d", "sign", "uploaded")], never);
+    const { add } = reconcileMedia(trees, answers(), [m("a", "selfie"), m("b", "front"), m("c", "front"), m("d", "sign", "uploaded")], never);
     expect(add.map((x) => [x.part, x.key, x.id])).toEqual([["start", "selfie", "a"], ["inspection", "front", "b"], ["inspection", "front", "c"], ["inspection", "sign", "d"]]);
-    expect(discard).toEqual([]);
     expect(applyMedia(answers(), add)).toEqual({ start: { selfie: ["a"] }, inspection: { front: ["b", "c"], sign: "d" }, end: {} });
   });
-  it("files that never finished are dropped so they stop counting towards the limit", () => {
-    expect(reconcileMedia(trees, answers(), [m("p", "selfie", "pending"), m("f", "front", "failed")], never).discard).toEqual(["p", "f"]);
+  it("files that have not finished are left alone: another device or tab may still be sending them (H-16)", () => {
+    expect(reconcileMedia(trees, answers(), [m("p", "selfie", "pending"), m("f", "front", "failed")], never)).toEqual({ add: [] });
   });
   it("leaves alone files already in the answers, files this phone is still sending, unknown fields, and anything over the limit", () => {
     const r = reconcileMedia(trees, answers({ start: { selfie: ["a"] }, inspection: { front: ["x"] } }),
       [m("a", "selfie"), m("n", "selfie"), m("sending", "front", "pending"), m("y", "front"), m("z", "front"), m("q", "nothing")], (id) => id === "sending");
     expect(r.add.map((x) => x.id)).toEqual(["y"]);                 // selfie is full; front had room for one more
-    expect(r.discard).toEqual([]);
+  });
+});
+
+describe("default number of files (F-010)", () => {
+  it("a media field without its own maximum takes one file, a signature always one", async () => {
+    const { maxFiles } = await import("./fieldTypes");
+    expect(maxFiles({ type: "photo", config: {} })).toBe(1);
+    expect(maxFiles({ type: "video", config: {} })).toBe(1);
+    expect(maxFiles({ type: "file", config: { max_count: 4 } })).toBe(4);
+    expect(maxFiles({ type: "signature", config: { max_count: 9 } })).toBe(1);
   });
 });

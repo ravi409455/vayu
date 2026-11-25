@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
-import { asList, useList, useRefresh } from "../../api/hooks";
+import { fetchAll, useList, useRefresh } from "../../api/hooks";
 import type { MasterList, MasterListItem } from "../../api/types";
 import { useAuth } from "../../auth";
-import { Empty, Pill, useToast, PageHeader } from "../../ui/kit";
+import { Empty, LoadError, PageHeader, Pill, useToast } from "../../ui/kit";
 import { slugKey } from "../../lib/fieldTypes";
 
 export function MasterLists() {
@@ -18,7 +18,7 @@ export function MasterLists() {
   const items = useQuery({
     queryKey: ["master-list-items", (open ?? lists.data?.[0])?.key],
     enabled: !!(open ?? lists.data?.[0]),
-    queryFn: async () => asList<MasterListItem>(await api(`master-lists/${(open ?? lists.data![0])!.key}/items`, { query: { include_archived: 1 } })),
+    queryFn: () => fetchAll<MasterListItem>(`master-lists/${(open ?? lists.data![0])!.key}/items`, { include_archived: 1 }),
   });
   const add = useMutation({
     mutationFn: () => api(`master-lists/${(open ?? lists.data![0])!.key}/items`, { body: { key: item.key, label: item.label } }),
@@ -34,6 +34,7 @@ export function MasterLists() {
   return (
     <>
       <PageHeader title="Master lists" subtitle="The choices dropdowns offer: cities, car models, reasons…" />
+      {lists.isError && <LoadError error={lists.error} what="master lists" onRetry={lists.refetch} />}
       <div className="split-view">
         <nav className="card list-nav" aria-label="Lists">
           {(lists.data ?? []).map((l) => (
@@ -43,7 +44,7 @@ export function MasterLists() {
         {current && (
           <section className="table-card" aria-label={current.name}>
             <h2 className="table-title">{current.name} <span className="muted small mono">{current.key}</span></h2>
-            <table className="rows"><thead><tr><th>Label</th><th>Key</th><th>Status</th><th aria-label="Actions" /></tr></thead>
+            <table className="rows"><thead><tr><th>Label</th><th>Key</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
               <tbody>{(items.data ?? []).map((i) => (
                 <tr key={i.id} className={i.archived ? "muted" : ""}>
                   <td>{manage ? <input aria-label={`Label of ${i.key}`} defaultValue={i.label} onBlur={(e) => e.target.value !== i.label && patch.mutate({ id: i.id, body: { label: e.target.value } })} /> : i.label}</td>

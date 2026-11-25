@@ -34,17 +34,25 @@ export async function shrinkImage(file: Blob): Promise<Blob> {
 export type Part = { part_number: number; url?: string };
 type Initiated = { id: string; status: string; part_size: number; parts?: Part[] };
 
+const live = new Set<XMLHttpRequest>();
+/** Sign-out: stop every part that is being sent. */
+export function abortTransfers(): void { live.forEach((x) => x.abort()); live.clear(); }
+
 function putPart(url: string, body: Blob, onBytes: (n: number) => void): Promise<string> {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
     x.open("PUT", url);
+    x.timeout = 300_000;                  // a stalled part must not hold its slot for ever
     x.upload.onprogress = (e) => onBytes(e.loaded);
     x.onload = () => {
+      live.delete(x);
       const etag = x.getResponseHeader("ETag");
       if (x.status >= 200 && x.status < 300 && etag) resolve(etag);
       else reject(new Error(`part upload failed (${x.status})`));
     };
-    x.onerror = () => reject(new Error("network"));
+    x.onerror = x.ontimeout = () => { live.delete(x); reject(new Error("network")); };
+    x.onabort = () => { live.delete(x); reject(new Error("stopped")); };
+    live.add(x);
     x.send(body);
   });
 }
@@ -63,10 +71,11 @@ export function initiate(s: UploadSpec): Promise<Initiated> {
     ...(s.replaces ? { replaces: s.replaces } : {}) } });
 }
 
-/** Sends what is missing and finishes. Returns when the server says "verified". */
-export async function transfer(s: UploadSpec, onProgress: (fraction: number) => void): Promise<void> {
+/** Sends what is missing and finishes. Returns once the bytes are on the server, with the status the
+ *  server gives then: "uploaded" means the checksum is still to be checked (that happens later). */
+export async function transfer(s: UploadSpec, onProgress: (fraction: number) => void): Promise<{ id: string; status: string }> {
   let init = await initiate(s);
-  if (init.status === "verified") { onProgress(1); return; }
+  if (init.status === "verified") { onProgress(1); return { id: init.id, status: init.status }; }
   const size = s.blob.size;
   const have = new Map<number, string>();
   if (init.status === "pending") {
@@ -81,7 +90,7 @@ export async function transfer(s: UploadSpec, onProgress: (fraction: number) => 
     let etag = "";
     for (let attempt = 0; ; attempt++) {
       try { etag = await putPart(p.url, slice, (n) => onProgress((done + n) / size)); break; }
-      catch (e) { if (attempt >= 3) throw e; await new Promise((r) => setTimeout(r, 500 * 2 ** attempt)); }
+      catch (e) { if (attempt >= 3 || (e as Error).message === "stopped") throw e; await new Promise((r) => setTimeout(r, 500 * 2 ** attempt)); }
     }
     have.set(p.part_number, etag);
     done += slice.size;
@@ -92,4 +101,5 @@ export async function transfer(s: UploadSpec, onProgress: (fraction: number) => 
       parts: [...have].map(([part_number, etag]) => ({ part_number, etag })) } });
   }
   onProgress(1);
+  return { id: init.id, status: init.status };
 }

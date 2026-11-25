@@ -11,7 +11,7 @@ import { addFieldTo, asField, isSection, moveField, newFieldDef, previewTree, re
 import { AccessEditor } from "../../ui/AccessEditor";
 import { ConditionBuilder } from "../../ui/ConditionBuilder";
 import { FormRenderer } from "../../ui/FormRenderer";
-import { Empty, Field, Modal, PageHeader, Pill, Tabs, useToast, when } from "../../ui/kit";
+import { Empty, Field, LoadError, Modal, PageHeader, Pill, Tabs, useToast, when } from "../../ui/kit";
 import { FieldEditor, type FieldDraft } from "./FieldEditor";
 import { PushReview } from "./library/PushReview";
 import { useCrumb } from "../../ui/crumb";
@@ -55,6 +55,7 @@ export function LibraryEditor() {
     onSuccess: () => { say("Done."); void refresh("library", "library-item"); }, onError: fail,
   });
   const tree = useMemo(() => (it && def ? previewTree(it.kind, def) : null), [it, def]);
+  if (item.isError) return <LoadError error={item.error} what="library item" onRetry={item.refetch} />;
   if (!it || !def || !tree) return <p className="muted pad">Loading…</p>;
   const section = isSection(def) ? def : null;
   const choices = ruleChoices(it.kind, def, SYSTEM_RULE_FIELDS);
@@ -120,7 +121,7 @@ export function LibraryEditor() {
       )}
       {tab === "history" && (
         <div className="table-card">
-          <table className="rows"><thead><tr><th>Revision</th><th>Who</th><th>When</th><th>What changed</th><th /></tr></thead>
+          <table className="rows"><thead><tr><th>Revision</th><th>Who</th><th>When</th><th>What changed</th><th><span className="sr-only">Actions</span></th></tr></thead>
             <tbody>{(history.data ?? []).map((h) => (
               <tr key={h.revision}><td>r{h.revision}{h.revision === it.revision && <> <Pill tone="ok">current</Pill></>}</td><td title={h.by_login}>{h.by || "—"}</td><td>{when(h.at)}</td>
                 <td>{h.changed_keys.length ? h.changed_keys.join(", ") : "created"}</td>

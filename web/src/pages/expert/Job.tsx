@@ -8,7 +8,7 @@ import { useRefresh } from "../../api/hooks";
 import { missingFields, pageGaps, submittable, type Answers } from "../../lib/formSpec";
 import { applyMedia, lockedFrom, reconcileMedia, unvisited, wizardSteps, type Part, type ServerMedia, type Tree } from "../../lib/wizard";
 import { loadJSON, removeKey, saveJSON } from "../../lib/store";
-import { discardFile, resumeUploads, summary, uploadFor, useUploads, retryFailed } from "../../lib/uploadManager";
+import { discardFile, isLocalId, realId, resumeUploads, summary, uploadFor, useUploads, retryFailed } from "../../lib/uploadManager";
 import { FormRenderer } from "../../ui/FormRenderer";
 import { Confirm, Pill } from "../../ui/kit";
 import { useCrumb } from "../../ui/crumb";
@@ -21,6 +21,15 @@ type Draft = { inspection: Answers; start: Answers; end: Answers; step: number; 
 const EMPTY_DRAFT: Draft = { inspection: {}, start: {}, end: {}, step: 0, visited: [] };
 const sKey = (id: string) => `vayu:job:${id}`;
 const dKey = (id: string) => `vayu:draft:${id}`;
+const PARTS = ["start", "inspection", "end"] as const;
+const localIds = (d: Draft) => PARTS.flatMap((p) => Object.values(d[p] ?? {}).flat()).filter(isLocalId);
+/** A file picked with no connection holds a stand-in id until the server registers it: swap the real one in. */
+function swapLocal(d: Draft): Draft {
+  let changed = false;
+  const fix = (v: unknown): unknown => (Array.isArray(v) ? v.map(fix) : isLocalId(v) && realId(v) ? ((changed = true), realId(v)) : v);
+  const next = { ...d, ...Object.fromEntries(PARTS.map((p) => [p, Object.fromEntries(Object.entries(d[p] ?? {}).map(([k, v]) => [k, fix(v)]))])) };
+  return changed ? next : d;
+}
 
 export function Job() {
   const id = useParams().id!;
@@ -96,6 +105,7 @@ export function Job() {
 
 function Finished({ booking }: { booking: Booking }) {
   const ups = useUploads(booking.id);
+  useEffect(() => { void resumeUploads(booking.id); }, [booking.id]);     // after a reload: keep sending what is left
   const { done, total } = summary(ups);
   return (
     <div className="card" role="status">
@@ -116,7 +126,26 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
   const ups = useUploads(id);
   const draftRef = useRef(draft);
   draftRef.current = draft;
-  useEffect(() => { saveJSON(dKey(id), draft); }, [id, draft]);
+  const adopted = useRef<Draft | null>(null);
+  useEffect(() => { if (draft !== adopted.current) saveJSON(dKey(id), draft); }, [id, draft]);
+  // The same lead open in another tab: take its answers (keep this tab's page) and say so, instead of
+  // each tab silently writing over the other's.
+  const [otherTab, setOtherTab] = useState(false);
+  useEffect(() => {
+    const on = (e: StorageEvent) => {
+      if (e.key !== dKey(id) || !e.newValue) return;
+      try {
+        const d = { ...EMPTY_DRAFT, ...(JSON.parse(e.newValue) as Partial<Draft>), step: draftRef.current.step };
+        adopted.current = d;
+        setDraft(d);
+        setOtherTab(true);
+      } catch { /* not a draft */ }
+    };
+    window.addEventListener("storage", on);
+    return () => window.removeEventListener("storage", on);
+  }, [id]);
+  const upIds = ups.map((u) => u.assetId).join();
+  useEffect(() => { setDraft(swapLocal); }, [upIds]);
 
   const insp = session.form;
   const trees = useMemo(() => ({ start: session.startForm ?? null, inspection: insp, end: session.endForm ?? null }), [session, insp]);
@@ -131,9 +160,8 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
       await resumeUploads(id);
       const server = await api<ServerMedia[]>(`bookings/${id}/media`).catch(() => null);
       if (!server || off) return;
-      const { add, discard: stale } = reconcileMedia(trees, draftRef.current, server, (mid) => !!uploadFor(mid));
+      const { add } = reconcileMedia(trees, draftRef.current, server, (mid) => !!uploadFor(mid));
       if (add.length > 0) setDraft((d) => applyMedia(d, add));
-      stale.forEach((mid) => void discardFile(mid));
     })();
     return () => { off = true; };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -165,11 +193,15 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
     go(step + 1);
   }
 
-  const gaps = (["start", "inspection", "end"] as const).flatMap((part) =>
-    trees[part] ? missingFields(part, trees[part]!, draft[part], ctx).map((g) => ({ ...g, kind: part })) : []);
+  // worked out once per change of the answers, not on every upload progress tick (F-086)
+  const gaps = useMemo(() => (["start", "inspection", "end"] as const).flatMap((part) =>
+    trees[part] ? missingFields(part, trees[part]!, draft[part], ctx).map((g) => ({ ...g, kind: part })) : []),
+  [trees, draft.inspection, draft.start, draft.end, booking.answers]); // eslint-disable-line react-hooks/exhaustive-deps
   const stepOf = (g: (typeof gaps)[number]) => steps.findIndex((s) => s.kind === g.kind && s.page && trees[g.kind]!.pages[g.page]?.id === s.page.id);
 
+  const waiting = localIds(draft).length;
   async function submit() {
+    if (waiting > 0) return;
     setBusy(true);
     setMsg("");
     try {
@@ -183,7 +215,10 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
     } catch (e) {
       if (e instanceof ApiError && e.code === "INVALID_ANSWERS") {
         const errs = (e.body.errors ?? {}) as Record<string, string>;
-        setErrors({ inspection: errs, start: errs, end: errs });
+        // each error goes on the part whose form has that question, not on every part
+        const keysOf = (t: Tree | null) => new Set(t?.pages.flatMap((pg) => pg.sections.flatMap((sec) => sec.fields.map((f) => f.key))) ?? []);
+        const byPart = (t: Tree | null) => { const k = keysOf(t); return Object.fromEntries(Object.entries(errs).filter(([key]) => k.has(key))); };
+        setErrors({ inspection: byPart(trees.inspection), start: byPart(trees.start), end: byPart(trees.end) });
         const label = (k: string) => Object.values(trees).flatMap((t) => t?.pages.flatMap((pg) => pg.sections.flatMap((sec) => sec.fields)) ?? []).find((f) => f.key === k)?.label || k;
         setMsg("Some answers need another look: " + Object.keys(errs).map(label).join(", "));
       } else setMsg(explain(e));
@@ -192,7 +227,9 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
 
   const { done, total } = summary(ups);
   const progress = Math.round((step / (steps.length - 1)) * 100);
-  const missingOn = (s: (typeof steps)[number]) => (s.kind !== "review" && s.page ? pageGaps(s.kind, trees[s.kind]!, s.page, draft[s.kind], ctx).length : 0);
+  const missCount = useMemo(() => new Map(steps.map((s) => [s, s.kind !== "review" && s.page ? pageGaps(s.kind, trees[s.kind]!, s.page, draft[s.kind], ctx).length : 0])),
+    [steps, trees, draft.inspection, draft.start, draft.end, booking.answers]); // eslint-disable-line react-hooks/exhaustive-deps
+  const missingOn = (s: (typeof steps)[number]) => missCount.get(s) ?? 0;
   const lock = lockedFrom(steps, missingOn);
   const gateTitle = steps[lock - 1]?.title ?? "";
   const notOpened = unvisited(steps, draft.visited ?? []);
@@ -224,7 +261,8 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
       </nav>
       <div className="wizard-main">
       <h1>{String(booking.answers.customer_name ?? "")} <span className="muted small">{booking.booking_id}</span></h1>
-      <div className="progress" aria-label={`Step ${step + 1} of ${steps.length}`}><div style={{ width: `${progress}%` }} /></div>
+      <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-label={`Step ${step + 1} of ${steps.length}`}><div style={{ width: `${progress}%` }} /></div>
+      {otherTab && <div className="banner warn" role="status"><strong>This lead is also open in another tab.</strong> Its answers were loaded here. Work in one tab only, so nothing is lost.</div>}
       {unstarted && (
         <div className="banner" role="status">
           {startError && checkinDone
@@ -249,9 +287,11 @@ function Wizard({ booking, session, onStart, starting, startError, onSubmitted }
           {gaps.length === 0 ? <p className="ok" role="status">Everything required is filled in.</p> : (
             <div className="card" role="alert"><strong>{gaps.length} thing{gaps.length === 1 ? "" : "s"} still needed</strong>
               <ul>{gaps.map((g) => <li key={`${g.kind}.${g.key}`}><button className="link" onClick={() => go(stepOf(g))}>{g.label}</button> <span className="muted small">({g.pageTitle})</span></li>)}</ul></div>)}
-          {ups.some((u) => u.status !== "done") && <p className="muted">Photos still uploading: {total - done}. You can submit now; they keep sending.</p>}
+          {waiting > 0
+            ? <p className="banner warn" role="status"><strong>{waiting} file{waiting === 1 ? " has" : "s have"} not reached the server yet</strong> (no connection). {waiting === 1 ? "It is" : "They are"} kept on this device; submit once you are back online.</p>
+            : ups.some((u) => u.status !== "done") && <p className="muted">Photos still uploading: {total - done}. You can submit now; they keep sending.</p>}
           {msg && <p className="error" role="alert">{msg}</p>}
-          <button className="primary bigbtn" disabled={busy || unstarted || gaps.length > 0} onClick={() => (notOpened.length ? setConfirm("submit") : void submit())}>Submit inspection</button>
+          <button className="primary bigbtn" disabled={busy || unstarted || gaps.length > 0 || waiting > 0} onClick={() => (notOpened.length ? setConfirm("submit") : void submit())}>Submit inspection</button>
         </div>
       )}
       {blocked.length > 0 && <div className="card" role="alert"><strong>Finish this step first</strong><p className="muted small">You cannot move on until these are done:</p><ul>{blocked.map((b) => <li key={b}>{b}</li>)}</ul></div>}

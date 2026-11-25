@@ -249,7 +249,7 @@ function GridEditor({ src, onChange, fields }: { src: Extract<Source, { kind: "g
     <div className="rd-grid">
       <div className="tbl-wrap">
         <table className="rd-grid-t">
-          <thead><tr><th></th>{src.columns.map((c, i) => (
+          <thead><tr><th><span className="sr-only">Actions</span></th>{src.columns.map((c, i) => (
             <th key={i}><input aria-label={`Column ${i + 1} name`} value={c.label} onChange={(e) => onChange({ ...src, columns: src.columns.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} /></th>))}
             <th><button type="button" className="link" onClick={() => onChange({ ...src, columns: [...src.columns, { label: `Column ${src.columns.length + 1}` }], rows: src.rows.map((r) => ({ ...r, cells: [...r.cells, { text: "" }] })) })}>+ Column</button></th></tr></thead>
           <tbody>{src.rows.map((r, i) => (

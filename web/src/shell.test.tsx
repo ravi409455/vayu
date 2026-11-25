@@ -7,11 +7,12 @@ import { ApiError, api, explain, staleInfo } from "./api/client";
 import { AuthProvider, useAuth } from "./auth";
 import { homeFor, RequireAuth } from "./guards";
 import { visibleNav } from "./Layout";
-import { nextGrant } from "./pages/admin/Roles";
+import { nextGrant, OPS_NOT_ON_WEB } from "./pages/admin/Roles";
 import { FieldEditor } from "./pages/admin/FieldEditor";
 import { FormBuilder, PublishDialog } from "./pages/admin/FormBuilder";
 import { AccessMatrix } from "./ui/AccessMatrix";
 import type { FormField, Me } from "./api/types";
+import * as uploads from "./lib/uploadManager";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -229,7 +230,9 @@ describe("identity changes clear what was cached", () => {
     const p = probe();
     await screen.findByText((_, el) => el === null || true).catch(() => {});
     await vi.waitFor(() => expect(p.auth.me).not.toBeNull());
+    const stop = vi.spyOn(uploads, "reset");
     await expect(p.auth.logout()).rejects.toBeInstanceOf(ApiError);
+    expect(stop).toHaveBeenCalled();                    // the upload queue stops too (F-072)
     expect(p.qc.getQueryData(["bookings"])).toBeUndefined();
     expect(p.qc.getQueryData(["me"])).toBeNull();
   });
@@ -292,5 +295,13 @@ describe("the form builder's publish button", () => {
     expect(publish).toBeDisabled();
     release();
     await waitFor(() => expect(publish).toBeEnabled());
+  });
+});
+
+describe("the Roles screen offers Ops only what the web shows them (F-224)", () => {
+  it("no page in the Ops menu depends on a permission the screen hides from Ops", () => {
+    const opsPerms = visibleNav("ops", () => true).flatMap((g) => g.items.map((i) => i.perm)).filter(Boolean) as string[];
+    expect(opsPerms.filter((p) => OPS_NOT_ON_WEB.has(p))).toEqual([]);
+    expect(OPS_NOT_ON_WEB.has("api_keys.manage") && OPS_NOT_ON_WEB.has("integrations.manage")).toBe(true);
   });
 });

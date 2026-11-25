@@ -2,6 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, type ReactN
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api, ApiError, setApiHandlers } from "./api/client";
 import type { Me } from "./api/types";
+import * as uploads from "./lib/uploadManager";
+import { setPerson } from "./lib/monitor";
+import { wipeWork } from "./lib/store";
 
 type Auth = {
   me: Me | null;
@@ -18,6 +21,7 @@ const Ctx = createContext<Auth | null>(null);
  *  the screens watching a query that no longer exists). */
 function wipe(qc: QueryClient): void {
   qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "me" });
+  uploads.reset();                  // nothing keeps sending (or retrying) under the next person
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -45,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, [qc]);
   const me = q.data ?? null;
+  useEffect(() => setPerson(me?.id ?? null), [me?.id]);
   const scope = useCallback((p: string) => (me ? (me.permissions[p] ?? null) : null), [me]);
   const value = useMemo<Auth>(
     () => ({
@@ -62,8 +67,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout: async () => {
         try {
           await api("auth/logout", { method: "POST", body: {} });
-        } finally {                       // even if the call fails, this browser forgets the person
+        } finally {                       // even if the call fails, this browser forgets the person and their work
           wipe(qc);
+          await wipeWork();
           qc.setQueryData(["me"], null);
         }
       },

@@ -91,6 +91,11 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   await page.getByRole("button", { name: "+ Add row" }).click();
   await page.getByLabel("Field", { exact: true }).selectOption({ label: "inspection: Odometer" });
   await page.getByLabel("Report label").fill("Kilometres driven");
+  await expect(page.getByText("Unsaved changes…")).toBeVisible();          // never "saved" before it is (F-015)
+  await page.getByRole("tab", { name: "Shared library" }).click();          // leaving at once still sends the edit
+  await page.getByRole("tab", { name: "Used car" }).click();
+  await page.getByRole("button", { name: "Condition", exact: true }).click();
+  await expect(page.getByLabel("Report label")).toHaveValue("Kilometres driven");
   await expect(page.getByText("All changes saved")).toBeVisible({ timeout: 10_000 });
   await page.getByRole("button", { name: "Publish" }).click();
   await expect(page.getByText("Live v1")).toBeVisible();
