@@ -247,7 +247,9 @@ fun BookingsScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () ->
                     BookingRow(b, listOf(env.labels.type(b.type), env.labels.person(b.expert)).filter { it.isNotBlank() }.joinToString(" · "), t, onOpen = { onOpen(b.id) })
                 }
             }
-            if (first == null) item { Text(if (term.isNotEmpty()) "Searching…" else "Loading…", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
+            // the server's reason when it refuses (as the booking page and dashboard do), never "Loading…" for ever
+            if (first == null) item { Text(loads.first().error ?: if (term.isNotEmpty()) "Searching…" else "Loading…",
+                color = if (loads.first().error != null) Vayu.colors.bad else Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
             else if (rows.isEmpty()) item {
                 val dated = filters["dates"] != "all"
                 Column(Modifier.padding(vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

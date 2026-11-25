@@ -265,6 +265,15 @@ class OpsFlowTest {
         waitFor("Rohit Sharma")
     }
 
+    /** A list the server refuses says why, instead of "Loading…" for ever (seen on the phone with a stale server). */
+    @Test fun aRefusedBookingsListSaysWhy() {
+        server.on("GET bookings", """{"expert":"Use a user id."}""", 400)     // refused from the start: no earlier copy to show
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Use a user id.")
+        assertEquals(0, compose.onAllNodes(hasText("Loading…")).fetchSemanticsNodes().size)
+    }
+
     @Test fun quickFiltersAndTheFilterViewAreOneChoice() {
         show()
         compose.onNodeWithText("Bookings").performClick()
