@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.forms.Kind
 import `in`.carcid.vayu.core.ops.MediaItem
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -246,18 +247,16 @@ fun opsFieldEnv(env: OpsEnv, lists: Map<String, List<Pair<String, String>>> = em
     asset = { null },
     people = env.labels.people.map { Triple(it.id?.toString().orEmpty(), it.shown, it.role) })
 
-private fun answerText(f: Field, v: Any?, env: OpsEnv): String = when (f.type) {
-    "single_choice" -> f.options.firstOrNull { it.key == v }?.label ?: shown(v)
-    "multi_choice" -> (v as? List<*>)?.joinToString(", ") { k -> f.options.firstOrNull { it.key == k }?.label ?: k.toString() } ?: "—"
-    "master_list" -> (v as? String)?.let { if (f.config["list"] == "city") env.labels.city(it) else if (f.config["list"] == "car_make_model") env.labels.car(it) else it } ?: "—"
-    "form_choice" -> (v as? String)?.let(env.labels::type) ?: "—"
-    "user_picker" -> (v as? Number)?.let { env.labels.person(it.toInt()) } ?: "—"
-    "number" -> if (v == null) "—" else shown(v) + ((f.config["unit"] as? String)?.let { " $it" } ?: "")
-    "currency" -> if (v == null) "—" else "₹" + shown(v)
-    "datetime" -> (v as? String)?.let { whenStamp(it, env.today()) } ?: "—"
-    "date" -> (v as? String)?.let { dayLabel(it, env.today()).ifBlank { it } } ?: "—"
-    "time" -> (v as? String)?.let { time12(it).ifBlank { it } } ?: "—"
-    "photo", "video", "file" -> (v as? List<*>)?.size?.let { n -> "$n ${if (f.type == "file") "file" else f.type}${if (n == 1) "" else "s"}" } ?: "—"
-    "signature" -> if (v == null) "—" else "Signed"
-    else -> shown(v)
+private fun answerText(f: Field, v: Any?, env: OpsEnv): String = when (f.fieldType.kind) {
+    Kind.CHOICE -> f.options.firstOrNull { it.key == v }?.label ?: shown(v)
+    Kind.MULTI -> (v as? List<*>)?.joinToString(", ") { k -> f.options.firstOrNull { it.key == k }?.label ?: k.toString() } ?: "—"
+    Kind.LIST -> (v as? String)?.let { if (f.config["list"] == "city") env.labels.city(it) else if (f.config["list"] == "car_make_model") env.labels.car(it) else it } ?: "—"
+    Kind.FORM_CHOICE -> (v as? String)?.let(env.labels::type) ?: "—"
+    Kind.USER -> (v as? Number)?.let { env.labels.person(it.toInt()) } ?: "—"
+    Kind.NUMBER -> if (v == null) "—" else if (f.type == "currency") "₹" + shown(v) else shown(v) + ((f.config["unit"] as? String)?.let { " $it" } ?: "")
+    Kind.WHEN -> (v as? String)?.let { when (f.type) {
+        "date" -> dayLabel(it, env.today()).ifBlank { it }; "time" -> time12(it).ifBlank { it }; else -> whenStamp(it, env.today()) } } ?: "—"
+    Kind.MEDIA -> (v as? List<*>)?.size?.let { n -> "$n ${if (f.type == "file") "file" else f.type}${if (n == 1) "" else "s"}" } ?: "—"
+    Kind.SIGNATURE -> if (v == null) "—" else "Signed"
+    Kind.TEXT, Kind.YES_NO, Kind.GPS, Kind.IMAGE, Kind.SYSTEM -> shown(v)
 }

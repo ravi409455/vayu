@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.expert
 
+import `in`.carcid.vayu.core.forms.Kind
 import `in`.carcid.vayu.ui.components.TimePick
 import `in`.carcid.vayu.ui.components.DatePick
 import `in`.carcid.vayu.ui.components.VayuSheet
@@ -155,29 +156,29 @@ private fun Note(text: String, color: androidx.compose.ui.graphics.Color) =
 
 @Composable
 private fun Input(f: Field, value: Any?, missing: Boolean, readOnly: Boolean, env: FieldEnv, onChange: (Any?) -> Unit) {
-    when (f.type) {
-        "short_text", "phone", "long_text" -> TextInput(f, value as? String ?: "", missing, readOnly, env,
+    when (f.fieldType.kind) {
+        Kind.TEXT -> TextInput(f, value as? String ?: "", missing, readOnly, env,
             keyboard = if (f.type == "phone") KeyboardType.Phone else KeyboardType.Text) { onChange(it.ifEmpty { null }) }
-        "number", "currency" -> TextInput(f, (value as? Double)?.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() } ?: (value as? String ?: ""),
+        Kind.NUMBER -> TextInput(f, (value as? Double)?.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() } ?: (value as? String ?: ""),
             missing, readOnly, env, keyboard = KeyboardType.Decimal) { t -> onChange(t.toDoubleOrNull() ?: if (t.isEmpty()) null else t) }
-        "date", "time", "datetime" -> DateInput(f, value as? String, readOnly, env, onChange)
-        "yes_no" -> {
+        Kind.WHEN -> DateInput(f, value as? String, readOnly, env, onChange)
+        Kind.YES_NO -> {
             val sel = when (value) { true -> "Yes"; false -> "No"; else -> null }
             ChoiceRow(listOf("Yes" to false, "No" to false), sel) { if (!readOnly) onChange(if (it == sel) null else it == "Yes") }
         }
-        "single_choice" -> SingleChoice(f.label, f.options, value as? String, readOnly, onChange)
-        "multi_choice" -> MultiChoice(f.options, (value as? List<*>)?.filterIsInstance<String>().orEmpty(), readOnly, onChange)
-        "master_list" -> SingleChoice(f.label, env.list(f.config["list"] as? String ?: "").map { Option(it.first, it.second, false, null) },
+        Kind.CHOICE -> SingleChoice(f.label, f.options, value as? String, readOnly, onChange)
+        Kind.MULTI -> MultiChoice(f.options, (value as? List<*>)?.filterIsInstance<String>().orEmpty(), readOnly, onChange)
+        Kind.LIST -> SingleChoice(f.label, env.list(f.config["list"] as? String ?: "").map { Option(it.first, it.second, false, null) },
             value as? String, readOnly, onChange, forceList = true)
-        "form_choice" -> SingleChoice(f.label, env.types.map { Option(it.first, it.second, false, null) }, value as? String, readOnly, onChange, forceList = true)
-        "user_picker" -> if (env.people.isEmpty()) Text(if (value == null) "—" else "Set by Ops", color = Vayu.colors.muted)
+        Kind.FORM_CHOICE -> SingleChoice(f.label, env.types.map { Option(it.first, it.second, false, null) }, value as? String, readOnly, onChange, forceList = true)
+        Kind.USER -> if (env.people.isEmpty()) Text(if (value == null) "—" else "Set by Ops", color = Vayu.colors.muted)
             else SingleChoice(f.label, env.people.filter { it.third == (f.config["role"] as? String ?: "expert") }.map { Option(it.first, it.second, false, null) },
                 (value as? Number)?.toLong()?.toString(), readOnly, { onChange((it as? String)?.toDouble()) }, forceList = true)
-        "gps" -> Gps(f, value, readOnly, env, onChange)
-        "photo", "video", "file" -> MediaTiles(f, value, readOnly, env)
-        "signature" -> Signature(f, value as? String, readOnly, env)
-        "image" -> FormImage(f, env)
-        else -> Text(value?.toString() ?: "—", color = Vayu.colors.muted)
+        Kind.GPS -> Gps(f, value, readOnly, env, onChange)
+        Kind.MEDIA -> MediaTiles(f, value, readOnly, env)
+        Kind.SIGNATURE -> Signature(f, value as? String, readOnly, env)
+        Kind.IMAGE -> FormImage(f, env)
+        Kind.SYSTEM -> Text(value?.toString() ?: "—", color = Vayu.colors.muted)
     }
 }
 

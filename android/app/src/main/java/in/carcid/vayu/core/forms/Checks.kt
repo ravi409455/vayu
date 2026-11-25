@@ -12,13 +12,14 @@ import java.math.BigDecimal
 fun answerCode(f: Field, v: Any?): String? {
     if (v == null || v == "") return null
     val c = f.config
-    return when (f.type) {
-        "phone" -> if (v !is String) "INVALID_TYPE" else if (indianMobile(v) == null) "INVALID_PHONE" else null
-        "number" -> numberCode(v, (c["decimals"] as? Number)?.toInt() ?: 0, c["min"] as? Number, c["max"] as? Number)
-        "currency" -> numberCode(v, 2, 0, null)
-        "short_text", "long_text" -> {
-            val text = (v as? String)?.let { if (f.type == "short_text") it.trim() else it } ?: return "INVALID_TYPE"
-            val max = (c["max_length"] as? Number)?.toInt() ?: if (f.type == "short_text") 200 else 5000
+    val check = f.fieldType.check
+    return when (check) {
+        Check.PHONE -> if (v !is String) "INVALID_TYPE" else if (indianMobile(v) == null) "INVALID_PHONE" else null
+        Check.NUMBER -> numberCode(v, (c["decimals"] as? Number)?.toInt() ?: 0, c["min"] as? Number, c["max"] as? Number)
+        Check.CURRENCY -> numberCode(v, 2, 0, null)
+        Check.SHORT_TEXT, Check.LONG_TEXT -> {
+            val text = (v as? String)?.let { if (check == Check.SHORT_TEXT) it.trim() else it } ?: return "INVALID_TYPE"
+            val max = (c["max_length"] as? Number)?.toInt() ?: if (check == Check.SHORT_TEXT) 200 else 5000
             val pattern = (c["pattern"] as? String)?.takeIf { it.isNotEmpty() }
             when {
                 // characters as the server counts them (an emoji is one, not two UTF-16 units)
@@ -27,7 +28,7 @@ fun answerCode(f: Field, v: Any?): String? {
                 else -> null
             }
         }
-        else -> null
+        Check.NONE -> null
     }
 }
 
