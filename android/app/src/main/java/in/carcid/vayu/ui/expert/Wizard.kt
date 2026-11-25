@@ -264,7 +264,8 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
                             fontSize = 12.sp, color = Vayu.colors.muted)
                     }
                     shown.forEach { f ->
-                        val r = requesters.getOrPut(f.key) { BringIntoViewRequester() }
+                        // one per question for this page, made once (remember), kept by key for "go to the next gap"
+                        val r = remember(step.id, f.key) { requesters.getOrPut(f.key) { BringIntoViewRequester() } }
                         Box(Modifier.bringIntoViewRequester(r)) {
                             val v = draft.answer(part, f.key)
                             Question(f, v, filled.required(part, f.key),

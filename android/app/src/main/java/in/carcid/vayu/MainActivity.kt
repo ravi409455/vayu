@@ -80,7 +80,7 @@ fun AppRoot(vm: AppViewModel) {
     val showUpdate by vm.showUpdate.collectAsState()
     VayuTheme(themeOf(screen)) {
         // status bar icons follow the app's own light / dark look, not the phone's setting
-        val activity = androidx.compose.ui.platform.LocalContext.current as? ComponentActivity
+        val activity = androidx.activity.compose.LocalActivity.current as? ComponentActivity
         val dark = Vayu.colors.bg.luminance() < 0.5f
         androidx.compose.runtime.LaunchedEffect(dark) {
             val clear = android.graphics.Color.TRANSPARENT
