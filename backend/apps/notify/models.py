@@ -15,6 +15,9 @@ class Notification(models.Model):
                                 on_delete=models.CASCADE, related_name="+")
     created_at = models.DateTimeField(default=timezone.now)
     read_at = models.DateTimeField(null=True, blank=True)
+    # push outcome, for metrics (F-247): phones reached, and dead tokens dropped
+    pushed = models.PositiveSmallIntegerField(default=0)
+    push_failed = models.PositiveSmallIntegerField(default=0)
 
     class Meta:
         indexes = [models.Index(fields=["user", "-created_at"])]

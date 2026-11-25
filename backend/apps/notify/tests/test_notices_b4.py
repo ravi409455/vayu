@@ -116,3 +116,14 @@ def test_an_earlier_users_device_on_the_same_phone_gets_no_pushes(env, booking):
         n = Notification.objects.create(user=earlier, kind="x", title="for the earlier user")
         tasks.push([n.id])
     assert sent == ["phone"]                                    # only the newest holder
+
+
+def test_each_notice_keeps_how_its_push_went(env, booking):
+    """F-247."""
+    Device.objects.create(user=env.expert_user, push_token="ok", push_token_at=timezone.now())
+    Device.objects.create(user=env.expert_user, push_token="dead", push_token_at=timezone.now())
+    with mock.patch.object(fcm, "credential", return_value={"project_id": "p"}), \
+            mock.patch.object(fcm, "send", side_effect=lambda t, d: t == "ok"):
+        assign(env, booking)
+    n = Notification.objects.get(user=env.expert_user)
+    assert (n.pushed, n.push_failed) == (1, 1)

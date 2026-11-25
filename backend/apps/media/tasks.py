@@ -58,8 +58,8 @@ def verify_asset(asset_id: str) -> str:
         return "gone"
     if not ok:
         storage.delete(asset.key)
-        asset.status = "failed"
-        asset.save(update_fields=["status"])
+        asset.status, asset.failed_attempts = "failed", asset.failed_attempts + 1
+        asset.save(update_fields=["status", "failed_attempts"])
         return "failed"
     asset.status, asset.verified_at = "verified", timezone.now()
     asset.save(update_fields=["status", "verified_at", "preview_key", "jpeg_key"])

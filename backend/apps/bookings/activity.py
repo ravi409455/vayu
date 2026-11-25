@@ -18,7 +18,8 @@ def log(b, actor, kind: str, changes: dict | None = None, keys: list[str] | None
         inspection=None) -> None:
     changes = changes or {}
     BookingActivity.objects.create(
-        booking=b, actor=actor if getattr(actor, "pk", None) else None, kind=kind,
+        booking=b, booking_ref=b.booking_id,
+        actor=actor if getattr(actor, "pk", None) else None, kind=kind,
         changes={k: v for k, v in changes.items() if k in SAFE_KEYS or k.startswith("check.")},
         keys=sorted(keys if keys is not None else changes), inspection=inspection)
 

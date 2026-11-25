@@ -192,3 +192,16 @@ def test_a_zip_built_while_its_booking_is_deleted_is_removed(job, settings):
         zips.request_zip(Booking.objects.get(pk=b["id"]), "photo", only=[str(a.id)])
     assert not [k for k in storage.client().list_objects_v2(
         Bucket=settings.S3_BUCKET, Prefix="zips/").get("Contents", [])]
+
+
+def test_failed_attempts_are_counted_across_retries(job, settings):
+    """F-247: a retry reuses the row; the failures are not forgotten."""
+    from apps.media.tests.conftest import initiate_body, put_parts
+
+    env, b = job
+    body = initiate_body(b["id"], jpeg())
+    for n in (1, 2):
+        init = env.expert.post("/api/v1/media/initiate", body, format="json").json()
+        parts = put_parts(init, jpeg(color=(n, 2, 3)), settings)           # wrong bytes
+        env.expert.post(f"/api/v1/media/{init['id']}/complete", {"parts": parts}, format="json")
+        assert MediaAsset.objects.get(pk=init["id"]).failed_attempts == n

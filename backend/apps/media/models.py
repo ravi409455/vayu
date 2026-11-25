@@ -42,6 +42,8 @@ class MediaAsset(models.Model):
     jpeg_key = models.CharField(max_length=200, blank=True)
     upload_id = models.TextField(blank=True)   # R2 ids are ~343 characters
     stuck_alerted = models.BooleanField(default=False)
+    # how many times it failed verification before (a retry reuses the row, F-247)
+    failed_attempts = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(default=timezone.now)
     verified_at = models.DateTimeField(null=True, blank=True)
     # Ops swapped this file for another: kept as history, out of the answers, ZIPs and limits

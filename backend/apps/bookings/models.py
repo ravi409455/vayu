@@ -142,14 +142,17 @@ class BookingActivity(models.Model):
     Append-only. Values are kept only for schedule / stage / assignment keys; other changes
     keep just the field keys (answers can be sensitive and are visible per role)."""
 
-    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name="activity")
+    # kept when the booking is deleted, for metrics (F-247): then only booking_ref names it
+    booking = models.ForeignKey(Booking, null=True, on_delete=models.SET_NULL,
+                                related_name="activity")
+    booking_ref = models.CharField(max_length=64, blank=True)    # the Booking ID as it was
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                               on_delete=models.PROTECT, related_name="+")  # null: the system
     # created | changed | edited | inspection_edited | ratings_changed
     kind = models.CharField(max_length=24)
     changes = models.JSONField(default=dict)   # {key: [old, new]} for SAFE_KEYS only
     keys = models.JSONField(default=list)      # every changed key ("part.key" for inspections)
-    inspection = models.ForeignKey(Inspection, null=True, blank=True, on_delete=models.CASCADE,
+    inspection = models.ForeignKey(Inspection, null=True, blank=True, on_delete=models.SET_NULL,
                                    related_name="+")
     at = models.DateTimeField(default=timezone.now, db_index=True)
 
