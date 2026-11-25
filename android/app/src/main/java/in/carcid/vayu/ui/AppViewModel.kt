@@ -36,6 +36,23 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
     /** A newer build on offer (null: this is the newest), and whether its screen is up. */
     val update = MutableStateFlow<`in`.carcid.vayu.core.update.AppUpdate?>(null)
     val showUpdate = MutableStateFlow(false)
+
+    /** The update's download, here rather than in its screen (F-018): it carries on if the screen closes. */
+    data class UpdateDownload(val got: Long = 0, val busy: Boolean = false, val ready: Boolean = false, val error: String? = null)
+    val updateDownload = MutableStateFlow(UpdateDownload())
+
+    /** Download [u] into [file] (checked against its SHA-256); one at a time. */
+    fun downloadUpdate(u: `in`.carcid.vayu.core.update.AppUpdate, file: java.io.File) {
+        if (updateDownload.value.busy) return
+        updateDownload.value = UpdateDownload(busy = true)
+        viewModelScope.launch {
+            updateDownload.value = try {
+                file.parentFile?.listFiles()?.forEach { it.delete() }        // older downloads
+                `in`.carcid.vayu.core.update.download(api.http, u, file) { got -> updateDownload.value = updateDownload.value.copy(got = got) }
+                UpdateDownload(got = updateDownload.value.got, ready = true)
+            } catch (e: ApiError) { UpdateDownload(error = e.message) }
+        }
+    }
     /** A booking to open, from a tapped notice; the home screen takes it and sets it back to null. */
     val opening = MutableStateFlow<String?>(null)
     /** The bell (notifications from the server), read on sign-in, on coming back and on each push. */

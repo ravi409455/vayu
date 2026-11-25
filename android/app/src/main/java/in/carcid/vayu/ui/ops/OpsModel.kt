@@ -44,7 +44,8 @@ class OpsModel(private val data: OpsData, me: Me, private val today: () -> Local
     fun reload(asked: Boolean = false) {
         _tick.value++
         job?.cancel()
-        job = viewModelScope.launch {
+        // on IO: it only writes StateFlows, so it never waits for the main thread
+        job = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _refreshing.value = true
             try {
                 if (_labels.value.people.isEmpty()) Labels.saved(data).takeIf { it.people.isNotEmpty() }?.let { _labels.value = it }
@@ -62,8 +63,14 @@ class OpsModel(private val data: OpsData, me: Me, private val today: () -> Local
 
     fun say(message: String) { _messages.trySend(message) }
 
+    /** Every screen's loads (F-018). */
+    val loads = OpsLoads(data, viewModelScope)
+
     private val reloadNow = { reload() }
+    private val sayNow0 = { m: String -> say(m) }
+    /** Every change Ops make (F-018). */
+    val actions = OpsActions(data, viewModelScope, reloadNow, sayNow0)
     private val sayNow = { m: String -> say(m) }
     /** What the Ops screens are given; the same lambdas every time, so an unchanged env compares equal. */
-    fun env(me: Me = this.me, labels: Labels = _labels.value, tick: Int = _tick.value) = OpsEnv(me, data, labels, today, tick, reloadNow, sayNow)
+    fun env(me: Me = this.me, labels: Labels = _labels.value, tick: Int = _tick.value) = OpsEnv(me, data, labels, today, tick, reloadNow, sayNow, loads, actions)
 }

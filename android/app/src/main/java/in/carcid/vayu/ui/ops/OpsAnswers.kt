@@ -216,23 +216,18 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
                     Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         SoftButton("Cancel", { editing = null }, Modifier.weight(1f))
                         PrimaryButton("Save", {
-                            scope.launch {
-                                try {
-                                    env.data.act("PATCH", "inspections/${data.insp.id}", buildJsonObject {
-                                        put("row_version", data.insp.rowVersion)
-                                        put("answers", buildJsonObject { put(p, buildJsonObject { put(f.key, JsonLogic.toJson(value)) }) })
-                                    })
-                                    editing = null; env.say("Saved."); env.refresh()
-                                } catch (e: ApiError) {
-                                    error = when (e.code) {
-                                        "STALE_INSPECTION" -> "Someone else saved this inspection meanwhile. Their version is loaded now; check and save again."
-                                            .also { env.refresh() }
-                                        "INVALID_ANSWERS" -> (e.extra["errors"] as? JsonObject)?.s(f.key)?.ifBlank { null }?.let { refusalText(it) } ?: e.message
-                                        "FIELD_ACCESS" -> "You can't change this at this stage."
-                                        else -> e.message
-                                    }
+                            env.actions.send("PATCH", "inspections/${data.insp.id}", buildJsonObject {
+                                put("row_version", data.insp.rowVersion)
+                                put("answers", buildJsonObject { put(p, buildJsonObject { put(f.key, JsonLogic.toJson(value)) }) })
+                            }, "Saved.", refused = { e ->
+                                error = when (e.code) {
+                                    "STALE_INSPECTION" -> "Someone else saved this inspection meanwhile. Their version is loaded now; check and save again."
+                                        .also { env.refresh() }
+                                    "INVALID_ANSWERS" -> (e.extra["errors"] as? JsonObject)?.s(f.key)?.ifBlank { null }?.let { refusalText(it) } ?: e.message
+                                    "FIELD_ACCESS" -> "You can't change this at this stage."
+                                    else -> e.message
                                 }
-                            }
+                            }) { editing = null }
                         }, Modifier.weight(1f))
                     }
                 }

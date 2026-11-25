@@ -113,12 +113,8 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     }
     assigning?.let { b ->
         AssignSheet(env, b, onClose = { assigning = null }) { expert ->
-            scope.launch {
-                try {
-                    data.act("POST", "bookings/${b.id}/assign", kotlinx.serialization.json.buildJsonObject { put("expert", kotlinx.serialization.json.JsonPrimitive(expert)) })
-                    assigning = null; env.say("Assigned to ${labels.person(expert)}."); model.reload()
-                } catch (e: `in`.carcid.vayu.core.api.ApiError) { env.say(e.message) }
-            }
+            env.actions.send("POST", "bookings/${b.id}/assign", kotlinx.serialization.json.buildJsonObject { put("expert", kotlinx.serialization.json.JsonPrimitive(expert)) },
+                "Assigned to ${labels.person(expert)}.") { assigning = null }
         }
     }
 }

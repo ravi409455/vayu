@@ -131,11 +131,8 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
             val allowed = regen?.allowed == true
             CardButton(if (sending) "Regenerating…" else "Regenerate", Modifier.fillMaxWidth(), online && allowed && !sending) {
                 sending = true
-                scope.launch {
-                    try {
-                        env.data.act("POST", "bookings/$id/report/regenerate")
-                        rep = Report.from(env.data.api.get("bookings/$id/report")) ?: rep
-                    } catch (e: ApiError) { env.say(e.message) } finally { sending = false }
+                env.actions.send("POST", "bookings/$id/report/regenerate", refused = { e -> env.say(e.message); sending = false }) {
+                    scope.launch { try { rep = Report.from(env.data.api.get("bookings/$id/report")) ?: rep } catch (e: ApiError) { } finally { sending = false } }
                 }
             }
             if (!allowed && regen?.reason?.isNotBlank() == true) Text(regen.reason, fontSize = 13.sp, color = Vayu.colors.muted)

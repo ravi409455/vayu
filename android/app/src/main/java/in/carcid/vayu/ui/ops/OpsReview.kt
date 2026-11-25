@@ -140,9 +140,9 @@ fun ReviewScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
                             if (ks.isNotEmpty()) put("key_checks", buildJsonObject { ks.forEach { (k, v) -> put(k.drop(2), (v as String?)?.let { JsonPrimitive(it) } ?: JsonNull) } })
                             put("row_version", insp.rowVersion)
                         }
-                        try { env.data.act("PATCH", "inspections/${insp.id}/overrides", body); env.say("Saved."); env.refresh() }
-                        catch (e: ApiError) { env.say(if (e.code == "STALE_INSPECTION") "Someone else changed it meanwhile; loaded their version." else e.message); env.refresh() }
-                        finally { saving = false }
+                        env.actions.send("PATCH", "inspections/${insp.id}/overrides", body, "Saved.", refused = { e ->
+                            env.say(if (e.code == "STALE_INSPECTION") "Someone else changed it meanwhile; loaded their version." else e.message); env.refresh(); saving = false
+                        }) { saving = false }
                     }
                 }, enabled = !saving)
             }
