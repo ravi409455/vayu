@@ -67,4 +67,10 @@ class OpsDataTest {
         assertEquals(4, i.expert); assertEquals(7, i.formVersion); assertNull(i.startVersion); assertEquals(9, i.endVersion)
         assertEquals(2, i.rowVersion); assertEquals("submitted", i.status)
     }
+
+    @Test fun mediaRowsAreReadIntoTypedModels() {
+        val rows = (kotlinx.serialization.json.Json.parseToJsonElement("""[{"id":"m1","field_key":"front","kind":"photo","status":"verified","size":123,"new":true}]""")
+            as kotlinx.serialization.json.JsonArray).map { it as kotlinx.serialization.json.JsonObject }
+        assertEquals(listOf(MediaItem("m1", "front", "photo", "verified")), MediaItem.list(rows))
+    }
 }

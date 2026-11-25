@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.MediaItem
 import `in`.carcid.vayu.core.ops.Inspection
 import `in`.carcid.vayu.core.api.initials
 
@@ -226,8 +227,8 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
                 NavRow("Inspection Data", "$n answer${if (n == 1) "" else "s"}" + if (bad > 0) " · $bad problem${if (bad == 1) "" else "s"}" else "",
                     if (bad > 0) Vayu.colors.warn else Vayu.colors.muted) { onAnswers("inspection") }
             }
-            val media = rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty().filter { it.s("status") in ARRIVED }
-            val photos = media.count { it.s("kind") == "photo" }; val videos = media.count { it.s("kind") == "video" }
+            val media = MediaItem.list(rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty()).filter { it.status in ARRIVED }
+            val photos = media.count { it.kind == "photo" }; val videos = media.count { it.kind == "video" }
             NavRow("Photos and videos", listOfNotNull("$photos photo${if (photos == 1) "" else "s"}", "$videos video${if (videos == 1) "" else "s"}".takeIf { videos > 0 }).joinToString(" · ")) { onPart(Part.MEDIA) }
             if (insp != null) {
                 val sc = insp.scores

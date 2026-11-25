@@ -106,3 +106,18 @@ data class Inspection(
         fun list(rows: List<JsonObject>): List<Inspection> = rows.mapNotNull(::from)
     }
 }
+
+/** A photo, video, file or signature on a booking (GET bookings/{id}/media). */
+@Serializable
+data class MediaItem(
+    val id: String = "",
+    @SerialName("field_key") val fieldKey: String = "",
+    /** "photo", "video", "file" or "signature". */
+    val kind: String = "",
+    /** "pending", "uploaded", "verified", "failed" or "purged". */
+    val status: String = "",
+) {
+    companion object {
+        fun list(rows: List<JsonObject>): List<MediaItem> = rows.mapNotNull { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
+    }
+}
