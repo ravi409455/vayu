@@ -64,6 +64,7 @@ import `in`.carcid.vayu.ui.expert.SingleChoice
 import `in`.carcid.vayu.core.forms.Option
 import `in`.carcid.vayu.ui.theme.Vayu
 import java.io.File
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 private val SPLITS = listOf("type" to "Type", "city" to "City", "expert" to "Expert", "stage" to "Stage")
@@ -129,18 +130,20 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
         "type" -> env.labels.type(k); "city" -> env.labels.city(k); "expert" -> env.labels.person(k.toIntOrNull()).ifBlank { "Unassigned" }
         else -> STAGE_WORDS[k] ?: k
     }.ifBlank { "—" }
+    val exportScope = androidx.compose.runtime.rememberCoroutineScope()
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         VayuTopBar("Dashboard", env.me.initials, bellCount = needs, onBell = onBell, onProfile = onProfile) {
-            if (env.can("dashboards.export")) IconButton(onClick = {
+            if (env.can("dashboards.export")) IconButton(onClick = { exportScope.launch {
                 val f = File(File(ctx.cacheDir, "reports").apply { mkdirs() }, "vayu-$from-$to-by-$split.csv")
-                writeAtomically(f, ("$split,count\n" + splitRows.groupBy { it.s("key") }.map { (k, r) -> k to r.sumOf { it.s("count").toIntOrNull() ?: 0 } }
+                // built and written off the main thread (fsync can stall a cheap phone)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { writeAtomically(f, ("$split,count\n" + splitRows.groupBy { it.s("key") }.map { (k, r) -> k to r.sumOf { it.s("count").toIntOrNull() ?: 0 } }
                     .sortedByDescending { it.second }.joinToString("\n") { (k, n) ->
                         listOf(label(k), "$n").joinToString(",") { v -> "\"" + v.replace("\"", "\"\"").let { if (it.firstOrNull() in setOf('=', '+', '-', '@', '\t', '\r', '\n')) "'$it" else it } + "\"" }
-                    }).toByteArray())
+                    }).toByteArray()) }
                 val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
                 ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/csv").putExtra(Intent.EXTRA_STREAM, uri)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Share the numbers"))
-            }) { Icon(Icons.Outlined.IosShare, contentDescription = "Share as a spreadsheet", tint = Vayu.colors.ink) }
+            } }) { Icon(Icons.Outlined.IosShare, contentDescription = "Share as a spreadsheet", tint = Vayu.colors.ink) }
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             OfflineNote(load.value)
