@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import androidx.compose.foundation.background
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
@@ -182,7 +183,8 @@ class OpsFlowTest {
             "generated_at":"2026-11-24T09:30:00+05:30","error":"","verify_url":"https://verify.example/x","url":"/api/v1/bookings/$B6/report/download"}"""
     private fun showReport() = compose.setContent { VayuTheme(ThemeMode.LIGHT) {
         val env = OpsEnv(me.copy(permissions = me.permissions + "submissions.edit"), data, Labels(), { LocalDate.parse(TODAY) }, 0, {}, {})
-        androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(20.dp)) {
+        // the app's background, not the test window's default (it changed with the library upgrade)
+        androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.background(`in`.carcid.vayu.ui.theme.Vayu.colors.bg).padding(20.dp)) {
             ReportCard(env, B6, Bk(Json.parseToJsonElement(day[3]).jsonObject))
         }
     } }
