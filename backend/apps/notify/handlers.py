@@ -54,16 +54,49 @@ def _reason(key) -> str:
         "label", flat=True).first() or str(key)
 
 
-def _label(key: str) -> str:
-    return key.replace("_", " ").capitalize()
+def _expert_view(b):
+    """(fields of the booking form by key, keys the expert may not see at this stage)."""
+    from apps.bookings.services import booking_form_version
+    from apps.forms.access import levels_for
+    from apps.forms.models import Field
+
+    version = booking_form_version()
+    levels = levels_for(version, "expert", b.stage)
+    return ({f.key: f for f in Field.objects.filter(version=version)},
+            {k for k, v in levels.items() if v == "hidden"})
 
 
-def _changed(changes: dict) -> str:
+def _label(key: str, fields: dict) -> str:
+    f = fields.get(key)
+    return f.label if f is not None else key.replace("_", " ").capitalize()
+
+
+def _shown(f, value) -> str:
+    """A value in the words the expert reads (option and list labels, never raw keys, F-240)."""
+    from apps.accounts.models import User
+    from apps.forms.models import MasterListItem
+
+    if value in (None, ""):
+        return "—"
+    if f is None:
+        return str(value)
+    if f.type == "master_list":
+        return (MasterListItem.objects.filter(list__key=f.config.get("list"), key=value)
+                .values_list("label", flat=True).first() or str(value))
+    if f.type == "user_picker":
+        u = User.objects.filter(pk=value).first()
+        return u.shown_name if u else str(value)
+    options = {o.get("key"): o.get("label") for o in f.config.get("options") or []}
+    return str(options.get(value, value))
+
+
+def _changed(changes: dict, fields: dict) -> str:
     keys = sorted(changes)
     if len(keys) == 1 and all(isinstance(v, str | int | type(None)) for v in changes[keys[0]]):
         old, new = changes[keys[0]]
-        return f"{_label(keys[0])}: {old or '—'} → {new or '—'}"
-    return ", ".join(_label(k) for k in keys)
+        f = fields.get(keys[0])
+        return f"{_label(keys[0], fields)}: {_shown(f, old)} → {_shown(f, new)}"
+    return ", ".join(_label(k, fields) for k in keys)
 
 
 def on_event(name: str, payload: dict) -> None:
@@ -89,26 +122,35 @@ def on_event(name: str, payload: dict) -> None:
         if b.created_by and b.created_by.username == SERVICE_USERNAME:   # API / ERP only
             to_ops(b, "new_booking", f"New booking {bid}", who)
         if b.assigned_expert_id:                       # created with an expert already chosen
-            to_user(b.assigned_expert_id, b, "assigned", f"New lead: {bid}",
-                    " · ".join(x for x in (who, _when(*(b.answers.get(k) for k in WHEN))) if x))
+            to_user(b.assigned_expert_id, b, "assigned", f"New lead: {bid}", " · ".join(
+                x for x in (_for_expert(b, who), _when(*(b.answers.get(k) for k in WHEN))) if x))
     elif name == "booking.assigned":
         if payload.get("expert") is None:
             return
-        to_user(payload["expert"], b, "assigned", f"New lead: {bid}",
-                " · ".join(x for x in (who, _when(*(b.answers.get(k) for k in WHEN))) if x))
+        to_user(payload["expert"], b, "assigned", f"New lead: {bid}", " · ".join(
+            x for x in (_for_expert(b, who), _when(*(b.answers.get(k) for k in WHEN))) if x))
     else:
-        _updated(b, payload.get("changes") or {}, bid, who, payload.get("by"))
+        _updated(b, payload.get("changes") or {}, bid, _for_expert(b, who), payload.get("by"))
+
+
+def _for_expert(b, who: str) -> str:
+    """The customer's name, unless the booking form hides it from experts at this stage."""
+    return "" if "customer_name" in _expert_view(b)[1] else who
 
 
 def _updated(b, changes: dict, bid: str, who: str, by) -> None:
-    """An expert hears about changes to their job, never about their own actions."""
+    """An expert hears about changes to their job, never about their own actions. [who]: the
+    customer's name as experts may see it."""
     old, new = changes.get("assigned_expert", [None, None])
     if old and old != new and old != by:
         to_user(old, b, "unassigned", f"{bid} moved to another expert", who)
     expert = b.assigned_expert_id
     if expert is None or expert == by or b.stage not in ("assigned", "in_progress", "cancelled"):
         return
-    if changes.get("stage", [None, None])[1] == "cancelled":
+    if changes.get("stage") == ["in_progress", "assigned"] and by != expert:     # force-release
+        to_user(expert, b, "released", f"{bid} released by Ops",
+                "Your draft there is closed. Start the lead again to carry on.")
+    elif changes.get("stage", [None, None])[1] == "cancelled":
         to_user(expert, b, "cancelled", f"{bid} cancelled",
                 " · ".join(x for x in (who, _reason(b.cancel_reason)) if x))
     elif b.stage == "cancelled":
@@ -118,8 +160,11 @@ def _updated(b, changes: dict, bid: str, who: str, by) -> None:
         to_user(expert, b, "rescheduled", f"{bid} moved",
                 f"{_when(*was)} → {_when(*(b.answers.get(k) for k in WHEN))}")
     elif "assigned_expert" not in changes and set(changes) - QUIET:
-        to_user(expert, b, "changed", f"{bid} details changed",
-                _changed({k: v for k, v in changes.items() if k not in QUIET}))
+        # never what the expert may not see: not its value, not even its name (F-068)
+        fields, hidden = _expert_view(b)
+        told = {k: v for k, v in changes.items() if k not in QUIET and k not in hidden}
+        if told:
+            to_user(expert, b, "changed", f"{bid} details changed", _changed(told, fields))
 
 
 def to_user(user_id, booking, kind: str, title: str, body: str = "") -> None:

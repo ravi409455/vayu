@@ -26,7 +26,8 @@ ACTION_PERMISSIONS = {
     "resolve_conflict": "bookings.edit", "activity": "bookings.view",
     "start": "submissions.fill", "forms": "submissions.fill", "submit": "submissions.fill",
     "inspections": "submissions.view", "timing_review": "bookings.review_timing",
-    "answer_fields": "submissions.view",
+    "answer_fields": "submissions.view", "clear_alert": "bookings.edit",
+    "count": "bookings.view",
 }
 
 
@@ -55,7 +56,7 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
             rule = (submissions.deliver_filter if self.action in ("start", "submit")
                     else submissions.own_filter)
             qs = qs.filter(rule(self.request.user)).distinct()
-        if self.action != "list":
+        if self.action not in ("list", "count"):
             return qs
         # only submissions this user may see, the same rule as the `inspections` action
         done = Inspection.objects.filter(booking=OuterRef("pk"), status="submitted").exclude(
@@ -164,6 +165,12 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         return self._out(services.cancel(request.user, self.get_object(),
                                          request.data.get("reason")))
 
+    @action(detail=False, methods=["get"])
+    def count(self, request):
+        """How many bookings the list would give for the same filters, without loading them (the
+        Bookings filter's counts, F-085)."""
+        return Response({"count": self.get_queryset().count()})
+
     @action(detail=False, methods=["get"], url_path="answer-fields")
     def answer_fields(self, request):
         """Fields Bookings can be filtered by (choice and yes/no answers this person may see)."""
@@ -187,6 +194,13 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         """Mark one flag ({"flag": "late"} or "quick") as looked at: it leaves "Needs you"."""
         return self._out(services.review_timing(request.user, self.get_object(),
                                                 request.data.get("flag")))
+
+    @action(detail=True, methods=["post"], url_path="clear-alert")
+    def clear_alert(self, request, pk=None):
+        """Ops looked at an alert ({"code": "TYPE_CHANGE_REJECTED"}): it leaves "Needs you" and
+        the timeline says who cleared it (F-221)."""
+        return self._out(services.clear_alert(request.user, self.get_object(),
+                                              request.data.get("code")))
 
     @action(detail=True, methods=["post"], url_path="change-type")
     def change_type(self, request, pk=None):

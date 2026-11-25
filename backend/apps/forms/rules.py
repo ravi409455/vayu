@@ -185,11 +185,17 @@ def spec_from_version(version) -> FormSpec:
     return FormSpec(form=version.form.ns, containers=containers, fields=fields, checks=checks)
 
 
+# what a value stored earlier may have become since: still accepted unchanged in an edit (H-07)
+GONE_STALE = {"ARCHIVED_OPTION", "INVALID_USER"}
+
+
 def validate_answers(version, answers: dict, today: str,
-                     overrides: dict | None = None) -> tuple[dict, dict]:
+                     overrides: dict | None = None, kept: dict | None = None) -> tuple[dict, dict]:
     """Full server-side validation of one form's answers. Returns (cleaned, errors).
 
-    Type errors win over rule errors; answers to hidden fields are dropped unchecked."""
+    Type errors win over rule errors; answers to hidden fields are dropped unchecked. [kept]: the
+    values stored before an edit; one sent back unchanged whose option was archived or whose user
+    was deactivated since is accepted (every other check, rules included, still runs)."""
     from .models import Field
 
     own = version.form.ns
@@ -206,7 +212,10 @@ def validate_answers(version, answers: dict, today: str,
         try:
             cleaned[key] = clean_answer(fields[key], value)
         except AnswerError as e:
-            type_errors[key] = e.code
+            if e.code in GONE_STALE and kept is not None and kept.get(key) == value:
+                cleaned[key] = value
+            else:
+                type_errors[key] = e.code
     result = evaluate_form(spec_from_version(version), {**answers, own: cleaned}, today,
                            overrides)
     visible_type_errors = {k: c for k, c in type_errors.items() if result.visible[k]}

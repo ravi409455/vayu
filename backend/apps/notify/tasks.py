@@ -22,6 +22,10 @@ def push(ids: list[int]) -> int:
     for n in Notification.objects.filter(pk__in=ids).only("id", "user_id"):
         for d in Device.objects.filter(user_id=n.user_id, revoked_at__isnull=True).exclude(
                 push_token=""):
+            # the same phone, signed in by someone else since: only the newest holder (F-141)
+            if d.push_token_at and Device.objects.filter(
+                    push_token=d.push_token, push_token_at__gt=d.push_token_at).exists():
+                continue
             if fcm.send(d.push_token, {"id": str(n.id)}):
                 sent += 1
             else:

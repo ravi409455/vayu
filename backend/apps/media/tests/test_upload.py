@@ -467,7 +467,6 @@ def test_zip_needs_media_download_and_a_valid_kind_and_media(job, settings):
 def test_stuck_uploads_are_listed_and_alerted_once(job, settings):
     from datetime import timedelta
 
-    from django.core.management import call_command
     from django.utils import timezone
 
     from apps.core import events
@@ -480,11 +479,46 @@ def test_stuck_uploads_are_listed_and_alerted_once(job, settings):
     assert len(rows) == 1 and rows[0]["booking_id"] == "MD1" and rows[0]["field_key"] == "photo_a"
     assert [r["id"] for r in env.expert.get("/api/v1/problems/stuck-uploads").json()] == [
         rows[0]["id"]]                                  # experts see only their own
+    from apps.media.tasks import flag_stuck_uploads
+    from apps.notify.models import Notification
+
+    env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg(color=(1, 1, 1))),
+                    format="json")                                 # a second file, same job
+    MediaAsset.objects.update(created_at=timezone.now() - timedelta(hours=7))
     with events.capture() as seen:
-        call_command("flag_stuck_uploads")
-        call_command("flag_stuck_uploads")
+        assert flag_stuck_uploads() == 1                           # one alert per booking
+        assert flag_stuck_uploads() == 0                           # told once
     assert [n for n, _ in seen] == ["alert.stuck_upload"]
+    assert Notification.objects.filter(user=env.ops_user, kind="problem",
+                                       title__startswith="Photos stuck").count() == 1
     assert sha(b"x")
+
+
+def test_the_stuck_upload_check_runs_every_hour():
+    from django.conf import settings as s
+
+    entry = next(e for e in s.CELERY_BEAT_SCHEDULE.values()
+                 if e["task"] == "apps.media.tasks.flag_stuck_uploads")
+    assert entry["schedule"] == 3600.0
+
+
+@pytest.mark.parametrize("why", ["completed", "cancelled", "failed", "replaced"])
+def test_the_stuck_list_forgets_files_nobody_waits_for(job, settings, why):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    env, b = job
+    env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()), format="json")
+    MediaAsset.objects.update(created_at=timezone.now() - timedelta(hours=7))
+    assert len(env.ops.get("/api/v1/problems/stuck-uploads").json()) == 1
+    if why in ("completed", "cancelled"):
+        Booking.objects.filter(pk=b["id"]).update(stage=why)
+    elif why == "failed":
+        MediaAsset.objects.update(status="failed")
+    else:
+        MediaAsset.objects.update(replaced_at=timezone.now())
+    assert env.ops.get("/api/v1/problems/stuck-uploads").json() == []
 
 
 def test_experts_download_only_their_own_media(job, settings):

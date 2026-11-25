@@ -30,7 +30,8 @@ EVENTS = ["booking.created", "booking.updated", "booking.deleted", "inspection.s
           "alert.stuck_upload"]
 # internal event name -> the public event it becomes
 PUBLIC = {"booking.created": "booking.created", "booking.updated": "booking.updated",
-          "booking.assigned": "booking.updated", "booking.deleted": "booking.deleted",
+          # booking.assigned is for the bell only: its booking.updated already went (F-207)
+          "booking.deleted": "booking.deleted",
           "inspection.started": "inspection.started",
           "inspection.submitted": "inspection.submitted", "media.completed": "media.completed",
           "pdf.ready": "pdf.ready", "alert.conflict": "alert.conflict",
@@ -126,8 +127,6 @@ def _context(public: str, payload: dict) -> dict:
         ctx["changed_keys"] = sorted(changes)
         if "booking_id" in changes:
             ctx["booking_id_change"] = changes["booking_id"]
-    if payload.get("expert") is not None:
-        ctx["changed_keys"] = sorted({*ctx.get("changed_keys", []), "assigned_expert"})
     for key in ("inspection", "revision", "media", "reason"):
         if payload.get(key) is not None:
             ctx[key] = payload[key]

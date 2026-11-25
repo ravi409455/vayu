@@ -92,6 +92,24 @@ def _check(asset: MediaAsset) -> bool:
 
 
 @shared_task
+def flag_stuck_uploads() -> int:
+    """Every hour: one alert.stuck_upload (bell, push, webhook) per booking with files newly
+    stuck past STUCK_UPLOAD_HOURS (H-09). Each file is told about once; the bell repeats a
+    booking's alert at most once a day (notify.handlers.QUIET_FOR)."""
+    from apps.core import events
+
+    from .services import stuck_uploads
+
+    fresh = list(stuck_uploads().filter(stuck_alerted=False).order_by("created_at"))
+    for booking_id in dict.fromkeys(a.booking_id for a in fresh):
+        first = next(a for a in fresh if a.booking_id == booking_id)
+        events.emit("alert.stuck_upload", booking=str(booking_id), media=str(first.id),
+                    field_key=first.field_key)
+    MediaAsset.objects.filter(pk__in=[a.pk for a in fresh]).update(stuck_alerted=True)
+    return len({a.booking_id for a in fresh})
+
+
+@shared_task
 def purge_expired(batch: int = 500) -> int:
     """Admin's retention setting: original photos and videos of completed jobs are deleted for
     good once they are older than the days set (0 keeps them). Their previews, print copies and

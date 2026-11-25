@@ -438,6 +438,10 @@ def check_completion(booking_id) -> bool:
         b.last_change = {"by": "system", "at": timezone.now().isoformat(), "keys": ["stage"]}
         b.save()
         activity.log(b, None, "changed", {"stage": ["submitted", "completed"]})
+    # a stage change is a booking.updated like any other (H-13); before inspection.completed so
+    # the report made for the completion is not marked out of date by it
+    events.emit("booking.updated", booking=str(b.id), booking_id=b.booking_id,
+                changes={"stage": ["submitted", "completed"]}, by=None)
     events.emit("inspection.completed", booking=str(b.id), booking_id=b.booking_id,
                 inspection=str(insp.id))
     events.emit("media.completed", booking=str(b.id), booking_id=b.booking_id)
@@ -503,9 +507,12 @@ def delete_asset(actor, asset: MediaAsset) -> None:
 
 
 def stuck_uploads(hours: int | None = None):
+    """Files still not arrived after the limit that someone waits for: not on a finished or
+    cancelled job, not failed (the phone sends a new one) and not replaced by Ops (F-149)."""
     cutoff = timezone.now() - timedelta(hours=hours or settings.STUCK_UPLOAD_HOURS)
-    return MediaAsset.objects.exclude(status__in=("verified", "purged")) \
-        .filter(created_at__lt=cutoff)
+    return MediaAsset.objects.exclude(status__in=("verified", "purged", "failed")) \
+        .filter(created_at__lt=cutoff, replaced_at__isnull=True) \
+        .exclude(booking__stage__in=("completed", "cancelled"))
 
 
 def missing_files(booking: Booking) -> list[dict]:
@@ -563,6 +570,8 @@ def finish_without_missing(actor, booking: Booking) -> Booking:
         activity.log(b, actor, "finished_without_files",
                      {"stage": ["submitted", "completed"], "missing": left},
                      keys=["stage", *(f"{r['part']}.{r['key']}" for r in rows)], inspection=insp)
+    events.emit("booking.updated", booking=str(b.id), booking_id=b.booking_id,
+                changes={"stage": ["submitted", "completed"]}, by=actor.pk)
     events.emit("inspection.completed", booking=str(b.id), booking_id=b.booking_id,
                 inspection=str(insp.id) if insp else "")
     return b

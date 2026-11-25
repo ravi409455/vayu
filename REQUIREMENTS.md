@@ -83,7 +83,7 @@ Reference report: `SA37926PDI.pdf` (PDI, 35 pp). Clappia (garuda) was reviewed r
 ### 5.1 App basics
 - Kotlin / Jetpack Compose, **Android 11+**, English, distributed as an **APK download link** with an in-app self-update.
 - **Forced minimum app version:** an outdated app can't start new jobs but can finish a job already in progress, including one started offline before its version became too old (accepted; Ops alerted). Work on a form the Admin switched off after the start is accepted too (Ops alerted).
-- **Visible push notifications** (Firebase) for: new job assigned, rescheduled, cancelled / reassigned away, booking details changed. Each push also triggers an immediate sync. Pull-to-refresh is also available.
+- **Visible push notifications** (Firebase) for: new job assigned, rescheduled, cancelled / reassigned away, force-released by Ops, booking details changed (with field and option labels; never a field the booking form hides from experts, and no customer name when that is hidden). Ops' review (ratings, Key Checks, cleared alerts) is never shown to experts. The check-in answers are kept from Start, so Ops see the arrival selfie and GPS of a running job. Each push also triggers an immediate sync. Pull-to-refresh is also available.
 - **My Jobs** list → **booking summary confirmation** → Start.
 - **Check-in** on Start:
   - GPS and **server-corrected time** captured automatically (no distance check).
@@ -107,7 +107,7 @@ forms at the end of the day; the app keeps its generic nature").
   yes/no field the person may see and a value, or "not filled".
 
 ### 5.3 Media
-- Photo/video fields: the expert taps the camera repeatedly up to the configured count. Camera and gallery are both allowed.
+- Photo/video fields: the expert taps the camera repeatedly up to the configured count (a field without its own maximum takes **1 file**). Camera and gallery are both allowed.
 - **In-app camera photos get a burned-in stamp** (booking ID, expert, server time, GPS, or **"GPS unavailable"**). Gallery photos aren't stamped. The source is tagged internally and never shown in the PDF.
 - Stored as sent, plus a preview copy and, for an iPhone **HEIC** photo or one larger than 2048 px, a **separate JPEG copy** (≤ 2048 px) used for previews and the PDF. Videos are clips of up to 60 s at 720p, compressed on the phone. The server checks each video really is an MP4 / MOV file. A failed upload, or one left unfinished longer than the stuck-upload limit (6 h), does not use up a place on its field.
 - Expert can **delete/retake** and review full-screen before submit.
@@ -189,7 +189,7 @@ forms at the end of the day; the app keeps its generic nature").
 - **Job board:**
   - Today / date-range views with stage + Ops status.
   - Filters for city, expert, type and stage.
-  - **Problem queue:** stuck uploads, conflicts, rejected type changes, unverified payments, pay-later outstanding, edited but not regenerated, unverified times, late starts and too-quick jobs not yet reviewed.
+  - **Problem queue:** stuck uploads (checked every hour; files on finished or cancelled jobs, failed or replaced ones drop out; bell, push and webhook once per booking, the bell at most daily), conflicts, rejected type changes (Ops clear each alert once looked at), unverified payments, pay-later outstanding, edited but not regenerated, unverified times, late starts and too-quick jobs not yet reviewed.
   - **Global search:** Booking ID, customer name/phone, chassis no., car.
 - **Dashboards:** volume by day/week/month × type, city, expert, lead owner; **CSV export**.
 - **Inspection timing (Admin and Ops only, never Experts; see `docs/plan-timing.md`):**

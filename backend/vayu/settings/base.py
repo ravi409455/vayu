@@ -130,6 +130,7 @@ CELERY_BEAT_SCHEDULE = {
     "retry-webhooks": {"task": "apps.integrations.tasks.retry_due", "schedule": 60.0},
     "sweep-reports": {"task": "apps.reports.tasks.sweep_reports", "schedule": 300.0},
     "purge-media": {"task": "apps.media.tasks.purge_expired", "schedule": 3600.0},
+    "stuck-uploads": {"task": "apps.media.tasks.flag_stuck_uploads", "schedule": 3600.0},
     "late-starts": {"task": "apps.notify.tasks.late_starts", "schedule": 300.0},
 }
 

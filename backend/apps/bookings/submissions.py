@@ -266,25 +266,31 @@ def _start(actor, b: Booking, client_uuid, client_started_at, inspection_type, a
         changes["inspection_type"] = [b.inspection_type, inspection_type]
         _alert(b, "TYPE_CHANGE_REJECTED",
                f"Type change to {b.inspection_type} rejected: expert started {inspection_type}")
-        events.emit("alert.type_change_rejected", booking=str(b.id), booking_id=b.booking_id)
         b.answers = {**b.answers, "inspection_type": inspection_type}
         sync_columns(b)
+        b.save()                          # webhooks read the booking as it is now
+        # after the type is the expert's: it goes to that type's integrations (F-239)
+        events.emit("alert.type_change_rejected", booking=str(b.id), booking_id=b.booking_id)
     pinned, notes = phone_pins(b, versions, at)
     if notes:
         _late_work(b, "LATE_WORK", "Started offline; " + " ".join(notes))
     if too_old:
         _late_work(b, "LATE_WORK", f"Started on app version {app_version} before it had to be "
                    "updated.")
+    checked_in: dict = {}
     if pinned["start"] is not None:
         # a job is only "in progress" once the check-in is done (nothing changes if it is not)
         check_shape({"start": start_answers})
-        _clean_all(b, {**pinned, "inspection": None, "end": None}, {"start": start_answers or {}})
+        checked_in = _clean_all(b, {**pinned, "inspection": None, "end": None},
+                                {"start": start_answers or {}})["start"]
     b.stage, b.started_at = "in_progress", timezone.now()
     timing.stamp_late(b)
     insp = Inspection.objects.create(booking=b, expert=actor, form_version=pinned["inspection"],
                                      start_version=pinned["start"], end_version=pinned["end"],
                                      client_start_uuid=client_uuid,
-                                     client_started_at=client_started_at)
+                                     client_started_at=client_started_at,
+                                     # kept from now on: Ops see the arrival proof (F-241)
+                                     answers={"start": checked_in} if checked_in else {})
     _changed(actor, b, changes)
     events.emit("inspection.started", booking=str(b.id), inspection=str(insp.id))
     return b, insp
@@ -305,9 +311,10 @@ def stamp_auto(version: FormVersion | None, answers: dict) -> dict:
     return out
 
 
-def _clean_all(b: Booking, pinned: dict, answers: dict):
+def _clean_all(b: Booking, pinned: dict, answers: dict, kept: dict | None = None):
     """Validate each part against the version it was started on. A part with no version (its
-    form is not used) holds no answers. Returns (cleaned by part, errors)."""
+    form is not used) holds no answers. [kept]: the answers stored before an Ops edit (see
+    validate_answers). Returns (cleaned by part, errors)."""
     raw = {part: answers.get(part) or {} for part in PARTS}
     cleaned: dict[str, dict] = {}
     errors: dict = {}
@@ -321,7 +328,8 @@ def _clean_all(b: Booking, pinned: dict, answers: dict):
             cleaned[part] = {}
             continue
         context = {"booking": b.answers, **{p: (cleaned.get(p) or raw[p]) for p in PARTS}}
-        cleaned[part], e = validate_answers(version, {**context, part: raw[part]}, today())
+        cleaned[part], e = validate_answers(version, {**context, part: raw[part]}, today(),
+                                            kept=None if kept is None else kept.get(part) or {})
         errors = {**errors, **e}
     from apps.media.services import reference_errors
 
@@ -394,6 +402,9 @@ def _submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id):
     locked = _locked_keys(actor.role, "in_progress", pinned, answers, {})
     if locked:
         raise err("FIELD_ACCESS", "You cannot change these fields.", 403, keys=locked)
+    # a submit without the check-in keeps the one sent at start
+    if "start" not in answers:
+        answers = {**answers, "start": (insp.answers or {}).get("start")}
     answers = {p: stamp_auto(pinned[p], answers.get(p) or {}) for p in PARTS}
     insp.answers = _clean_all(b, pinned, answers)
     insp.status, insp.submitted_at = "submitted", timezone.now()
@@ -488,7 +499,7 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
     if locked:
         raise err("FIELD_ACCESS", "You cannot change these fields at this stage.", 403, keys=locked)
     merged = {k: {**(insp.answers.get(k) or {}), **(answers.get(k) or {})} for k in PARTS}
-    new = _clean_all(b, pinned, merged)
+    new = _clean_all(b, pinned, merged, kept=insp.answers)
     changed = [(part, k) for part in PARTS
                for k in sorted(set(new[part]) | set(insp.answers.get(part) or {}))
                if new[part].get(k) != (insp.answers.get(part) or {}).get(k)]
@@ -550,9 +561,11 @@ def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Insp
         scoring.validate_overrides(insp.form_version, body)
     except ValueError as e:
         raise err("INVALID_OVERRIDES", str(e)) from e
-    texts = body.get("key_checks") or {}
-    if texts and insp.booking.stage not in ("submitted", "completed"):
-        raise err("NOT_SUBMITTED", "Key Checks can be filled once the expert submits.", 409)
+    # no review of work nobody has sent (F-238), nor Key Check texts while it is being inspected
+    if insp.status != "submitted" or (body.get("key_checks") and insp.booking.stage not in (
+            "submitted", "completed")):
+        raise err("NOT_SUBMITTED", "Ratings and Key Checks can be set once the expert submits.",
+                  409)
     before = {k: v["value"] for k, v in ((insp.scores or {}).get("key_checks") or {}).items()}
     insp.overrides = scoring.apply_overrides(insp.overrides, body)
     insp.row_version += 1
@@ -564,7 +577,7 @@ def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Insp
     if set(body) - {"key_checks"}:
         activity.log(insp.booking, actor, "ratings_changed", keys=[], inspection=insp)
     after = {k: v["value"] for k, v in insp.scores.get("key_checks", {}).items()}
-    moved = {f"check.{k}": [before.get(k), after.get(k)] for k in texts
+    moved = {f"check.{k}": [before.get(k), after.get(k)] for k in body.get("key_checks") or {}
              if before.get(k) != after.get(k)}
     if moved:
         activity.log(insp.booking, actor, "key_checks_changed", moved, inspection=insp)

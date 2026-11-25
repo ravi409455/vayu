@@ -477,6 +477,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/Booking'
           description: ''
+  /api/v1/bookings/{id}/clear-alert:
+    post:
+      operationId: bookings_clear_alert_create
+      description: |-
+        Ops looked at an alert ({"code": "TYPE_CHANGE_REJECTED"}): it leaves "Needs you" and
+        the timeline says who cleared it (F-221).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Booking'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Booking'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
   /api/v1/bookings/{id}/finish:
     post:
       operationId: bookings_finish_create
@@ -876,6 +911,23 @@ paths:
       operationId: bookings_answer_fields_retrieve
       description: Fields Bookings can be filtered by (choice and yes/no answers this
         person may see).
+      tags:
+      - bookings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+          description: ''
+  /api/v1/bookings/count:
+    get:
+      operationId: bookings_count_retrieve
+      description: |-
+        How many bookings the list would give for the same filters, without loading them (the
+        Bookings filter's counts, F-085).
       tags:
       - bookings
       security:

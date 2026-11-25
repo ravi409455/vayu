@@ -146,3 +146,95 @@ def test_runtime_oscillation_is_caught_not_looped_forever():
     ]})
     with pytest.raises(RuntimeError, match="cycle"):
         evaluate_form(spec, {"inspection": {"aa": "x", "bb": "y"}}, "2026-10-14")
+
+
+def test_an_unchanged_value_whose_user_left_is_kept_but_rules_still_run(form_v, add_field,
+                                                                        admin, make_user):
+    """H-07: only an unchanged stored value is let through, and only for archived / inactive."""
+    version = build(form_v, add_field, admin)
+    add_field(form_v[2], "lead", type="user_picker", config={"role": "ops"})
+    gone = make_user("ops", username="gone")
+    gone.is_active = False
+    gone.save()
+    answers = {"chassis_no": "X", "door": "ok", "lead": gone.id}
+    _, errors = validate_answers(version, {"inspection": answers}, today="2026-10-14")
+    assert errors == {"lead": "INVALID_USER"}                          # a new choice: refused
+    cleaned, errors = validate_answers(version, {"inspection": answers}, today="2026-10-14",
+                                       kept={"lead": gone.id})
+    assert errors == {} and cleaned["lead"] == gone.id
+    _, errors = validate_answers(version, {"inspection": {**answers, "door": "dent"}},
+                                 today="2026-10-14", kept={"lead": gone.id})
+    assert errors == {"door_photo": "required"}                        # rules still run
+    _, errors = validate_answers(version, {"inspection": {**answers, "odo": -1}},
+                                 today="2026-10-14", kept={"lead": gone.id, "odo": -1})
+    assert errors == {"odo": "OUT_OF_RANGE"}                           # other codes never kept
+
+
+@pytest.mark.parametrize("cfg,value,words", [
+    ({"min": 0}, -1, "Must be at least 0."), ({"max": 9}, 10, "Must be at most 9."),
+    ({"min": 1, "max": 9}, 10, "Must be between 1 and 9.")])
+def test_a_range_message_never_says_none(cfg, value, words):
+    """F-007 (the broken message): one end of the range left open."""
+    from types import SimpleNamespace
+
+    from apps.forms.fieldtypes import AnswerError, clean_answer
+
+    with pytest.raises(AnswerError) as e:
+        clean_answer(SimpleNamespace(type="number", config=cfg, key="odo"), value)
+    assert str(e.value) == words
+
+
+@pytest.mark.parametrize("key,limit", [("chassis_no", 64), ("booking_id", 64), ("note", 200)])
+def test_text_copied_into_a_column_is_never_longer_than_it(key, limit):
+    """F-120: a named TOO_LONG instead of a database error."""
+    from types import SimpleNamespace
+
+    from apps.forms.fieldtypes import AnswerError, clean_answer
+
+    f = SimpleNamespace(type="short_text", config={}, key=key)
+    assert clean_answer(f, "x" * limit) == "x" * limit
+    with pytest.raises(AnswerError) as e:
+        clean_answer(f, "x" * (limit + 1))
+    assert e.value.code == "TOO_LONG"
+
+
+def test_a_file_field_without_its_own_maximum_takes_one():
+    """F-010: the same default everywhere (web, Android and the builder read it from here)."""
+    from types import SimpleNamespace
+
+    from apps.forms.fieldtypes import DEFAULT_MAX_COUNT, AnswerError, clean_answer
+
+    assert DEFAULT_MAX_COUNT == {"photo": 1, "video": 1, "file": 1}
+    f = SimpleNamespace(type="photo", config={}, key="p")
+    ids = ["5f0c3c8e-2f4e-4a57-9f9c-0d7b6a1d2e3f", "6f0c3c8e-2f4e-4a57-9f9c-0d7b6a1d2e3f"]
+    assert clean_answer(f, ids[:1]) == ids[:1]
+    with pytest.raises(AnswerError) as e:
+        clean_answer(f, ids)
+    assert e.value.code == "TOO_MANY"
+
+
+def test_the_migration_writes_the_old_default_into_fields_that_relied_on_it(form_v, add_field):
+    from importlib import import_module
+
+    from django.apps import apps as django_apps
+
+    from apps.forms.models import Field, LibraryItem
+
+    _, v, s = form_v
+    add_field(s, "pics", type="photo")
+    add_field(s, "clips", type="video", config={"max_count": 2})
+    Field.objects.filter(key="pics").update(config={})
+    sec = LibraryItem.objects.create(kind="section", key="sec", name="S", definition={
+        "title": "S", "fields": [{"key": "doc", "label": "Doc", "type": "file"},
+                                 {"key": "t", "label": "T", "type": "short_text"}]})
+    one = LibraryItem.objects.create(kind="field", key="one", name="One", definition={
+        "key": "one", "label": "One", "type": "photo", "config": {"max_count": 4}})
+    import_module("apps.forms.migrations.0020_explicit_max_count").write_old_default(
+        django_apps, None)
+    assert Field.objects.get(key="pics").config["max_count"] == 10
+    assert Field.objects.get(key="clips").config["max_count"] == 2          # its own, kept
+    sec.refresh_from_db()
+    one.refresh_from_db()
+    assert sec.definition["fields"][0]["config"] == {"max_count": 5}
+    assert "config" not in sec.definition["fields"][1]
+    assert one.definition["config"] == {"max_count": 4}
