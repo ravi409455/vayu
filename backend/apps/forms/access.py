@@ -80,7 +80,11 @@ def visible_answers(levels: dict[str, str], answers: dict, role: str) -> dict:
 
 def may_see_submissions(user, form) -> bool:
     """Admin always; others only if the form's "who can see submissions" list names their role."""
-    return user.role == "admin" or user.role in (form.submission_roles or [])
+    return role_may_see_submissions(user.role, form)
+
+
+def role_may_see_submissions(role: str, form) -> bool:
+    return role == "admin" or role in (form.submission_roles or [])
 
 
 def hidden_inspection_forms(user) -> list[int]:

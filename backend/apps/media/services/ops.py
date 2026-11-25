@@ -1,5 +1,4 @@
 """Ops adding, replacing and removing files on a submitted job."""
-import json
 
 from django.db import transaction
 from django.utils import timezone
@@ -16,7 +15,7 @@ from apps.forms.models import PARTS, Field
 from .. import storage
 from ..models import MediaAsset, MediaZip
 from .access import field_for, hidden_fields, is_manager
-from .answers import first_unarrived, live_asset, max_count, submitted_answer
+from .answers import expected_media, first_unarrived, live_asset, max_count, submitted_answer
 from .cleanup import asset_keys, drop_zips
 from .completion import check_completion
 
@@ -109,7 +108,8 @@ def remove(request, asset: MediaAsset) -> None:
     Ops upload that was never attached), so a retake is never blocked by an unwanted file."""
     user = request.user
     booking = asset.booking
-    used = any(str(asset.id) in json.dumps(i.answers) for i in booking.inspections.filter(
+    # named by a submitted inspection's file fields (not just any text that quotes the id)
+    used = any(str(asset.id) in expected_media(i) for i in booking.inspections.filter(
         status="submitted"))
     mine_unused = asset.uploaded_by_id == user.pk and not used and asset.replaced_at is None
     if not mine_unused or (booking.stage in ("completed", "cancelled")

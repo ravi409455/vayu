@@ -2,7 +2,8 @@ from django.core.management.base import BaseCommand
 
 from apps.forms.models import MasterList, MasterListItem
 
-# City and car make/model start empty: admins fill them. Never overwrites admin edits.
+# City and car make/model start empty here; setup_platform fills them (apps/platform/setup/
+# lists.py) and admins edit them. Never overwrites admin edits.
 LISTS = {
     "city": ("City", []),
     "car_make_model": ("Car make/model", []),

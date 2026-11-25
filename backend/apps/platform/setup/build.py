@@ -2,7 +2,6 @@
 Running it again with the same spec changes nothing; a different spec publishes a new version
 (inspections already started keep theirs)."""
 import json
-from typing import Any
 
 from django.db import transaction
 
@@ -161,6 +160,3 @@ def system_form(ftype: str) -> Form:
     return Form.objects.get(type=ftype)
 
 
-def describe(spec: dict) -> dict[str, Any]:
-    fields = [f for p in spec["pages"] for s in p["sections"] for f in s["fields"]]
-    return {"pages": len(spec["pages"]), "fields": len(fields)}

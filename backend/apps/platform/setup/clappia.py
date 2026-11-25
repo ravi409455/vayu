@@ -223,9 +223,6 @@ NUMBERS = [(r"km (current )?reading", "km", 0, 999999), (r"number of (car )?keys
 RANK: dict[tuple[str | None, str | None], int] = {
     ("ok", None): 0, ("warn", "minor"): 1, ("bad", "major"): 2, ("bad", "critical"): 3,
     ("warn", None): 4, ("muted", None): 5}
-# photos asked always, not only when a check finds a problem
-ALWAYS_PHOTO_SECTIONS = {"Car Images From All Directions", "Car Documents", "Car Details"}
-ALWAYS_PHOTO = re.compile(r"odometer|km reading|chassis|number plate|selfie", re.I)
 
 
 def spell(answer: str) -> str:
@@ -533,11 +530,3 @@ def _pairs(photo: dict, check: dict) -> bool:
     return a == b or difflib.SequenceMatcher(None, a, b).ratio() >= 0.75
 
 
-def stats(spec: dict) -> dict:
-    fields = [f for p in spec["pages"] for s in p["sections"] for f in s["fields"]]
-    from collections import Counter
-
-    return {"pages": len(spec["pages"]), "fields": len(fields),
-            "types": dict(Counter(f["type"] for f in fields)),
-            "rules": sum(1 for f in fields if f.get("show_if")),
-            "problems": len(spec["problems"])}

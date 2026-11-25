@@ -11,7 +11,6 @@ from .models import (
     Form,
     FormType,
     FormVersion,
-    MasterListItem,
     Page,
     Section,
     VersionCheck,
@@ -19,12 +18,6 @@ from .models import (
     lock_draft,
 )
 from .system_fields import PAGE_TITLE, STARTER_FIELDS, SYSTEM_FIELDS
-
-
-def item_label(list_key: str, item_key: str) -> str | None:
-    """Label for a master-list item, archived or not (old answers must still display)."""
-    return (MasterListItem.objects.filter(list__key=list_key, key=item_key)
-            .values_list("label", flat=True).first())
 
 
 def _build_first_version(form: Form) -> FormVersion:

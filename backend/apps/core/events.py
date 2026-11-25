@@ -1,5 +1,5 @@
-"""Domain events (booking.created, ...). Phase 9 delivers them to webhooks; until then they can
-be observed with `capture()` (tests) or `subscribe()`."""
+"""Domain events (booking.created, ...). Webhooks (integrations), the report (reports) and the bell
+and pushes (notify) subscribe in their apps' ready(); tests watch them with `capture()`."""
 from collections.abc import Callable
 from contextlib import contextmanager
 

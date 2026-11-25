@@ -45,9 +45,6 @@ LISTS = {"city": [("delhi", "Delhi"), ("pune", "Pune"), ("mumbai", "Mumbai")],
          "car_make_model": [("maruti_victoris", "Maruti Victoris"), ("tata_nexon", "Tata Nexon"),
                             ("hyundai_creta", "Hyundai Creta"),
                             ("mahindra_xuv_3xo", "Mahindra XUV 3XO AX5")]}
-DEFECT = {"options": [{"key": "ok", "label": "OK"},
-                      {"key": "dent", "label": "Dent", "is_defect": True, "severity": "minor"},
-                      {"key": "crack", "label": "Crack", "is_defect": True, "severity": "major"}]}
 
 
 def _publish(form: Form) -> FormVersion:

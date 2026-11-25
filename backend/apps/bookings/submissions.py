@@ -9,7 +9,8 @@ from django.utils import timezone
 
 from apps.core import events
 from apps.core import tasks as core_tasks
-from apps.forms.access import STAGES, levels_for, may_see_submissions
+from apps.core.errors import CodedError
+from apps.forms.access import STAGES, levels_for, role_may_see_submissions
 from apps.forms.models import PARTS, Field, Form, FormType, FormVersion, VersionStatus
 from apps.forms.rules import validate_answers
 from apps.forms.serializers import VersionTreeSerializer
@@ -65,10 +66,6 @@ def current_versions(booking: Booking) -> dict:
     return insp.pinned() if insp else versions_to_pin(inspection_version(booking.inspection_type))
 
 
-class _Role:
-    """Just a role name, so the visibility rule can be asked about a role without a user."""
-    def __init__(self, role: str):
-        self.role = role
 
 
 def own_filter(user) -> Q:
@@ -539,7 +536,7 @@ def searchable_stages(role: str) -> dict[str, list[str]]:
         return {c: list(STAGES) for c in columns}
     try:
         booking_version = booking_form_version()
-    except Exception:  # noqa: BLE001 - no booking form yet means no bookings either
+    except CodedError:                  # no booking form yet means no bookings either
         return {}
     by_stage = {s: levels_for(booking_version, role, s) for s in STAGES}
     out = {c: [s for s in STAGES if by_stage[s].get(key, "hidden") != "hidden"]  # fail closed
@@ -549,7 +546,7 @@ def searchable_stages(role: str) -> dict[str, list[str]]:
     chassis = {s: [levels_for(v, role, s).get("chassis_no", "hidden") for v in versions]
                or ["hidden"] for s in STAGES}                    # no form to say: closed
     out["chassis_no"] = [s for s in STAGES if "hidden" not in chassis[s]]
-    if any(not may_see_submissions(_Role(role), f) for f in Form.objects.filter(
+    if any(not role_may_see_submissions(role, f) for f in Form.objects.filter(
             type=FormType.CUSTOM)):
         out["chassis_no"] = []                  # a hidden submission must not be searchable
     return out

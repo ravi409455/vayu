@@ -12,7 +12,6 @@ CONDITION = {"options": [
     {"key": "minor", "label": "Minor", "is_defect": True, "severity": "minor"},
     {"key": "major", "label": "Major", "is_defect": True, "severity": "major"},
     {"key": "critical", "label": "Critical", "is_defect": True, "severity": "critical"}]}
-NOT_OK = {"in": [{"var": "inspection.%s"}, ["major", "critical"]]}
 FUEL = [("petrol", "Petrol"), ("diesel", "Diesel"), ("cng", "CNG"), ("hybrid", "Hybrid")]
 GEAR = [("manual", "Manual"), ("automatic", "Automatic"), ("amt", "AMT"), ("cvt", "CVT")]
 

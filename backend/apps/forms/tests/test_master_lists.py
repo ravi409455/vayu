@@ -3,7 +3,6 @@ from django.core.management import call_command
 
 from apps.accounts.models import AuditLog, Role
 from apps.forms.models import MasterList
-from apps.forms.services import item_label
 
 pytestmark = pytest.mark.django_db
 
@@ -60,7 +59,9 @@ def test_archived_items_hidden_but_labels_still_resolve(admin):
     admin.patch(f"/api/v1/master-list-items/{a['id']}", {"archived": True}, format="json")
     assert admin.get("/api/v1/master-lists/city/items").json() == []
     assert len(admin.get("/api/v1/master-lists/city/items?include_archived=1").json()) == 1
-    assert item_label("city", "delhi") == "Delhi"
+    from apps.reports.context import _label  # what the report prints for an old answer
+
+    assert _label("city", "delhi") == "Delhi"
 
 
 def test_items_are_never_deleted(admin):
