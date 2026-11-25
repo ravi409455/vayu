@@ -88,7 +88,7 @@ class JobsModel(
         val now = clock()
         val sinceBoot = s.syncedElapsed()?.let { e -> elapsed()?.let { it - e } }
         if (sinceBoot != null && (sinceBoot < 0 || kotlin.math.abs((now - at) - sinceBoot) > 2 * 60_000)) return false
-        fun day(ms: Long) = Instant.ofEpochMilli(ms + s.clockOffset()).atZone(ZoneId.systemDefault()).toLocalDate()
+        fun day(ms: Long) = Instant.ofEpochMilli(ms + s.clockOffset()).atZone(`in`.carcid.vayu.core.sync.IST).toLocalDate()
         return day(at) == day(now)
     }
 
@@ -120,7 +120,7 @@ class JobsModel(
 
     /** Today by the server's clock (the phone's may be wrong). */
     fun today(): LocalDate = Instant.ofEpochMilli(clock() + (store?.clockOffset() ?: 0L))
-        .atZone(ZoneId.systemDefault()).toLocalDate()
+        .atZone(`in`.carcid.vayu.core.sync.IST).toLocalDate()
 
     private fun show(offline: Boolean, error: String? = null) {
         val s = store ?: return

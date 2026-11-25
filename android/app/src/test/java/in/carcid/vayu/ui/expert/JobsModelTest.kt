@@ -46,4 +46,13 @@ class JobsModelTest {
         now += 24 * hour; boot += 24 * hour            // the next day
         assertFalse(m.verified())
     }
+
+    @Test fun todayIsIndiaTodayWhateverZoneThePhoneIsIn() {
+        val was = java.util.TimeZone.getDefault()
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Europe/London"))
+        try {
+            now = Instant.parse("2026-11-24T20:00:00Z").toEpochMilli()          // 01:30 on the 25th in India
+            org.junit.Assert.assertEquals(java.time.LocalDate.parse("2026-11-25"), model().today())
+        } finally { java.util.TimeZone.setDefault(was) }
+    }
 }

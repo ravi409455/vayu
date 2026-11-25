@@ -24,6 +24,13 @@ class FormTreeTest {
         assertFalse(t.field("seal")!!.answerable)
     }
 
+    @Test fun aFieldWithoutAMostFilesSettingTakesOneFile() {
+        fun f(type: String, config: Map<String, Any?> = emptyMap()) =
+            Field("k", "K", type, "", false, null, null, true, "edit", config)
+        assertEquals(listOf(1, 1, 1, 1), listOf("photo", "video", "file", "signature").map { f(it).maxCount })
+        assertEquals(6, f("photo", mapOf("max_count" to 6)).maxCount)
+    }
+
     @Test fun requiredQuestionsAreMissingUntilAnswered() {
         val f = filled()
         assertEquals(listOf("travel"), f.gaps("start").map { it.key })
