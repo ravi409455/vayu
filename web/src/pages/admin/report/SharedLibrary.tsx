@@ -17,6 +17,7 @@ import { PageSettings, PartSettings } from "./PartSettings";
 import { Preview, type LayoutPage } from "./Preview";
 import { ReportSettings } from "./ReportSettings";
 import { useShared, type SharedItem, type ThemeContent, type Usage } from "./sharing";
+import { keys } from "../../../api/keys";
 
 type Template = { id: number; form: number; form_key: string; versions: { id: number; number: number; status: string }[] };
 type TVersion = { id: number; definition: Definition };
@@ -40,11 +41,11 @@ export function SharedLibrary({ templates, forms, editable }: { templates: Templ
   const [deleting, setDeleting] = useState<SharedItem | null>(null);
   async function rename() {
     const it = renaming!; setRenaming(null);
-    try { await api(`pdf-shared/${it.id}`, { method: "PATCH", body: { name: newName } }); await refresh("pdf-shared"); say("Renamed."); } catch (e) { fail(e); }
+    try { await api(`pdf-shared/${it.id}`, { method: "PATCH", body: { name: newName } }); await refresh(keys.pdfShared()); say("Renamed."); } catch (e) { fail(e); }
   }
   async function remove() {
     const it = deleting!; setDeleting(null);
-    try { await api(`pdf-shared/${it.id}`, { method: "DELETE" }); await refresh("pdf-shared"); say(`“${it.name}” deleted.`); } catch (e) { fail(e); }
+    try { await api(`pdf-shared/${it.id}`, { method: "DELETE" }); await refresh(keys.pdfShared()); say(`“${it.name}” deleted.`); } catch (e) { fail(e); }
   }
   const item = (items.data ?? []).find((i) => i.id === open);
   if (item) return <SharedEditor key={`${item.id}-${item.revision}`} item={item} all={items.data ?? []} templates={templates} forms={forms} editable={editable} onBack={() => setOpen(null)} />;
@@ -104,12 +105,12 @@ function SharedEditor({ item, all, templates, forms, editable, onBack }: {
   const host = templates.find((t) => t.id === tid);
   const form = forms.find((f) => f.id === host?.form);
   const hostVersion = host && (host.versions.find((v) => v.status === "draft") ?? host.versions[host.versions.length - 1]);
-  const hv = useQuery({ queryKey: ["pdf-version", hostVersion?.id], enabled: !!hostVersion, queryFn: ({ signal }) => api<TVersion>(`pdf-template-versions/${hostVersion!.id}`, { signal }) });
-  const content = useQuery({ queryKey: ["pdf-shared", item.id, item.revision], queryFn: async () => (await api<SharedItem>(`pdf-shared/${item.id}`)).content });
+  const hv = useQuery({ queryKey: keys.pdfVersion(hostVersion?.id), enabled: !!hostVersion, queryFn: ({ signal }) => api<TVersion>(`pdf-template-versions/${hostVersion!.id}`, { signal }) });
+  const content = useQuery({ queryKey: keys.pdfShared(item.id, item.revision), queryFn: async () => (await api<SharedItem>(`pdf-shared/${item.id}`)).content });
   const formVersionId = form?.draft_version?.id ?? form?.published_version?.id;
-  const tree = useQuery({ queryKey: ["form-version", formVersionId], enabled: !!formVersionId, queryFn: ({ signal }) => api<FormVersion>(`form-versions/${formVersionId}`, { signal }) });
+  const tree = useQuery({ queryKey: keys.formVersion(formVersionId), enabled: !!formVersionId, queryFn: ({ signal }) => api<FormVersion>(`form-versions/${formVersionId}`, { signal }) });
   const choices = useRefChoices(host?.form ?? 0);
-  const sample = useQuery({ queryKey: ["pdf-sample", form?.inspection_type], enabled: !!form?.inspection_type,
+  const sample = useQuery({ queryKey: keys.pdfSample(form?.inspection_type), enabled: !!form?.inspection_type,
     queryFn: async () => (await Promise.all(["completed", "submitted"].map((stage) => api<Page<Booking>>("bookings", { query: { type: form!.inspection_type, stage } })))).flatMap((r) => r.results) });
   const [bookingId, setBookingId] = useState("");
   const chosen = bookingId || sample.data?.[0]?.id || "";
@@ -156,7 +157,7 @@ function SharedEditor({ item, all, templates, forms, editable, onBack }: {
     try {
       const r = await api<SharedItem & { updated: string[] }>("pdf-shared", { body: { kind: item.kind, key: item.key, name: item.name, content: body } });
       setDirty(false);
-      await refresh("pdf-shared", "pdf-version", "pdf-templates");
+      await refresh(keys.pdfShared(), keys.pdfVersion(), keys.pdfTemplates());
       say(`Saved as version ${r.revision}.${r.updated.length ? ` Updated: ${r.updated.join(", ")}.` : ""}`);
     } catch (e) { fail(e); }
   }

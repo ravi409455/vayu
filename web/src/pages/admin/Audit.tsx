@@ -6,6 +6,7 @@ import { useList } from "../../api/hooks";
 import type { User } from "../../api/types";
 import { fmtStamp } from "../../lib/format";
 import { Empty, LoadError, PageHeader } from "../../ui/kit";
+import { keys } from "../../api/keys";
 
 type Row = { id: number; actor_username: string | null; actor_name: string | null; action: string; target_type: string; target_id: string; summary: string; created_at: string };
 
@@ -34,8 +35,8 @@ export function Audit() {
   const [f, setF] = useState({ action: "", actor: "", from: "", to: "" });
   const [page, setPage] = useState(1);
   const set = (p: Partial<typeof f>) => { setF({ ...f, ...p }); setPage(1); };
-  const users = useList<User>("users-all", "users");
-  const q = useQuery({ queryKey: ["audit", f, page], queryFn: ({ signal }) => api<Page<Row>>("audit-logs", { query: { ...f, page }, signal }) });
+  const users = useList<User>(keys.users(), "users");
+  const q = useQuery({ queryKey: keys.audit(f, page), queryFn: ({ signal }) => api<Page<Row>>("audit-logs", { query: { ...f, page }, signal }) });
   const rows = q.data?.results ?? [];
   return (
     <>

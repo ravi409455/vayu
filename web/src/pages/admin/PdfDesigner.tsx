@@ -16,6 +16,7 @@ import { Preview, type LayoutPage } from "./report/Preview";
 import { ReportSettings } from "./report/ReportSettings";
 import { useShared, type SharedItem } from "./report/sharing";
 import { SharedLibrary } from "./report/SharedLibrary";
+import { keys } from "../../api/keys";
 
 type Template = { id: number; form: number; form_key: string; versions: { id: number; number: number; status: string }[] };
 type TVersion = { id: number; template: number; number: number; status: string; definition: Definition; row_version: number };
@@ -26,15 +27,15 @@ export function PdfDesigner() {
   const { can } = useAuth();
   const { fail } = useToast();
   const refresh = useRefresh();
-  const templates = useList<Template>("pdf-templates", "pdf-templates");
-  const forms = useList<FormSummary>("forms", "forms");
+  const templates = useList<Template>(keys.pdfTemplates(), "pdf-templates");
+  const forms = useList<FormSummary>(keys.forms(), "forms");
   const [tid, setTid] = useState<number | "library" | null>(null);
   const library = tid === "library";
   const t = library ? null : (templates.data ?? []).find((x) => x.id === tid) ?? (templates.data ?? [])[0] ?? null;
   const formName = (x: Template) => (forms.data ?? []).find((f) => f.id === x.form)?.name ?? x.form_key;
   const editable = can("pdf_templates.edit");
   const withoutTemplate = (forms.data ?? []).filter((f) => f.type === "custom" && !(templates.data ?? []).some((x) => x.form === f.id));
-  const make = useMutation({ mutationFn: (form: number) => api<Template>("pdf-templates", { body: { form } }), onSuccess: (r) => { void refresh("pdf-templates"); setTid(r.id); }, onError: fail });
+  const make = useMutation({ mutationFn: (form: number) => api<Template>("pdf-templates", { body: { form } }), onSuccess: (r) => { void refresh(keys.pdfTemplates()); setTid(r.id); }, onError: fail });
   return (
     <>
       <PageHeader title="PDF templates">
@@ -47,7 +48,7 @@ export function PdfDesigner() {
         <button key={x.id} role="tab" aria-selected={(t?.id ?? null) === x.id} className={t?.id === x.id ? "on" : ""} onClick={() => setTid(x.id)}>{formName(x)}</button>))}
         <button role="tab" aria-selected={library} className={`rd-libtab${library ? " on" : ""}`} onClick={() => setTid("library")}>Shared library</button></div>
       {library ? <SharedLibrary templates={templates.data ?? []} forms={forms.data ?? []} editable={editable} />
-        : t ? <Designer key={t.id} template={t} form={(forms.data ?? []).find((f) => f.id === t.form)} editable={editable} refresh={() => refresh("pdf-templates")}
+        : t ? <Designer key={t.id} template={t} form={(forms.data ?? []).find((f) => f.id === t.form)} editable={editable} refresh={() => refresh(keys.pdfTemplates())}
         copyTargets={withoutTemplate} onOpen={setTid} />
         : <Empty title="No PDF templates yet">Create one for an inspection form with “New template for…”.</Empty>}
     </>
@@ -85,11 +86,11 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
   const draftMeta = template.versions.find((v) => v.status === "draft");
   const latest = template.versions[template.versions.length - 1];
   const vid = (draftMeta ?? latest)?.id;
-  const ver = useQuery({ queryKey: ["pdf-version", vid], enabled: !!vid, queryFn: ({ signal }) => api<TVersion>(`pdf-template-versions/${vid}`, { signal }) });
+  const ver = useQuery({ queryKey: keys.pdfVersion(vid), enabled: !!vid, queryFn: ({ signal }) => api<TVersion>(`pdf-template-versions/${vid}`, { signal }) });
   const formVersionId = form?.draft_version?.id ?? form?.published_version?.id;
-  const tree = useQuery({ queryKey: ["form-version", formVersionId], enabled: !!formVersionId, queryFn: ({ signal }) => api<FormVersion>(`form-versions/${formVersionId}`, { signal }) });
+  const tree = useQuery({ queryKey: keys.formVersion(formVersionId), enabled: !!formVersionId, queryFn: ({ signal }) => api<FormVersion>(`form-versions/${formVersionId}`, { signal }) });
   const choices = useRefChoices(template.form);
-  const sample = useQuery({ queryKey: ["pdf-sample", form?.inspection_type], enabled: !!form?.inspection_type,
+  const sample = useQuery({ queryKey: keys.pdfSample(form?.inspection_type), enabled: !!form?.inspection_type,
     queryFn: async () => (await Promise.all(["completed", "submitted"].map((stage) => api<Page<Booking>>("bookings", { query: { type: form!.inspection_type, stage } })))).flatMap((r) => r.results) });
   const [def, setDef] = useState<Definition | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -168,11 +169,11 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
     await save(def);
     try {
       await api(`pdf-template-versions/${v.id}/publish`, { body: { row_version: rowVersion.current } });
-      say("Published. New and re-made reports use this layout."); await reload("pdf-version"); void refresh();
+      say("Published. New and re-made reports use this layout."); await reload(keys.pdfVersion()); void refresh();
     } catch (e) { fail(e); setShowWarnings(true); }
   }
   async function discardDraft() {
-    try { await api(`pdf-template-versions/${v!.id}`, { method: "DELETE" }); setDiscard(false); say("Draft discarded. The live layout is unchanged."); await reload("pdf-version"); await refresh(); }
+    try { await api(`pdf-template-versions/${v!.id}`, { method: "DELETE" }); setDiscard(false); say("Draft discarded. The live layout is unchanged."); await reload(keys.pdfVersion()); await refresh(); }
     catch (e) { setDiscard(false); fail(e); }
   }
   async function exportFile() {
@@ -192,7 +193,7 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
     setImporting(null);
     try {
       const r = await api<TVersion & { issues: Issue[]; notes: string[] }>(`pdf-templates/${template.id}/import`, { body: file });
-      await refresh(); await reload("pdf-version", "pdf-shared", "pdf-pictures");
+      await refresh(); await reload(keys.pdfVersion(), keys.pdfShared(), keys.pdfPictures());
       say([`Imported into draft v${r.number}.`, ...r.notes, r.issues.length ? `${r.issues.length} thing${r.issues.length === 1 ? "" : "s"} to fix: see warnings.` : ""].filter(Boolean).join(" "));
       if (r.issues.length) setShowWarnings(true);
     } catch (e) { fail(e); }

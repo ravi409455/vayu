@@ -15,6 +15,7 @@ import { Avatar } from "../../ui/Avatar";
 import { Empty, LoadError, PageHeader, useToast } from "../../ui/kit";
 import { Actions } from "./Booking";
 import { useCount, viewQuery } from "./Bookings";
+import { keys } from "../../api/keys";
 
 const SLOT_PX = 76;                // width of 30 minutes; the day scrolls sideways
 const LANE_W = 200;                // the expert column, kept in view while scrolling
@@ -33,9 +34,9 @@ export function Today() {
   const { say, fail } = useToast();
   const refresh = useRefresh();
   const t = today();
-  const q = useQuery({ queryKey: ["bookings-page", "today-home", t], refetchInterval: 60_000,      // the whole day, every page
+  const q = useQuery({ queryKey: keys.bookings("today-home", t), refetchInterval: 60_000,      // the whole day, every page
     queryFn: ({ signal }) => fetchAll<Booking>("bookings", { date_from: t, date_to: t, order: "schedule" }, signal) });
-  const experts = useList<User>("experts", "users", { role: "expert" });
+  const experts = useList<User>(keys.users(), "users", { role: "expert" });
   const scroller = useRef<HTMLDivElement>(null);
   const car = useLabels("car_make_model");
   const city = useLabels("city");
@@ -243,7 +244,7 @@ export function Today() {
             {spanFacts(tip.sp, hoursOf(tip.b.answers.inspection_time), nowAt).map((f) => <Fragment key={f.label}><dt>{f.label}</dt><dd className={f.bad ? "bad" : ""}>{f.value}</dd></Fragment>)}
           </dl>
         </div>)}
-      {assigning && <Actions kind="assign" booking={assigning} experts={experts.data ?? []} onClose={() => setAssigning(null)} fail={fail} onDone={() => { setAssigning(null); say("Assigned."); void refresh("bookings-page"); }} />}
+      {assigning && <Actions kind="assign" booking={assigning} experts={experts.data ?? []} onClose={() => setAssigning(null)} fail={fail} onDone={() => { setAssigning(null); say("Assigned."); void refresh(keys.bookings()); }} />}
     </>
   );
 }

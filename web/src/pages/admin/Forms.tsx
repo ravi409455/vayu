@@ -8,6 +8,7 @@ import { useAuth } from "../../auth";
 import { Empty, Field, LoadError, Modal, PageHeader, Pill, useToast } from "../../ui/kit";
 import { slugKey } from "../../lib/fieldTypes";
 import { ImportDialog } from "./ImportForm";
+import { keys } from "../../api/keys";
 
 export const TYPE_LABEL: Record<FormType, string> = { booking: "Booking form", start: "Start form", end: "End form", custom: "Custom form" };
 const SYSTEM_ORDER: FormType[] = ["booking", "start", "end"];
@@ -24,7 +25,7 @@ export function Forms() {
   const { fail } = useToast();
   const nav = useNavigate();
   const refresh = useRefresh();
-  const forms = useList<FormSummary>("forms", "forms");
+  const forms = useList<FormSummary>(keys.forms(), "forms");
   const [open, setOpen] = useState(false);
   const file = useRef<HTMLInputElement>(null);
   const [bundle, setBundle] = useState<unknown>(null);
@@ -32,7 +33,7 @@ export function Forms() {
   const [keyEdited, setKeyEdited] = useState(false);     // until the Admin types a key, it follows the name
   const create = useMutation({
     mutationFn: () => api<FormSummary>("forms", { body: f }),
-    onSuccess: (r) => { void refresh("forms"); nav(`/forms/${r.id}`); },
+    onSuccess: (r) => { void refresh(keys.forms()); nav(`/forms/${r.id}`); },
     onError: fail,
   });
   const system = SYSTEM_ORDER.map((t) => (forms.data ?? []).find((x) => x.type === t)).filter((x): x is FormSummary => !!x);

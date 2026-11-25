@@ -2,12 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "./client";
 import { fetchAll } from "./hooks";
 import type { MasterListItem } from "./types";
+import { keys } from "./keys";
 
 export type InspectionType = { key: string; label: string; available: boolean };
 
 /** The custom forms by name: what Ops pick when they book. `available` = switched on and published. */
 export function useInspectionTypes(): InspectionType[] {
-  const q = useQuery({ queryKey: ["inspection-types"], staleTime: 60_000, queryFn: ({ signal }) => api<InspectionType[]>("inspection-types", { signal }) });
+  const q = useQuery({ queryKey: keys.inspectionTypes(), staleTime: 60_000, queryFn: ({ signal }) => api<InspectionType[]>("inspection-types", { signal }) });
   return q.data ?? [];
 }
 
@@ -19,7 +20,7 @@ export function useTypeLabels(): (key: unknown) => string {
 
 /** key -> label for a master list (cities, car models, inspection types...). */
 export function useLabels(list: string): (key: unknown) => string {
-  const q = useQuery({ queryKey: ["list-items", list], staleTime: 300_000, queryFn: ({ signal }) => fetchAll<MasterListItem>(`master-lists/${list}/items`, undefined, signal) });
+  const q = useQuery({ queryKey: keys.listItems(list), staleTime: 300_000, queryFn: ({ signal }) => fetchAll<MasterListItem>(`master-lists/${list}/items`, undefined, signal) });
   const map = new Map((q.data ?? []).map((i) => [i.key, i.label]));
   return (key) => (key === undefined || key === null || key === "" ? "" : map.get(String(key)) ?? String(key));
 }

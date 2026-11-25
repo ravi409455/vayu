@@ -5,6 +5,7 @@ import { useList, useRefresh } from "../../api/hooks";
 import type { ApiKeyRow, FormSummary } from "../../api/types";
 import { Confirm, Empty, Field, LoadError, Modal, PageHeader, Pill, useToast, when } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
+import { keys } from "../../api/keys";
 
 /** "a, b" -> ["a", "b"]; "*" -> ["*"] (every field, only when typed on purpose);
  *  empty means no access at all (fail closed). */
@@ -17,8 +18,8 @@ export function parseFields(s: string): string[] {
 export function ApiKeys() {
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const keys = useList<ApiKeyRow>("api-keys", "api-keys");
-  const forms = useList<FormSummary>("forms", "forms");
+  const apiKeys = useList<ApiKeyRow>(keys.apiKeys(), "api-keys");
+  const forms = useList<FormSummary>(keys.forms(), "forms");
   const eligible = (forms.data ?? []).filter((f) => f.type === "booking" || f.type === "custom");
   const [edit, setEdit] = useState<{ id?: string; name: string; allow_delete: boolean; scope: Record<string, string> } | null>(null);
   const [shown, setShown] = useState<string | null>(null);
@@ -33,18 +34,18 @@ export function ApiKeys() {
       const body = { name: e.name, allow_delete: e.allow_delete, scope: { forms } };
       return e.id ? api<ApiKeyRow>(`api-keys/${e.id}`, { method: "PATCH", body }) : api<ApiKeyRow>("api-keys", { body });
     },
-    onSuccess: (r) => { setEdit(null); if (r.key) setShown(r.key); else say("Saved."); void refresh("api-keys"); },
+    onSuccess: (r) => { setEdit(null); if (r.key) setShown(r.key); else say("Saved."); void refresh(keys.apiKeys()); },
     onError: fail,
   });
-  const revoke = useMutation({ mutationFn: (k: ApiKeyRow) => api(`api-keys/${k.id}/revoke`, { body: {} }), onSuccess: () => { say("Revoked. It stopped working immediately."); void refresh("api-keys"); }, onError: fail });
+  const revoke = useMutation({ mutationFn: (k: ApiKeyRow) => api(`api-keys/${k.id}/revoke`, { body: {} }), onSuccess: () => { say("Revoked. It stopped working immediately."); void refresh(keys.apiKeys()); }, onError: fail });
   return (
     <>
       <PageHeader title="API keys" subtitle={<>Let another system read and write bookings. API docs: <a href="/api/v1/docs" target="_blank" rel="noreferrer">/api/v1/docs</a></>}>
         <button className="primary" onClick={() => setEdit({ name: "", allow_delete: false, scope: {} })}>New key</button></PageHeader>
-      {keys.isError && <LoadError error={keys.error} what="API keys" onRetry={keys.refetch} />}
-      {keys.data && keys.data.length === 0 ? <Empty title="No API keys yet" action={<button className="primary" onClick={() => setEdit({ name: "", allow_delete: false, scope: {} })}>New key</button>}>A key lets another system read and write bookings.</Empty> :
+      {apiKeys.isError && <LoadError error={apiKeys.error} what="API keys" onRetry={apiKeys.refetch} />}
+      {apiKeys.data && apiKeys.data.length === 0 ? <Empty title="No API keys yet" action={<button className="primary" onClick={() => setEdit({ name: "", allow_delete: false, scope: {} })}>New key</button>}>A key lets another system read and write bookings.</Empty> :
       <table><thead><tr><th>Name</th><th>Key starts with</th><th>Can access</th><th>Last used</th><th><span className="sr-only">Actions</span></th></tr></thead>
-        <tbody>{(keys.data ?? []).map((k) => (
+        <tbody>{(apiKeys.data ?? []).map((k) => (
           <tr key={k.id}><td>{k.name} {k.revoked_at && <Pill tone="bad">Revoked</Pill>} {k.allow_delete && <Pill tone="warn">Can delete</Pill>}</td>
             <td className="mono">vk_{k.prefix}_…</td>
             <td className="small">{Object.entries(k.scope.forms).map(([f, v]) => `${f}: ${v.join(", ")}`).join(" · ")}</td>

@@ -9,6 +9,7 @@ import { fmtDay, fmtPhone, fmtStamp, fmtTime, mapsUrl } from "../lib/format";
 import { Thumb } from "./MediaThumb";
 import { MEDIA_TYPES, NOT_ASKED_TYPES } from "../lib/fieldTypes";
 import { isEmpty } from "../rules/rules";
+import { keys } from "../api/keys";
 
 export type SheetFilter = "all" | "defects" | "edited" | "empty";
 const SKIP = NOT_ASKED_TYPES;          // shown on the Ratings tab, or nothing to read
@@ -34,7 +35,7 @@ function ListLabel({ list, value }: { list: string; value: unknown }) {
 }
 
 function UserName({ role, id }: { role: string; id: unknown }) {
-  const q = useQuery({ queryKey: ["users-by-role", role], retry: false, staleTime: 300_000, queryFn: ({ signal }) => fetchAll<User>("users", { role }, signal) });
+  const q = useQuery({ queryKey: keys.users({ role }), retry: false, staleTime: 300_000, queryFn: ({ signal }) => fetchAll<User>("users", { role }, signal) });
   const u = q.data?.find((x) => x.id === id);
   return <>{u ? u.name || u.username : `#${String(id)}`}</>;
 }

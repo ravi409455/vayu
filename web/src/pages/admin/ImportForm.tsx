@@ -6,6 +6,7 @@ import { useRefresh } from "../../api/hooks";
 import type { FormSummary } from "../../api/types";
 import { slugKey } from "../../lib/fieldTypes";
 import { Field, Modal, useToast } from "../../ui/kit";
+import { keys } from "../../api/keys";
 
 type Bundle = { schema?: number; form?: { key?: string; name?: string; type?: string; kind?: string } };
 type Result = { form: number; draft_version: number; created: { form: boolean; library_items: number }; notes: string[] };
@@ -28,7 +29,7 @@ export function ImportDialog({ bundle, forms, onClose }: { bundle: Bundle; forms
   const asNew = mode === "new" && !system;
   const go = useMutation({
     mutationFn: () => api<Result>("promote/import", { body: bundle, query: asNew ? { as_new_key: key, as_new_name: name } : undefined }),
-    onSuccess: (r) => { setDone(r); void refresh("forms"); },
+    onSuccess: (r) => { setDone(r); void refresh(keys.forms()); },
     onError: (e) => { if (e instanceof ApiError && Array.isArray(e.body.conflicts)) setConflicts(e.body.conflicts as string[]); else fail(e); },
   });
   if (done) {
@@ -71,7 +72,7 @@ export function DuplicateDialog({ form, onClose }: { form: FormSummary; onClose:
   const [keyEdited, setKeyEdited] = useState(false);
   const dup = useMutation({
     mutationFn: () => api<Result>(`forms/${form.id}/duplicate`, { body: { key, name } }),
-    onSuccess: (r) => { void refresh("forms"); nav(`/forms/${r.form}`); },
+    onSuccess: (r) => { void refresh(keys.forms()); nav(`/forms/${r.form}`); },
     onError: fail,
   });
   return (

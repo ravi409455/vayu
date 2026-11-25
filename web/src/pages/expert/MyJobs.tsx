@@ -8,6 +8,7 @@ import type { Booking } from "../../api/types";
 import { addDays, fmtDay, fmtPhone, fmtTime, mapsUrl, today } from "../../lib/format";
 import { Empty, LoadError, Pill, PageHeader } from "../../ui/kit";
 import { loadJSON, saveJSON } from "../../lib/store";
+import { keys } from "../../api/keys";
 
 const OPEN = ["assigned", "in_progress", "submitted"];
 
@@ -49,7 +50,7 @@ async function myLeads(since: string): Promise<Booking[]> {
 export function MyJobs() {
   const [days, setDays] = useState(30);
   const since = addDays(today(), -days);
-  const jobs = useQuery({ queryKey: ["my-jobs", since], queryFn: () => myLeads(since), refetchInterval: 60_000, placeholderData: keepPreviousData });
+  const jobs = useQuery({ queryKey: keys.bookings("mine", since), queryFn: () => myLeads(since), refetchInterval: 60_000, placeholderData: keepPreviousData });
   const car = useLabels("car_make_model");
   const city = useLabels("city");
   const type = useTypeLabels();

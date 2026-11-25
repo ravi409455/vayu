@@ -6,6 +6,7 @@ import { useInspectionTypes } from "../../api/labels";
 import { useAuth } from "../../auth";
 import { useTiming, type TimingSettings } from "../../lib/timing";
 import { Field, PageHeader, useToast } from "../../ui/kit";
+import { keys } from "../../api/keys";
 
 /** Settings Admin changes (Ops may look): today the time limits for late starts and too-quick jobs. */
 export function Settings() {
@@ -19,7 +20,7 @@ export function Settings() {
   useEffect(() => setV(saved), [saved]);
   const save = useMutation({
     mutationFn: () => api("settings/timing", { method: "PUT", body: v }),
-    onSuccess: () => { say("Saved. Flags use the new limits now."); void refresh("settings"); void refresh("bookings-page"); },
+    onSuccess: () => { say("Saved. Flags use the new limits now."); void refresh(keys.settings()); void refresh(keys.bookings()); },
     onError: fail,
   });
   const num = (value: number, set: (n: number) => void, label: string) => (
@@ -67,12 +68,12 @@ type MediaSettings = { photo_days: number; video_days: number };
 function MediaRetention({ edit }: { edit: boolean }) {
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const q = useQuery({ queryKey: ["settings", "media"], queryFn: ({ signal }) => api<MediaSettings>("settings/media", { signal }) });
+  const q = useQuery({ queryKey: keys.settings("media"), queryFn: ({ signal }) => api<MediaSettings>("settings/media", { signal }) });
   const [v, setV] = useState<MediaSettings | null>(null);
   useEffect(() => { if (q.data) setV(q.data); }, [q.data]);
   const save = useMutation({
     mutationFn: () => api("settings/media", { method: "PUT", body: v }),
-    onSuccess: () => { say("Saved. Older files are removed within the hour."); void refresh("settings"); },
+    onSuccess: () => { say("Saved. Older files are removed within the hour."); void refresh(keys.settings()); },
     onError: fail,
   });
   if (!v) return null;

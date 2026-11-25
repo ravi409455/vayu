@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { useList } from "../api/hooks";
 import type { FormSummary, FormVersion } from "../api/types";
+import { keys } from "../api/keys";
 
 export type RefChoice = { value: string; label: string; type: string };
 type Want = { ns: string; id: number };
@@ -20,7 +21,7 @@ const offers = (type: string, own: { use_start?: boolean; use_end?: boolean } | 
 function useVersions(want: Want[]): Tree[] | undefined {
   const ids = want.map((x) => `${x.ns}:${x.id}`).join(",");
   return useQuery({
-    queryKey: ["form-trees", ids], enabled: want.length > 0,
+    queryKey: keys.formVersions("set", ids), enabled: want.length > 0,
     queryFn: async ({ signal }) => Promise.all(want.map(async (x) => ({ ns: x.ns, v: await api<FormVersion>(`form-versions/${x.id}`, { signal }) }))),
   }).data;
 }
@@ -34,7 +35,7 @@ function fieldsOf(trees: Tree[]): RefChoice[] {
 /** For a PDF template: every field of the booking, start, end and the given custom form (drafts
  *  first), plus the Key Checks the report may show. */
 export function useRefChoices(customFormId?: number): RefChoice[] {
-  const forms = useList<FormSummary>("forms", "forms").data ?? [];
+  const forms = useList<FormSummary>(keys.forms(), "forms").data ?? [];
   const own = forms.find((f) => f.id === customFormId);
   const ownV = own?.draft_version ?? own?.published_version;
   const want = forms.filter((f) => (f.type === "custom" ? f.id === customFormId : offers(f.type, ownV)))
@@ -50,7 +51,7 @@ export function useRefChoices(customFormId?: number): RefChoice[] {
 /** For the form builder: fields a condition can point at: the version being edited plus the other
  *  forms' published ones (booking, start, end; never another custom form). */
 export function useFieldChoices(f: FormSummary | undefined, v: FormVersion | undefined): RefChoice[] {
-  const forms = useList<FormSummary>("forms", "forms").data ?? [];
+  const forms = useList<FormSummary>(keys.forms(), "forms").data ?? [];
   const want = forms.filter((x) => x.type !== "custom" && x.type !== f?.type && !!x.published_version && (f?.type !== "custom" || offers(x.type, v)))
     .map((x) => ({ ns: nsOf(x.type), id: x.published_version!.id }));
   const trees = useVersions(want);

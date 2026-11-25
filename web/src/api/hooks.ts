@@ -24,11 +24,13 @@ export async function fetchAll<T>(path: string, query?: Query, signal?: AbortSig
   return out;
 }
 
-export function useList<T>(key: string, path: string, query?: Query) {
-  return useQuery({ queryKey: [key, query], queryFn: ({ signal }) => fetchAll<T>(path, query, signal) });
+/** Every row of a list, cached under a key from `keys` (the query is added to it). */
+export function useList<T>(key: readonly unknown[], path: string, query?: Query) {
+  return useQuery({ queryKey: query ? [...key, query] : key, queryFn: ({ signal }) => fetchAll<T>(path, query, signal) });
 }
 
+/** Refresh by `keys` prefixes: `refresh(keys.booking())` reaches every booking query. */
 export function useRefresh() {
   const qc = useQueryClient();
-  return (...keys: string[]) => Promise.all(keys.map((k) => qc.invalidateQueries({ queryKey: [k] })));
+  return (...ks: readonly unknown[][]) => Promise.all(ks.map((k) => qc.invalidateQueries({ queryKey: k })));
 }

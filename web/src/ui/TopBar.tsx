@@ -11,6 +11,7 @@ import { Avatar } from "./Avatar";
 import { useCrumbText } from "./crumb";
 import { envName } from "./Logo";
 import { useNeeds } from "../lib/problems";
+import { keys } from "../api/keys";
 
 /** Section of the app for each first path segment; detail pages name their parent list. */
 const SECTION: Record<string, [string, string]> = {
@@ -59,7 +60,7 @@ function GlobalSearch() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  const res = useQuery({ queryKey: ["global-search", q], enabled: q.length >= 2, staleTime: 15_000,
+  const res = useQuery({ queryKey: keys.bookings("search", q), enabled: q.length >= 2, staleTime: 15_000,
     queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query: { search: q }, signal }) });
   const hits = (res.data?.results ?? []).slice(0, 6);
   const go = (to: string) => { setOpen(false); setTerm(""); box.current?.blur(); nav(to); };

@@ -26,6 +26,7 @@ import { missingFields } from "../../lib/formSpec";
 import { StaleDialog, type Stale } from "../../ui/StaleDialog";
 import type { Answers } from "../../lib/formSpec";
 import { useCrumb } from "../../ui/crumb";
+import { keys } from "../../api/keys";
 
 export function BookingPage() {
   const id = useParams().id!;
@@ -68,22 +69,23 @@ function Detail({ id }: { id: string }) {
   const { can } = useAuth();
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const b = useQuery({ queryKey: ["booking", id], queryFn: ({ signal }) => api<Booking>(`bookings/${id}`, { signal }) });
+  const b = useQuery({ queryKey: keys.booking(id), queryFn: ({ signal }) => api<Booking>(`bookings/${id}`, { signal }) });
   useCrumb(b.data?.booking_id);
-  const insps = useQuery({ queryKey: ["inspections", id], queryFn: ({ signal }) => fetchAll<Inspection>(`bookings/${id}/inspections`, undefined, signal) });
-  const activity = useQuery({ queryKey: ["activity", id], queryFn: ({ signal }) => api<Activity[]>(`bookings/${id}/activity`, { signal }) });
+  const insps = useQuery({ queryKey: keys.bookingPart(id, "inspections"), queryFn: ({ signal }) => fetchAll<Inspection>(`bookings/${id}/inspections`, undefined, signal) });
+  const activity = useQuery({ queryKey: keys.bookingPart(id, "activity"), queryFn: ({ signal }) => api<Activity[]>(`bookings/${id}/activity`, { signal }) });
   const [tab, setTab] = useState<Tab | null>(null);
   const [action, setAction] = useState<null | ActionKind>(null);
   const [reviewing, setReviewing] = useState("");
   const [rail, setRail] = useState(() => { try { return localStorage.getItem("vayu:booking-rail") !== "hidden"; } catch { return true; } });
   const toggleRail = () => { setRail(!rail); try { localStorage.setItem("vayu:booking-rail", rail ? "hidden" : "shown"); } catch { /* private window: it just will not be remembered */ } };
   const booking = b.data;
-  const experts = useList<User>("experts", "users", { role: "expert" });
+  const experts = useList<User>(keys.users(), "users", { role: "expert" });
   const trees = useTrees(booking?.inspection_type);
   const car = useLabels("car_make_model");
   const city = useLabels("city");
   const typeLabel = useTypeLabels();
-  const reload = () => Promise.all([refresh("booking"), refresh("inspections"), refresh("board"), refresh("report"), refresh("activity"), refresh("bookings-page")]);
+  // this booking and its parts, every booking list, and the "Needs you" problems (not the old "board")
+  const reload = () => refresh(keys.booking(id), keys.bookings(), keys.problems());
   const insp = (insps.data ?? []).filter((i) => i.status === "submitted").sort((a, c) => (c.submitted_at ?? "").localeCompare(a.submitted_at ?? ""))[0] ?? (insps.data ?? [])[0];
   const pinned = usePinnedTrees(insp);                   // the exact versions this inspection was started on
   const report = useReport(id, booking?.stage === "completed" && can("reports.view"));     // for the "PDF out of date" label
@@ -126,7 +128,7 @@ function Detail({ id }: { id: string }) {
           <span className="grow">{f.words}.{" "}
             {f.reviewedAt ? <span className="muted small">Reviewed by {f.reviewedBy} · {fmtStamp(f.reviewedAt)}</span>
               : <span className="muted small">{f.flag === "late" ? `Limit: start within ${booking.timing?.grace_minutes} min of the booked time.` : `Limit: take at least ${booking.timing?.min_minutes} min.`}</span>}</span>
-          {!f.reviewedAt && can("bookings.review_timing") && <button className="sm" disabled={reviewing === f.flag} onClick={async () => { setReviewing(f.flag); try { await api(`bookings/${booking.id}/timing-review`, { body: { flag: f.flag } }); say("Marked reviewed."); void reload(); void refresh("problems"); } catch (e) { fail(e); } finally { setReviewing(""); } }}>Mark reviewed</button>}
+          {!f.reviewedAt && can("bookings.review_timing") && <button className="sm" disabled={reviewing === f.flag} onClick={async () => { setReviewing(f.flag); try { await api(`bookings/${booking.id}/timing-review`, { body: { flag: f.flag } }); say("Marked reviewed."); void reload(); } catch (e) { fail(e); } finally { setReviewing(""); } }}>Mark reviewed</button>}
         </div>))}
       {booking.conflict && <ConflictBanner booking={booking} insps={insps.data ?? []} experts={experts.data ?? []} onResolved={reload} />}
       {booking.stage === "submitted" && can("media.manage") && <WaitingFiles booking={booking} onFinished={reload} onMedia={() => setTab("media")} />}
@@ -256,7 +258,7 @@ type Missing = { part: string; key: string; label: string; count: number; requir
 export function WaitingFiles({ booking, onFinished, onMedia }: { booking: Booking; onFinished: () => void; onMedia: () => void }) {
   const { fail, say } = useToast();
   const [asking, setAsking] = useState(false);
-  const q = useQuery({ queryKey: ["missing-files", booking.id, booking.row_version],
+  const q = useQuery({ queryKey: keys.bookingPart(booking.id, "missing-files", booking.row_version),
     queryFn: ({ signal }) => api<{ missing: Missing[]; can_finish: boolean }>(`bookings/${booking.id}/missing-files`, { signal }) });
   const missing = q.data?.missing ?? [];
   if (!missing.length) return null;
@@ -542,7 +544,7 @@ function MediaTab({ booking, insp, trees, onChanged }: { booking: Booking; insp?
   const [showEmpty, setShowEmpty] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
   const fields = useMemo(() => mediaFields(trees), [trees]);
-  const onServer = useQuery({ queryKey: ["booking-media", booking.id], enabled: can("media.manage"),
+  const onServer = useQuery({ queryKey: keys.bookingPart(booking.id, "media"), enabled: can("media.manage"),
     queryFn: ({ signal }) => api<{ id: string; by_ops: boolean }[]>(`bookings/${booking.id}/media`, { signal }) });
   const byOps = new Set((onServer.data ?? []).filter((m) => m.by_ops).map((m) => m.id));
   // Ops add or replace photos and videos once the expert has submitted; nobody deletes
@@ -783,7 +785,7 @@ type ReportInfo = { verify_url?: string; revision: number; status: string; updat
 
 /** The booking's report (null: none yet). While it is being made, look every few seconds. */
 function useReport(bookingId: string, enabled = true) {
-  return useQuery({ queryKey: ["report", bookingId], retry: false, enabled,
+  return useQuery({ queryKey: keys.bookingPart(bookingId, "report"), retry: false, enabled,
     refetchInterval: (x) => (x.state.data?.updating ? 3000 : false),
     queryFn: async () => { try { return await api<ReportInfo>(`bookings/${bookingId}/report`); } catch (e) { if (e instanceof ApiError && e.status === 404) return null; throw e; } } });
 }
@@ -799,7 +801,7 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
   const r = q.data;
   const regen = useMutation({            // one press, one request: the button is off while it runs
     mutationFn: () => api(`bookings/${booking.id}/report/regenerate`, { body: {} }),
-    onSuccess: () => { say("Making the new PDF. It shows here by itself."); void q.refetch(); void refresh("problems"); },
+    onSuccess: () => { say("Making the new PDF. It shows here by itself."); void q.refetch(); void refresh(keys.problems()); },
     onError: (e) => { fail(e); void q.refetch(); },
   });
   const why = r?.regenerate && !r.regenerate.allowed ? r.regenerate.reason ?? "" : "";
@@ -809,7 +811,7 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
     catch { say("Could not copy here. Select the link and copy it yourself.", true); return; }
     try {                                           // logged only once it really was copied
       await api(`bookings/${booking.id}/report/shared`, { body: { how: "check_link" } });
-      say("Check link copied."); void refresh("activity");
+      say("Check link copied."); void refresh(keys.bookingPart(booking.id, "activity"));
     } catch (e) { fail(e); }
   }
   return (
@@ -822,7 +824,7 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
         {r && can("submissions.edit") && <button disabled={regen.isPending || !!why || r.updating} title={why || undefined} onClick={() => { if (!regen.isPending) regen.mutate(); }}>
           <RefreshCw size={15} aria-hidden /> {regen.isPending || r.updating ? "Making…" : "Regenerate"}</button>}
         {r?.verify_url && r.status === "ready" && <button onClick={() => void copyCheckLink()}>Copy check link</button>}
-        {r?.url && <a className="btn primary" href={r.url} download={r.filename} onClick={() => setTimeout(() => void refresh("activity"), 1500)}><Download size={15} aria-hidden /> Download PDF</a>}
+        {r?.url && <a className="btn primary" href={r.url} download={r.filename} onClick={() => setTimeout(() => void refresh(keys.bookingPart(booking.id, "activity")), 1500)}><Download size={15} aria-hidden /> Download PDF</a>}
       </div>
       {r?.updating && <p className="muted small">The new PDF is being made. This page shows it by itself.</p>}
       {r?.out_of_date && !r.updating && <div className="banner warn">Out of date: changes since this PDF. Press Regenerate when you are done to make a new one.</div>}
@@ -845,7 +847,7 @@ export function Actions({ kind, booking, experts, onClose, onDone, fail }: { kin
   const [time, setTime] = useState(String(booking.answers.inspection_time ?? ""));
   const [reason, setReason] = useState("");
   const [type, setType] = useState(booking.inspection_type);
-  const reasons = useQuery({ queryKey: ["list-items", kind === "cancel" ? "cancel_reason" : "reschedule_reason"], enabled: kind === "cancel" || kind === "reschedule", queryFn: ({ signal }) => fetchAll<MasterListItem>(`master-lists/${kind === "cancel" ? "cancel_reason" : "reschedule_reason"}/items`, undefined, signal) });
+  const reasons = useQuery({ queryKey: keys.listItems(kind === "cancel" ? "cancel_reason" : "reschedule_reason"), enabled: kind === "cancel" || kind === "reschedule", queryFn: ({ signal }) => fetchAll<MasterListItem>(`master-lists/${kind === "cancel" ? "cancel_reason" : "reschedule_reason"}/items`, undefined, signal) });
   const types = useInspectionTypes();
   const typeLabel = useTypeLabels();
   const [busy, setBusy] = useState(false);

@@ -15,6 +15,7 @@ import { Empty, Field, LoadError, Modal, PageHeader, Pill, Tabs, useToast, when 
 import { FieldEditor, type FieldDraft } from "./FieldEditor";
 import { PushReview } from "./library/PushReview";
 import { useCrumb } from "../../ui/crumb";
+import { keys } from "../../api/keys";
 
 type Item = { id: number; kind: "field" | "section"; key: string; name: string; revision: number; archived: boolean; definition: Definition; usages: { form: string; version: number; status: string }[] };
 type Revision = { revision: number; name: string; definition: Definition; changed_keys: string[]; by: string; by_login?: string; at: string };
@@ -27,10 +28,10 @@ export function LibraryEditor() {
   const { can } = useAuth();
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const item = useQuery({ queryKey: ["library-item", id], queryFn: ({ signal }) => api<Item>(`library/${id}`, { signal }) });
+  const item = useQuery({ queryKey: keys.libraryItem(id), queryFn: ({ signal }) => api<Item>(`library/${id}`, { signal }) });
   useCrumb(item.data?.name);
-  const history = useQuery({ queryKey: ["library-history", id], queryFn: ({ signal }) => api<Revision[]>(`library/${id}/history`, { signal }) });
-  const lists = useList<MasterList>("master-lists", "master-lists");
+  const history = useQuery({ queryKey: keys.libraryHistory(id), queryFn: ({ signal }) => api<Revision[]>(`library/${id}/history`, { signal }) });
+  const lists = useList<MasterList>(keys.masterLists(), "master-lists");
   const [def, setDef] = useState<Definition | null>(null);
   const [name, setName] = useState("");
   const [pick, setPick] = useState<string | null>(null);              // which field of a section is open
@@ -47,12 +48,12 @@ export function LibraryEditor() {
   const dirty = !!it && !!def && (!sameDef(def, it.definition) || name !== it.name);
   const save = useMutation({
     mutationFn: () => api<Item>(`library/${id}`, { method: "PATCH", body: { definition: def, revision: it!.revision, name } }),
-    onSuccess: (r) => { setError(""); say(`Saved as revision ${r.revision}.`); void refresh("library", "library-item", "library-history"); },
+    onSuccess: (r) => { setError(""); say(`Saved as revision ${r.revision}.`); void refresh(keys.library(), keys.libraryItem(), keys.libraryHistory()); },
     onError: (e) => { if (e instanceof ApiError && e.code === "STALE_LIBRARY_ITEM") setStale(true); else setError(e instanceof ApiError ? e.message : "Could not save."); },
   });
   const archive = useMutation({
     mutationFn: () => api(`library/${id}`, { method: "PATCH", body: { archived: !it!.archived } }),
-    onSuccess: () => { say("Done."); void refresh("library", "library-item"); }, onError: fail,
+    onSuccess: () => { say("Done."); void refresh(keys.library(), keys.libraryItem()); }, onError: fail,
   });
   const tree = useMemo(() => (it && def ? previewTree(it.kind, def) : null), [it, def]);
   if (item.isError) return <LoadError error={item.error} what="library item" onRetry={item.refetch} />;
@@ -75,7 +76,7 @@ export function LibraryEditor() {
       </PageHeader>
       {stale && (
         <Modal title="Someone else saved this item" onClose={() => setStale(false)}
-          actions={<><button onClick={() => setStale(false)}>Keep editing</button><button className="primary" onClick={() => { setStale(false); void refresh("library-item", "library-history"); }}>Reload their version</button></>}>
+          actions={<><button onClick={() => setStale(false)}>Keep editing</button><button className="primary" onClick={() => { setStale(false); void refresh(keys.libraryItem(), keys.libraryHistory()); }}>Reload their version</button></>}>
           <p>Another Admin saved a newer revision after you opened it. Reload to see theirs; your unsaved changes here will be replaced.</p>
         </Modal>)}
       <Tabs value={tab} onChange={setTab} tabs={[{ id: "settings", label: "Settings" }, { id: "used", label: `Used in (${it.usages.length})` }, { id: "history", label: "History" }]} />
@@ -137,7 +138,7 @@ export function LibraryEditor() {
         </div>
       )}
       {adding && section && <AddFieldHere onClose={() => setAdding(false)} existing={section.fields.map((f) => f.key)} onAdd={(f) => { setDef(addFieldTo(section, f)); setPick(f.key); setAdding(false); }} />}
-      {review !== null && <PushReview itemId={id} itemName={name} revision={review} onClose={() => setReview(null)} onDone={() => void refresh("library", "library-item", "forms")} />}
+      {review !== null && <PushReview itemId={id} itemName={name} revision={review} onClose={() => setReview(null)} onDone={() => void refresh(keys.library(), keys.libraryItem(), keys.forms())} />}
     </>
   );
 }

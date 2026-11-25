@@ -12,6 +12,7 @@ import { addFile, discardFile, isLocalId, uploadFor, useUploads } from "../lib/u
 import { evaluateTree, type Answers, type Ctx, type Kind } from "../lib/formSpec";
 import { CameraCapture } from "./CameraCapture";
 import { Field } from "./kit";
+import { keys } from "../api/keys";
 
 export type RenderProps = {
   kind: Kind;
@@ -137,7 +138,7 @@ function Choices({ name, options, value, onChange, disabled, label, plain }: { n
 }
 
 function ListSelect({ list, value, onChange, disabled, label }: { list: string; value: string; onChange: (v: string) => void; disabled: boolean; label: string }) {
-  const q = useQuery({ queryKey: ["list-items", list], enabled: !!list, staleTime: 300_000, queryFn: ({ signal }) => fetchAll<MasterListItem>(`master-lists/${list}/items`, undefined, signal) });
+  const q = useQuery({ queryKey: keys.listItems(list), enabled: !!list, staleTime: 300_000, queryFn: ({ signal }) => fetchAll<MasterListItem>(`master-lists/${list}/items`, undefined, signal) });
   const items = (q.data ?? []).filter((i) => !i.archived || i.key === value);
   return <select aria-label={label} disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Choose…</option>{items.map((i) => <option key={i.key} value={i.key}>{i.label}</option>)}</select>;
 }
@@ -148,7 +149,7 @@ function TypeSelect({ value, onChange, disabled, label }: { value: string; onCha
 }
 
 function UserSelect({ role, value, onChange, disabled, label }: { role: string; value: number | null | undefined; onChange: (v: unknown) => void; disabled: boolean; label: string }) {
-  const q = useQuery({ queryKey: ["users-by-role", role], retry: false, staleTime: 300_000, queryFn: ({ signal }) => fetchAll<User>("users", { role }, signal) });
+  const q = useQuery({ queryKey: keys.users({ role }), retry: false, staleTime: 300_000, queryFn: ({ signal }) => fetchAll<User>("users", { role }, signal) });
   if (q.isError) return <input aria-label={label} disabled value={value ?? ""} readOnly />;
   return <select aria-label={label} disabled={disabled} value={value ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
     <option value="">Choose…</option>{(q.data ?? []).filter((u) => u.is_active).map((u) => <option key={u.id} value={u.id}>{u.name || u.username}</option>)}</select>;
@@ -268,7 +269,7 @@ function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: 
 }
 
 function RemoteThumb({ id, kind, mediaUrl }: { id: string; kind: string; mediaUrl?: RenderProps["mediaUrl"] }) {
-  const q = useQuery({ queryKey: ["media-url", id], enabled: !!mediaUrl, staleTime: 600_000, refetchInterval: LINK_REFRESH_MS, queryFn: () => mediaUrl!(id) });
+  const q = useQuery({ queryKey: keys.mediaUrl(id), enabled: !!mediaUrl, staleTime: 600_000, refetchInterval: LINK_REFRESH_MS, queryFn: () => mediaUrl!(id) });
   const u = q.data?.preview_url ?? q.data?.url;
   if (q.data?.removed) return <div className="fake-photo" title="Deleted after the storage time set in Settings" aria-label="Deleted after the storage time set in Settings"><ImageOff size={22} aria-hidden /></div>;
   if (!u) return <div style={{ aspectRatio: "4/3", background: "var(--hover)", borderRadius: 8 }} role="img" aria-label="Preview not ready" />;

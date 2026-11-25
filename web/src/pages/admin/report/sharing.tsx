@@ -5,20 +5,21 @@ import { api, uploadFile } from "../../../api/client";
 import { useRefresh } from "../../../api/hooks";
 import { Field, useToast } from "../../../ui/kit";
 import type { Definition, Part } from "./model";
+import { keys } from "../../../api/keys";
 
 export type Picture = { id: string; name: string; size: number; url: string };
 export type Usage = { template: number; form: string; draft?: number; published?: number };
 export type SharedItem = { id: number; kind: "theme" | "snippet"; key: string; name: string; revision: number; used_by: Usage[]; content?: unknown };
 
 export function usePictures() {
-  return useQuery({ queryKey: ["pdf-pictures"], queryFn: ({ signal }) => api<Picture[]>("pdf-pictures", { signal }) });
+  return useQuery({ queryKey: keys.pdfPictures(), queryFn: ({ signal }) => api<Picture[]>("pdf-pictures", { signal }) });
 }
 export function useShared() {
-  return useQuery({ queryKey: ["pdf-shared"], queryFn: ({ signal }) => api<SharedItem[]>("pdf-shared", { signal }) });
+  return useQuery({ queryKey: keys.pdfShared(), queryFn: ({ signal }) => api<SharedItem[]>("pdf-shared", { signal }) });
 }
 /** One version of a shared item's content (what a template using it shows). */
 export function useSharedContent<T>(item: SharedItem | undefined, revision: number | undefined) {
-  return useQuery({ queryKey: ["pdf-shared", item?.id, revision], enabled: !!item && !!revision,
+  return useQuery({ queryKey: keys.pdfShared(item?.id, revision), enabled: !!item && !!revision,
     queryFn: async () => (await api<SharedItem>(`pdf-shared/${item!.id}`, { query: { revision: String(revision) } })).content as T });
 }
 
@@ -36,7 +37,7 @@ export function PicturePicker({ label, onPick }: { label: string; onPick: (id: s
   const upload = async (file: File) => {
     try {
       const r = await uploadFile<Picture>("pdf-pictures", file, "POST", { name: file.name.replace(/\.[^.]+$/, "") });
-      await refresh("pdf-pictures");
+      await refresh(keys.pdfPictures());
       onPick(r.id);
     } catch (e) { fail(e); }
   };
@@ -58,7 +59,7 @@ export function PictureLibrary({ readOnly }: { readOnly: boolean }) {
   const refresh = useRefresh();
   const pictures = usePictures();
   const [name, setName] = useState("");
-  const act = async (fn: () => Promise<unknown>) => { try { await fn(); await refresh("pdf-pictures"); } catch (e) { fail(e); } };
+  const act = async (fn: () => Promise<unknown>) => { try { await fn(); await refresh(keys.pdfPictures()); } catch (e) { fail(e); } };
   return (
     <>
       <p className="muted small">Pictures here can be used in any template's header, footer or watermark. The same picture uploaded twice is kept once.</p>
@@ -99,7 +100,7 @@ export function ShareForm({ kind, items, content, onSaved, label }: {
   const save = async () => {
     try {
       const r = await api<SharedItem & { updated: string[] }>("pdf-shared", { body: { kind, key: existing?.key ?? keyOf(name), name: existing?.name ?? name.trim(), content } });
-      await refresh("pdf-shared");
+      await refresh(keys.pdfShared());
       setName(""); setTarget("");
       onSaved(r);
     } catch (e) { fail(e); }

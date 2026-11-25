@@ -14,6 +14,7 @@ import { Confirm, Pill } from "../../ui/kit";
 import { useCrumb } from "../../ui/crumb";
 import { MapPin, Phone } from "lucide-react";
 import { fmtPhone, fmtSlot, mapsUrl } from "../../lib/format";
+import { keys } from "../../api/keys";
 
 type Session = { startUuid: string; submitUuid: string; inspectionId: string; form: Tree; startForm: Tree | null; endForm: Tree | null; versionId: number; started?: boolean };   // started: false until the check-in is done (the job is not "in progress" before)
 type Forms = { form: Tree; start_form: Tree | null; end_form: Tree | null };
@@ -34,7 +35,7 @@ function swapLocal(d: Draft): Draft {
 export function Job() {
   const id = useParams().id!;
   const refresh = useRefresh();
-  const booking = useQuery({ queryKey: ["job", id], queryFn: ({ signal }) => api<Booking>(`bookings/${id}`, { signal }), refetchInterval: (q) => (q.state.data?.stage === "submitted" ? 4000 : false) });
+  const booking = useQuery({ queryKey: keys.booking(id), queryFn: ({ signal }) => api<Booking>(`bookings/${id}`, { signal }), refetchInterval: (q) => (q.state.data?.stage === "submitted" ? 4000 : false) });
   useCrumb(booking.data?.booking_id);
   const [session, setSession] = useState<Session | null>(() => loadJSON<Session | null>(sKey(id), null));
   const b = booking.data;
@@ -54,7 +55,7 @@ export function Job() {
       saveJSON(sKey(id), s);
       return s;
     },
-    onSuccess: (s) => { setSession(s); setError(""); void refresh("job"); },
+    onSuccess: (s) => { setSession(s); setError(""); void refresh(keys.booking(id)); },
     onError: (e) => setError(explain(e)),
   });
   /** Opens the forms on this phone without starting the job; a form with no check-in starts at once. */
@@ -98,7 +99,7 @@ export function Job() {
           {error && <p className="error" role="alert">{error}</p>}
         </>
       )}
-      {session && canWork && <Wizard booking={b} session={session} onStart={(a) => start.mutate(a)} starting={start.isPending} startError={error} onSubmitted={() => { removeKey(dKey(id)); removeKey(sKey(id)); setSession(null); void refresh("job"); }} />}
+      {session && canWork && <Wizard booking={b} session={session} onStart={(a) => start.mutate(a)} starting={start.isPending} startError={error} onSubmitted={() => { removeKey(dKey(id)); removeKey(sKey(id)); setSession(null); void refresh(keys.booking(id)); }} />}
     </div>
   );
 }

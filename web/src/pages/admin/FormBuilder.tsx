@@ -22,6 +22,7 @@ import { DuplicateDialog } from "./ImportForm";
 import { FieldEditor, type FieldDraft, type ValidationDraft } from "./FieldEditor";
 import { useCrumb } from "../../ui/crumb";
 import { MoreMenu } from "../../ui/Menu";
+import { keys } from "../../api/keys";
 
 type Issue = { path: string; code: string; message: string };
 
@@ -30,13 +31,13 @@ export function FormBuilder() {
   const { can } = useAuth();
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const form = useQuery({ queryKey: ["form", id], queryFn: ({ signal }) => api<FormSummary>(`forms/${id}`, { signal }) });
+  const form = useQuery({ queryKey: keys.form(id), queryFn: ({ signal }) => api<FormSummary>(`forms/${id}`, { signal }) });
   const f = form.data;
   useCrumb(f?.name);
   const vid = f?.draft_version?.id ?? f?.published_version?.id;
   const draft = !!f?.draft_version;
-  const version = useQuery({ queryKey: ["version", vid], enabled: !!vid, queryFn: ({ signal }) => api<FormVersion>(`form-versions/${vid}`, { signal }) });
-  const lists = useList<MasterList>("master-lists", "master-lists");
+  const version = useQuery({ queryKey: keys.formVersion(vid), enabled: !!vid, queryFn: ({ signal }) => api<FormVersion>(`form-versions/${vid}`, { signal }) });
+  const lists = useList<MasterList>(keys.masterLists(), "master-lists");
   const v = version.data;
   const [local, setLocal] = useState<FormPage[] | null>(null);
   const [sel, setSel] = useState<Sel>(null);
@@ -52,7 +53,7 @@ export function FormBuilder() {
   const [confirmDel, setConfirmDel] = useState<null | (() => void)>(null);
   const edit = can("forms.edit") && draft;
   const pages: FormPage[] = local ?? v?.pages ?? [];
-  const reload = async () => { await Promise.all([refresh("version"), refresh("form"), refresh("forms")]); setLocal(null); };
+  const reload = async () => { await refresh(keys.formVersion(), keys.forms()); setLocal(null); };
   const run = async (fn: () => Promise<unknown>, done?: string) => {
     try { await fn(); if (done) say(done); await reload(); } catch (e) { setLocal(null); fail(e); await reload(); }
   };

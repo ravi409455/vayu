@@ -4,12 +4,13 @@ import { api, ApiError } from "../../api/client";
 import { useList } from "../../api/hooks";
 import type { FormSummary } from "../../api/types";
 import { Pill, useToast, PageHeader } from "../../ui/kit";
+import { keys } from "../../api/keys";
 
 type ImportResult = { form: number; draft_version: number; created: { form: boolean; master_list_items: number; library_items: number }; notes: string[] };
 
 export function Promote() {
   const { say, fail } = useToast();
-  const forms = useList<FormSummary>("forms", "forms");
+  const forms = useList<FormSummary>(keys.forms(), "forms");
   const file = useRef<HTMLInputElement>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [conflicts, setConflicts] = useState<string[]>([]);
