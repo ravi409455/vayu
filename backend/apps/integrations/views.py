@@ -368,9 +368,19 @@ def _clean_scope(scope) -> dict:
     return {"forms": out}
 
 
+KEY_ACTIONS = ("assign", "cancel", "reschedule", "change_type")
+
+
+def _clean_actions(raw) -> list[str]:
+    if not isinstance(raw, list) or any(a not in KEY_ACTIONS for a in raw):
+        raise err("INVALID_ACTIONS", f"allowed_actions is a list of: {', '.join(KEY_ACTIONS)}.")
+    return sorted(set(raw))
+
+
 def key_body(k: ApiKey, full_key: str | None = None) -> dict:
     out = {"id": str(k.id), "name": k.name, "prefix": k.prefix, "scope": k.scope,
-           "allow_delete": k.allow_delete, "revoked_at": k.revoked_at,
+           "allow_delete": k.allow_delete, "allowed_actions": k.allowed_actions,
+           "revoked_at": k.revoked_at,
            "last_used_at": k.last_used_at, "created_at": k.created_at}
     if full_key:
         out["key"] = full_key                   # shown once
@@ -391,11 +401,14 @@ class ApiKeyList(APIView):
         if not isinstance(allow, bool):
             raise err("INVALID_TOGGLE", "allow_delete must be true or false.")
         scope = _clean_scope(request.data.get("scope"))
+        actions = _clean_actions(request.data.get("allowed_actions", []))
         key, prefix, hashed = apikeys.generate()
         k = ApiKey.objects.create(name=name.strip(), prefix=prefix, key_hash=hashed, scope=scope,
-                                  allow_delete=allow, created_by=request.user)
+                                  allow_delete=allow, allowed_actions=actions,
+                                  created_by=request.user)
         audit.record(request.user, "api_key.create", "api_key", k.id,
-                     f"Created API key {k.name} ({k.prefix}){' with DELETE' if allow else ''}")
+                     f"Created API key {k.name} ({k.prefix}){' with DELETE' if allow else ''}"
+                     f"{'; actions ' + ', '.join(actions) if actions else ''}")
         return Response(key_body(k, key), status=status.HTTP_201_CREATED)
 
 
@@ -420,10 +433,13 @@ class ApiKeyDetail(APIView):
             if not isinstance(request.data["allow_delete"], bool):
                 raise err("INVALID_TOGGLE", "allow_delete must be true or false.")
             k.allow_delete = request.data["allow_delete"]
+        if "allowed_actions" in request.data:
+            k.allowed_actions = _clean_actions(request.data["allowed_actions"])
         k.save()
         audit.record(request.user, "api_key.update", "api_key", k.id,
                      f"Updated API key {k.name} ({k.prefix}); delete "
-                     f"{'allowed' if k.allow_delete else 'off'}")
+                     f"{'allowed' if k.allow_delete else 'off'}; actions "
+                     f"{', '.join(k.allowed_actions) or 'none'}")
         return Response(key_body(k))
 
 

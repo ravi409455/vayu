@@ -179,7 +179,7 @@ forms at the end of the day; the app keeps its generic nature").
   - **Preview** shows the whole request live (method, final URL, headers, body) for the latest job, a job picked by Booking ID, or sample values when the form has no job; it never sends anything or builds a ZIP.
   - **No HMAC signing:** the receiving system is authenticated by a token Admin puts in a header (over https). Retried with backoff, delivery log with re-send, test button (sends the designed request, marked `X-Vayu-Test`).
   - **Links:** PDF links are signed with 7-day expiry. **ZIP links open a "Preparing… x%" page**, which builds the ZIP once, caches it for 7 days, then downloads automatically.
-- **REST API:** full CRUD via **API keys scoped to forms and fields**.
+- **REST API:** full CRUD via **API keys scoped to forms and fields**. A key may also **assign / reassign, cancel, reschedule and change type** (`POST ext/bookings/{ref}/assign|cancel|reschedule|change-type`), each a flag on the key that the Admin turns on (off by default, like delete); every action is audited and fires the same webhooks as on the web.
   - **Delete is off by default** per key; Admin must grant it explicitly.
   - Writes use field keys, bulk updates are supported, and booking lookup works by internal ID (primary) or Booking ID.
   - Auto-generated **Swagger** docs. No rate limiting.

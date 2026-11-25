@@ -1128,6 +1128,29 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/ext/bookings/{ref}/{action}:
+    post:
+      operationId: ext_bookings_create_2
+      description: |-
+        POST ext/bookings/<ref>/<action>: assign (or reassign) {"expert"}, cancel {"reason"},
+        reschedule {"date", "time", "reason"}, change-type {"inspection_type"}. Each one is a flag on
+        the key, off by default (F-228); audited; the same rules and webhooks as on the web.
+      parameters:
+      - in: path
+        name: action
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: ref
+        schema:
+          type: string
+        required: true
+      tags:
+      - ext
+      responses:
+        '200':
+          description: No response body
   /api/v1/ext/bookings/{ref}/inspection:
     get:
       operationId: ext_bookings_inspection_retrieve

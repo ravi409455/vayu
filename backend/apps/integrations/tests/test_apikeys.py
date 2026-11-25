@@ -337,3 +337,57 @@ def test_an_inspection_patch_writes_only_to_the_inspection_that_counts(ienv, boo
                 {"answers": {"odometer": 99}}, format="json")
     assert r.status_code == 200 and r.json()["id"] == str(kept.id)
     assert Inspection.objects.get(pk=kept.pk).answers["inspection"]["odometer"] == 99
+
+
+# ---------------------------------------------------------------- F-228 booking actions by key
+
+def test_booking_actions_are_off_until_the_key_is_allowed_them(env, booking):
+    from apps.core import events
+
+    key = new_key(env)
+    c = client(key)
+    url = f"/api/v1/ext/bookings/{booking['id']}"
+    r = c.post(f"{url}/assign", {"expert": env.expert_user.id}, format="json")
+    assert r.status_code == 403 and r.json()["code"] == "ACTION_NOT_ALLOWED"
+    assert env.admin.patch(f"/api/v1/api-keys/{key['id']}", {
+        "allowed_actions": ["assign", "reschedule", "cancel"]},
+        format="json").json()["allowed_actions"] == ["assign", "cancel", "reschedule"]
+    with events.capture() as seen:
+        r = c.post(f"{url}/assign", {"expert": env.expert_user.id}, format="json")
+    assert r.status_code == 200 and r.json()["stage"] == "assigned"
+    assert "booking.updated" in [n for n, _ in seen]                    # webhooks fire as usual
+    assert AuditLog.objects.filter(action="api.booking.assign").exists()
+    r = c.post(f"{url}/reschedule", {"date": "2026-10-20", "time": "11:00",
+                                     "reason": "customer_request"}, format="json")
+    assert r.status_code == 200, r.json()
+    assert c.post(f"{url}/change-type", {"inspection_type": "pdi"},
+                  format="json").status_code == 403                    # not allowed on this key
+    assert c.post(f"{url}/fly", {}, format="json").status_code == 404
+    bad = c.post(f"{url}/assign", {"expert": 999999}, format="json")
+    assert bad.status_code == 400 and bad.json()["code"] == "INVALID_EXPERT"   # the web's rules
+    from unittest import mock
+
+    with mock.patch("apps.bookings.services.active_item", return_value=True):
+        assert c.post(f"{url}/cancel", {"reason": "x"}, format="json").status_code == 200
+    assert Booking.objects.get(pk=booking["id"]).stage == "cancelled"
+
+
+def test_change_type_through_a_key_and_bad_action_lists(env, booking):
+    key = new_key(env, allowed_actions=["change_type"])
+    r = client(key).post(f"/api/v1/ext/bookings/{booking['id']}/change-type",
+                         {"inspection_type": "pdi"}, format="json")
+    assert r.status_code == 200
+    for bad in ("assign", ["fly"]):
+        r = env.admin.post("/api/v1/api-keys", {"name": "x", "scope": ALL,
+                                                "allowed_actions": bad}, format="json")
+        assert r.status_code == 400 and r.json()["code"] == "INVALID_ACTIONS"
+
+
+def test_a_key_creates_with_an_expert_only_when_it_may_assign(env):
+    body = {"answers": answers(booking_id="KX1", assigned_expert=env.expert_user.id)}
+    c = client(new_key(env))
+    r = c.post("/api/v1/ext/bookings", body, format="json")
+    assert r.status_code == 403 and r.json()["code"] == "ACTION_NOT_ALLOWED"
+    ok = client(new_key(env, allowed_actions=["assign"])).post("/api/v1/ext/bookings", body,
+                                                               format="json")
+    assert ok.status_code == 201 and ok.json()["stage"] == "assigned"

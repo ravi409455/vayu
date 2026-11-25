@@ -21,4 +21,5 @@ urlpatterns = [
     path("ext/bookings/bulk", ext_views.BulkBookings.as_view()),
     path("ext/bookings/<str:ref>", ext_views.BookingDetail.as_view()),
     path("ext/bookings/<str:ref>/inspection", ext_views.BookingInspection.as_view()),
+    path("ext/bookings/<str:ref>/<str:action>", ext_views.BookingAction.as_view()),
 ]

@@ -109,6 +109,8 @@ class Bookings(ExtView):
         if not isinstance(answers, dict):
             raise ValidationError({"answers": "An object of field keys and values is required."})
         need_keys(allowed, answers)
+        if answers.get("assigned_expert"):          # choosing the expert is the assign action
+            need_action(request, "assign")
         b = services.create(request.user, answers)
         audit.record(request.user, "api.booking.create", "booking", b.id,
                      f"Created booking {b.booking_id} via API key {request.auth.prefix}")
@@ -146,6 +148,39 @@ class BookingDetail(ExtView):
                      f"Deleted booking {b.booking_id} via API key {request.auth.prefix}")
         services.delete(request.user, b)
         return Response(status=204)
+
+
+def need_action(request, action: str) -> None:
+    if action not in (request.auth.allowed_actions or []):
+        raise CodedError("ACTION_NOT_ALLOWED", f"This key may not {action.replace('_', ' ')}. "
+                         "Ask an Admin to allow it.", 403)
+
+
+class BookingAction(ExtView):
+    """POST ext/bookings/<ref>/<action>: assign (or reassign) {"expert"}, cancel {"reason"},
+    reschedule {"date", "time", "reason"}, change-type {"inspection_type"}. Each one is a flag on
+    the key, off by default (F-228); audited; the same rules and webhooks as on the web."""
+
+    ACTIONS = {
+        "assign": lambda u, b, d: services.assign(u, b, d.get("expert")),
+        "cancel": lambda u, b, d: services.cancel(u, b, d.get("reason")),
+        "reschedule": lambda u, b, d: services.reschedule(u, b, d.get("date"), d.get("time"),
+                                                          d.get("reason")),
+        "change_type": lambda u, b, d: services.change_type(u, b, d.get("inspection_type")),
+    }
+
+    def post(self, request, ref, action):
+        name = action.replace("-", "_")
+        if name not in self.ACTIONS:
+            raise CodedError("UNKNOWN_ACTION", "Use assign, cancel, reschedule or change-type.",
+                             404)
+        need_form(request, booking_form())
+        need_action(request, name)
+        b = self.ACTIONS[name](request.user, find(ref), request.data)
+        audit.record(request.user, f"api.booking.{name}", "booking", b.id,
+                     f"{name.replace('_', ' ').capitalize()} {b.booking_id} via API key "
+                     f"{request.auth.prefix}")
+        return Response(booking_body(request, Booking.objects.get(pk=b.pk)))
 
 
 def _error(e: APIException) -> dict:
