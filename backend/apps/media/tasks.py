@@ -39,7 +39,9 @@ def verify_asset(asset_id: str) -> str:
 
     claimed = MediaAsset.objects.filter(pk=asset_id, status="uploaded").update(
         status="verifying")
-    asset = MediaAsset.objects.get(pk=asset_id)
+    asset = MediaAsset.objects.filter(pk=asset_id).first()
+    if asset is None:                     # its booking was deleted
+        return "gone"
     if not claimed:                       # already done, or another run is at it
         return asset.status
     try:
@@ -47,6 +49,13 @@ def verify_asset(asset_id: str) -> str:
     except Exception:
         MediaAsset.objects.filter(pk=asset_id).update(status="uploaded")   # can be run again
         raise
+    if not MediaAsset.objects.filter(pk=asset_id).exists():
+        # the booking was deleted while this ran: its delete_files did not see what we wrote
+        from .services import asset_keys
+
+        for key in asset_keys(asset):
+            storage.delete(key)
+        return "gone"
     if not ok:
         storage.delete(asset.key)
         asset.status = "failed"

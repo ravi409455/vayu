@@ -143,3 +143,52 @@ def test_a_task_logs_with_the_request_id_that_queued_it():
     assert request_id_var.get() == "req-42"
     _restore_request_id(task=SimpleNamespace(request=SimpleNamespace()))
     assert request_id_var.get() == "-"
+
+
+def test_a_check_running_when_its_booking_is_deleted_leaves_no_files_behind(job, settings):
+    """Review: verify_asset finishing after the booking (and its delete_files) went."""
+    from unittest import mock
+
+    from apps.media import tasks
+    from apps.media.tests.conftest import initiate_body, put_parts
+
+    env, b = job
+    data = jpeg(4000, 3000)                                  # makes a preview and a copy
+    init = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], data),
+                           format="json").json()
+    parts = put_parts(init, data, settings)
+    a = MediaAsset.objects.get(pk=init["id"])
+    storage.complete_multipart(a.key, a.upload_id, parts)
+    MediaAsset.objects.filter(pk=a.pk).update(status="uploaded", upload_id="")
+    real = tasks._check
+
+    def delete_meanwhile(asset):
+        ok = real(asset)
+        Booking.objects.filter(pk=b["id"]).delete()          # the Admin deletes it now
+        return ok
+
+    with mock.patch.object(tasks, "_check", side_effect=delete_meanwhile):
+        assert tasks.verify_asset(str(a.pk)) == "gone"
+    assert not any(storage.exists(k) for k in (a.key, f"previews/{a.pk}.jpg",
+                                               f"copies/{a.pk}.jpg"))
+    assert tasks.verify_asset(str(a.pk)) == "gone"            # a retry after that: nothing
+
+
+def test_a_zip_built_while_its_booking_is_deleted_is_removed(job, settings):
+    from unittest import mock
+
+    from apps.media import zips
+
+    env, b = job
+    a = _files(env, b, settings)
+    real = zips.storage.upload_file
+
+    def upload_then_delete(path, key, ctype):
+        real(path, key, ctype)
+        Booking.objects.filter(pk=b["id"]).delete()
+        return None
+
+    with mock.patch.object(zips.storage, "upload_file", side_effect=upload_then_delete):
+        zips.request_zip(Booking.objects.get(pk=b["id"]), "photo", only=[str(a.id)])
+    assert not [k for k in storage.client().list_objects_v2(
+        Bucket=settings.S3_BUCKET, Prefix="zips/").get("Contents", [])]

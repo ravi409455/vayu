@@ -118,8 +118,7 @@ def request_zip(booking, kind: str, excluded: list[str] | None = None,
         return z
     z = MediaZip.objects.create(booking=booking, kind=kind, excluded=excluded, only=only)
     build_zip.delay(str(z.id))
-    z.refresh_from_db()
-    return z
+    return MediaZip.objects.filter(pk=z.pk).first() or z      # gone: its booking was deleted
 
 
 @shared_task
@@ -129,8 +128,7 @@ def build_zip(zip_id: str) -> None:
                                    kind__in=KIND_TYPES[z.kind]).exclude(field_key__in=z.excluded)
     assets = list((qs.filter(pk__in=z.only) if z.only else qs).order_by("created_at"))
     if not assets:
-        z.status = "failed"
-        z.save()
+        MediaZip.objects.filter(pk=z.pk).update(status="failed")   # never re-made if gone
         return
     places = _places(z.booking)
     assets.sort(key=lambda a: (places.get(a.field_key, (10**9,))[0], a.created_at))
@@ -141,7 +139,7 @@ def build_zip(zip_id: str) -> None:
         _write(z, assets, names, path)
     except Exception:
         z.status = "failed"                   # never "Preparing..." for 7 days (F-108)
-        z.save(update_fields=["status"])
+        MediaZip.objects.filter(pk=z.pk).update(status="failed")
         logging.getLogger(__name__).exception("ZIP build failed", extra={
             "booking": str(z.booking_id), "zip": str(z.id), "kind": z.kind})
         raise
@@ -156,8 +154,11 @@ def _write(z: MediaZip, assets: list, names: list[str], path: str) -> None:
                 for chunk in storage.stream(a.key):
                     out.write(chunk)
             z.progress = int(100 * n / len(assets))
-            z.save(update_fields=["progress"])
+            MediaZip.objects.filter(pk=z.pk).update(progress=z.progress)
     z.key = f"zips/{z.id}.zip"
     storage.upload_file(path, z.key, "application/zip")
     z.status, z.built_at, z.progress = "ready", timezone.now(), 100
-    z.save()
+    saved = MediaZip.objects.filter(pk=z.pk).update(key=z.key, status=z.status,
+                                                    built_at=z.built_at, progress=100)
+    if not saved:                 # its booking was deleted while it was built: no orphan object
+        storage.delete(z.key)
