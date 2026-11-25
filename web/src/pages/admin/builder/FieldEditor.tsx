@@ -1,14 +1,14 @@
 import { Link2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { Access, Check as Validation, FormField, Option } from "../../api/types";
-import { uploadFile } from "../../api/client";
-import { iconFor } from "../../lib/typeIcons";
-import { AccessEditor } from "../../ui/AccessEditor";
-import { ConditionBuilder, type FieldChoice } from "../../ui/ConditionBuilder";
-import { Check, Field, Pill, Tabs, useToast } from "../../ui/kit";
-import { InfoTip } from "../../ui/InfoTip";
-import { MoreMenu } from "../../ui/Menu";
-import { CHOICE_TYPES, FIELD_TYPES, NO_TEXT_TYPES, slugKey, SYSTEM_TYPE_LABELS, UPLOAD_TYPES } from "../../lib/fieldTypes";
+import type { Access, Check as Validation, FormField, Option } from "../../../api/types";
+import { uploadFile } from "../../../api/client";
+import { iconFor } from "../../../lib/typeIcons";
+import { AccessEditor } from "../../../ui/AccessEditor";
+import { ConditionBuilder, type FieldChoice } from "../../../ui/ConditionBuilder";
+import { Check, Field, Pill, Tabs, useToast } from "../../../ui/kit";
+import { InfoTip } from "../../../ui/InfoTip";
+import { MoreMenu } from "../../../ui/Menu";
+import { CHOICE_TYPES, FIELD_TYPES, NO_TEXT_TYPES, slugKey, SYSTEM_TYPE_LABELS, UPLOAD_TYPES } from "../../../lib/fieldTypes";
 
 export type FieldDraft = Pick<FormField, "label" | "helper_text" | "type" | "config" | "required" | "required_if" | "show_if" | "visible" | "access">;
 /** A validation being edited: one saved (has an id) or new. */

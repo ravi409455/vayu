@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FormField } from "./api/types";
 import { addDays, fmtDay, fmtPhone, fmtSlot, fmtStamp, fmtTime } from "./lib/format";
 import { activityText } from "./pages/ops/booking/ActivityCard";
-import { viewQuery } from "./pages/ops/Bookings";
+import { viewQuery } from "./lib/bookingViews";
 import { dayWindow } from "./pages/ops/Today";
 import { defectOf } from "./ui/AnswerSheet";
 
@@ -160,7 +160,7 @@ describe("field types in words", () => {
   it("a new choice's key follows its label until someone types a key", async () => {
     const { render, screen } = await import("@testing-library/react");
     const userEvent = (await import("@testing-library/user-event")).default;
-    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    const { FieldEditor } = await import("./pages/admin/builder/FieldEditor");
     const onSave = vi.fn();
     const f = { id: 1, section: 1, key: "door", label: "Door", helper_text: "", type: "single_choice", required: false, required_if: null, show_if: null,
       config: { options: [{ key: "ok", label: "OK" }] }, visible: true, order: 0, is_system: false, access: {}, locked: false, library: null };
@@ -177,7 +177,7 @@ describe("field types in words", () => {
 
 describe("choice keys stay put once saved", () => {
   it("renaming a saved choice keeps its key; a new one follows its label", async () => {
-    const { followsLabel } = await import("./pages/admin/FieldEditor");
+    const { followsLabel } = await import("./pages/admin/builder/FieldEditor");
     const saved = new Set(["ok"]);
     expect(followsLabel({ key: "ok", label: "OK" }, saved)).toBe(false);          // saved: never rewritten
     expect(followsLabel({ key: "", label: "" }, saved)).toBe(true);               // new and empty
@@ -187,7 +187,7 @@ describe("choice keys stay put once saved", () => {
   it("editing the label of a saved choice in the editor does not touch its key", async () => {
     const { render, screen } = await import("@testing-library/react");
     const userEvent = (await import("@testing-library/user-event")).default;
-    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    const { FieldEditor } = await import("./pages/admin/builder/FieldEditor");
     const onSave = vi.fn();
     const f = { id: 1, section: 1, key: "door", label: "Door", helper_text: "", type: "single_choice", required: false, required_if: null, show_if: null,
       config: { options: [{ key: "ok", label: "OK" }] }, visible: true, order: 0, is_system: false, access: {}, locked: false, library: null };
@@ -203,7 +203,7 @@ describe("choice keys stay put once saved", () => {
 describe("report support in the field editor", () => {
   const base = { id: 1, section: 1, helper_text: "", required: false, required_if: null, show_if: null, visible: true, order: 0, is_system: false, access: {}, locked: false, library: null };
   it("an answer prints in the colour chosen, else one that follows its meaning", async () => {
-    const { toneOf } = await import("./pages/admin/FieldEditor");
+    const { toneOf } = await import("./pages/admin/builder/FieldEditor");
     expect(toneOf({ key: "ok", label: "Ok" })).toBe("ok");
     expect(toneOf({ key: "s", label: "Scratch", is_defect: true, severity: "minor" })).toBe("warn");
     expect(toneOf({ key: "d", label: "Damaged", is_defect: true, severity: "major" })).toBe("bad");
@@ -212,7 +212,7 @@ describe("report support in the field editor", () => {
   it("picks a report colour for an answer", async () => {
     const { render, screen } = await import("@testing-library/react");
     const userEvent = (await import("@testing-library/user-event")).default;
-    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    const { FieldEditor } = await import("./pages/admin/builder/FieldEditor");
     const onSave = vi.fn();
     const f = { ...base, key: "plate", label: "Number plate", type: "single_choice", config: { options: [{ key: "na", label: "Not available" }] } };
     const u = userEvent.setup();
@@ -224,7 +224,7 @@ describe("report support in the field editor", () => {
   it("a photo can be an issue photo and show one of the checks of its section", async () => {
     const { render, screen } = await import("@testing-library/react");
     const userEvent = (await import("@testing-library/user-event")).default;
-    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    const { FieldEditor } = await import("./pages/admin/builder/FieldEditor");
     const onSave = vi.fn();
     const f = { ...base, key: "door_photo", label: "Door photo", type: "photo", config: { max_count: 3 } };
     const siblings = [{ key: "door", label: "Door", type: "single_choice" }, { key: "other_photo", label: "Other photo", type: "photo" }];
@@ -287,7 +287,7 @@ describe("field validations on the Logic tab", () => {
   it("are edited there and saved with the field; a message is required", async () => {
     const { render, screen } = await import("@testing-library/react");
     const userEvent = (await import("@testing-library/user-event")).default;
-    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    const { FieldEditor } = await import("./pages/admin/builder/FieldEditor");
     const onSave = vi.fn();
     const f = { id: 1, section: 1, key: "odo", label: "Odometer", helper_text: "", type: "number", required: false, required_if: null, show_if: null,
       config: {}, visible: true, order: 0, is_system: true, access: {}, locked: false, library: null };
@@ -310,7 +310,7 @@ describe("field validations on the Logic tab", () => {
   it("go away when their last condition is deleted", async () => {
     const { render, screen } = await import("@testing-library/react");
     const userEvent = (await import("@testing-library/user-event")).default;
-    const { FieldEditor } = await import("./pages/admin/FieldEditor");
+    const { FieldEditor } = await import("./pages/admin/builder/FieldEditor");
     const onSave = vi.fn();
     const f = { id: 1, section: 1, key: "odo", label: "Odometer", helper_text: "", type: "number", required: false, required_if: null, show_if: null,
       config: {}, visible: true, order: 0, is_system: false, access: {}, locked: false, library: null };

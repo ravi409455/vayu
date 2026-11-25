@@ -7,13 +7,13 @@ import { STAGE_LABEL, useLabels } from "../../api/labels";
 import type { Booking, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { fmtTime, ist, today } from "../../lib/format";
+import { useCount, viewQuery } from "../../lib/bookingViews";
 import { loadJSON, saveJSON } from "../../lib/store";
 import { clampStart, DAY_END, DAY_START, dayWindow, hm, hoursOf, jobSpan, rangeLabel, spanFacts, spanTitle, stackRows, WINDOW_HOURS, windowStarts, type Span } from "../../lib/schedule";
 import { useTiming } from "../../lib/timing";
 import { Avatar } from "../../ui/Avatar";
 import { Empty, LoadError, PageHeader, useToast } from "../../ui/kit";
 import { Actions } from "./booking/Actions";
-import { useCount, viewQuery } from "./Bookings";
 import { keys } from "../../api/keys";
 
 const SLOT_PX = 76;                // width of 30 minutes; the day scrolls sideways

@@ -8,8 +8,9 @@ import { STAGE_LABEL, STAGE_TONE, useInspectionTypes, useLabels, useTypeLabels }
 import type { Booking, MasterListItem, User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { allowedActions } from "../../lib/actions";
+import { useCount, viewQuery, type View } from "../../lib/bookingViews";
 import { useDebounced } from "../../lib/useDebounced";
-import { addDays, fmtSlot, today } from "../../lib/format";
+import { fmtSlot } from "../../lib/format";
 import { loadJSON, saveJSON } from "../../lib/store";
 import { fmtMinutes } from "../../lib/timing";
 import { ExpertCell } from "../../ui/ExpertCell";
@@ -23,28 +24,11 @@ export function canDelete(role: string, stage: string): boolean {
   return role === "admin" || stage === "draft";
 }
 
-export type View = "today" | "unassigned" | "in_progress" | "uploading" | "upcoming" | "completed" | "late" | "quick" | "all";
 export type Filters = { search: string; city: string; expert: string; type: string; stage: string; date_from: string; date_to: string; answer: string; value: string };
 export const EMPTY: Filters = { search: "", city: "", expert: "", type: "", stage: "", date_from: "", date_to: "", answer: "", value: "" };
 /** A field Bookings can be filtered by (server: bookings/answer-fields). */
 export type AnswerField = { field: string; label: string; type: string; form: string; options: { value: string; label: string }[] };
 export const NOT_FILLED = "__none__";
-
-/** What each saved view asks the server for (on top of the person's own filters). */
-export function viewQuery(view: View, now = new Date()): Record<string, string> {
-  const t = today(now);
-  switch (view) {
-    case "today": return { date_from: t, date_to: t, order: "schedule" };
-    case "unassigned": return { stage: "draft", order: "schedule" };
-    case "in_progress": return { stage: "in_progress", order: "schedule" };
-    case "uploading": return { stage: "submitted" };
-    case "upcoming": return { date_from: addDays(t, 1), order: "schedule" };
-    case "completed": return { stage: "completed" };
-    case "late": return { timing: "late" };           // Admin / Ops only (the limits are on the Settings page)
-    case "quick": return { timing: "quick" };
-    default: return {};
-  }
-}
 
 const VIEWS: { id: View; label: string; counted?: boolean; perm?: string }[] = [
   { id: "today", label: "Today", counted: true }, { id: "unassigned", label: STAGE_LABEL.draft!, counted: true },
@@ -59,11 +43,6 @@ export function timingPills(b: Booking): string[] {
   return t ? [...(t.late ? [`Late ${fmtMinutes(t.late_minutes)}`] : []), ...(t.quick ? [`Too quick ${fmtMinutes(t.duration_minutes)}`] : [])] : [];
 }
 const BOARD: string[] = ["draft", "assigned", "in_progress", "submitted", "completed"];
-
-/** How many bookings a query matches: the same question the list asks, so a number and its list agree. */
-export function useCount(query: Record<string, string>, enabled = true) {
-  return useQuery({ queryKey: keys.bookings("count", query), enabled, staleTime: 30_000, queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query, signal }) }).data?.count;
-}
 
 function ViewTab({ v, on, onPick, own }: { v: (typeof VIEWS)[number]; on: boolean; onPick: () => void; own: Record<string, string> }) {
   const n = useCount({ ...own, ...viewQuery(v.id) });          // the person's filters apply to the numbers too

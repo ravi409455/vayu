@@ -7,7 +7,7 @@ import type { FormSummary, FormType } from "../../api/types";
 import { useAuth } from "../../auth";
 import { Empty, Field, LoadError, Modal, PageHeader, Pill, useToast } from "../../ui/kit";
 import { slugKey } from "../../lib/fieldTypes";
-import { ImportDialog } from "./ImportForm";
+import { ImportDialog } from "./builder/ImportForm";
 import { keys } from "../../api/keys";
 
 export const TYPE_LABEL: Record<FormType, string> = { booking: "Booking form", start: "Start form", end: "End form", custom: "Custom form" };

@@ -8,7 +8,7 @@ import { AuthProvider, useAuth } from "./auth";
 import { homeFor, RequireAuth } from "./guards";
 import { visibleNav } from "./Layout";
 import { nextGrant, OPS_NOT_ON_WEB } from "./pages/admin/Roles";
-import { FieldEditor } from "./pages/admin/FieldEditor";
+import { FieldEditor } from "./pages/admin/builder/FieldEditor";
 import { FormBuilder, PublishDialog } from "./pages/admin/FormBuilder";
 import { AccessMatrix } from "./ui/AccessMatrix";
 import type { FormField, Me } from "./api/types";

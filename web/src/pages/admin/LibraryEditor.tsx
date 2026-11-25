@@ -12,7 +12,7 @@ import { AccessEditor } from "../../ui/AccessEditor";
 import { ConditionBuilder } from "../../ui/ConditionBuilder";
 import { FormRenderer } from "../../ui/FormRenderer";
 import { Empty, Field, LoadError, Modal, PageHeader, Pill, Tabs, useToast, when } from "../../ui/kit";
-import { FieldEditor, type FieldDraft } from "./FieldEditor";
+import { FieldEditor, type FieldDraft } from "./builder/FieldEditor";
 import { PushReview } from "./library/PushReview";
 import { useCrumb } from "../../ui/crumb";
 import { keys } from "../../api/keys";
