@@ -20,6 +20,7 @@ from apps.platform.schema import obj
 from . import services, submissions, sync, timing
 from .models import Booking, Inspection
 from .serializers import BookingSerializer, InspectionSerializer
+from .stages import Stage
 
 ACTION_PERMISSIONS = {
     "list": "bookings.view", "retrieve": "bookings.view", "create": "bookings.create",
@@ -83,6 +84,12 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
                     if not all(i.isdigit() for i in ids):
                         raise ValidationError({param: "Use user ids, separated by commas."})
                     qs = qs.filter(assigned_expert_id__in=ids)
+                    continue
+                if param == "stage":                  # one stage or several: stage=draft,assigned
+                    wanted = p[param].split(",")
+                    if not set(wanted) <= set(Stage.values):
+                        raise ValidationError({param: "Use stage words, separated by commas."})
+                    qs = qs.filter(stage__in=wanted)
                     continue
                 qs = qs.filter(**{column: p[param]})
         problem = p.get("problem")                    # the Ops problem queue

@@ -24,8 +24,6 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,7 +57,7 @@ import java.time.LocalDate
 /**
  * The Bookings filters: one map shared by the quick row, the Filter view and Dashboard tiles.
  * "dates" is absent for today (the default), or "upcoming", "all", or "range" with date_from / date_to.
- * "expert" holds one id or several ("3,7").
+ * "expert" holds one id or several ("3,7"); "stage" one status or several ("assigned,in_progress").
  */
 object BookingFilters {
     private val DATE_KEYS = setOf("dates", "date_from", "date_to")
@@ -100,14 +98,20 @@ object BookingFilters {
     /** A new type (or none) drops the answer: its questions belong to the old type. */
     fun withType(f: Map<String, String>, type: String?) = if (type == f["type"]) f else set(f, "type", type) - "answer" - "value"
 
-    fun experts(f: Map<String, String>): Set<String> = f["expert"]?.split(",")?.filter { it.isNotBlank() }?.toSet().orEmpty()
-    fun withExperts(f: Map<String, String>, ids: Set<String>) = if (ids.isEmpty()) f - "expert" else f + ("expert" to ids.sorted().joinToString(","))
+    private fun several(f: Map<String, String>, key: String): Set<String> = f[key]?.split(",")?.filter { it.isNotBlank() }?.toSet().orEmpty()
+    private fun withSeveral(f: Map<String, String>, key: String, values: Set<String>) = if (values.isEmpty()) f - key else f + (key to values.sorted().joinToString(","))
+    fun experts(f: Map<String, String>) = several(f, "expert")
+    fun withExperts(f: Map<String, String>, ids: Set<String>) = withSeveral(f, "expert", ids)
+    fun stages(f: Map<String, String>) = several(f, "stage")
+    fun withStages(f: Map<String, String>, stages: Set<String>) = withSeveral(f, "stage", stages)
+    /** One status reads as its word, several as a count ("2 statuses"), so a chip keeps its width; null when none is chosen. */
+    fun stagesWord(stages: Set<String>): String? = when (stages.size) { 0 -> null; 1 -> STAGE_WORDS[stages.single()]; else -> "${stages.size} statuses" }
     fun expertsWord(n: Int) = if (n == 1) "1 expert" else "$n experts"
     fun set(f: Map<String, String>, key: String, value: String?) = if (value == null) f - key else f + (key to value)
 
     /** "Today · In progress · 2 experts". */
     fun words(f: Map<String, String>, labels: Labels, answer: String? = null): List<String> = listOfNotNull(
-        dateWord(f), f["stage"]?.let { STAGE_WORDS[it] }, f["timing"]?.let { if (it == "late") "Started late" else "Too quick" },
+        dateWord(f), stagesWord(stages(f)), f["timing"]?.let { if (it == "late") "Started late" else "Too quick" },
         f["type"]?.let(labels::type), f["city"]?.let(labels::city), experts(f).size.takeIf { it > 0 }?.let(::expertsWord), answer)
 
     /** The questions a type can be filtered by (choices and yes / no); none until a type is picked. */
@@ -134,22 +138,16 @@ private fun QuickChip(text: String, on: Boolean, description: String, modifier: 
     }
 }
 
-/** The Status quick filter: the chosen status in words; a tap opens [options] (a status, or null for all, and its line in the menu). */
+/** The Status quick filter: one status in words, several as a count. */
 @Composable
-private fun StatusChip(stage: String?, options: List<Pair<String?, String>>, modifier: Modifier = Modifier, onPick: (String?) -> Unit) {
-    var menu by remember { mutableStateOf(false) }
-    val word = stage?.let { STAGE_WORDS[it] }
-    Box(modifier) {
-        QuickChip(word ?: "Status", stage != null, "Status: ${word ?: "any"}", Modifier.fillMaxWidth()) { menu = true }
-        DropdownMenu(menu, { menu = false }, containerColor = Vayu.colors.bg) {
-            options.forEach { (k, label) ->
-                DropdownMenuItem(text = { Text(label, color = Vayu.colors.ink, fontWeight = if (k == stage) FontWeight.SemiBold else FontWeight.Normal) },
-                    trailingIcon = { if (k == stage) Icon(Icons.Outlined.Check, "Chosen", tint = Vayu.colors.ink) },
-                    onClick = { menu = false; onPick(k) })
-            }
-        }
-    }
-}
+private fun StatusChip(stages: Set<String>, modifier: Modifier = Modifier, onClick: () -> Unit) =
+    QuickChip(BookingFilters.stagesWord(stages) ?: "Status", stages.isNotEmpty(),
+        "Status: ${when (stages.size) { 0 -> "any"; 1 -> BookingFilters.stagesWord(stages); else -> "${stages.size} chosen" }}", modifier, onClick)
+
+/** Tick several statuses; [words] is each status's line in the list. */
+@Composable
+private fun StatusSheet(words: List<Pair<String, String>>, chosen: Set<String>, onDismiss: () -> Unit, onDone: (Set<String>) -> Unit) =
+    TickSheet("Status", "Any status", words, chosen, onDismiss, onDone)
 
 /** The Experts quick filter: how many are chosen, never their names (they would wrap the row). */
 @Composable
@@ -161,13 +159,12 @@ private fun ExpertsChip(chosen: Set<String>, modifier: Modifier = Modifier, onCl
 @Composable
 fun QuickFilters(f: Map<String, String>, labels: Labels, onChange: (Map<String, String>) -> Unit, onAll: () -> Unit) {
     var experts by remember { mutableStateOf(false) }
-    val stage = f["stage"]
+    var status by remember { mutableStateOf(false) }
+    val stages = BookingFilters.stages(f)
     val chosen = BookingFilters.experts(f)
     Row(Modifier.padding(top = 12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         // Status and Experts share the row's width (Status a little more: "In progress"), the Filter button keeps its own
-        StatusChip(stage, (listOf<String?>(null) + STAGE_WORDS.keys).map { k -> k to (k?.let { STAGE_WORDS[it] } ?: "Any status") }, Modifier.weight(1.2f)) {
-            onChange(BookingFilters.set(f, "stage", it))
-        }
+        StatusChip(stages, Modifier.weight(1.2f)) { status = true }
         ExpertsChip(chosen, Modifier.weight(1f)) { experts = true }
         val n = BookingFilters.count(f)
         // one width with or without the count, so nothing moves when a filter goes on
@@ -181,22 +178,28 @@ fun QuickFilters(f: Map<String, String>, labels: Labels, onChange: (Map<String, 
             if (n > 0) Text(" $n", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.onPrimary, maxLines = 1, softWrap = false)
         }
     }
+    if (status) StatusSheet(STAGE_WORDS.toList(), stages, { status = false }) { onChange(BookingFilters.withStages(f, it)) }
     if (experts) ExpertsSheet(expertOptions(labels), chosen, { experts = false }) { onChange(BookingFilters.withExperts(f, it)) }
 }
 
-/** Pick several experts: tick boxes, a search when the list is long, Done says how many. */
+/** Pick several experts. */
 @Composable
-fun ExpertsSheet(options: List<Pair<String, String>>, chosen: Set<String>, onDismiss: () -> Unit, onDone: (Set<String>) -> Unit) {
+fun ExpertsSheet(options: List<Pair<String, String>>, chosen: Set<String>, onDismiss: () -> Unit, onDone: (Set<String>) -> Unit) =
+    TickSheet("Experts", "Any expert", options, chosen, onDismiss, onDone)
+
+/** Pick several of [options] (key, words): tick boxes, a search when the list is long, Done says how many; [any] takes the filter off. */
+@Composable
+private fun TickSheet(title: String, any: String, options: List<Pair<String, String>>, chosen: Set<String>, onDismiss: () -> Unit, onDone: (Set<String>) -> Unit) {
     var draft by remember { mutableStateOf(chosen) }
     var find by remember { mutableStateOf("") }
     VayuSheet(onDismiss, footer = {
         Row(Modifier.padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            SoftButton("Any expert", { onDone(emptySet()); onDismiss() }, Modifier.weight(1f))
+            SoftButton(any, { onDone(emptySet()); onDismiss() }, Modifier.weight(1f))
             PrimaryButton(if (draft.isEmpty()) "Done" else "Done · ${draft.size} chosen", { onDone(draft); onDismiss() }, Modifier.weight(1f))
         }
     }) {
-        Text("Experts", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Vayu.colors.ink, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-        if (options.size > 8) Box(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) { SoftField(find, { find = it }, "Find an expert", icon = Icons.Outlined.Search) }
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Vayu.colors.ink, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+        if (options.size > 8) Box(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) { SoftField(find, { find = it }, "Find", icon = Icons.Outlined.Search) }
         options.filter { find.isBlank() || it.second.contains(find.trim(), ignoreCase = true) }.forEach { (id, name) ->
             val on = id in draft
             Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(role = Role.Checkbox) { draft = if (on) draft - id else draft + id }
@@ -286,7 +289,7 @@ fun FilterSheet(f: Map<String, String>, env: OpsEnv, onDismiss: () -> Unit, onAp
                         Modifier.weight(1f)) { open = "to" }
                 }
             }
-            FilterBox("Status", draft["stage"]?.let { STAGE_WORDS[it] }, "Any status", onClear = { draft = draft - "stage" }) { open = "stage" }
+            FilterBox("Status", BookingFilters.stages(draft).mapNotNull { STAGE_WORDS[it] }.joinToString(", ").ifEmpty { null }, "Any status", onClear = { draft = draft - "stage" }) { open = "stage" }
             val experts = BookingFilters.experts(draft)
             FilterBox("Experts", expertOptions(labels).filter { it.first in experts }.joinToString(", ") { it.second }.ifEmpty { null }, "Any expert",
                 onClear = { draft = draft - "expert" }) { open = "expert" }
@@ -309,7 +312,7 @@ fun FilterSheet(f: Map<String, String>, env: OpsEnv, onDismiss: () -> Unit, onAp
                 if (open == "from" && draft["date_to"]?.let { it < d.toString() } == true) draft = draft + ("date_to" to d.toString())
                 open = if (open == "from" && draft["date_to"] == null) "to" else null
             }, onDismiss = { open = null })
-        "stage" -> PickSheet("Status", "Any status", STAGE_WORDS.toList(), draft["stage"], { open = null }) { draft = BookingFilters.set(draft, "stage", it) }
+        "stage" -> StatusSheet(STAGE_WORDS.toList(), BookingFilters.stages(draft), { open = null }) { draft = BookingFilters.withStages(draft, it) }
         "type" -> PickSheet("Inspection type", "Any type", labels.types.map { it.first to it.second }, draft["type"], { open = null }) { draft = BookingFilters.withType(draft, it) }
         "city" -> PickSheet("City", "Any city", labels.cities.toList(), draft["city"], { open = null }) { draft = BookingFilters.set(draft, "city", it) }
         "answer" -> PickSheet("Answer", "Any question", fields.map { it.s("field") to it.s("label") }, draft["answer"], { open = null }) {
@@ -321,14 +324,17 @@ fun FilterSheet(f: Map<String, String>, env: OpsEnv, onDismiss: () -> Unit, onAp
     }
 }
 
-/** Today's filters, one line as on Bookings: Status ▾ (the day's statuses with their counts) · Experts ▾. */
+/** Today's filters, one line: Status ▾ (the day's statuses with their counts) · Experts ▾; several of each can be ticked. */
 @Composable
-fun TodayFilters(counts: List<Pair<String?, Int>>, stage: String?, experts: Set<String>, labels: Labels, onStage: (String?) -> Unit, onExperts: (Set<String>) -> Unit) {
-    var picking by remember { mutableStateOf(false) }
+fun TodayFilters(counts: List<Pair<String, Int>>, stages: Set<String>, experts: Set<String>, labels: Labels, onStages: (Set<String>) -> Unit, onExperts: (Set<String>) -> Unit) {
+    var picking by remember { mutableStateOf<String?>(null) }
     Row(Modifier.padding(top = 14.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        StatusChip(stage, counts.map { (k, n) -> k to "${k?.let { STAGE_WORDS[it] } ?: "All"} · $n" }, Modifier.weight(1f), onStage)
-        ExpertsChip(experts, Modifier.weight(1f)) { picking = true }
+        StatusChip(stages, Modifier.weight(1f)) { picking = "status" }
+        ExpertsChip(experts, Modifier.weight(1f)) { picking = "experts" }
     }
-    if (picking) ExpertsSheet(expertOptions(labels), experts, { picking = false }, onExperts)
+    when (picking) {
+        "status" -> StatusSheet(counts.map { (k, n) -> k to "${STAGE_WORDS[k]} · $n" }, stages, { picking = null }, onStages)
+        "experts" -> ExpertsSheet(expertOptions(labels), experts, { picking = null }, onExperts)
+    }
 }
 
