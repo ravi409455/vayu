@@ -23,7 +23,7 @@ kover {
 
 android {
     namespace = "in.carcid.vayu"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         // one processor type only (smaller APK to copy to a test phone): -Pvayu.abi=arm64-v8a
@@ -74,7 +74,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
     // lint runs in CI; known false positives and old warnings live in the baseline (new ones fail)
@@ -180,3 +179,5 @@ sentry {
 androidComponents {
     beforeVariants(selector().withBuildType("release")) { it.hostTests.forEach { (_, t) -> t.enable = false } }
 }
+
+kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }

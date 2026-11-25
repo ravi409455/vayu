@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.printToString
 import com.github.takahirom.roborazzi.RoborazziOptions
@@ -197,8 +198,9 @@ class OpsFlowTest {
         compose.onNodeWithContentDescription("Experts: any").performClick()
         compose.onNodeWithText("Ravi Expert").performClick()
         compose.onNodeWithText("Meera Expert").performClick()
-        compose.onNodeWithText("Done · 2 chosen").performClick()
-        compose.waitUntil(5_000) { server.queries.any { "stage=assigned" in it && "expert=3,4" in it } }
+        compose.onNodeWithText("Done · 2 chosen").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        runCatching { compose.waitUntil(5_000) { server.queries.any { "stage=assigned" in it && "expert=3,4" in it } } }
+            .onFailure { throw AssertionError("DEBUGQ label=" + compose.onAllNodes(hasText("experts", substring = true)).fetchSemanticsNodes().map { it.config.toString().take(120) } + " sheet=" + compose.onAllNodes(hasText("Done", substring = true)).fetchSemanticsNodes().size) }
         waitFor("Today · Assigned · 2 experts")
         compose.onNodeWithContentDescription("All filters, 2 on").assertIsDisplayed()
         shot("ops_bookings_quick")
