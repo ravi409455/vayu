@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import androidx.compose.foundation.background
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
@@ -182,7 +183,8 @@ class OpsFlowTest {
             "generated_at":"2026-11-24T09:30:00+05:30","error":"","verify_url":"https://verify.example/x","url":"/api/v1/bookings/$B6/report/download"}"""
     private fun showReport() = compose.setContent { VayuTheme(ThemeMode.LIGHT) {
         val env = OpsEnv(me.copy(permissions = me.permissions + "submissions.edit"), data, Labels(), { LocalDate.parse(TODAY) }, 0, {}, {})
-        androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(20.dp)) {
+        // the app's background, not the test window's default (it changed with the library upgrade)
+        androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.background(`in`.carcid.vayu.ui.theme.Vayu.colors.bg).padding(20.dp)) {
             ReportCard(env, B6, Bk(Json.parseToJsonElement(day[3]).jsonObject))
         }
     } }
@@ -263,6 +265,15 @@ class OpsFlowTest {
         waitFor("Rohit Sharma")
     }
 
+    /** A list the server refuses says why, instead of "Loading…" for ever (seen on the phone with a stale server). */
+    @Test fun aRefusedBookingsListSaysWhy() {
+        server.on("GET bookings", """{"expert":"Use a user id."}""", 400)     // refused from the start: no earlier copy to show
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Use a user id.")
+        assertEquals(0, compose.onAllNodes(hasText("Loading…")).fetchSemanticsNodes().size)
+    }
+
     @Test fun quickFiltersAndTheFilterViewAreOneChoice() {
         show()
         compose.onNodeWithText("Bookings").performClick()
@@ -275,8 +286,11 @@ class OpsFlowTest {
         compose.onNodeWithText("Ravi Expert").performClick()
         compose.onNodeWithText("Meera Expert").performClick()
         compose.onNodeWithText("Done · 2 chosen").performClick()
-        compose.waitUntil(5_000) { server.queries.any { "stage=assigned" in it && "expert=3,4" in it } }
+        // what the person sees first, then the request: under Robolectric with Compose 1.11 the list
+        // behind a closed sheet redraws only once the screen is read (on a phone the request leaves in
+        // 0.2-0.4 s, checked 15 times on the OnePlus)
         waitFor("Today · Assigned · 2 experts")
+        compose.waitUntil(5_000) { server.queries.any { "stage=assigned" in it && "expert=3,4" in it } }
         compose.onNodeWithContentDescription("All filters, 2 on").assertIsDisplayed()
         shot("ops_bookings_quick")
         // the Filter view starts from the same choices
@@ -288,8 +302,8 @@ class OpsFlowTest {
         compose.onNodeWithText("Upcoming").performClick()
         compose.onNodeWithContentDescription("Remove Status").performClick()
         compose.onNodeWithText("Show bookings").performClick()
+        waitFor("Upcoming · 2 experts")                                            // what the person sees first
         compose.waitUntil(5_000) { server.queries.any { it.startsWith("date_from=2026-11-25&order=schedule") && "expert=3,4" in it && "stage" !in it } }
-        waitFor("Upcoming · 2 experts")
         compose.onNodeWithContentDescription("Status: any").assertIsDisplayed()       // and back in the quick row
         compose.onNodeWithText("Clear").performClick()
         waitFor("Showing 5 · Today")

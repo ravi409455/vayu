@@ -287,7 +287,11 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         }
         if (res.code == "DEVICE_REVOKED") tokens.clear()
         if (res.status !in 200..299) throw ApiError(res.code ?: "HTTP_${res.status}",
-            res.body["detail"]?.jsonPrimitive?.contentOrNull ?: "Something went wrong (${res.status}).",
+            // the server's own sentence: its detail, else a field's message ({"expert": "Use a user id."})
+            (res.body["detail"] as? JsonPrimitive)?.contentOrNull
+                ?: res.body.values.firstNotNullOfOrNull { v -> (v as? JsonPrimitive)?.takeIf { it.isString }?.content
+                    ?: (v as? kotlinx.serialization.json.JsonArray)?.firstOrNull()?.let { (it as? JsonPrimitive)?.content } }
+                ?: "Something went wrong (${res.status}).",
             res.status, res.body)
         return res
     }
