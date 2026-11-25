@@ -318,6 +318,7 @@ def _clean_all(b: Booking, pinned: dict, answers: dict, kept: dict | None = None
     raw = {part: answers.get(part) or {} for part in PARTS}
     cleaned: dict[str, dict] = {}
     errors: dict = {}
+    messages: dict = {}
     unused = [part for part, v in pinned.items() if v is None and raw[part]]
     if unused:
         raise err("INVALID_ANSWERS", "This inspection does not use that form.",
@@ -329,14 +330,16 @@ def _clean_all(b: Booking, pinned: dict, answers: dict, kept: dict | None = None
             continue
         context = {"booking": b.answers, **{p: (cleaned.get(p) or raw[p]) for p in PARTS}}
         cleaned[part], e = validate_answers(version, {**context, part: raw[part]}, today(),
-                                            kept=None if kept is None else kept.get(part) or {})
+                                            kept=None if kept is None else kept.get(part) or {},
+                                            messages=messages)
         errors = {**errors, **e}
     from apps.media.services import reference_errors
 
     errors = {**errors, **reference_errors(
         b, [(pinned[p], cleaned[p]) for p in PARTS if pinned[p] is not None])}
     if errors:
-        raise err("INVALID_ANSWERS", "Some answers are invalid.", errors=errors)
+        raise err("INVALID_ANSWERS", "Some answers are invalid.", errors=errors,
+                  messages={k: messages.get(k, v) for k, v in errors.items()})
     return cleaned
 
 

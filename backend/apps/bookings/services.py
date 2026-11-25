@@ -52,9 +52,12 @@ def active_inspection_type(key: str) -> bool:
 
 
 def clean(version: FormVersion, answers: dict, kept: dict | None = None) -> dict:
-    cleaned, errors = validate_answers(version, {"booking": answers}, today(), kept=kept)
+    messages: dict = {}
+    cleaned, errors = validate_answers(version, {"booking": answers}, today(), kept=kept,
+                                       messages=messages)
     if errors:
-        raise err("INVALID_ANSWERS", "Some answers are invalid.", errors=errors)
+        raise err("INVALID_ANSWERS", "Some answers are invalid.", errors=errors,
+                  messages=messages)
     return cleaned
 
 
