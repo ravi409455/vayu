@@ -71,7 +71,7 @@ import `in`.carcid.vayu.core.forms.Filled
 import `in`.carcid.vayu.core.forms.refusalText
 import `in`.carcid.vayu.core.media.Locator
 import `in`.carcid.vayu.core.media.copyIn
-import `in`.carcid.vayu.core.media.stampPhoto
+import `in`.carcid.vayu.core.media.shrinkPhoto
 import `in`.carcid.vayu.ui.components.Banner
 import `in`.carcid.vayu.ui.components.PrimaryButton
 import `in`.carcid.vayu.ui.components.SoftButton
@@ -167,7 +167,7 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
             if (f.type == "photo" && type.startsWith("image/")) {
                 val out = newFile(dir, "jpg")
                 withContext(Dispatchers.Default) {
-                    stampPhoto(raw, out, stampLines(draft.code, env.expertName, env.now(), env.verified, Locator.last).let { listOf(it[0] + " · gallery", it[1]) })
+                    shrinkPhoto(raw, out)          // not stamped: an older photo must not look like proof of this visit
                     raw.delete()
                 }
                 model.addFile(part, f.key, "photo", out, "image/jpeg", "gallery", label(f, draft, part), single = false, max = f.maxCount)
