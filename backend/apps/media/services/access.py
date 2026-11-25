@@ -1,6 +1,10 @@
 """Who may read or add media on a booking, and which fields are hidden from them."""
 
 
+from typing import Any
+
+from rest_framework.request import Request
+
 from apps.accounts.permissions import scope_for
 from apps.bookings.models import Booking
 from apps.bookings.services import err
@@ -12,7 +16,7 @@ from apps.forms.models import Field
 from ..models import KINDS, MediaAsset
 
 
-def writable_booking(request, booking_id, moved_ok: bool = False) -> Booking:
+def writable_booking(request: Request, booking_id: Any, moved_ok: bool = False) -> Booking:
     """The booking if this user may add media to it: its expert (own scope) or media managers.
     [moved_ok]: also a job moved away from them meanwhile, for their own new or own uploads only."""
     user = request.user
@@ -26,12 +30,12 @@ def writable_booking(request, booking_id, moved_ok: bool = False) -> Booking:
     return b
 
 
-def word(user) -> str:
+def word(user: Any) -> str:
     """What this person calls a booking (docs/plan-leads-bookings-words.md): experts a lead."""
     return "lead" if getattr(user, "role", "") == "expert" else "booking"
 
 
-def readable_booking(request, booking_id) -> Booking:
+def readable_booking(request: Request, booking_id: Any) -> Booking:
     qs = Booking.objects.all()
     if scope_for(request.user, "submissions.view", request) == "own":
         qs = qs.filter(own_filter(request.user)).distinct()
@@ -50,7 +54,7 @@ def field_for(booking: Booking, field_key: str) -> Field:
     raise err("UNKNOWN_FIELD", f"'{field_key}' is not a field of this inspection.")
 
 
-def hidden_fields(user, booking: Booking) -> set[str]:
+def hidden_fields(user: Any, booking: Booking) -> set[str]:
     """Media field keys this user may not see at the booking's current stage (an expert's own
     form too: Ops-only photo fields stay Ops-only)."""
     if user.role == "admin":
@@ -70,5 +74,5 @@ def hidden_fields(user, booking: Booking) -> set[str]:
     return out
 
 
-def is_manager(user, request=None) -> bool:
+def is_manager(user: Any, request: Request | None = None) -> bool:
     return scope_for(user, "media.manage", request) is not None

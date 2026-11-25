@@ -1,5 +1,6 @@
 """One place that turns "the client sent something odd" into a clean 400 instead of a 500."""
 import logging
+from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import DataError
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 BAD_VALUE = {"22001", "22003", "22021", "22P02", "22007", "22008"}
 
 
-def handler(exc, context):
+def handler(exc: Any, context: Any) -> Any:
     if isinstance(exc, DjangoValidationError):      # e.g. a malformed UUID in a lookup
         exc = CodedError("INVALID_INPUT", "; ".join(exc.messages), 400)
     elif isinstance(exc, DataError) and (
@@ -37,7 +38,7 @@ def handler(exc, context):
 BY_STATUS = {404: "NOT_FOUND", 403: "PERMISSION_DENIED"}
 
 
-def one_shape(data, exc, status: int = 400) -> dict:
+def one_shape(data: Any, exc: Any, status: int = 400) -> dict[str, Any]:
     """Every error body has a code and a detail (F-160), whoever raised it. A DRF field error
     keeps its keys and adds them under fields; "Not found." etc. get DRF's own code."""
     if isinstance(data, dict) and "code" in data and "detail" in data:
@@ -58,7 +59,7 @@ def one_shape(data, exc, status: int = 400) -> dict:
 class ObjectJSONParser(JSONParser):
     """Every endpoint reads request.data like a dict; a top-level list or string is a 400."""
 
-    def parse(self, stream, media_type=None, parser_context=None):
+    def parse(self, stream: Any, media_type: Any=None, parser_context: Any=None) -> Any:
         data = super().parse(stream, media_type, parser_context)
         if not isinstance(data, dict):
             raise ParseError("The request body must be a JSON object.")

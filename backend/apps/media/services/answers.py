@@ -1,5 +1,7 @@
 """Which files an inspection's answers name, and which of them never arrived."""
 
+from typing import Any
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from apps.bookings.models import Booking, Inspection
@@ -10,7 +12,7 @@ from apps.forms.models import Field
 from ..models import KINDS, MediaAsset
 
 
-def submitted_answer(booking: Booking, field: Field, lock=False):
+def submitted_answer(booking: Booking, field: Field, lock: Any=False) -> Any:
     """(inspection, part, file ids) of a field in the submitted inspection."""
     qs = booking.inspections.filter(status="submitted").order_by("-submitted_at")
     insp = (qs.select_for_update() if lock else qs).first()
@@ -22,7 +24,7 @@ def submitted_answer(booking: Booking, field: Field, lock=False):
     return insp, part, [value] if isinstance(value, str) else list(value or [])
 
 
-def live_asset(booking: Booking, field_key: str, asset_id) -> MediaAsset | None:
+def live_asset(booking: Booking, field_key: str, asset_id: Any) -> MediaAsset | None:
     """A file on this booking's field that has not been replaced."""
     try:
         return MediaAsset.objects.filter(booking=booking, field_key=field_key,
@@ -50,7 +52,7 @@ def first_unarrived(booking: Booking, ids: list[str]) -> str | None:
     return next(iter(unarrived(booking, ids)), None)
 
 
-def referenced_ids(version, answers: dict) -> dict[str, str]:
+def referenced_ids(version: Any, answers: dict[str, Any]) -> dict[str, str]:
     """{media id: field type} for every media reference in one form's cleaned answers."""
     out: dict[str, str] = {}
     for f in Field.objects.filter(version=version, type__in=KINDS):
@@ -60,7 +62,7 @@ def referenced_ids(version, answers: dict) -> dict[str, str]:
     return out
 
 
-def reference_errors(booking: Booking, parts: list[tuple]) -> dict[str, str]:
+def reference_errors(booking: Booking, parts: list[tuple[Any, ...]]) -> dict[str, str]:
     """Answers may only point at this booking's media of the right kind."""
     errors: dict[str, str] = {}
     for version, answers in parts:
@@ -88,4 +90,4 @@ def expected_media(inspection: Inspection) -> set[str]:
 def max_count(field: Field) -> int:
     if field.type == "signature":
         return 1
-    return field.config.get("max_count", DEFAULT_MAX_COUNT.get(field.type, 1))
+    return int(field.config.get("max_count", DEFAULT_MAX_COUNT.get(field.type, 1)))

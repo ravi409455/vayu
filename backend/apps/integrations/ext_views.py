@@ -1,7 +1,7 @@
 """The REST API for other systems (API key auth). A key sees and writes only the forms and fields
 in its scope; DELETE needs the key to have been given it explicitly."""
 import uuid
-from typing import cast
+from typing import Any, cast
 
 from django.db import transaction
 from rest_framework.exceptions import APIException, ValidationError
@@ -23,35 +23,35 @@ BULK_LIMIT = 100
 
 
 class HasApiKey(BasePermission):
-    def has_permission(self, request, view):
+    def has_permission(self, request: Any, view: Any) -> Any:
         return isinstance(request.auth, ApiKey)
 
 
-def scope_of(request, form: Form | None) -> list[str] | None:
+def scope_of(request: Any, form: Form | None) -> list[str] | None:
     """The field keys this key may use on a form (["*"] = all); None = form not in scope."""
     if form is None:
         return None
-    return request.auth.scope.get("forms", {}).get(form.key)
+    return cast(list[str] | None, request.auth.scope.get("forms", {}).get(form.key))
 
 
 def permitted(allowed: list[str] | None, key: str) -> bool:
     return allowed is not None and (allowed == ["*"] or key in allowed)
 
 
-def need_form(request, form: Form | None) -> list[str]:
+def need_form(request: Any, form: Form | None) -> list[str]:
     allowed = scope_of(request, form)
     if allowed is None:
         raise CodedError("OUT_OF_SCOPE", "This key may not use that form.", 403)
     return allowed
 
 
-def need_keys(allowed: list[str], keys) -> None:
+def need_keys(allowed: list[str], keys: Any) -> None:
     bad = sorted(k for k in keys if not permitted(allowed, k))
     if bad:
         raise CodedError("OUT_OF_SCOPE", "This key may not write these fields.", 403, keys=bad)
 
 
-def only(answers: dict, allowed: list[str]) -> dict:
+def only(answers: dict[str, Any], allowed: list[str]) -> dict[str, Any]:
     return {k: v for k, v in (answers or {}).items() if permitted(allowed, k)}
 
 
@@ -75,7 +75,7 @@ def find(ref: str) -> Booking:
     return b
 
 
-def booking_body(request, b: Booking, allowed: list[str] | None = None) -> dict:
+def booking_body(request: Any, b: Booking, allowed: list[str] | None = None) -> dict[str, Any]:
     """[allowed]: the key's booking fields when the caller already looked them up (a list)."""
     allowed = need_form(request, booking_form()) if allowed is None else allowed
     return {"id": str(b.id), "booking_id": b.booking_id, "stage": b.stage,
@@ -90,7 +90,7 @@ class ExtView(APIView):
 
 
 class Bookings(ExtView):
-    def get(self, request):
+    def get(self, request: Any) -> Response:
         allowed = need_form(request, booking_form())
         qs = Booking.objects.all()
         p = request.query_params
@@ -105,7 +105,7 @@ class Bookings(ExtView):
         return paginator.get_paginated_response([booking_body(request, b, allowed)
                                                  for b in page or []])
 
-    def post(self, request):
+    def post(self, request: Any) -> Response:
         allowed = need_form(request, booking_form())
         answers = request.data.get("answers")
         if not isinstance(answers, dict):
@@ -119,7 +119,7 @@ class Bookings(ExtView):
         return Response(booking_body(request, b), status=201)
 
 
-def update_booking(request, ref: str, answers, row_version=None) -> Booking:
+def update_booking(request: Any, ref: str, answers: Any, row_version: Any=None) -> Booking:
     allowed = need_form(request, booking_form())
     if not isinstance(answers, dict):
         raise ValidationError({"answers": "An object of field keys and values is required."})
@@ -134,15 +134,15 @@ def update_booking(request, ref: str, answers, row_version=None) -> Booking:
 
 
 class BookingDetail(ExtView):
-    def get(self, request, ref):
+    def get(self, request: Any, ref: Any) -> Response:
         return Response(booking_body(request, find(ref)))
 
-    def patch(self, request, ref):
+    def patch(self, request: Any, ref: Any) -> Response:
         b = update_booking(request, ref, request.data.get("answers"),
                            request.data.get("row_version"))
         return Response(booking_body(request, b))
 
-    def delete(self, request, ref):
+    def delete(self, request: Any, ref: Any) -> Response:
         need_form(request, booking_form())
         if not request.auth.allow_delete:
             raise CodedError("DELETE_NOT_ALLOWED",
@@ -154,7 +154,7 @@ class BookingDetail(ExtView):
         return Response(status=204)
 
 
-def need_action(request, action: str) -> None:
+def need_action(request: Any, action: str) -> None:
     if action not in (request.auth.allowed_actions or []):
         raise CodedError("ACTION_NOT_ALLOWED", f"This key may not {action.replace('_', ' ')}. "
                          "Ask an Admin to allow it.", 403)
@@ -178,7 +178,7 @@ class BookingAction(ExtView):
               "reschedule": ["inspection_date", "inspection_time"],
               "change_type": ["inspection_type"]}
 
-    def post(self, request, ref, action):
+    def post(self, request: Any, ref: Any, action: Any) -> Response:
         name = action.replace("-", "_")
         if name not in self.ACTIONS:
             raise CodedError("UNKNOWN_ACTION", "Use assign, cancel, reschedule or change-type.",
@@ -192,16 +192,16 @@ class BookingAction(ExtView):
         return Response(booking_body(request, Booking.objects.get(pk=b.pk)))
 
 
-def _error(e: APIException) -> dict:
+def _error(e: APIException) -> dict[str, Any]:
     if isinstance(e, CodedError):
-        return dict(cast(dict, e.detail))
+        return dict(cast(dict[str, Any], e.detail))
     return {"code": e.default_code, "detail": e.detail}
 
 
 class BulkBookings(ExtView):
     """PATCH many bookings. Each item succeeds or fails on its own; the reply lists both."""
 
-    def post(self, request):
+    def post(self, request: Any) -> Response:
         items = request.data.get("items")
         if not isinstance(items, list) or not items or len(items) > BULK_LIMIT:
             raise ValidationError({"items": f"Send 1 to {BULK_LIMIT} items."})
@@ -228,7 +228,7 @@ def latest_inspection(b: Booking) -> Inspection:
 
 
 class BookingInspection(ExtView):
-    def get(self, request, ref):
+    def get(self, request: Any, ref: Any) -> Response:
         b = find(ref)
         allowed = need_form(request, inspection_form(b))
         insp = latest_inspection(b)
@@ -236,7 +236,7 @@ class BookingInspection(ExtView):
                          "row_version": insp.row_version,
                          "data": only(insp.answers.get("inspection") or {}, allowed)})
 
-    def patch(self, request, ref):
+    def patch(self, request: Any, ref: Any) -> Response:
         b = find(ref)
         allowed = need_form(request, inspection_form(b))
         answers = request.data.get("answers")

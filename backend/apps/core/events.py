@@ -2,8 +2,9 @@
 and pushes (notify) subscribe in their apps' ready(); tests watch them with `capture()`."""
 from collections.abc import Callable
 from contextlib import contextmanager
+from typing import Any
 
-_subscribers: list[Callable[[str, dict], None]] = []
+_subscribers: list[Callable[[str, dict[str, Any]], None]] = []
 
 # every event there is (F-044): an emit of anything else is a typo and raises
 NAMES = frozenset({
@@ -15,11 +16,11 @@ NAMES = frozenset({
 })
 
 
-def subscribe(fn: Callable[[str, dict], None]) -> None:
+def subscribe(fn: Callable[[str, dict[str, Any]], None]) -> None:
     _subscribers.append(fn)
 
 
-def emit(name: str, **payload) -> None:
+def emit(name: str, **payload: Any) -> None:
     if name not in NAMES:
         raise ValueError(f"Unknown event {name!r}: add it to apps.core.events.NAMES.")
     for fn in list(_subscribers):
@@ -27,8 +28,8 @@ def emit(name: str, **payload) -> None:
 
 
 @contextmanager
-def capture():
-    seen: list[tuple[str, dict]] = []
+def capture() -> Any:
+    seen: list[tuple[str, dict[str, Any]]] = []
     fn = lambda name, payload: seen.append((name, payload))  # noqa: E731
     _subscribers.append(fn)
     try:

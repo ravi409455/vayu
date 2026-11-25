@@ -1,5 +1,7 @@
 """Submitted -> Completed once the files are in; Ops finishing without the missing ones."""
 
+from typing import Any
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -14,7 +16,7 @@ from ..models import KINDS, MediaAsset
 from .answers import expected_media
 
 
-def check_completion(booking_id) -> bool:
+def check_completion(booking_id: Any) -> bool:
     """Submitted -> Completed once every referenced file is verified. Exactly once."""
     with transaction.atomic():
         b = Booking.objects.select_for_update().get(pk=booking_id)
@@ -42,7 +44,7 @@ def check_completion(booking_id) -> bool:
     return True
 
 
-def missing_files(booking: Booking) -> list[dict]:
+def missing_files(booking: Booking) -> list[dict[str, Any]]:
     """What holds a submitted job back: per field of the counted inspection, the files it names
     that have not arrived, and whether the field is required (Ops upload those before finishing)."""
     from apps.forms.rules import evaluate_form, spec_from_version
@@ -71,7 +73,7 @@ def missing_files(booking: Booking) -> list[dict]:
     return rows
 
 
-def finish_without_missing(actor, booking: Booking) -> Booking:
+def finish_without_missing(actor: Any, booking: Booking) -> Booking:
     """Ops finish a job whose expert's files will not come (a lost phone): only once every
     required field has its file. Missing optional files are left out of the report; if they
     arrive later they are added and the report is made again (verify_asset)."""

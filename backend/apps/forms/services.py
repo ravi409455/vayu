@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.db import transaction
 from django.db.models import F, Max
 from django.shortcuts import get_object_or_404
@@ -43,7 +45,7 @@ def _build_first_version(form: Form) -> FormVersion:
 
 
 @transaction.atomic
-def create_form(actor, *, key: str, name: str, inspection_type: str = "") -> Form:
+def create_form(actor: Any, *, key: str, name: str, inspection_type: str = "") -> Form:
     """Admins create custom forms only; the booking, start and end forms exist from the start."""
     form = Form.objects.create(key=key, type=FormType.CUSTOM, name=name,
                                inspection_type=inspection_type or key)
@@ -70,7 +72,7 @@ def ensure_system_forms() -> None:
 
 
 @transaction.atomic
-def create_draft(actor, form: Form) -> FormVersion:
+def create_draft(actor: Any, form: Form) -> FormVersion:
     """New draft = deep copy of the latest published version (new ids, same keys)."""
     if form.versions.filter(status=VersionStatus.DRAFT).exists():
         raise CodedError("DRAFT_EXISTS", "This form already has a draft.", 409)
@@ -101,7 +103,7 @@ def create_draft(actor, form: Form) -> FormVersion:
     return draft
 
 
-def system_field_issues(version: FormVersion) -> list:
+def system_field_issues(version: FormVersion) -> list[Any]:
     from .rules import Issue
 
     present = {f.key: f for f in Field.objects.filter(version=version, is_system=True)}
@@ -117,7 +119,7 @@ def system_field_issues(version: FormVersion) -> list:
     return issues
 
 
-def publish_version(actor, version_id: int, row_version: int) -> FormVersion:
+def publish_version(actor: Any, version_id: int, row_version: int) -> FormVersion:
     """Freeze a draft. `row_version` must be the one the admin last saw, so nobody publishes a
     draft that changed under them. The row lock makes concurrent publishes safe."""
     from .rules import dependent_issues, validate_version
@@ -150,7 +152,7 @@ def publish_version(actor, version_id: int, row_version: int) -> FormVersion:
 
 
 @transaction.atomic
-def reorder(actor, version_id: int, body) -> FormVersion:
+def reorder(actor: Any, version_id: int, body: Any) -> FormVersion:
     """Set the order of pages, of sections inside pages, and of fields inside sections in one
     step (what dragging does). Sections and fields may move to another page or section, except
     into or out of a section linked to the library."""
@@ -161,13 +163,13 @@ def reorder(actor, version_id: int, body) -> FormVersion:
     if not isinstance(body, dict) or set(body) - {"pages", "sections", "fields"}:
         raise CodedError("INVALID_REORDER", "Send pages, sections and/or fields.", 400)
 
-    def ids(value, label):
+    def ids(value: Any, label: Any) -> Any:
         if not isinstance(value, list) or not all(isinstance(i, int) for i in value) \
                 or len(set(value)) != len(value):
             raise CodedError("INVALID_REORDER", f"{label} must be a list of distinct ids.", 400)
         return value
 
-    def mine(model, wanted, label):
+    def mine(model: Any, wanted: Any, label: Any) -> Any:
         found = {o.pk: o for o in model.objects.filter(version=version, pk__in=wanted)}
         if set(found) != set(wanted):
             raise CodedError("INVALID_REORDER", f"Some {label} are not part of this version.", 400)
@@ -213,7 +215,7 @@ def reorder(actor, version_id: int, body) -> FormVersion:
 
 
 @transaction.atomic
-def discard_draft(actor, form: Form) -> None:
+def discard_draft(actor: Any, form: Form) -> None:
     """Throw the open draft away. The published version is untouched. A form that was never
     published has nothing to fall back to, so its first draft cannot be discarded."""
     draft = form.versions.filter(status=VersionStatus.DRAFT).first()
@@ -229,7 +231,8 @@ def discard_draft(actor, form: Form) -> None:
                  f"Discarded draft v{number} of {form.key}")
 
 
-def save_draft_setting(actor, version_id: int, action: str, change, summary) -> FormVersion:
+def save_draft_setting(actor: Any, version_id: int, action: str, change: Any,
+                       summary: Any) -> FormVersion:
     """A setting of a draft version (switches, rating config, Key Checks), saved the one way
     (F-023): lock the draft, [change](version) sets the fields and returns their names, the
     version goes up, then the audit row says [summary](version)."""

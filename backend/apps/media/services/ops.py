@@ -1,7 +1,10 @@
 """Ops adding, replacing and removing files on a submitted job."""
 
+from typing import Any
+
 from django.db import transaction
 from django.utils import timezone
+from rest_framework.request import Request
 
 from apps.bookings import activity
 from apps.bookings.changes import stamp
@@ -32,7 +35,7 @@ OPS_STAGES = ("submitted", "completed")
 LOOSE_LIMIT = 10      # Ops uploads per field not in the answers (yet)
 
 
-def check_ops_upload(booking: Booking, field: Field, user) -> None:
+def check_ops_upload(booking: Booking, field: Field, user: Any) -> None:
     """What Ops and Admin may put on a booking: photos, videos and files, once the expert has
     submitted, on fields the Admin has not blocked and they may see."""
     if field.key in hidden_fields(user, booking):
@@ -49,7 +52,7 @@ def check_ops_upload(booking: Booking, field: Field, user) -> None:
                   403)
 
 
-def attach(request, new: MediaAsset, replaces=None) -> None:
+def attach(request: Request, new: MediaAsset, replaces: Any=None) -> None:
     """Ops put a file they uploaded into the submitted inspection: in place of `replaces` (kept as
     history, Admin can still open it) or added to the field. The report is rebuilt."""
     from apps.scoring import service as scoring
@@ -102,7 +105,7 @@ def attach(request, new: MediaAsset, replaces=None) -> None:
     check_completion(booking.id)     # a submitted booking now also waits for this file
 
 
-def remove(request, asset: MediaAsset) -> None:
+def remove(request: Request, asset: MediaAsset) -> None:
     """Nobody deletes a submitted file (Ops replace it instead). Anyone may only take back a file
     they uploaded themselves that no submitted inspection uses yet (the expert's Remove button, an
     Ops upload that was never attached), so a retake is never blocked by an unwanted file."""
@@ -119,7 +122,7 @@ def remove(request, asset: MediaAsset) -> None:
     delete_asset(user, asset)
 
 
-def delete_asset(actor, asset: MediaAsset) -> None:
+def delete_asset(actor: Any, asset: MediaAsset) -> None:
     """Ops remove a file after submission: the object, its preview, its reference in the answers."""
     from apps.scoring import service as scoring
 
@@ -147,7 +150,7 @@ def delete_asset(actor, asset: MediaAsset) -> None:
         upload = asset.upload_id
         asset.delete()
 
-        def clean_storage():                  # only once the database change is really saved
+        def clean_storage() -> None:              # only once the database change is really saved
             for key in keys:
                 storage.delete(key)
             if upload:

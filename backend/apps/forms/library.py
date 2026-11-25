@@ -41,7 +41,7 @@ def bad(code: str, message: str, status: int = 400) -> CodedError:
 
 # ------------------------------------------------------------------ definitions
 
-def validate_field_definition(d: Any, *, expect_key: str | None = None) -> dict:
+def validate_field_definition(d: Any, *, expect_key: str | None = None) -> dict[str, Any]:
     if not isinstance(d, dict) or set(d) - FIELD_KEYS or not {"key", "label", "type"} <= set(d):
         raise bad("INVALID_DEFINITION", "A field definition needs key, label and type, and only "
                   f"these properties: {', '.join(sorted(FIELD_KEYS))}.")
@@ -76,7 +76,7 @@ def validate_field_definition(d: Any, *, expect_key: str | None = None) -> dict:
     return d
 
 
-def validate_section_definition(d: Any) -> dict:
+def validate_section_definition(d: Any) -> dict[str, Any]:
     if (not isinstance(d, dict) or set(d) - SECTION_KEYS or not isinstance(d.get("fields"), list)):
         raise bad("INVALID_DEFINITION", "A section definition needs a title and a fields list.")
     if not isinstance(d.get("title"), str) or not d["title"].strip():
@@ -100,14 +100,14 @@ def validate_section_definition(d: Any) -> dict:
     return d
 
 
-def _rules_of(field: dict) -> list[Any]:
+def _rules_of(field: dict[str, Any]) -> list[Any]:
     rules = [field.get("show_if"), field.get("required_if")]
     if field.get("type") == "derived":
         rules.append((field.get("config") or {}).get("rule"))
     return rules
 
 
-def check_self_contained(kind: str, definition: dict) -> None:
+def check_self_contained(kind: str, definition: dict[str, Any]) -> None:
     """Rules in a library item may use only the item's own fields and the system fields every
     custom form has, so the item behaves the same in every form."""
     fields = [definition] if kind == LibraryKind.FIELD else definition["fields"]
@@ -128,7 +128,7 @@ def check_self_contained(kind: str, definition: dict) -> None:
                           "library.")
 
 
-def _check_immutable(kind: str, old: dict, new: dict) -> None:
+def _check_immutable(kind: str, old: dict[str, Any], new: dict[str, Any]) -> None:
     if kind == LibraryKind.FIELD:
         if new.get("type") != old["type"]:  # the key was already checked in update_item
             raise bad("TYPE_IMMUTABLE", "A library field's type can never change.")
@@ -141,11 +141,11 @@ def _check_immutable(kind: str, old: dict, new: dict) -> None:
 
 # ------------------------------------------------------------------ items
 
-def _settings_changed(old: dict, new: dict) -> list[str]:
+def _settings_changed(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
     return sorted(k for k in (set(old) | set(new)) if old.get(k) != new.get(k))
 
 
-def changed_keys(kind: str, old: dict | None, new: dict) -> list[str]:
+def changed_keys(kind: str, old: dict[str, Any] | None, new: dict[str, Any]) -> list[str]:
     """What a save changed: setting names for a field, field keys (and section settings) for a
     section. Shown in the history."""
     if old is None:
@@ -163,7 +163,7 @@ def changed_keys(kind: str, old: dict | None, new: dict) -> list[str]:
     return out
 
 
-def _record(actor, item: LibraryItem, old: dict | None) -> None:
+def _record(actor: Any, item: LibraryItem, old: dict[str, Any] | None) -> None:
     LibraryRevision.objects.create(
         item=item, revision=item.revision, name=item.name, definition=item.definition,
         changed_keys=changed_keys(item.kind, old, item.definition),
@@ -179,7 +179,8 @@ def _validate(kind: str, key: str, definition: Any) -> None:
 
 
 @transaction.atomic
-def create_item(actor, *, kind: str, key: str, name: str | None, definition: Any) -> LibraryItem:
+def create_item(actor: Any, *, kind: str, key: str, name: str | None,
+                definition: Any) -> LibraryItem:
     if kind not in (LibraryKind.FIELD, LibraryKind.SECTION):
         raise bad("INVALID_DEFINITION", "kind must be 'field' or 'section'.")
     if kind == LibraryKind.SECTION and not LIST_KEY_RE.fullmatch(key or ""):
@@ -196,8 +197,9 @@ def create_item(actor, *, kind: str, key: str, name: str | None, definition: Any
 
 
 @transaction.atomic
-def update_item(actor, item: LibraryItem, *, definition: Any = None, archived: bool | None = None,
-                name: str | None = None, revision: int | None = None) -> LibraryItem:
+def update_item(actor: Any, item: LibraryItem, *, definition: Any = None,
+                archived: bool | None = None, name: str | None = None,
+                revision: int | None = None) -> LibraryItem:
     item = LibraryItem.objects.select_for_update().get(pk=item.pk)
     if definition is not None:
         if revision is None:
@@ -230,7 +232,7 @@ def update_item(actor, item: LibraryItem, *, definition: Any = None, archived: b
     return item
 
 
-def usages(item: LibraryItem) -> list[dict]:
+def usages(item: LibraryItem) -> list[dict[str, Any]]:
     rows = set()
     for model in (Field, Section):
         rows |= set(model.objects.filter(library_item=item).values_list(
@@ -238,9 +240,9 @@ def usages(item: LibraryItem) -> list[dict]:
     return [{"form": f, "version": n, "status": s} for f, n, s in sorted(rows)]
 
 
-def used_in_counts() -> dict:
+def used_in_counts() -> dict[int, int]:
     """{library item id: how many forms use it}, for every item in two queries."""
-    forms: dict = {}
+    forms: dict[int, set[str]] = {}
     for model in (Field, Section):
         for item_id, key in model.objects.filter(library_item__isnull=False).values_list(
                 "library_item_id", "version__form__key"):
@@ -248,7 +250,7 @@ def used_in_counts() -> dict:
     return {k: len(v) for k, v in forms.items()}
 
 
-def delete_item(actor, item: LibraryItem) -> None:
+def delete_item(actor: Any, item: LibraryItem) -> None:
     if usages(item):
         raise CodedError("IN_USE", "This item is used by a form; archive it instead.", 409)
     audit.record(actor, "library.delete", "library_item", item.id, f"{item.kind} {item.key}")
@@ -257,7 +259,7 @@ def delete_item(actor, item: LibraryItem) -> None:
 
 # ------------------------------------------------------------------ into forms
 
-def _field_attrs(d: dict) -> dict:
+def _field_attrs(d: dict[str, Any]) -> dict[str, Any]:
     return {"label": d["label"], "helper_text": d.get("helper_text", ""), "type": d["type"],
             "config": d.get("config", {}), "required": d.get("required", False),
             "required_if": d.get("required_if"), "show_if": d.get("show_if"),
@@ -271,7 +273,7 @@ def _usable(item: LibraryItem, kind: str) -> None:
         raise CodedError("ARCHIVED", "This library item is archived.", 409)
 
 
-def _next_order(qs) -> int:
+def _next_order(qs: Any) -> int:
     return (qs.aggregate(m=Max("order"))["m"] or 0) + 1
 
 
@@ -288,7 +290,7 @@ def ensure_not_locked(section: Section) -> None:
 
 
 @transaction.atomic
-def add_field(actor, section: Section, item: LibraryItem, link: bool) -> Field:
+def add_field(actor: Any, section: Section, item: LibraryItem, link: bool) -> Field:
     _usable(item, LibraryKind.FIELD)
     ensure_draft(section.version_id)
     ensure_not_locked(section)
@@ -302,14 +304,14 @@ def add_field(actor, section: Section, item: LibraryItem, link: bool) -> Field:
     return field
 
 
-def _build_section_fields(section: Section, definition: dict, start: int = 0) -> None:
+def _build_section_fields(section: Section, definition: dict[str, Any], start: int = 0) -> None:
     for i, fd in enumerate(definition["fields"], start=start):
         Field(version_id=section.version_id, section=section, key=fd["key"], order=i,
               **_field_attrs(fd)).save()
 
 
 @transaction.atomic
-def add_section(actor, page: Page, item: LibraryItem, link: bool) -> Section:
+def add_section(actor: Any, page: Page, item: LibraryItem, link: bool) -> Section:
     _usable(item, LibraryKind.SECTION)
     ensure_draft(page.version_id)
     d = item.definition
@@ -325,14 +327,14 @@ def add_section(actor, page: Page, item: LibraryItem, link: bool) -> Section:
     return section
 
 
-def _apply(field: Field, fd: dict, order: int) -> None:
+def _apply(field: Field, fd: dict[str, Any], order: int) -> None:
     for attr, value in _field_attrs(fd).items():
         setattr(field, attr, value)
     field.order = order
 
 
 @transaction.atomic
-def accept_update(actor, obj: Field | Section) -> Field | Section:
+def accept_update(actor: Any, obj: Field | Section) -> Field | Section:
     """Bring a linked field or section to the library's current revision. The library owns
     everything inside the item (content, rules, required, visible, access, and for a section its
     fields and their order); the form keeps only where the item sits."""
@@ -370,7 +372,7 @@ def accept_update(actor, obj: Field | Section) -> Field | Section:
     return obj
 
 
-def unlink(actor, obj: Field | Section) -> Field | Section:
+def unlink(actor: Any, obj: Field | Section) -> Field | Section:
     ensure_draft(obj.version_id)
     if isinstance(obj, Field) and obj.section.library_item_id is not None:
         raise bad("VIA_SECTION", "This field is part of a linked section; unlink the section.")
@@ -385,7 +387,7 @@ def unlink(actor, obj: Field | Section) -> Field | Section:
 
 
 @transaction.atomic
-def save_to_library(actor, obj: Field | Section, *, key: str | None, name: str | None):
+def save_to_library(actor: Any, obj: Field | Section, *, key: str | None, name: str | None) -> Any:
     ensure_draft(obj.version_id)
     if locked(obj):
         raise CodedError("ALREADY_LINKED", "This item is already linked to the library.", 409)

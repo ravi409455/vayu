@@ -1,4 +1,6 @@
 
+from typing import Any
+
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.password_validation import validate_password
@@ -22,7 +24,7 @@ def validate_new_password(password: str, username: str) -> None:
         raise ValidationError({"password": list(e.messages)}) from e
 
 
-def _failures_key(username: str, ip: str, user) -> str:
+def _failures_key(username: str, ip: str, user: Any) -> str:
     # the password's hash is part of it: a password reset by the Admin ends the lock
     stamp = user.password[-12:] if user is not None else ""
     return f"login-failures:{username.strip().lower()}:{ip}:{stamp}"
@@ -49,8 +51,8 @@ def authenticate(username: str, password: str, ip: str = "") -> User:
         raise fail
     cache.delete(key)
     # last sign-in, for the Users list (web and phone alike)
-    type(user).objects.filter(pk=user.pk).update(last_login=timezone.now())  # type: ignore[union-attr]
-    return user  # type: ignore[return-value]
+    type(user).objects.filter(pk=user.pk).update(last_login=timezone.now())
+    return user
 
 
 def revoke_devices(user: User) -> int:
@@ -58,7 +60,7 @@ def revoke_devices(user: User) -> int:
         revoked_at=timezone.now(), push_token="")
 
 
-def register_device_and_tokens(user: User, device_name: str) -> dict:
+def register_device_and_tokens(user: User, device_name: str) -> dict[str, Any]:
     """A new phone replaces the old one, unless the old one may still hold work that hasn't
     reached the server (then the person syncs it first, or someone allowed to sign it out does)."""
     with transaction.atomic():

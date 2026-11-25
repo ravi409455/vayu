@@ -9,6 +9,7 @@ import re
 import socket
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Any
 from urllib.parse import quote, urlencode, urlparse
 
 import requests
@@ -77,7 +78,7 @@ class _PeerGuard:
     """Checks the address actually connected to, so a DNS answer that changes between our check
     and the connection (DNS rebinding) cannot reach a private address."""
 
-    def _new_conn(self):
+    def _new_conn(self) -> Any:
         sock = super()._new_conn()  # type: ignore[misc]
         if not settings.WEBHOOK_ALLOW_PRIVATE and not ipaddress.ip_address(
                 sock.getpeername()[0]).is_global:
@@ -103,7 +104,7 @@ class GuardedHTTPSPool(HTTPSConnectionPool):
 
 
 class GuardedAdapter(HTTPAdapter):
-    def init_poolmanager(self, *args, **kwargs):
+    def init_poolmanager(self, *args: Any, **kwargs: Any) -> None:
         super().init_poolmanager(*args, **kwargs)
         self.poolmanager.pool_classes_by_scheme = {"http": GuardedHTTPPool,
                                                    "https": GuardedHTTPSPool}
@@ -118,10 +119,10 @@ def session() -> requests.Session:
 
 # ------------------------------------------------------------------ routing
 
-def _context(public: str, payload: dict) -> dict:
+def _context(public: str, payload: dict[str, Any]) -> dict[str, Any]:
     """The few facts a delivery needs later. Values are left out on purpose, except the old and
     new Booking ID (an edited ID must reach the other system)."""
-    ctx: dict = {}
+    ctx: dict[str, Any] = {}
     changes = payload.get("changes") or {}
     if changes:
         ctx["changed_keys"] = sorted(changes)
@@ -135,7 +136,7 @@ def _context(public: str, payload: dict) -> dict:
     return ctx
 
 
-def targets(booking, public: str) -> list[Integration]:
+def targets(booking: Any, public: str) -> list[Integration]:
     """Integrations of the booking form (booking events) and of the inspection form that handles
     this booking's type (every event) that subscribed to this event."""
     from django.db.models import Q
@@ -151,7 +152,7 @@ def targets(booking, public: str) -> list[Integration]:
     return list(rows.filter(q))
 
 
-def on_event(name: str, payload: dict) -> None:
+def on_event(name: str, payload: dict[str, Any]) -> None:
     from apps.bookings.models import Booking
 
     public = PUBLIC.get(name)
@@ -175,11 +176,11 @@ def send_later(d: Delivery) -> None:
 
 # ------------------------------------------------------------------ the request
 
-def _scoped(answers: dict, allowed: list) -> dict:
+def _scoped(answers: dict[str, Any], allowed: list[Any]) -> dict[str, Any]:
     return {k: v for k, v in (answers or {}).items() if not allowed or k in allowed}
 
 
-def build_payload(d: Delivery, preview: bool = False) -> dict:
+def build_payload(d: Delivery, preview: bool = False) -> dict[str, Any]:
     """The standard JSON body. `preview` shows example ZIP links instead of building a ZIP."""
     from apps.bookings.models import Booking
     from apps.media import storage as media_storage
@@ -188,7 +189,7 @@ def build_payload(d: Delivery, preview: bool = False) -> dict:
     from apps.reports.models import Report
 
     integ = d.integration
-    body: dict = {"event": d.event, "delivery": str(d.id),
+    body: dict[str, Any] = {"event": d.event, "delivery": str(d.id),
                   "occurred_at": d.created_at.isoformat(),
                   "booking": {"id": d.booking_uuid, "booking_id": d.booking_ref}}
     for key in ("changed_keys", "inspection", "revision", "alert", "reason"):
@@ -226,15 +227,15 @@ def build_payload(d: Delivery, preview: bool = False) -> dict:
     return body
 
 
-def build_sample_payload(d: Delivery, types: dict[str, str]) -> dict:
+def build_sample_payload(d: Delivery, types: dict[str, str]) -> dict[str, Any]:
     """The standard body for a form that has no job yet: values made up from each field's type."""
     integ = d.integration
-    body: dict = {"event": d.event, "delivery": str(d.id),
+    body: dict[str, Any] = {"event": d.event, "delivery": str(d.id),
                   "occurred_at": d.created_at.isoformat(),
                   "booking": {"id": "00000000-0000-0000-0000-000000000000",
                               "booking_id": values.sample("text", "job.booking_id")}}
     if integ.include_data:
-        def part(name: str) -> dict:
+        def part(name: str) -> dict[str, Any]:
             return {r.split(".", 1)[1]: values.sample(t, r) for r, t in types.items()
                     if r.startswith(name + ".")
                     and (not integ.fields or r.split(".", 1)[1] in integ.fields)}

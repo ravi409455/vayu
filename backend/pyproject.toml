@@ -69,6 +69,30 @@ python_version = "3.12"
 check_untyped_defs = true
 ignore_missing_imports = true
 
+# typed code (plan-quality Q1.2): core, every app's services, the library and integrations
+# The strict flags one by one: `strict = true` in an override leaks to every module, and
+# disallow_untyped_decorators is left off because Celery's @shared_task is untyped.
+[[tool.mypy.overrides]]
+module = ["apps.core.*", "apps.*.services", "apps.*.services.*", "apps.forms.library",
+          "apps.forms.library_push", "apps.integrations.*"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_calls = true
+disallow_any_generics = true
+warn_return_any = true
+strict_equality = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["apps.*.tests.*", "apps.*.migrations.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+disallow_any_generics = false
+warn_return_any = false
+warn_unused_ignores = false
+
 [tool.django-stubs]
 django_settings_module = "vayu.settings.test"
 

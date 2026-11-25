@@ -46,19 +46,19 @@ class MissingPathValue(ValueError):
 
 # ------------------------------------------------------------------ the picker's list
 
-def _live(form, override: dict):
+def _live(form: Any, override: dict[str, Any]) -> Any:
     from apps.bookings.submissions import latest_published
 
     return override[form.id] if form.id in override else latest_published(form)
 
 
-def versions(form, override: dict | None = None) -> dict:
+def versions(form: Any, override: dict[str, Any] | None = None) -> dict[str, Any]:
     """part -> the version whose fields the picker offers (the latest published one)."""
     from apps.forms.models import Form, FormType
 
     override = override or {}
     booking = Form.objects.filter(type=FormType.BOOKING).first()
-    out: dict = {"booking": _live(booking, override) if booking else None}
+    out: dict[str, Any] = {"booking": _live(booking, override) if booking else None}
     if form.type == FormType.CUSTOM:
         out["inspection"] = _live(form, override)
         for part, ftype in (("start", FormType.START), ("end", FormType.END)):
@@ -68,7 +68,7 @@ def versions(form, override: dict | None = None) -> dict:
     return out
 
 
-def _fields(version) -> list:
+def _fields(version: Any) -> list[Any]:
     from apps.forms.models import Field
 
     if version is None:
@@ -77,7 +77,8 @@ def _fields(version) -> list:
         "section__page__order", "section__order", "order", "id"))
 
 
-def catalogue(form, event: str | None = None, override: dict | None = None) -> list[dict]:
+def catalogue(form: Any, event: str | None = None,
+              override: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """[{group, ref, label, type}] for this form. `event` hides what can never be filled for it;
     None lists everything (used to find values whose field has gone)."""
     from apps.forms.models import FormType
@@ -91,7 +92,7 @@ def catalogue(form, event: str | None = None, override: dict | None = None) -> l
     if form.type == FormType.BOOKING:
         keep = keep & (_BASE | {"event"})
     vers = versions(form, override)
-    out: list[dict] = []
+    out: list[dict[str, Any]] = []
 
     def add(group: str, ref: str, label: str, type_: str) -> None:
         out.append({"group": group, "ref": ref, "label": label, "type": type_})
@@ -150,7 +151,7 @@ def refs_in(text: str) -> list[str]:
     return [m.group(1) for m in TOKEN.finditer(text)]
 
 
-def _kc_value(kc: dict, scores: dict) -> Any:
+def _kc_value(kc: dict[str, Any], scores: dict[str, Any]) -> Any:
     """A Key Check's value for an integration: a number when it is a Number one that reads as a
     number, else the text."""
     text = ((scores.get("key_checks") or {}).get(kc["key"]) or {}).get("value")
@@ -186,7 +187,7 @@ def render(text: str, get: Callable[[str], Any], *, as_text: bool = False, sep: 
         v = get(one.group(1))
         return None if v == "" else v
 
-    def fill(m: re.Match) -> str:
+    def fill(m: re.Match[str]) -> str:
         s = text_of(get(m.group(1)), sep)
         if encode:
             if not s:
@@ -222,7 +223,7 @@ def json_strings(node: Any) -> list[str]:
     return []
 
 
-def used_refs(integ) -> set[str]:
+def used_refs(integ: Any) -> set[str]:
     texts = [integ.url, *(q.get("value", "") for q in integ.query),
              *(h.get("value", "") for h in integ.headers)]
     if integ.body_mode == "custom":
@@ -230,7 +231,8 @@ def used_refs(integ) -> set[str]:
     return {r for t in texts for r in refs_in(t)}
 
 
-def broken_refs(integ, override: dict | None = None, cache: dict | None = None) -> list[str]:
+def broken_refs(integ: Any, override: dict[str, Any] | None = None,
+                cache: dict[Any, Any] | None = None) -> list[str]:
     """Values the integration uses whose field is not in the form's live version any more.
     [cache]: shared by a list, so each form's values are worked out once (F-089)."""
     cache = {} if cache is None else cache
@@ -248,7 +250,7 @@ def broken_refs(integ, override: dict | None = None, cache: dict | None = None) 
     return sorted(broken)
 
 
-def publish_warnings(version, *, published: bool) -> list[dict]:
+def publish_warnings(version: Any, *, published: bool) -> list[dict[str, Any]]:
     """Integrations whose values the version breaks. `published`: the version is live already,
     so "before" is the one it replaced; otherwise it is a draft that would replace the live one."""
     from apps.forms.models import VersionStatus
@@ -296,7 +298,7 @@ class Resolver:
     mode "send": real values. "preview": the same, but ZIP links are examples (nothing is built).
     "sample": made-up values from each value's type (a form without jobs)."""
 
-    def __init__(self, d, mode: str = "send", types: dict[str, str] | None = None):
+    def __init__(self, d: Any, mode: str = "send", types: dict[str, str] | None = None) -> None:
         from apps.bookings.models import Booking
 
         self.d, self.mode, self.types = d, mode, types or {}
@@ -312,11 +314,11 @@ class Resolver:
             self._cache[ref] = None if v == "" else v
         return self._cache[ref]
 
-    def _booking(self):
+    def _booking(self) -> Any:
         assert self.booking is not None      # callers run only when the job still exists
         return self.booking
 
-    def inspection(self):
+    def inspection(self) -> Any:
         if self._insp is False:
             b = self.booking
             # before any submission, the running draft (inspection.started); never past a

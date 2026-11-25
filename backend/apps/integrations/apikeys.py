@@ -1,10 +1,12 @@
 """API keys: a long random secret shown once, stored only as a SHA-256 hash."""
 import hashlib
 import secrets
+from typing import Any
 
 from django.utils import timezone
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.request import Request
 
 from apps.accounts.models import Role, User
 
@@ -40,10 +42,10 @@ def service_user() -> User:
 class ApiKeyAuthentication(BaseAuthentication):
     """`Authorization: Api-Key vk_...` or `X-API-Key: vk_...`. A revoked key stops at once."""
 
-    def authenticate_header(self, request):
+    def authenticate_header(self, request: Request) -> Any:
         return "Api-Key"
 
-    def authenticate(self, request):
+    def authenticate(self, request: Request) -> Any:
         header = get_authorization_header(request).decode()
         key = header[8:] if header.startswith("Api-Key ") else request.headers.get("X-API-Key")
         if not key:

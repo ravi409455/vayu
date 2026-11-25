@@ -1,11 +1,13 @@
 """Admin screens' API: webhook integrations, their delivery log, API keys, API docs."""
 import json
 import uuid
+from typing import Any
 
 from django.shortcuts import get_object_or_404
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -24,7 +26,7 @@ DESIGN = ("form", "event", "url", "query", "headers", "body_mode", "body")   # n
 MAX_TEXT = 1000
 
 
-def _text(value, what: str, allowed: set[str], *, one_line: bool = False) -> str:
+def _text(value: Any, what: str, allowed: set[str], *, one_line: bool = False) -> str:
     """A string that may hold {{ref}} tokens; every token must be one the form offers."""
     if not isinstance(value, str) or len(value) > MAX_TEXT:
         raise err("INVALID_VALUE", f"{what} must be text of up to {MAX_TEXT} characters.")
@@ -39,7 +41,7 @@ def _text(value, what: str, allowed: set[str], *, one_line: bool = False) -> str
     return value
 
 
-def _json(node, allowed: set[str], depth: int, count: list):
+def _json(node: Any, allowed: set[str], depth: int, count: list[Any]) -> Any:
     """A custom body: any JSON object or list; strings may hold {{ref}} values the form offers."""
     count[0] += 1
     if count[0] > values.MAX_NODES or depth > values.MAX_DEPTH:
@@ -62,10 +64,10 @@ def _json(node, allowed: set[str], depth: int, count: list):
     raise err("INVALID_BODY", "The body is JSON.")           # pragma: no cover - JSON has no more
 
 
-def _clean_integration(data: dict, current: Integration | None = None, *,
-                       check_address: bool = True) -> dict:
+def _clean_integration(data: dict[str, Any], current: Integration | None = None, *,
+                       check_address: bool = True) -> dict[str, Any]:
     """Validated column values from a request body (only what the body carries)."""
-    out: dict = {}
+    out: dict[str, Any] = {}
     if "form" in data or current is None:
         form_id = data.get("form")
         chosen = Form.objects.filter(pk=form_id).first() if isinstance(form_id, int) else None
@@ -160,7 +162,7 @@ def _clean_integration(data: dict, current: Integration | None = None, *,
     return out
 
 
-def body(i: Integration, cache: dict | None = None) -> dict:
+def body(i: Integration, cache: dict[str, Any] | None = None) -> dict[str, Any]:
     return {"id": str(i.id), "form": i.form_id, "form_key": i.form.key, "name": i.name,
             "event": i.event, "method": i.method, "url": i.url, "query": i.query,
             "headers": i.headers, "body_mode": i.body_mode, "body": i.body,
@@ -171,7 +173,7 @@ def body(i: Integration, cache: dict | None = None) -> dict:
             "created_at": i.created_at}
 
 
-def delivery_body(d: Delivery) -> dict:
+def delivery_body(d: Delivery) -> dict[str, Any]:
     return {"id": str(d.id), "integration": str(d.integration_id), "event": d.event,
             "booking": d.booking_uuid, "booking_id": d.booking_ref, "status": d.status,
             "attempts": d.attempts, "response_status": d.response_status, "error": d.error,
@@ -183,15 +185,16 @@ def delivery_body(d: Delivery) -> dict:
 class IntegrationList(APIView):
     permission_classes = [perm("integrations.manage")]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         qs = Integration.objects.select_related("form")
         if request.query_params.get("form", "").isdigit():
             qs = qs.filter(form_id=request.query_params["form"])
-        cache: dict = {}
+        cache: dict[str, Any] = {}
         return Response([body(i, cache) for i in qs])
 
-    def post(self, request):
-        i = Integration(created_by=request.user, **_clean_integration(request.data))
+    def post(self, request: Request) -> Response:
+        i = Integration(created_by=request.user,  # type: ignore[misc]
+                        **_clean_integration(request.data))
         i.save()
         audit.record(request.user, "integration.create", "integration", i.id,
                      f"Created integration {i.name} for form {i.form.key}")
@@ -201,13 +204,13 @@ class IntegrationList(APIView):
 class IntegrationDetail(APIView):
     permission_classes = [perm("integrations.manage")]
 
-    def _get(self, pk) -> Integration:
+    def _get(self, pk: Any) -> Integration:
         return get_object_or_404(Integration.objects.select_related("form"), pk=pk)
 
-    def get(self, request, pk):
+    def get(self, request: Request, pk: Any) -> Response:
         return Response(body(self._get(pk)))
 
-    def patch(self, request, pk):
+    def patch(self, request: Request, pk: Any) -> Response:
         i = self._get(pk)
         for key, value in _clean_integration(request.data, i).items():
             setattr(i, key, value)
@@ -216,7 +219,7 @@ class IntegrationDetail(APIView):
                      f"Updated integration {i.name}")
         return Response(body(i))
 
-    def delete(self, request, pk):
+    def delete(self, request: Request, pk: Any) -> Response:
         i = self._get(pk)
         audit.record(request.user, "integration.delete", "integration", i.id,
                      f"Deleted integration {i.name}")
@@ -227,11 +230,11 @@ class IntegrationDetail(APIView):
 class EventCatalog(APIView):
     permission_classes = [perm("integrations.manage")]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         return Response(webhooks.EVENTS)
 
 
-def _booking_for(request, form: Form, submitted: bool = False) -> Booking | None:
+def _booking_for(request: Request, form: Form, submitted: bool = False) -> Booking | None:
     raw = request.data.get("booking")
     if raw:
         try:
@@ -251,7 +254,7 @@ class TestSend(APIView):
 
     permission_classes = [perm("integrations.manage")]
 
-    def post(self, request, pk):
+    def post(self, request: Request, pk: Any) -> Response:
         i = get_object_or_404(Integration.objects.select_related("form"), pk=pk)
         booking = _booking_for(request, i.form, submitted=not i.event.startswith("booking."))
         d = Delivery.objects.create(
@@ -271,7 +274,7 @@ class Catalogue(APIView):
 
     permission_classes = [perm("integrations.manage")]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         form = Form.objects.filter(pk=request.query_params.get("form", "").strip() or 0).first()
         event = request.query_params.get("event")
         if form is None or form.type not in (FormType.BOOKING, FormType.CUSTOM):
@@ -287,7 +290,7 @@ class Preview(APIView):
 
     permission_classes = [perm("integrations.manage")]
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         data = {**request.data}
         data["name"] = data.get("name") or "preview"          # a preview does not need a name yet
         i = Integration(**_clean_integration(data, check_address=False))
@@ -314,7 +317,7 @@ class Preview(APIView):
 class DeliveryList(APIView):
     permission_classes = [perm("integrations.manage")]
 
-    def get(self, request, pk):
+    def get(self, request: Request, pk: Any) -> Response:
         i = get_object_or_404(Integration, pk=pk)
         qs = i.deliveries.all()
         for param in ("status", "event"):
@@ -330,7 +333,7 @@ class Resend(APIView):
 
     permission_classes = [perm("integrations.manage")]
 
-    def post(self, request, pk):
+    def post(self, request: Request, pk: Any) -> Response:
         old = get_object_or_404(Delivery.objects.select_related("integration"), pk=pk)
         d = Delivery.objects.create(
             integration=old.integration, event=old.event, booking=old.booking,
@@ -344,12 +347,12 @@ class Resend(APIView):
 
 # ------------------------------------------------------------------ API keys
 
-def _clean_scope(scope) -> dict:
+def _clean_scope(scope: Any) -> dict[str, Any]:
     """{"forms": {form key: [field keys] or ["*"]}} where every name really exists."""
     if not isinstance(scope, dict) or not isinstance(scope.get("forms"), dict) \
             or not scope["forms"] or set(scope) - {"forms"}:
         raise err("INVALID_SCOPE", 'scope must look like {"forms": {"<form key>": ["<field>"]}}.')
-    out: dict = {}
+    out: dict[str, Any] = {}
     for key, fields in scope["forms"].items():
         form = Form.objects.filter(key=key, type__in=[FormType.BOOKING, FormType.CUSTOM],
                                    is_active=True).first()
@@ -373,13 +376,13 @@ def _clean_scope(scope) -> dict:
 KEY_ACTIONS = ("assign", "cancel", "reschedule", "change_type")
 
 
-def _clean_actions(raw) -> list[str]:
+def _clean_actions(raw: Any) -> list[str]:
     if not isinstance(raw, list) or any(a not in KEY_ACTIONS for a in raw):
         raise err("INVALID_ACTIONS", f"allowed_actions is a list of: {', '.join(KEY_ACTIONS)}.")
     return sorted(set(raw))
 
 
-def key_body(k: ApiKey, full_key: str | None = None) -> dict:
+def key_body(k: ApiKey, full_key: str | None = None) -> dict[str, Any]:
     out = {"id": str(k.id), "name": k.name, "prefix": k.prefix, "scope": k.scope,
            "allow_delete": k.allow_delete, "allowed_actions": k.allowed_actions,
            "revoked_at": k.revoked_at,
@@ -392,10 +395,10 @@ def key_body(k: ApiKey, full_key: str | None = None) -> dict:
 class ApiKeyList(APIView):
     permission_classes = [perm("api_keys.manage")]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         return Response([key_body(k) for k in ApiKey.objects.all()])
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         name = request.data.get("name")
         if not isinstance(name, str) or not name.strip() or len(name) > 100:
             raise err("INVALID_NAME", "Give the key a name (up to 100 characters).")
@@ -407,7 +410,7 @@ class ApiKeyList(APIView):
         key, prefix, hashed = apikeys.generate()
         k = ApiKey.objects.create(name=name.strip(), prefix=prefix, key_hash=hashed, scope=scope,
                                   allow_delete=allow, allowed_actions=actions,
-                                  created_by=request.user)
+                                  created_by=request.user)  # type: ignore[misc]
         audit.record(request.user, "api_key.create", "api_key", k.id,
                      f"Created API key {k.name} ({k.prefix}){' with DELETE' if allow else ''}"
                      f"{'; actions ' + ', '.join(actions) if actions else ''}")
@@ -417,10 +420,10 @@ class ApiKeyList(APIView):
 class ApiKeyDetail(APIView):
     permission_classes = [perm("api_keys.manage")]
 
-    def get(self, request, pk):
+    def get(self, request: Request, pk: Any) -> Response:
         return Response(key_body(get_object_or_404(ApiKey, pk=pk)))
 
-    def patch(self, request, pk):
+    def patch(self, request: Request, pk: Any) -> Response:
         k = get_object_or_404(ApiKey, pk=pk)
         if k.revoked_at is not None:
             raise err("KEY_REVOKED", "A revoked key cannot be changed.", 409)
@@ -448,7 +451,7 @@ class ApiKeyDetail(APIView):
 class ApiKeyRevoke(APIView):
     permission_classes = [perm("api_keys.manage")]
 
-    def post(self, request, pk):
+    def post(self, request: Request, pk: Any) -> Response:
         from django.utils import timezone
 
         k = get_object_or_404(ApiKey, pk=pk)

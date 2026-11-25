@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Any
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -25,7 +26,7 @@ COLUMNS = {"customer_name": "customer_name", "customer_phone": "customer_phone",
 ACTION_ONLY = ("assigned_expert", "inspection_type")  # changed through their own actions
 
 
-def err(code: str, message: str, status: int = 400, **extra) -> CodedError:
+def err(code: str, message: str, status: int = 400, **extra: Any) -> CodedError:
     return CodedError(code, message, status, **extra)
 
 
@@ -52,8 +53,9 @@ def active_inspection_type(key: str) -> bool:
                                versions__status=VersionStatus.PUBLISHED).exists()
 
 
-def clean(version: FormVersion, answers: dict, kept: dict | None = None) -> dict:
-    messages: dict = {}
+def clean(version: FormVersion, answers: dict[str, Any],
+          kept: dict[str, Any] | None = None) -> dict[str, Any]:
+    messages: dict[str, Any] = {}
     cleaned, errors = validate_answers(version, {"booking": answers}, today(), kept=kept,
                                        messages=messages)
     if errors:
@@ -70,7 +72,7 @@ def sync_columns(b: Booking) -> None:
                          if a.get("inspection_date") else None)
 
 
-def _ensure_unique(booking_id: str, exclude=None) -> None:
+def _ensure_unique(booking_id: str, exclude: Any=None) -> None:
     qs = Booking.objects.filter(booking_id__iexact=booking_id.strip())
     if exclude is not None:
         qs = qs.exclude(pk=exclude.pk)
@@ -86,12 +88,12 @@ def _save(b: Booking) -> None:
         raise err("DUPLICATE_BOOKING_ID", "That booking ID is already used.") from e
 
 
-def _touch(b: Booking, actor, keys: list[str]) -> None:
+def _touch(b: Booking, actor: Any, keys: list[str]) -> None:
     stamp(b, actor, keys)
 
 
 @transaction.atomic
-def create(actor, answers: dict) -> Booking:
+def create(actor: Any, answers: dict[str, Any]) -> Booking:
     version = booking_form_version()
     cleaned = clean(version, answers)
     _ensure_unique(cleaned["booking_id"])
@@ -109,7 +111,7 @@ def create(actor, answers: dict) -> Booking:
 
 
 @transaction.atomic
-def edit(actor, b: Booking, new_answers: dict, row_version: int) -> Booking:
+def edit(actor: Any, b: Booking, new_answers: dict[str, Any], row_version: int) -> Booking:
     b = Booking.objects.select_for_update().get(pk=b.pk)
     check_fresh(b, row_version, "STALE_BOOKING", "booking")
     forbidden = [k for k in new_answers if k in ACTION_ONLY]
@@ -147,7 +149,7 @@ def _lock(b: Booking) -> Booking:
     return Booking.objects.select_for_update().get(pk=b.pk)
 
 
-def _changed(actor, b: Booking, changes: dict) -> None:
+def _changed(actor: Any, b: Booking, changes: dict[str, Any]) -> None:
     _touch(b, actor, sorted(changes))
     _save(b)
     activity.log(b, actor, "changed", changes)
@@ -156,7 +158,7 @@ def _changed(actor, b: Booking, changes: dict) -> None:
 
 
 @transaction.atomic
-def assign(actor, b: Booking, expert_id) -> Booking:
+def assign(actor: Any, b: Booking, expert_id: Any) -> Booking:
     b = _lock(b)
     expert = User.objects.filter(pk=expert_id, role=Role.EXPERT, is_active=True).first()
     if expert is None:
@@ -177,7 +179,7 @@ def assign(actor, b: Booking, expert_id) -> Booking:
 
 
 @transaction.atomic
-def reschedule(actor, b: Booking, date_, time_, reason) -> Booking:
+def reschedule(actor: Any, b: Booking, date_: Any, time_: Any, reason: Any) -> Booking:
     b = _lock(b)
     if b.stage not in ("draft", "assigned"):
         raise err("INVALID_STAGE", f"A {b.stage} booking cannot be rescheduled.", 409)
@@ -200,7 +202,7 @@ def reschedule(actor, b: Booking, date_, time_, reason) -> Booking:
 
 
 @transaction.atomic
-def cancel(actor, b: Booking, reason) -> Booking:
+def cancel(actor: Any, b: Booking, reason: Any) -> Booking:
     b = _lock(b)
     if not isinstance(reason, str) or not active_item("cancel_reason", reason):
         raise err("INVALID_REASON", "Choose a cancel reason from the list.")
@@ -213,7 +215,7 @@ def cancel(actor, b: Booking, reason) -> Booking:
 
 
 @transaction.atomic
-def force_release(actor, b: Booking) -> Booking:
+def force_release(actor: Any, b: Booking) -> Booking:
     b = _lock(b)
     if b.stage != "in_progress":
         raise err("NOT_STARTED", "Only a started booking can be force-released.", 409)
@@ -230,7 +232,7 @@ def force_release(actor, b: Booking) -> Booking:
 
 
 @transaction.atomic
-def review_timing(actor, b: Booking, flag) -> Booking:
+def review_timing(actor: Any, b: Booking, flag: Any) -> Booking:
     """Mark one flag ("late" or "quick") as looked at; the other stays open."""
     if flag not in ("late", "quick"):
         raise err("INVALID_FLAG", "Say which flag: late or quick.")
@@ -243,7 +245,7 @@ def review_timing(actor, b: Booking, flag) -> Booking:
 
 
 @transaction.atomic
-def clear_alert(actor, b: Booking, code) -> Booking:
+def clear_alert(actor: Any, b: Booking, code: Any) -> Booking:
     b = _lock(b)
     kept = [a for a in b.alerts if a.get("code") != code]
     if len(kept) == len(b.alerts):
@@ -255,7 +257,7 @@ def clear_alert(actor, b: Booking, code) -> Booking:
 
 
 @transaction.atomic
-def change_type(actor, b: Booking, inspection_type) -> Booking:
+def change_type(actor: Any, b: Booking, inspection_type: Any) -> Booking:
     b = _lock(b)
     if b.started_at is not None or b.stage not in ("draft", "assigned"):
         raise err("TYPE_LOCKED", "The inspection type is locked once the booking has started.", 409)
@@ -269,7 +271,7 @@ def change_type(actor, b: Booking, inspection_type) -> Booking:
 
 
 @transaction.atomic
-def delete(actor, b: Booking) -> None:
+def delete(actor: Any, b: Booking) -> None:
     """Admin may delete any booking; anyone else only a draft that nobody has worked on. Its
     files (originals, previews, copies, the PDF, ZIPs) go from storage once it is gone (H-02)."""
     from apps.media.models import MediaZip

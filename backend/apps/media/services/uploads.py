@@ -2,6 +2,7 @@
 import math
 import uuid
 from datetime import timedelta
+from typing import Any
 
 from botocore.exceptions import ClientError
 from django.conf import settings
@@ -29,7 +30,7 @@ LIMITS = {
 }
 
 
-def booking_media(request, booking_id) -> list[dict]:
+def booking_media(request: Any, booking_id: Any) -> list[dict[str, Any]]:
     """The files this person put on the booking (media managers: every file), oldest first, so a
     phone that lost its draft can pick them up again. Fields they may not see are left out."""
     booking = writable_booking(request, booking_id, moved_ok=True)    # experts: their own only
@@ -43,13 +44,13 @@ def booking_media(request, booking_id) -> list[dict]:
             for a in qs if a.field_key not in hidden]
 
 
-def _urls(asset: MediaAsset) -> list[dict]:
+def _urls(asset: MediaAsset) -> list[dict[str, Any]]:
     parts = math.ceil(asset.size / settings.MEDIA_PART_SIZE)
     return [{"part_number": n, "url": storage.presign_part(asset.key, asset.upload_id, n)}
             for n in range(1, parts + 1)]
 
 
-def _body(asset: MediaAsset, with_urls: bool) -> dict:
+def _body(asset: MediaAsset, with_urls: bool) -> dict[str, Any]:
     out = {"id": str(asset.id), "status": asset.status, "kind": asset.kind,
            "field_key": asset.field_key, "part_size": settings.MEDIA_PART_SIZE}
     if with_urls:
@@ -57,7 +58,7 @@ def _body(asset: MediaAsset, with_urls: bool) -> dict:
     return out
 
 
-def initiate(request, data: dict) -> tuple[dict, bool]:
+def initiate(request: Any, data: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     """Returns (body, created). Retrying with the same client_uuid returns the same asset."""
     user = request.user
     booking = writable_booking(request, data.get("booking"), moved_ok=True)   # a new own upload
@@ -147,14 +148,14 @@ def initiate(request, data: dict) -> tuple[dict, bool]:
 
 
 
-def progress(asset: MediaAsset) -> dict:
+def progress(asset: MediaAsset) -> dict[str, Any]:
     body = _body(asset, False)
     body["uploaded_parts"] = (storage.list_parts(asset.key, asset.upload_id)
                               if asset.upload_id else [])
     return body
 
 
-def complete(asset: MediaAsset, parts: list[dict]) -> MediaAsset:
+def complete(asset: MediaAsset, parts: list[dict[str, Any]]) -> MediaAsset:
     from ..tasks import verify_asset
 
     if asset.status in ("uploaded", "verifying", "verified"):
@@ -184,7 +185,7 @@ def complete(asset: MediaAsset, parts: list[dict]) -> MediaAsset:
     return asset
 
 
-def stuck_uploads(hours: int | None = None):
+def stuck_uploads(hours: int | None = None) -> Any:
     """Files still not arrived after the limit that someone waits for: not on a finished or
     cancelled job, not failed (the phone sends a new one) and not replaced by Ops (F-149)."""
     cutoff = timezone.now() - timedelta(hours=hours or settings.STUCK_UPLOAD_HOURS)
