@@ -33,21 +33,24 @@ export function useProblems() {
   const t = today();
   const flagged = (flag: Flag) => ({ ...opts, enabled: on && can("bookings.review_timing"), queryKey: keys.problems(flag, t),
     queryFn: ({ signal }: { signal: AbortSignal }) => api<Page<Booking>>("bookings", { query: { timing: flag, reviewed: "0", date_from: addDays(t, -6), date_to: t, order: "schedule" }, signal }) });
+  // times stamped on an unchecked phone clock (F-222), the same last 7 days: they never clear by themselves
+  const unverified = useQuery({ ...opts, queryKey: keys.problems("unverified", t),
+    queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query: { problem: "unverified_time", date_from: addDays(t, -6), date_to: t, order: "schedule" }, signal }) });
   const late = useQuery(flagged("late"));
   const quick = useQuery(flagged("quick"));
   const reports = reportProblems(pdf.data);
   const lists = { stuck: stuck.data ?? [], pdf: reports.failed, out_of_date: reports.outOfDate, conflicts: conflicts.data?.results ?? [], types: types.data?.results ?? [],
-    late: late.data?.results ?? [], quick: quick.data?.results ?? [] };
+    late: late.data?.results ?? [], quick: quick.data?.results ?? [], unverified: unverified.data?.results ?? [] };
   // a page shows the first 50; the number is the server's count
-  const beyond = [conflicts, types, late, quick].reduce((n, q) => n + Math.max(0, (q.data?.count ?? 0) - (q.data?.results.length ?? 0)), 0);
-  return { ...lists, beyond, total: lists.stuck.length + lists.pdf.length + lists.out_of_date.length + lists.conflicts.length + lists.types.length + lists.late.length + lists.quick.length + beyond,
+  const beyond = [conflicts, types, late, quick, unverified].reduce((n, q) => n + Math.max(0, (q.data?.count ?? 0) - (q.data?.results.length ?? 0)), 0);
+  return { ...lists, beyond, total: lists.stuck.length + lists.pdf.length + lists.out_of_date.length + lists.conflicts.length + lists.types.length + lists.late.length + lists.quick.length + lists.unverified.length + beyond,
     loading: stuck.isLoading || pdf.isLoading || conflicts.isLoading || types.isLoading,
-    error: [stuck, pdf, conflicts, types, late, quick].find((q) => q.isError)?.error ?? null,
-    refetch: () => Promise.all([stuck, pdf, conflicts, types, late, quick].map((q) => q.refetch())) };
+    error: [stuck, pdf, conflicts, types, late, quick, unverified].find((q) => q.isError)?.error ?? null,
+    refetch: () => Promise.all([stuck, pdf, conflicts, types, late, quick, unverified].map((q) => q.refetch())) };
 }
 
-export type Need = { key: string; kind: "unassigned" | "upload" | "conflict" | "report" | "type" | "late" | "quick"; tone: "warn" | "bad"; title: string; meta: string; to: string; action: string; at?: string };
-export const NEED_KIND: Record<Need["kind"], string> = { unassigned: "Unassigned today", upload: "Stuck uploads", conflict: "Conflicts", report: "Reports", type: "Type changes", late: "Started late", quick: "Too quick" };
+export type Need = { key: string; kind: "unassigned" | "upload" | "conflict" | "report" | "type" | "late" | "quick" | "unverified"; tone: "warn" | "bad"; title: string; meta: string; to: string; action: string; at?: string };
+export const NEED_KIND: Record<Need["kind"], string> = { unassigned: "Unassigned today", upload: "Stuck uploads", conflict: "Conflicts", report: "Reports", type: "Type changes", late: "Started late", quick: "Too quick", unverified: "Unverified times" };
 
 /** Everything that needs a person, as one list, most urgent first: today's jobs with no expert,
  *  conflicts, stuck uploads, failed or out-of-date reports, rejected type changes. */
@@ -70,6 +73,8 @@ export function useNeeds(): { needs: Need[]; total: number; loading: boolean; er
     ...(["late", "quick"] as const).flatMap((flag) => p[flag].map((b) => ({ key: `${flag}${b.id}`, kind: flag, tone: "warn" as const,
       title: `${b.booking_id}: ${(timingFlags(b.timing).find((f) => f.flag === flag)?.words ?? FLAG_NAME[flag]).toLowerCase()}`,
       meta: `${fmtSlot(b.answers.inspection_date, b.answers.inspection_time)} · ${String(b.answers.customer_name ?? "")}`, to: `/booking/${b.id}`, action: "Review" }))),
+    ...p.unverified.map((b) => ({ key: `u${b.id}`, kind: "unverified" as const, tone: "warn" as const, title: `${b.booking_id}: time not verified`,
+      meta: `${fmtSlot(b.answers.inspection_date, b.answers.inspection_time)} · the phone's clock was not checked that day, so its times may be off`, to: `/booking/${b.id}`, action: "Open" })),
     ...p.types.map((b) => ({ key: `t${b.id}`, kind: "type" as const, tone: "warn" as const, title: `${b.booking_id}: type change rejected`, meta: b.alerts?.find((a) => a.code === "TYPE_CHANGE_REJECTED")?.detail ?? "The expert started another type", to: `/booking/${b.id}`, action: "Open" })),
   ];
   const extra = p.beyond + Math.max(0, (open.data?.count ?? 0) - (open.data?.results.length ?? 0));

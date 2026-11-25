@@ -80,3 +80,23 @@ test("two experts submitted: Ops choose which inspection counts and the conflict
   expect(kept.answers.inspection.odometer).toBe(99999);
   expect(insps.find((i) => i.expert === idOf("expert2"))!.status).toBe("superseded");   // set aside, not deleted
 });
+
+test("a time stamped on an unchecked phone clock is marked on the booking and in Needs you (F-222)", async ({ page }) => {
+  const ops = await apiAs("ops");
+  const ravi = await apiAs("expert");
+  const users = await json(await (await apiAs("admin")).get("users", { params: { role: "expert" } }));
+  const ravisId = (users.results ?? users).find((u: { username: string }) => u.username === "expert").id as number;
+  const b = await json(await ops.post("bookings", { data: { answers: {
+    booking_id: "OPS-U1", customer_name: "Offline Clock", customer_phone: "9876500097", address: "2 Test Street", city: "delhi",
+    inspection_date: todayInIndia(), inspection_time: "09:30", inspection_type: "pdi", car_make_model: "maruti_victoris" } } }));
+  await json(await ops.post(`bookings/${b.id}/assign`, { data: { expert: ravisId } }));
+  const selfie = await uploadFile(ravi, b.id, "selfie", "photo", "image/jpeg", JPEG);
+  await json(await ravi.post(`bookings/${b.id}/start`, { data: { client_uuid: crypto.randomUUID(), inspection_type: "pdi", start_answers: { selfie: [selfie] }, unverified_time: true } }));
+  expect((await json(await ops.get(`bookings/${b.id}`))).unverified_time).toBe(true);
+
+  await signIn(page, "ops");
+  await page.goto(`/booking/${b.id}`);
+  await expect(page.getByText("Time not verified")).toBeVisible();
+  await page.goto("/problems");
+  await expect(page.getByRole("list", { name: "Needs you" })).toContainText("OPS-U1: time not verified");
+});
