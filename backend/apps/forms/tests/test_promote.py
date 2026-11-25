@@ -338,6 +338,7 @@ def _first_field(b):
     lambda b: _first_field(b).pop("access"),
     lambda b: b["pdf_template"].__setitem__("definition", {"junk": 1}),
     lambda b: b["pdf_template"].__setitem__("definition", {"blocks": []}),   # old designer
+    lambda b: b["pdf_template"].__setitem__("shared", "not a list"),       # damaged template file
     lambda b: b["version"]["checks"].append({"rule": {"a": 1, "b": 2}, "message": "m",
                                              "fields": [], "order": 9}),
     lambda b: b["library"][0].__setitem__("definition", {"type": "bogus"}),

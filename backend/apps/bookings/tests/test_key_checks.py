@@ -159,3 +159,71 @@ def test_only_inspection_forms_take_key_checks(kenv):
     r = kenv.admin.patch(f"/api/v1/form-versions/{d}/key-checks", {"key_checks": KC[:1]},
                          format="json")
     assert r.status_code == 400 and r.json()["code"] == "INVALID_KEY_CHECKS"
+
+
+# ---------------------------------------------------------------- report rows and integrations
+
+def test_report_table_rows_show_key_checks_with_their_tone(kenv):
+    from apps.reports.context import table_rows
+
+    def rows(answers, overrides=None):
+        _, insp = run(kenv, answers)
+        if overrides:
+            override(kenv.ops, insp, {"key_checks": overrides})
+        insp.refresh_from_db()
+        src = Source(booking=insp.booking, insp=insp)
+        part = {"source": {"kind": "fields", "rows": [
+            {"field": "check.dented"}, {"field": "check.seat_kc"}, {"field": "check.gone"},
+            {"field": "check.odo"}, {"field": "check.odo", "fallback": "Not read"},
+            {"field": "check.accident", "label": "Accidents"}]}}
+        return table_rows(src, part, src.values())
+
+    dent = rows({"door": "dent", "paint": "ok"})
+    assert [(r["label"], r["text"], r["tone"], r["empty"]) for r in dent] == [
+        ("Dented", "Dent", "bad", False),            # a Yes/No: "yes" is the problem
+        ("Odometer", "Not read", None, True),        # empty: only the row with a fallback
+        ("Accidents", "None seen", None, False)]     # label from the row; seat_kc left out
+    assert rows({"door": "ok", "paint": "ok"})[0]["tone"] == "ok"
+    assert rows({"door": "ok", "paint": "ok"}, {"dented": "Not sure"})[0]["tone"] is None
+
+
+def test_integrations_list_and_send_each_key_check(kenv):
+    from apps.forms.models import Form
+    from apps.integrations import values
+    from apps.integrations.models import Delivery, Integration
+
+    refs = {c["ref"]: c["type"] for c in values.catalogue(Form.objects.get(pk=kenv.form_id))}
+    assert refs["result.key_check.odo"] == "number" and refs["result.key_check.body"] == "text"
+    b, insp = run(kenv, {"door": "dent", "paint": "ok"})
+    override(kenv.ops, insp, {"key_checks": {"odo": "about 40k"}})
+    d = Delivery(integration=Integration(form_id=kenv.form_id), event="pdf.ready",
+                 booking_uuid=b["id"], booking_ref=b["booking_id"])
+    r = values.Resolver(d)
+    assert r.get("result.key_check.odo") == "about 40k"     # a Number one that isn't a number
+    assert r.get("result.key_check.nope") is None
+    assert {"name": "Accident history", "value": "None seen"} in r.get("result.key_checks")
+
+
+@pytest.mark.parametrize("bad, message", [
+    ({"label": " "}, "label must be text"),
+    ({"in_report": "yes"}, "in_report must be true or false"),
+    ({"type": "linked", "fields": ["door"], "combine": "both"}, "combine must be join or template"),
+    ({"type": "rule", "rule": {}}, "the rule is required"),
+])
+def test_bad_key_check_settings_are_named(bad, message):
+    from apps.scoring import keychecks
+
+    kc = {"key": "x1", "label": "X", "type": "text", **bad}
+    with pytest.raises(ValueError, match=message):
+        keychecks.validate([kc])
+
+
+def test_publish_reports_stored_key_checks_that_no_longer_validate():
+    from types import SimpleNamespace
+    from unittest import mock
+
+    from apps.scoring import keychecks
+
+    version = SimpleNamespace(form=SimpleNamespace(ns="inspection"), key_checks="not a list")
+    with mock.patch("apps.forms.rules._known_fields", return_value={}):
+        assert keychecks.issues(version)[0][1] == "INVALID_KEY_CHECKS"

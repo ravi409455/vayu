@@ -41,7 +41,9 @@ describe("the Forms page", () => {
     shell(<Forms />);
     const system = within(await screen.findByRole("table", { name: "System forms" }));
     await waitFor(() => expect(system.getAllByRole("row")).toHaveLength(4));
-    expect(system.getAllByRole("row").slice(1).map((r) => within(r).getAllByRole("cell")[0]!.textContent)).toEqual(["Booking", "Start", "End"]);
+    expect(system.getAllByRole("row").slice(1).map((r) => within(r).getByRole("link").textContent)).toEqual(["Booking", "Start", "End"]);
+    // a renamed system form still says which one it is
+    expect(system.getAllByRole("row").slice(1).map((r) => within(r).getAllByRole("cell")[0]!.textContent)).toEqual(["Booking Booking form", "Start Start form", "End End form"]);
     const custom = within(screen.getByRole("table", { name: "Custom forms" }));
     expect(custom.getByText("PDI (new car)")).toBeInTheDocument();
     expect(custom.getByText("Not published")).toBeInTheDocument();           // EV has only a draft

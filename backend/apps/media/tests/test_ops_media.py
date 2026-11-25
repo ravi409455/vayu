@@ -226,6 +226,10 @@ def test_an_inspection_edit_cannot_drop_a_file_but_can_add_one(job, settings):
     r = env.ops.patch(f"/api/v1/inspections/{insp.id}", {"row_version": insp.row_version,
                       "answers": {"inspection": {"photo_a": [a, new]}}}, format="json")
     assert r.status_code == 200 and photos(b) == [a, new]
+    insp.refresh_from_db()
+    r = env.ops.patch(f"/api/v1/inspections/{insp.id}", {"row_version": insp.row_version,
+                      "answers": {"inspection": {"photo_a": [new, a]}}}, format="json")
+    assert r.status_code == 200 and photos(b) == [new, a]          # same files, new order: no add
 
 
 def test_ops_cannot_upload_to_a_field_hidden_from_them(job, settings):

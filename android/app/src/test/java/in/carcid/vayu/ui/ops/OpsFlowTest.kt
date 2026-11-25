@@ -123,8 +123,9 @@ class OpsFlowTest {
         waitFor("of 5 completed")
         compose.onNodeWithContentDescription("In progress, 1").performClick()
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Rohit Sharma")).fetchSemanticsNodes().isEmpty() }   // unassigned hidden
+        waitFor("Ravi Expert")                       // the list reloads after the chip: wait for the row
         compose.onNode(hasText("Ravi Expert", substring = true)).performClick()
-        compose.onNodeWithText("Farhan Ali").assertIsDisplayed()                       // in progress
+        waitFor("Farhan Ali")                                                           // in progress
         assertTrue(compose.onAllNodes(hasText("Arjun Mehta")).fetchSemanticsNodes().isEmpty())   // assigned: not listed
         assertTrue(compose.onAllNodes(hasText("Meera Expert")).fetchSemanticsNodes().isEmpty())  // nothing in progress
         shot("ops_today_in_progress")
