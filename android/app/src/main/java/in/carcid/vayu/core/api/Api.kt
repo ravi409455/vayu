@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.core.api
 
+import `in`.carcid.vayu.core.s
+
 import `in`.carcid.vayu.core.auth.TokenStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -38,10 +40,11 @@ data class Me(val id: Int, val username: String, val name: String, val role: Str
               /** Ops' notification switches that are off ("submitted", "started", "new_bookings"). */
               val muted: Set<String> = emptySet()) {
     fun can(p: String) = p in permissions
-    val initials: String
-        get() = (name.ifBlank { username }).split(" ").filter { it.isNotBlank() }.take(2)
-            .joinToString("") { it.first().uppercase() }
+    val initials: String get() = initials(name.ifBlank { username })
 }
+
+/** "Ravi Kumar" → "RK": the first letters of the first two words (avatars). */
+fun initials(name: String): String = name.split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }
 
 /** The Vayu API, as the app uses it. Tokens are refreshed once on a 401; a revoked phone signs out. */
 class Api(private val baseUrl: String, private val tokens: TokenStore,
@@ -59,7 +62,7 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
             put("username", username); put("password", password)
             put("client", "mobile"); put("device_name", deviceName)
         }, auth = false)
-        tokens.save(body.str("access"), body.str("refresh"))
+        tokens.save(body.s("access"), body.s("refresh"))
         expired.value = false
         return me()
     }
@@ -258,14 +261,13 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
     }
 
     private fun parseMe(o: JsonObject) = Me(
-        id = o.getValue("id").jsonPrimitive.intOrNull ?: 0, username = o.str("username"),
-        name = o.str("name"), role = o.str("role"),
+        id = o.getValue("id").jsonPrimitive.intOrNull ?: 0, username = o.s("username"),
+        name = o.s("name"), role = o.s("role"),
         mustChangePassword = o["must_change_password"]?.jsonPrimitive?.booleanOrNull ?: false,
         theme = o["theme"]?.jsonPrimitive?.contentOrNull ?: "light",
         permissions = (o["permissions"] as? JsonObject)?.keys.orEmpty(),
         muted = (o["notify_prefs"] as? JsonObject)?.filterValues { it.jsonPrimitive.booleanOrNull == false }?.keys.orEmpty())
 
-    private fun JsonObject.str(k: String) = this[k]?.jsonPrimitive?.contentOrNull ?: ""
 
     private suspend fun call(method: String, path: String, body: JsonObject? = null, auth: Boolean = true,
                              headers: Map<String, String> = emptyMap()): JsonObject =

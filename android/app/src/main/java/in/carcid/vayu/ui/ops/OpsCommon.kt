@@ -39,7 +39,7 @@ import `in`.carcid.vayu.core.ops.Loaded
 import `in`.carcid.vayu.core.ops.OpsData
 import `in`.carcid.vayu.core.ops.o
 import `in`.carcid.vayu.core.ops.rows
-import `in`.carcid.vayu.core.ops.s
+import `in`.carcid.vayu.core.s
 import `in`.carcid.vayu.ui.components.OfflineStrip
 import `in`.carcid.vayu.ui.components.StatusDot
 import `in`.carcid.vayu.ui.components.Tone
@@ -55,6 +55,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /** A booking as the Ops screens read it (BookingSerializer). */
+@androidx.compose.runtime.Immutable
 class Bk(val o: JsonObject) {
     val id = o.s("id")
     val code = o.s("booking_id")
@@ -111,6 +112,7 @@ fun opsStatus(b: Bk): Pair<String, Tone> = when {
 }
 
 /** Names for keys: cities, car models, types, people. Loaded once, kept for offline. */
+@androidx.compose.runtime.Immutable
 class Labels(val cities: Map<String, String> = emptyMap(), val cars: Map<String, String> = emptyMap(),
              val types: List<Triple<String, String, Boolean>> = emptyList(), val people: List<JsonObject> = emptyList()) {
     fun city(k: String) = cities[k] ?: k
@@ -245,7 +247,8 @@ fun shown(v: Any?): String = when (v) {
     // ponytail: no comma under 10,000, so a year reads 2022 (47,000 km still gets one)
     is Double -> if (v % 1.0 != 0.0) v.toString() else if (kotlin.math.abs(v) < 10_000) v.toLong().toString() else "%,d".format(v.toLong())
     is List<*> -> if (v.all { it is String && it.length == 36 }) "${v.size} file${if (v.size == 1) "" else "s"}" else v.joinToString(", ")
-    is Map<*, *> -> if (v["lat"] != null) "%.4f, %.4f".format((v["lat"] as Number).toDouble(), (v["lng"] as Number).toDouble()) else v.toString()
+    is Map<*, *> -> { val lat = v["lat"] as? Number; val lng = v["lng"] as? Number
+        if (lat != null && lng != null) "%.4f, %.4f".format(lat.toDouble(), lng.toDouble()) else v.toString() }
     else -> v.toString()
 }
 

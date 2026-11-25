@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.core.ops
 
+import `in`.carcid.vayu.core.s
+
 import `in`.carcid.vayu.core.api.Api
 import `in`.carcid.vayu.core.api.ApiError
 import `in`.carcid.vayu.core.writeAtomically
@@ -67,6 +69,5 @@ fun JsonElement.rows(): List<JsonObject> = when (this) {
 
 fun JsonElement.count(): Int = ((this as? JsonObject)?.get("count") as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: rows().size
 
-fun JsonObject.s(k: String): String = (this[k] as? JsonPrimitive)?.contentOrNull ?: ""
 fun JsonObject.o(k: String): JsonObject = this[k] as? JsonObject ?: JsonObject(emptyMap())
 fun JsonObject.a(k: String): JsonArray = this[k] as? JsonArray ?: JsonArray(emptyList())

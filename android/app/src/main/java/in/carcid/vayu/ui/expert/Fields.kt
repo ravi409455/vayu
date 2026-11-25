@@ -336,7 +336,7 @@ private fun Gps(f: Field, value: Any?, readOnly: Boolean, env: FieldEnv, onChang
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = if (v != null) Vayu.colors.ok else Vayu.colors.muted, modifier = Modifier.size(18.dp))
         Text(when {
-            v != null -> "Location recorded · %.4f, %.4f".format((v["lat"] as Number).toDouble(), (v["lng"] as Number).toDouble()) +
+            v != null -> "Location recorded" + ((v["lat"] as? Number)?.let { lat -> (v["lng"] as? Number)?.let { lng -> " · %.4f, %.4f".format(lat.toDouble(), lng.toDouble()) } } ?: "") +
                 ((v["accuracy"] as? Number)?.let { " (±${it.toInt()} m)" } ?: "")
             state == "busy" -> "Finding your location…"
             state == "off" -> "Location is off on this phone"
@@ -394,15 +394,7 @@ private fun AddTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label
 /** A small preview of a picture on the phone (decoded at tile size, off the main thread). */
 @Composable
 fun rememberThumb(path: String, size: Int = 160): ImageBitmap? = produceState<ImageBitmap?>(null, path) {
-    value = withContext(Dispatchers.IO) {
-        runCatching {
-            val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(path, o)
-            var s = 1
-            while (o.outWidth / (s * 2) >= size && o.outHeight / (s * 2) >= size) s *= 2
-            BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = s })?.asImageBitmap()
-        }.getOrNull()
-    }
+    value = withContext(Dispatchers.IO) { `in`.carcid.vayu.core.media.thumb(path, size) }
 }.value
 
 @Composable

@@ -1,0 +1,334 @@
+[
+ {
+  "name": "phone 98765 43210",
+  "type": "phone",
+  "config": {},
+  "value": "98765 43210",
+  "expected": null
+ },
+ {
+  "name": "phone +91 98765 43210",
+  "type": "phone",
+  "config": {},
+  "value": "+91 98765 43210",
+  "expected": null
+ },
+ {
+  "name": "phone 09876543210",
+  "type": "phone",
+  "config": {},
+  "value": "09876543210",
+  "expected": null
+ },
+ {
+  "name": "phone 919876543210",
+  "type": "phone",
+  "config": {},
+  "value": "919876543210",
+  "expected": null
+ },
+ {
+  "name": "phone (98765) 43-210",
+  "type": "phone",
+  "config": {},
+  "value": "(98765) 43-210",
+  "expected": null
+ },
+ {
+  "name": "phone 12345",
+  "type": "phone",
+  "config": {},
+  "value": "12345",
+  "expected": "INVALID_PHONE"
+ },
+ {
+  "name": "phone 5876543210",
+  "type": "phone",
+  "config": {},
+  "value": "5876543210",
+  "expected": "INVALID_PHONE"
+ },
+ {
+  "name": "number \"12\"",
+  "type": "number",
+  "config": {
+   "decimals": 0
+  },
+  "value": "12",
+  "expected": null
+ },
+ {
+  "name": "number 12",
+  "type": "number",
+  "config": {
+   "decimals": 0
+  },
+  "value": 12,
+  "expected": null
+ },
+ {
+  "name": "number \" 7 \"",
+  "type": "number",
+  "config": {
+   "decimals": 0
+  },
+  "value": " 7 ",
+  "expected": null
+ },
+ {
+  "name": "number \"12.0\"",
+  "type": "number",
+  "config": {
+   "decimals": 0
+  },
+  "value": "12.0",
+  "expected": null
+ },
+ {
+  "name": "number \"1e3\"",
+  "type": "number",
+  "config": {
+   "decimals": 0
+  },
+  "value": "1e3",
+  "expected": null
+ },
+ {
+  "name": "number \"12.5\"",
+  "type": "number",
+  "config": {
+   "decimals": 0
+  },
+  "value": "12.5",
+  "expected": "TOO_MANY_DECIMALS"
+ },
+ {
+  "name": "number \"abc\"",
+  "type": "number",
+  "config": {
+   "decimals": 0
+  },
+  "value": "abc",
+  "expected": "INVALID_TYPE"
+ },
+ {
+  "name": "number \"NaN\"",
+  "type": "number",
+  "config": {
+   "decimals": 0
+  },
+  "value": "NaN",
+  "expected": "INVALID_TYPE"
+ },
+ {
+  "name": "number true",
+  "type": "number",
+  "config": {
+   "decimals": 0
+  },
+  "value": true,
+  "expected": "INVALID_TYPE"
+ },
+ {
+  "name": "number in 0..10 10",
+  "type": "number",
+  "config": {
+   "decimals": 0,
+   "min": 0,
+   "max": 10
+  },
+  "value": "10",
+  "expected": null
+ },
+ {
+  "name": "number in 0..10 0",
+  "type": "number",
+  "config": {
+   "decimals": 0,
+   "min": 0,
+   "max": 10
+  },
+  "value": "0",
+  "expected": null
+ },
+ {
+  "name": "number in 0..10 11",
+  "type": "number",
+  "config": {
+   "decimals": 0,
+   "min": 0,
+   "max": 10
+  },
+  "value": "11",
+  "expected": "OUT_OF_RANGE"
+ },
+ {
+  "name": "number in 0..10 -1",
+  "type": "number",
+  "config": {
+   "decimals": 0,
+   "min": 0,
+   "max": 10
+  },
+  "value": "-1",
+  "expected": "OUT_OF_RANGE"
+ },
+ {
+  "name": "number 2 decimals 1.25",
+  "type": "number",
+  "config": {
+   "decimals": 2
+  },
+  "value": "1.25",
+  "expected": null
+ },
+ {
+  "name": "number 2 decimals 1.255",
+  "type": "number",
+  "config": {
+   "decimals": 2
+  },
+  "value": "1.255",
+  "expected": "TOO_MANY_DECIMALS"
+ },
+ {
+  "name": "currency 100.50",
+  "type": "currency",
+  "config": {},
+  "value": "100.50",
+  "expected": null
+ },
+ {
+  "name": "currency 0",
+  "type": "currency",
+  "config": {},
+  "value": "0",
+  "expected": null
+ },
+ {
+  "name": "currency -1",
+  "type": "currency",
+  "config": {},
+  "value": "-1",
+  "expected": "OUT_OF_RANGE"
+ },
+ {
+  "name": "currency 1.234",
+  "type": "currency",
+  "config": {},
+  "value": "1.234",
+  "expected": "TOO_MANY_DECIMALS"
+ },
+ {
+  "name": "short text max 5 \"abcde\"",
+  "type": "short_text",
+  "config": {
+   "max_length": 5
+  },
+  "value": "abcde",
+  "expected": null
+ },
+ {
+  "name": "short text max 5 \"abcdef\"",
+  "type": "short_text",
+  "config": {
+   "max_length": 5
+  },
+  "value": "abcdef",
+  "expected": "TOO_LONG"
+ },
+ {
+  "name": "short text max 5 \"  abcde  \"",
+  "type": "short_text",
+  "config": {
+   "max_length": 5
+  },
+  "value": "  abcde  ",
+  "expected": null
+ },
+ {
+  "name": "short text max 5 \"\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\"",
+  "type": "short_text",
+  "config": {
+   "max_length": 5
+  },
+  "value": "😀😀😀😀😀",
+  "expected": null
+ },
+ {
+  "name": "short text max 5 \"\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\"",
+  "type": "short_text",
+  "config": {
+   "max_length": 5
+  },
+  "value": "😀😀😀😀😀😀",
+  "expected": "TOO_LONG"
+ },
+ {
+  "name": "long text max 5 \"abc  \"",
+  "type": "long_text",
+  "config": {
+   "max_length": 5
+  },
+  "value": "abc  ",
+  "expected": null
+ },
+ {
+  "name": "long text max 5 \" abcde\"",
+  "type": "long_text",
+  "config": {
+   "max_length": 5
+  },
+  "value": " abcde",
+  "expected": "TOO_LONG"
+ },
+ {
+  "name": "long text max 5 \"\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\"",
+  "type": "long_text",
+  "config": {
+   "max_length": 5
+  },
+  "value": "😀😀😀😀😀",
+  "expected": null
+ },
+ {
+  "name": "pattern \"KA01\"",
+  "type": "short_text",
+  "config": {
+   "pattern": "[A-Z]{2}\\d{2}",
+   "pattern_message": "Like KA01."
+  },
+  "value": "KA01",
+  "expected": null
+ },
+ {
+  "name": "pattern \"ka01\"",
+  "type": "short_text",
+  "config": {
+   "pattern": "[A-Z]{2}\\d{2}",
+   "pattern_message": "Like KA01."
+  },
+  "value": "ka01",
+  "expected": "PATTERN_MISMATCH"
+ },
+ {
+  "name": "pattern \"KA01X\"",
+  "type": "short_text",
+  "config": {
+   "pattern": "[A-Z]{2}\\d{2}",
+   "pattern_message": "Like KA01."
+  },
+  "value": "KA01X",
+  "expected": "PATTERN_MISMATCH"
+ },
+ {
+  "name": "pattern \" KA01 \"",
+  "type": "short_text",
+  "config": {
+   "pattern": "[A-Z]{2}\\d{2}",
+   "pattern_message": "Like KA01."
+  },
+  "value": " KA01 ",
+  "expected": null
+ }
+]

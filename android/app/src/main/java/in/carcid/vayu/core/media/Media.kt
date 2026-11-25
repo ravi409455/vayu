@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.core.media
 
+import androidx.compose.ui.graphics.asImageBitmap
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
@@ -106,3 +108,12 @@ fun copyIn(ctx: Context, uri: Uri, dest: File): String? {
     ctx.contentResolver.openInputStream(uri)?.use { input -> FileOutputStream(dest).use { input.copyTo(it) } } ?: return null
     return type
 }
+
+/** A small picture of the image at [path], decoded at about [size] px (whole-power-of-two sampling); null if it can't be read. */
+fun thumb(path: String, size: Int): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
+    val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, o)
+    var s = 1
+    while (o.outWidth / (s * 2) >= size && o.outHeight / (s * 2) >= size) s *= 2
+    BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = s })?.asImageBitmap()
+}.getOrNull()

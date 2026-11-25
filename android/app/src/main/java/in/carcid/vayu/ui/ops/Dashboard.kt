@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.api.initials
+
 import `in`.carcid.vayu.ui.components.SoftButton
 import `in`.carcid.vayu.ui.components.Avatar
 import `in`.carcid.vayu.core.ops.a
@@ -54,7 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import `in`.carcid.vayu.core.ops.rows
-import `in`.carcid.vayu.core.ops.s
+import `in`.carcid.vayu.core.s
 import `in`.carcid.vayu.core.writeAtomically
 import `in`.carcid.vayu.ui.components.Segmented
 import `in`.carcid.vayu.ui.components.VayuTopBar
@@ -62,6 +64,7 @@ import `in`.carcid.vayu.ui.expert.SingleChoice
 import `in`.carcid.vayu.core.forms.Option
 import `in`.carcid.vayu.ui.theme.Vayu
 import java.io.File
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 private val SPLITS = listOf("type" to "Type", "city" to "City", "expert" to "Expert", "stage" to "Stage")
@@ -127,18 +130,20 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
         "type" -> env.labels.type(k); "city" -> env.labels.city(k); "expert" -> env.labels.person(k.toIntOrNull()).ifBlank { "Unassigned" }
         else -> STAGE_WORDS[k] ?: k
     }.ifBlank { "—" }
+    val exportScope = androidx.compose.runtime.rememberCoroutineScope()
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg)) {
         VayuTopBar("Dashboard", env.me.initials, bellCount = needs, onBell = onBell, onProfile = onProfile) {
-            if (env.can("dashboards.export")) IconButton(onClick = {
+            if (env.can("dashboards.export")) IconButton(onClick = { exportScope.launch {
                 val f = File(File(ctx.cacheDir, "reports").apply { mkdirs() }, "vayu-$from-$to-by-$split.csv")
-                writeAtomically(f, ("$split,count\n" + splitRows.groupBy { it.s("key") }.map { (k, r) -> k to r.sumOf { it.s("count").toIntOrNull() ?: 0 } }
+                // built and written off the main thread (fsync can stall a cheap phone)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { writeAtomically(f, ("$split,count\n" + splitRows.groupBy { it.s("key") }.map { (k, r) -> k to r.sumOf { it.s("count").toIntOrNull() ?: 0 } }
                     .sortedByDescending { it.second }.joinToString("\n") { (k, n) ->
                         listOf(label(k), "$n").joinToString(",") { v -> "\"" + v.replace("\"", "\"\"").let { if (it.firstOrNull() in setOf('=', '+', '-', '@', '\t', '\r', '\n')) "'$it" else it } + "\"" }
-                    }).toByteArray())
+                    }).toByteArray()) }
                 val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
                 ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/csv").putExtra(Intent.EXTRA_STREAM, uri)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Share the numbers"))
-            }) { Icon(Icons.Outlined.IosShare, contentDescription = "Share as a spreadsheet", tint = Vayu.colors.ink) }
+            } }) { Icon(Icons.Outlined.IosShare, contentDescription = "Share as a spreadsheet", tint = Vayu.colors.ink) }
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             OfflineNote(load.value)
@@ -204,7 +209,7 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
                     val id = e.int("expert"); val name = env.labels.person(id)
                     Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).clickable(role = Role.Button) { onOpenList(dates + ("expert" to "$id")) }.padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Avatar(name.split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.take(1).uppercase() }, size = 36)
+                        Avatar(initials(name), size = 36)
                         Column(Modifier.weight(1f)) {
                             Text(name, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(listOfNotNull("${e.s("bookings")} booking${if (e.s("bookings") == "1") "" else "s"}", e.s("on_time").ifBlank { null }?.let { "$it% on time" })

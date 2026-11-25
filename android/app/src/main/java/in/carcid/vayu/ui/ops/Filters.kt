@@ -43,7 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import `in`.carcid.vayu.core.ops.s
+import `in`.carcid.vayu.core.s
 import `in`.carcid.vayu.ui.components.DatePick
 import `in`.carcid.vayu.ui.components.PrimaryButton
 import `in`.carcid.vayu.ui.components.SoftButton

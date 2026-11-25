@@ -222,6 +222,12 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         val p = screen.value as? Screen.Profile
         if (p != null) {
             // the same drafts Uploads lists, by name
+            // a draft file that can't be read may hold work: sign-out deletes drafts, so it stops here
+            if (graph.drafts(p.me.id).unreadable().isNotEmpty()) {
+                _screen.value = p.copy(error = "A draft on this phone can't be read, so signing out could lose work. " +
+                    "Keep the phone as it is and tell your Ops team.")
+                return
+            }
             val waiting = graph.drafts(p.me.id).all().filter { it.unsent }.map { it.code }.sorted()
             if (waiting.isNotEmpty()) {
                 _screen.value = p.copy(error = "Not sent yet: ${waiting.joinToString(", ")}. Open Uploads to send, finish or discard " +
@@ -232,7 +238,7 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         viewModelScope.launch {
             // no signal: the server still thinks this phone is signed in; end it at the next sign-in
             val refresh = tokens.refresh()
-            if (runCatching { api.logout() }.isFailure && refresh != null) tokens.setPendingLogout(refresh)
+            if (`in`.carcid.vayu.core.attempt { api.logout() }.isFailure && refresh != null) tokens.setPendingLogout(refresh)
             // nothing is unsent (checked above), so nothing of theirs needs to stay
             signedIn()?.let { graph.forgetCopies(it); graph.forgetDrafts(it, all = true) }
             graph.clearNotices()

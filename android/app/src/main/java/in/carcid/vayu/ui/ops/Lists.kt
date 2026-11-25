@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.api.initials
+
 import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.async
@@ -50,7 +52,7 @@ import `in`.carcid.vayu.core.ops.a
 import `in`.carcid.vayu.core.ops.count
 import kotlinx.serialization.json.JsonObject
 import `in`.carcid.vayu.core.ops.rows
-import `in`.carcid.vayu.core.ops.s
+import `in`.carcid.vayu.core.s
 import `in`.carcid.vayu.ui.components.Avatar
 import `in`.carcid.vayu.ui.components.Segmented
 import `in`.carcid.vayu.ui.components.SoftButton
@@ -65,7 +67,6 @@ import java.net.URLEncoder
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private fun initials(name: String) = name.split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }
 
 /** Ops' home (variant B): how the day is going, who needs an expert, each expert's jobs. */
 @Composable
@@ -322,8 +323,7 @@ fun NeedsYouScreen(env: OpsEnv, loaded: List<Need>?, onBack: () -> Unit, onOpen:
 /** One thing that needs a person (web: lib/problems.ts); [group] is its heading in the bell. */
 data class Need(val key: String, val booking: String, val tone: Tone, val title: String, val meta: String, val group: String = "")
 
-/** Every problem queue as one list, in groups, most urgent group first. */
-/** Every problem list; null when none could be read (no signal, nothing saved): keep what shows. */
+/** Every problem queue as one list, in groups, most urgent group first; null when none could be read (no signal, nothing saved): keep what shows. */
 suspend fun loadNeeds(env: OpsEnv): List<Need>? {
     val t = env.today()
     val read = java.util.concurrent.atomic.AtomicInteger()

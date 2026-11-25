@@ -158,6 +158,11 @@ class DraftStore(private val dir: File,
     fun all(): List<Draft> = ((dir.listFiles { f -> f.name.endsWith(".json") }.orEmpty().map { it.name.removeSuffix(".json") }) + cache.keys)
         .distinct().mapNotNull { get(it) }
 
+    /** Draft files on the phone that can't be read (booking ids): never counted as sent, never deleted unseen. */
+    @Synchronized
+    fun unreadable(): List<String> = dir.listFiles { f -> f.name.endsWith(".json") }.orEmpty()
+        .map { it.name.removeSuffix(".json") }.filter { it !in cache && get(it) == null }
+
     /** Kept in memory and queued for writing; the newest save of a draft is always the one written. */
     fun save(d: Draft): Draft { stage(d); flushLater(d.bookingId); return d }
 

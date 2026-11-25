@@ -29,4 +29,16 @@ class OpsDataTest {
         assertNull(data.saved("bookings?search=1"))
         assertNotNull(data.saved("bookings?search=5"))
     }
+
+    /** R-11: the report reply is decoded once, into a typed model, in the data layer. */
+    @Test fun theReportReplyIsReadIntoATypedModel() {
+        val r = Report.from(kotlinx.serialization.json.Json.parseToJsonElement("""{"revision":3,"status":"ready","updating":false,
+            "out_of_date":true,"regenerate":{"allowed":false,"reason":"Choose which inspection counts first."},
+            "generated_at":"2026-11-24T09:30:00+05:30","filename":"x.pdf","error":null,"verify_url":"https://v/x",
+            "url":"/api/v1/bookings/b/report/download","preview_url":null,"something_new":1}"""))!!
+        assertEquals(3, r.revision); assertEquals("ready", r.status); assertEquals(true, r.outOfDate)
+        assertEquals(false, r.regenerate.allowed); assertEquals("Choose which inspection counts first.", r.regenerate.reason)
+        assertEquals("", r.error); assertEquals("https://v/x", r.verifyUrl); assertNotNull(r.url)
+        assertNull(Report.from(kotlinx.serialization.json.Json.parseToJsonElement("""{"code":"NO_REPORT"}""")).takeIf { it?.status?.isNotEmpty() == true })
+    }
 }

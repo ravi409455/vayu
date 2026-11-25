@@ -141,12 +141,6 @@ fun rememberPermissions(vararg permissions: String, onResult: (Boolean) -> Unit 
 }
 
 /**
- * The in-app camera (approved prototype): live preview with the stamp and one shutter. Each shot
- * is shown first: Use keeps it and goes back to the form, Retake tries again. Photos are stamped
- * and shrunk; videos are 720p, at most 60 s. The front camera is one tap away.
- */
-@SuppressLint("MissingPermission")
-/**
  * Which camera a photo or video field opens first: Back unless the form builder chose Front. The
  * check-in selfie is Front even in a form saved on the phone before the setting existed (phones
  * keep the forms they have and do not download them again).
@@ -161,6 +155,12 @@ fun firstCameraIsBack(field: Field): Boolean = when (field.config["camera"]) {
 fun videoRecorder(): Recorder = Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.HD))
     .setTargetVideoEncodingBitRate(2_500_000).build()
 
+/**
+ * The in-app camera (approved prototype): live preview with the stamp and one shutter. Each shot
+ * is shown first: Use keeps it and goes back to the form, Retake tries again. Photos are stamped
+ * and shrunk; videos are 720p, at most 60 s. The front camera is one tap away.
+ */
+@SuppressLint("MissingPermission")
 @Composable
 fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () -> Instant, verified: Boolean,
                  dir: File, onTaken: (File, String) -> Unit, onDone: () -> Unit) {

@@ -44,6 +44,13 @@ class JobStoreTest {
         assertEquals("Customer cancelled", JobStore(file).jobs().single().cancelReason)
     }
 
+    /** F-052: a published form version never changes, so it is parsed once, not on every keystroke. */
+    @Test fun aFormVersionIsParsedOnce() {
+        val s = JobStore(file)
+        s.apply(payload(job("2"), forms = """{"7":{"pages":[]}}"""), phoneNow = 0)
+        org.junit.Assert.assertSame(s.tree(7), s.tree(7))
+    }
+
     @Test fun formsAreKeptAcrossSyncsAndDroppedWhenNoJobUsesThem() {
         val s = JobStore(file)
         s.apply(payload(job("1"), forms = """{"7":{"pages":[]}}"""), 0)
