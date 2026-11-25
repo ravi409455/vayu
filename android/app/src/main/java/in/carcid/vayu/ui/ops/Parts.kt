@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ARRIVED
+
 import `in`.carcid.vayu.ui.expert.answered
 
 import androidx.compose.material.icons.outlined.Add
@@ -96,7 +98,7 @@ import `in`.carcid.vayu.core.media.copyIn
 import `in`.carcid.vayu.core.ops.a
 import `in`.carcid.vayu.core.ops.o
 import `in`.carcid.vayu.core.ops.rows
-import `in`.carcid.vayu.core.ops.s
+import `in`.carcid.vayu.core.s
 import `in`.carcid.vayu.core.rules.JsonLogic
 import `in`.carcid.vayu.core.writeAtomically
 import `in`.carcid.vayu.ui.components.Banner
@@ -176,7 +178,7 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
     var editing by remember { mutableStateOf<Pair<String, Field>?>(null) }
     var viewing by remember { mutableStateOf<JsonObject?>(null) }
     val list = androidx.compose.foundation.lazy.rememberLazyListState()
-    val media = rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty().filter { it.s("status") in setOf("uploaded", "verified") }
+    val media = rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty().filter { it.s("status") in ARRIVED }
     val up = rememberOpsUploader(env, id, data, rememberLoad(env, "bookings/$id").value?.offline == false)
     viewing?.let { m ->
         val pf = PARTS.firstNotNullOfOrNull { p -> data?.trees?.get(p)?.fields?.firstOrNull { it.key == m.s("field_key") }?.let { p to it } }
@@ -376,15 +378,8 @@ suspend fun mediaBytes(env: OpsEnv, dir: File, id: String, preview: Boolean = fa
 }
 
 /** [thumb] off the main thread (a 2000-px decode stutters the list on a low-end phone). */
-private suspend fun decoded(f: File, size: Int): ImageBitmap? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { thumb(f, size) }
+private suspend fun decoded(f: File, size: Int): ImageBitmap? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { `in`.carcid.vayu.core.media.thumb(f.path, size) }
 
-private fun thumb(f: File, size: Int): ImageBitmap? = runCatching {
-    val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    BitmapFactory.decodeFile(f.path, o)
-    var s = 1
-    while (o.outWidth / (s * 2) >= size && o.outHeight / (s * 2) >= size) s *= 2
-    BitmapFactory.decodeFile(f.path, BitmapFactory.Options().apply { inSampleSize = s })?.asImageBitmap()
-}.getOrNull()
 
 /**
  * Ops add a file to a submitted inspection, or replace one (the old one stays as history only
@@ -444,7 +439,7 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val data = rememberBooking(env, id)
     val list = rememberLoad(env, "bookings/$id/media")
-    val items = list.value?.data?.rows().orEmpty().filter { it.s("status") in setOf("uploaded", "verified") }
+    val items = list.value?.data?.rows().orEmpty().filter { it.s("status") in ARRIVED }
     var open by remember { mutableStateOf<JsonObject?>(null) }
     val online = list.value?.offline == false
     val fields = PARTS.flatMap { p -> data?.trees?.get(p)?.pages.orEmpty().flatMap { pg -> pg.sections.flatMap { s -> s.fields.filter { it.isMedia }.map { Triple(p, s.title, it) } } } }

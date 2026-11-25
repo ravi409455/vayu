@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.core.forms
 
+import `in`.carcid.vayu.core.s
+
 import `in`.carcid.vayu.core.rules.FormRules
 import `in`.carcid.vayu.core.rules.JsonLogic
 import kotlinx.serialization.json.JsonArray
@@ -64,7 +66,6 @@ data class FormTree(val id: Int, val pages: List<Page>, val checks: List<FormRul
     companion object {
         @Suppress("UNCHECKED_CAST")
         fun parse(o: JsonObject): FormTree {
-            fun JsonObject.s(k: String) = (this[k] as? JsonPrimitive)?.contentOrNull ?: ""
             fun JsonObject.b(k: String, d: Boolean) = (this[k] as? JsonPrimitive)?.booleanOrNull ?: d
             fun JsonObject.logic(k: String) = this[k]?.let { JsonLogic.fromJson(it) }
             val pages = (o["pages"] as? JsonArray).orEmpty().map { it.jsonObject }.map { p ->

@@ -1,5 +1,8 @@
 package `in`.carcid.vayu.core.draft
 
+import `in`.carcid.vayu.core.ARRIVED
+import `in`.carcid.vayu.core.s
+
 import `in`.carcid.vayu.core.api.Api
 import `in`.carcid.vayu.core.api.ApiError
 import `in`.carcid.vayu.core.forms.Filled
@@ -35,7 +38,6 @@ class Outbox(
     private val filledOf: (Draft) -> Filled?,
 ) {
     /** Statuses that mean "the server has every byte". */
-    private val arrived = setOf("uploaded", "verified")
 
     /**
      * Returns false when something has to be tried again later (no signal, the server still
@@ -97,7 +99,7 @@ class Outbox(
     private suspend fun checked(id: String): Boolean {
         var waiting = false
         for (f in draft(id).files.filter { it.sent && !it.verified && !it.refused && it.serverId != null }) {
-            val status = try { api.media(f.serverId!!).str("status") } catch (e: ApiError) {
+            val status = try { api.media(f.serverId!!).s("status") } catch (e: ApiError) {
                 if (transient(e)) throw e
                 "verified"                                        // gone from the server: nothing left to check
             }
@@ -120,10 +122,10 @@ class Outbox(
             }
             try {
                 val r = api.mediaInitiate(id, f.id, f.field, f.kind, f.contentType, f.size, f.sha256, f.source)
-                val server = r.str("id").takeIf { it.matches(SERVER_ID) } ?: throw ApiError("BAD_ID", "The server sent an odd file id.", 0)
-                val done = r.str("status") in arrived
+                val server = r.s("id").takeIf { it.matches(SERVER_ID) } ?: throw ApiError("BAD_ID", "The server sent an odd file id.", 0)
+                val done = r.s("status") in ARRIVED
                 drafts.update(id) { d -> d.copy(files = d.files.map { if (it.id == f.id) it.copy(serverId = server, sent = done,
-                    verified = r.str("status") == "verified", error = null) else it }) }
+                    verified = r.s("status") == "verified", error = null) else it }) }
             } catch (e: ApiError) {
                 if (transient(e)) throw e
                 // the field is full on the server: files from before; pick them up and try again next run
@@ -161,7 +163,7 @@ class Outbox(
      */
     private suspend fun reconcile(id: String) {
         val rows = (api.get("bookings/$id/media") as? JsonArray).orEmpty().map { it.jsonObject }
-            .filter { it.str("id").matches(SERVER_ID) }
+            .filter { it.s("id").matches(SERVER_ID) }
         val fields = filledOf(draft(id))?.trees.orEmpty()
             .flatMap { (p, t) -> t?.fields.orEmpty().map { p to it } }.associateBy { it.second.key }
         drafts.update(id) { cur ->
@@ -169,12 +171,12 @@ class Outbox(
             var next = cur
             val drop = mutableListOf<String>()
             for (r in rows) {
-                val server = r.str("id")
+                val server = r.s("id")
                 if (server in known) continue
-                val (part, f) = fields[r.str("field_key")] ?: continue
-                if (r.str("status") !in arrived) { drop += server; continue }
-                val file = LocalFile(java.util.UUID.randomUUID().toString(), part, f.key, r.str("kind"), "", "", "server", 0, "",
-                    "${f.label} (from before)", serverId = server, sent = true, progress = 1f, verified = r.str("status") == "verified")
+                val (part, f) = fields[r.s("field_key")] ?: continue
+                if (r.s("status") !in ARRIVED) { drop += server; continue }
+                val file = LocalFile(java.util.UUID.randomUUID().toString(), part, f.key, r.s("kind"), "", "", "server", 0, "",
+                    "${f.label} (from before)", serverId = server, sent = true, progress = 1f, verified = r.s("status") == "verified")
                 val value: Any? = if (f.type == "signature") (next.answer(part, f.key) ?: file.id)
                     else ((next.answer(part, f.key) as? List<*>).orEmpty() + file.id)
                 next = next.copy(files = next.files + file).withAnswer(part, f.key, value)
@@ -272,21 +274,19 @@ private val VERSION_REFUSED = setOf("FORM_VERSION_OLD", "INVALID_VERSION")
 /** A server file id (a UUID): checked before it goes into a request path. */
 private val SERVER_ID = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
-private fun JsonObject.str(k: String) = (this[k] as? JsonPrimitive)?.contentOrNull ?: ""
 
 /**
  * Send a registered file's missing parts straight to storage and finish it. [init] is the
  * media/initiate answer. True when the server has every byte; false if it arrived damaged.
  */
 suspend fun transfer(api: Api, init: JsonObject, file: File, contentType: String, progress: (Float) -> Unit = {}): Boolean {
-    val arrived = setOf("uploaded", "verified")
-    if (init.str("status") in arrived) return true
-    val id = init.str("id")
+    if (init.s("status") in ARRIVED) return true
+    val id = init.s("id")
     val partSize = (init["part_size"] as? JsonPrimitive)?.intOrNull ?: (8 * 1024 * 1024)
     val have = (api.media(id)["uploaded_parts"] as? JsonArray).orEmpty().map { it.jsonObject }
-        .associate { (it["part_number"] as JsonPrimitive).intOrNull!! to it.str("etag") }.toMutableMap()
+        .associate { (it["part_number"] as JsonPrimitive).intOrNull!! to it.s("etag") }.toMutableMap()
     val urls = (init["parts"] as? JsonArray).orEmpty().map { it.jsonObject }
-        .associate { (it["part_number"] as JsonPrimitive).intOrNull!! to it.str("url") }
+        .associate { (it["part_number"] as JsonPrimitive).intOrNull!! to it.s("url") }
     RandomAccessFile(file, "r").use { raf ->
         for ((n, url) in urls.toSortedMap()) {
             if (n in have || url.isEmpty()) continue
@@ -297,5 +297,5 @@ suspend fun transfer(api: Api, init: JsonObject, file: File, contentType: String
             progress(minOf(1f, (n.toLong() * partSize).toFloat() / file.length()))
         }
     }
-    return api.mediaComplete(id, have.toSortedMap().map { it.key to it.value }).str("status") in arrived
+    return api.mediaComplete(id, have.toSortedMap().map { it.key to it.value }).s("status") in ARRIVED
 }

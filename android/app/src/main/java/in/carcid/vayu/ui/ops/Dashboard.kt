@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.api.initials
+
 import `in`.carcid.vayu.ui.components.SoftButton
 import `in`.carcid.vayu.ui.components.Avatar
 import `in`.carcid.vayu.core.ops.a
@@ -54,7 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import `in`.carcid.vayu.core.ops.rows
-import `in`.carcid.vayu.core.ops.s
+import `in`.carcid.vayu.core.s
 import `in`.carcid.vayu.core.writeAtomically
 import `in`.carcid.vayu.ui.components.Segmented
 import `in`.carcid.vayu.ui.components.VayuTopBar
@@ -204,7 +206,7 @@ fun DashboardScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -
                     val id = e.int("expert"); val name = env.labels.person(id)
                     Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).clickable(role = Role.Button) { onOpenList(dates + ("expert" to "$id")) }.padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Avatar(name.split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.take(1).uppercase() }, size = 36)
+                        Avatar(initials(name), size = 36)
                         Column(Modifier.weight(1f)) {
                             Text(name, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(listOfNotNull("${e.s("bookings")} booking${if (e.s("bookings") == "1") "" else "s"}", e.s("on_time").ifBlank { null }?.let { "$it% on time" })

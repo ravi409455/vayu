@@ -394,15 +394,7 @@ private fun AddTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label
 /** A small preview of a picture on the phone (decoded at tile size, off the main thread). */
 @Composable
 fun rememberThumb(path: String, size: Int = 160): ImageBitmap? = produceState<ImageBitmap?>(null, path) {
-    value = withContext(Dispatchers.IO) {
-        runCatching {
-            val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(path, o)
-            var s = 1
-            while (o.outWidth / (s * 2) >= size && o.outHeight / (s * 2) >= size) s *= 2
-            BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = s })?.asImageBitmap()
-        }.getOrNull()
-    }
+    value = withContext(Dispatchers.IO) { `in`.carcid.vayu.core.media.thumb(path, size) }
 }.value
 
 @Composable

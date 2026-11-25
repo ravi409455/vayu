@@ -1,5 +1,9 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.api.initials
+
+import `in`.carcid.vayu.core.ARRIVED
+
 import `in`.carcid.vayu.core.forms.PARTS
 import `in`.carcid.vayu.core.forms.FormTree
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -66,7 +70,7 @@ import `in`.carcid.vayu.core.api.ApiError
 import `in`.carcid.vayu.core.forms.Option
 import `in`.carcid.vayu.core.ops.o
 import `in`.carcid.vayu.core.ops.rows
-import `in`.carcid.vayu.core.ops.s
+import `in`.carcid.vayu.core.s
 import `in`.carcid.vayu.ui.components.Avatar
 import `in`.carcid.vayu.ui.components.Banner
 import `in`.carcid.vayu.ui.components.PrimaryButton
@@ -220,7 +224,7 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
                 NavRow("Inspection Data", "$n answer${if (n == 1) "" else "s"}" + if (bad > 0) " · $bad problem${if (bad == 1) "" else "s"}" else "",
                     if (bad > 0) Vayu.colors.warn else Vayu.colors.muted) { onAnswers("inspection") }
             }
-            val media = rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty().filter { it.s("status") in setOf("uploaded", "verified") }
+            val media = rememberLoad(env, "bookings/$id/media").value?.data?.rows().orEmpty().filter { it.s("status") in ARRIVED }
             val photos = media.count { it.s("kind") == "photo" }; val videos = media.count { it.s("kind") == "video" }
             NavRow("Photos and videos", listOfNotNull("$photos photo${if (photos == 1) "" else "s"}", "$videos video${if (videos == 1) "" else "s"}".takeIf { videos > 0 }).joinToString(" · ")) { onPart(Part.MEDIA) }
             if (insp != null) {
@@ -392,7 +396,7 @@ fun AssignSheet(env: OpsEnv, b: Bk, onClose: () -> Unit, onAssign: (Int) -> Unit
                     Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(12.dp))
                         .background(if (pick == uid) Vayu.colors.soft else Vayu.colors.bg).clickable(role = Role.RadioButton) { pick = uid }.padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Avatar(name.split(" ").take(2).joinToString("") { it.take(1).uppercase() }, size = 36)
+                        Avatar(initials(name), size = 36)
                         Column(Modifier.weight(1f)) {
                             Text(name, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
                             Text("${theirs.size} booking${if (theirs.size == 1) "" else "s"} that day", fontSize = 13.sp, color = Vayu.colors.muted)

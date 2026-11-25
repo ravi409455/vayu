@@ -39,7 +39,7 @@ import `in`.carcid.vayu.core.ops.Loaded
 import `in`.carcid.vayu.core.ops.OpsData
 import `in`.carcid.vayu.core.ops.o
 import `in`.carcid.vayu.core.ops.rows
-import `in`.carcid.vayu.core.ops.s
+import `in`.carcid.vayu.core.s
 import `in`.carcid.vayu.ui.components.OfflineStrip
 import `in`.carcid.vayu.ui.components.StatusDot
 import `in`.carcid.vayu.ui.components.Tone
