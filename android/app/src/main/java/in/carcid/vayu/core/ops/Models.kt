@@ -203,3 +203,11 @@ data class VolumeRow(val period: String = "", val key: String = "", val count: I
         fun list(rows: List<JsonObject>): List<VolumeRow> = rows.mapNotNull { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
     }
 }
+
+/** Signed links to a stored file (GET media/{id}/url); [previewUrl] is the small copy when the server has one. */
+@Serializable
+data class MediaLinks(val url: String = "", @SerialName("preview_url") val previewUrl: String? = null) {
+    companion object {
+        fun from(e: JsonElement?): MediaLinks? = (e as? JsonObject)?.let { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
+    }
+}

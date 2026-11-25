@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.ListItem
 import `in`.carcid.vayu.core.ops.MediaItem
 import `in`.carcid.vayu.core.ops.Inspection
 import `in`.carcid.vayu.core.api.initials
@@ -163,8 +164,8 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             Text(b.customer.ifBlank { b.code }, fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink,
                 maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
-            val why = if (b.stage == "cancelled") rememberLoad(env, "master-lists/cancel_reason/items").value?.data?.rows().orEmpty()
-                .firstOrNull { it.s("key") == b.t.cancelReason }?.s("label") ?: b.t.cancelReason.replace('_', ' ') else ""
+            val why = if (b.stage == "cancelled") ListItem.list(rememberLoad(env, "master-lists/cancel_reason/items").value?.data?.rows().orEmpty())
+                .firstOrNull { it.key == b.t.cancelReason }?.label ?: b.t.cancelReason.replace('_', ' ') else ""
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 val (st, tone) = opsStatus(b)
                 Chip(listOf(st, why).filter { it.isNotBlank() }.joinToString(" · "), tone)
@@ -416,7 +417,7 @@ fun AssignSheet(env: OpsEnv, b: Bk, onClose: () -> Unit, onAssign: (Int) -> Unit
 /** Reschedule (new day, time, reason) or cancel (reason): reasons are the Admin's master lists. */
 @Composable
 private fun ReasonDialog(env: OpsEnv, title: String, list: String, withSlot: Bk?, onClose: () -> Unit, onDone: (String, String, String) -> Unit) {
-    val reasons = rememberLoad(env, "master-lists/$list/items").value?.data?.rows().orEmpty().filter { it.s("archived") != "true" }
+    val reasons = ListItem.list(rememberLoad(env, "master-lists/$list/items").value?.data?.rows().orEmpty()).filter { !it.archived }
     var reason by remember { mutableStateOf<String?>(null) }
     var day by remember { mutableStateOf(withSlot?.date.orEmpty()) }
     var time by remember { mutableStateOf(withSlot?.time.orEmpty()) }
@@ -432,7 +433,7 @@ private fun ReasonDialog(env: OpsEnv, title: String, list: String, withSlot: Bk?
                 SoftButton("Time: " + time12(time).ifEmpty { "choose" }, { picking = "time" }, Modifier.fillMaxWidth())
             }
             Text("Reason", fontWeight = FontWeight.SemiBold)
-            SingleChoice("Reason", reasons.map { Option(it.s("key"), it.s("label"), false, null) }, reason, false, { reason = it as String? }, forceList = true)
+            SingleChoice("Reason", reasons.map { Option(it.key, it.label, false, null) }, reason, false, { reason = it as String? }, forceList = true)
         }
     }, confirmButton = {
         TextButton({ reason?.let { onDone(it, day, time) } }, enabled = reason != null && (withSlot == null || (day.isNotEmpty() && time.isNotEmpty()))) { Text(title) }

@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.MediaLinks
 import `in`.carcid.vayu.core.ops.MediaItem
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -95,10 +96,10 @@ suspend fun mediaBytes(env: OpsEnv, dir: File, id: String, preview: Boolean = fa
     val f = if (preview) File(dir, "media-$id-p") else full
     if (f.exists()) return@withContext f
     try {
-        val links = env.data.api.get("media/$id/url") as JsonObject
-        val url = links.s("preview_url").takeIf { preview && it.isNotBlank() } ?: links.s("url")
-        writeAtomically(if (url == links.s("url")) full else f, env.data.api.download(url))
-        if (url == links.s("url")) full else f
+        val links = MediaLinks.from(env.data.api.get("media/$id/url")) ?: return@withContext null
+        val url = links.previewUrl?.takeIf { preview && it.isNotBlank() } ?: links.url
+        writeAtomically(if (url == links.url) full else f, env.data.api.download(url))
+        if (url == links.url) full else f
     } catch (e: kotlin.coroutines.cancellation.CancellationException) { throw e } catch (e: Exception) { null }
 }
 
@@ -276,7 +277,8 @@ internal fun MediaViewer(env: OpsEnv, m: MediaItem, fieldLabel: String, onClose:
                     modifier = Modifier.clickable(role = Role.Button) {
                         scope.launch {
                             try {
-                                val url = (env.data.api.get("media/${m.id}/url") as JsonObject).s("url")
+                                val url = MediaLinks.from(env.data.api.get("media/${m.id}/url"))?.url.orEmpty()
+                                if (url.isBlank()) { env.say("Couldn't open this file. Try again."); return@launch }
                                 // videos play here; other files open in an app that can show them
                                 if (m.kind == "video") videoUrl = url
                                 else try { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
