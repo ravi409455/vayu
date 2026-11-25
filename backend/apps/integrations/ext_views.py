@@ -5,7 +5,6 @@ from typing import cast
 
 from django.db import transaction
 from rest_framework.exceptions import APIException, ValidationError
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,6 +13,7 @@ from apps.accounts import audit
 from apps.bookings import services, submissions
 from apps.bookings.models import Booking, Inspection
 from apps.core.errors import CodedError
+from apps.core.pagination import Pages
 from apps.forms.models import Form, FormType
 
 from .apikeys import ApiKeyAuthentication
@@ -100,7 +100,7 @@ class Bookings(ExtView):
                 qs = qs.filter(**{column: p[param]})
         if p.get("search"):
             qs = qs.filter(booking_id__icontains=p["search"].strip())
-        paginator = PageNumberPagination()
+        paginator = Pages()
         page = paginator.paginate_queryset(qs, request, view=self)
         return paginator.get_paginated_response([booking_body(request, b, allowed)
                                                  for b in page or []])

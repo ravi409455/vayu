@@ -6,7 +6,6 @@ from django.shortcuts import get_object_or_404
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -14,6 +13,7 @@ from apps.accounts import audit
 from apps.accounts.permissions import perm
 from apps.bookings.models import Booking
 from apps.bookings.services import err
+from apps.core.pagination import Pages
 from apps.forms.models import Field, Form, FormType
 
 from . import apikeys, values, webhooks
@@ -320,7 +320,7 @@ class DeliveryList(APIView):
         for param in ("status", "event"):
             if request.query_params.get(param):
                 qs = qs.filter(**{param: request.query_params[param]})
-        paginator = PageNumberPagination()
+        paginator = Pages()
         page = paginator.paginate_queryset(qs, request, view=self)
         return paginator.get_paginated_response([delivery_body(d) for d in page or []])
 

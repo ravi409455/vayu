@@ -56,3 +56,15 @@ def test_the_dashboard_summary_counts_in_the_database_and_caps_its_span(ienv):
     r = ienv.ops.get("/api/v1/dashboards/summary", {"date_from": "2020-01-01",
                                                      "date_to": "2026-12-31"})
     assert r.status_code == 400
+
+
+def test_lists_take_a_page_size_up_to_200(ienv):
+    """F-165."""
+    for i in range(3):
+        create(ienv.ops, booking_id=f"P{i}")
+    two = ienv.ops.get("/api/v1/bookings", {"page_size": 2}).json()
+    assert len(two["results"]) == 2 and two["count"] == 3 and two["next"]
+    capped = ienv.ops.get("/api/v1/bookings", {"page_size": 5000}).json()
+    assert len(capped["results"]) == 3
+    gone = ienv.ops.get("/api/v1/bookings", {"page": 99})
+    assert gone.status_code == 404 and gone.json()["code"] == "NOT_FOUND"

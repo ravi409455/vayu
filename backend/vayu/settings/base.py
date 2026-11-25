@@ -85,7 +85,7 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_SCHEMA_CLASS": "apps.platform.schema.Schema",
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_PAGINATION_CLASS": "apps.core.pagination.Pages",
     "PAGE_SIZE": 50,
     # abuse limits per client IP (views opt in with throttle_scope); counters live in Redis so
     # every gunicorn worker shares them
