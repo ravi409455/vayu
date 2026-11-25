@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from apps.accounts.permissions import scope_for
 from apps.bookings.models import Booking
+from apps.core import log
 from apps.core.errors import fail
 
 from .. import storage
@@ -143,6 +144,8 @@ def initiate(request: Any, data: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         asset.key = f"bookings/{booking.id}/{asset.id}"
         asset.upload_id = storage.create_multipart(asset.key, ctype)
         asset.save()
+    log.event("upload.initiated", user=user, booking=str(booking.id), media=str(asset.id),
+              kind=kind, size=size)
     return _body(asset, True), True
 
 

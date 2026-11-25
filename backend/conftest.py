@@ -1,7 +1,7 @@
 import pytest
 
 from apps.core import tasks as core_tasks
-from apps.core.testing import api_as, login, make_user  # noqa: F401  (pytest fixtures)
+from apps.core.testing import api_as, logged, login, make_user  # noqa: F401  (pytest fixtures)
 
 
 def pytest_configure(config):

@@ -211,7 +211,7 @@ def test_the_preview_lists_every_form_and_each_setting_that_changes_and_writes_n
 
 
 def test_a_push_updates_drafts_in_place_and_makes_a_new_draft_for_live_only_forms(
-        admin, make_form, tree):
+        admin, make_form, tree, logged):
     item = lib_field(admin)
     a, va = linked_form(admin, make_form, tree, "pdi", item)
     b, vb = linked_form(admin, make_form, tree, "ev", item, publish_it=True)
@@ -225,6 +225,8 @@ def test_a_push_updates_drafts_in_place_and_makes_a_new_draft_for_live_only_form
     assert find(tree(new_draft.id), "tyre_depth")["label"] == "Tread depth"
     assert find(tree(vb), "tyre_depth")["label"] == "Tyre depth"
     assert AuditLog.objects.filter(action="library.push").count() == 1
+    pushed = logged("library.pushed")[0]
+    assert (pushed["item"], pushed["forms"], pushed["published"]) == (item["id"], 2, False)
 
 
 def test_a_form_already_up_to_date_is_left_alone(admin, make_form, tree):

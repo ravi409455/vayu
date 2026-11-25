@@ -14,6 +14,7 @@ class CodedError(APIException):
         payload = {"code": code, "detail": detail, **extra}
         super().__init__(payload)
         self.detail = payload
+        self.code, self.payload = code, payload
 
 
 def fail(code: str, message: str, status: int = 400, **extra: Any) -> CodedError:

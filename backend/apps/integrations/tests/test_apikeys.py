@@ -87,7 +87,7 @@ def test_patch_validation_and_revoked_keys_are_frozen(env):
 
 # ---------------------------------------------------------------- authentication
 
-def test_requests_need_a_valid_unrevoked_key(env, booking):
+def test_requests_need_a_valid_unrevoked_key(env, booking, logged):
     k = new_key(env)
     assert APIClient().get("/api/v1/ext/bookings").status_code in (401, 403)
     assert env.admin.get("/api/v1/ext/bookings").status_code == 403         # a session is not a key
@@ -103,11 +103,16 @@ def test_requests_need_a_valid_unrevoked_key(env, booking):
     via_header = APIClient()
     via_header.credentials(HTTP_X_API_KEY=k["key"])
     assert via_header.get("/api/v1/ext/bookings").status_code == 200
+    refused = logged("api_key.refused")
+    assert [r["key_prefix"] for r in refused] == ["unknown", "unknown", k["prefix"]]
+    assert logged("api_key.used")[-1]["key_prefix"] == k["prefix"]
+    assert k["key"] not in str(logged())                              # the prefix only
     assert client(k).get("/api/v1/ext/bookings").status_code == 200
     assert ApiKey.objects.get().last_used_at is not None
     env.admin.post(f"/api/v1/api-keys/{k['id']}/revoke")
     r = client(k).get("/api/v1/ext/bookings")                                # revoke is immediate
     assert r.status_code == 401
+    assert logged("api_key.refused")[-1]["reason"] == "revoked"
 
 
 def test_the_service_identity_cannot_sign_in_and_is_not_an_admin_for_last_admin_rules(env):
@@ -341,7 +346,7 @@ def test_an_inspection_patch_writes_only_to_the_inspection_that_counts(ienv, boo
 
 # ---------------------------------------------------------------- F-228 booking actions by key
 
-def test_booking_actions_are_off_until_the_key_is_allowed_them(env, booking):
+def test_booking_actions_are_off_until_the_key_is_allowed_them(env, booking, logged):
     from apps.core import events
 
     key = new_key(env)
@@ -349,6 +354,7 @@ def test_booking_actions_are_off_until_the_key_is_allowed_them(env, booking):
     url = f"/api/v1/ext/bookings/{booking['id']}"
     r = c.post(f"{url}/assign", {"expert": env.expert_user.id}, format="json")
     assert r.status_code == 403 and r.json()["code"] == "ACTION_NOT_ALLOWED"
+    assert logged("api_key.refused")[-1]["action"] == "assign"
     assert env.admin.patch(f"/api/v1/api-keys/{key['id']}", {
         "allowed_actions": ["assign", "reschedule", "cancel"]},
         format="json").json()["allowed_actions"] == ["assign", "cancel", "reschedule"]

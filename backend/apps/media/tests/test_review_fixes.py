@@ -184,7 +184,7 @@ def test_a_parallel_complete_that_already_won_returns_the_asset(job, settings):
     assert r.status_code == 200 and r.json()["status"] == "verified"
 
 
-def test_a_file_that_is_not_an_image_fails_verification_cleanly(job, settings):
+def test_a_file_that_is_not_an_image_fails_verification_cleanly(job, settings, logged):
     env, b = job
     junk = b"this is not a picture at all" * 50
     r = env.expert.post("/api/v1/media/initiate", initiate_body(
@@ -196,6 +196,7 @@ def test_a_file_that_is_not_an_image_fails_verification_cleanly(job, settings):
     a = MediaAsset.objects.get(pk=init["id"])
     assert a.status == "failed" and not storage.exists(a.key)
     assert verify_asset is not None and sha(junk) == a.sha256
+    assert logged("upload.failed")[0]["reason"] == "unreadable_image"
 
 
 # ---------------------------------------------------- abuse limits, sign-out on password change

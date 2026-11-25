@@ -1,4 +1,5 @@
 """Start, submit and Ops edits of inspections, including the offline conflict rules."""
+import logging
 from datetime import timedelta
 from typing import NoReturn
 
@@ -7,7 +8,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from apps.core import events
+from apps.core import events, log
 from apps.core import tasks as core_tasks
 from apps.core.concurrency import check_row_version
 from apps.core.errors import CodedError, fail
@@ -367,6 +368,11 @@ def submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id=No
         return _submit(actor, b, submission_uuid, answers, form_version_id)
     except _OldVersion:
         _refuse_old(b)
+    except CodedError as e:                  # error codes only, never the answers
+        log.event("submission.rejected", level=logging.WARNING, user=actor, booking=str(b.id),
+                  booking_id=b.booking_id, code=e.code,
+                  errors=sorted(set((e.payload.get("errors") or {}).values())))
+        raise
 
 
 @transaction.atomic

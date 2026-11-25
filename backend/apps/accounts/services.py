@@ -1,4 +1,5 @@
 
+import logging
 from typing import Any
 
 from django.conf import settings
@@ -10,6 +11,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.core import log
 from apps.core.errors import CodedError
 
 from .models import Device, User
@@ -41,23 +43,35 @@ def authenticate(username: str, password: str, ip: str = "") -> User:
     key = _failures_key(username, ip, user)
     failures = cache.get(key, 0)
     fail = CodedError("INVALID_CREDENTIALS", "Invalid username or password.", 401)
+    # the typed username is never logged (it can be a mistyped password): the id, or "unknown user"
+    who = user.pk if user is not None else "unknown user"
     if failures >= settings.LOCKOUT_MAX_FAILURES:
+        log.event("auth.sign_in_locked", level=logging.WARNING, user_id=who, ip=ip)
         raise fail
     if user is None:
         make_password(password)        # the same hashing time as a real user (no timing hint)
     if user is None or not user.check_password(password) or not user.is_active:
         # ponytail: get + set is not atomic; two tries in the same instant may count once
         cache.set(key, failures + 1, settings.LOCKOUT_MINUTES * 60)
+        reason = "no_user" if user is None else "inactive" if not user.is_active \
+            else "bad_password"
+        log.event("auth.sign_in_failed", level=logging.WARNING, user_id=who, ip=ip, reason=reason)
+        if failures + 1 >= settings.LOCKOUT_MAX_FAILURES:
+            log.event("auth.locked_out", level=logging.WARNING, user_id=who, ip=ip)
         raise fail
     cache.delete(key)
+    log.event("auth.sign_in", user=user, ip=ip)
     # last sign-in, for the Users list (web and phone alike)
     type(user).objects.filter(pk=user.pk).update(last_login=timezone.now())
     return user
 
 
 def revoke_devices(user: User) -> int:
-    return Device.objects.filter(user=user, revoked_at__isnull=True).update(
+    count = Device.objects.filter(user=user, revoked_at__isnull=True).update(
         revoked_at=timezone.now(), push_token="")
+    if count:
+        log.event("auth.device_revoked", user_id=user.pk, count=count)
+    return count
 
 
 def register_device_and_tokens(user: User, device_name: str) -> dict[str, Any]:
@@ -74,6 +88,7 @@ def register_device_and_tokens(user: User, device_name: str) -> dict[str, Any]:
                              drafts=counts.get("drafts"), files=counts.get("files"))
         revoke_devices(user)
         device = Device.objects.create(user=user, name=device_name)
+    log.event("auth.device_registered", user=user, device=str(device.id))
     refresh = RefreshToken.for_user(user)
     refresh["device_id"] = str(device.id)
     return {"access": str(refresh.access_token), "refresh": str(refresh),

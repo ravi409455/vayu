@@ -84,7 +84,7 @@ def test_retention_covers_documents_signatures_and_cancelled_jobs(job, settings)
         assert not any(storage.exists(k) for k in print_keys(a.id))
 
 
-def test_a_zip_whose_build_fails_is_shown_failed_and_made_again(job, settings):
+def test_a_zip_whose_build_fails_is_shown_failed_and_made_again(job, settings, logged, caplog):
     """F-080 / F-108."""
     from unittest import mock
 
@@ -98,6 +98,9 @@ def test_a_zip_whose_build_fails_is_shown_failed_and_made_again(job, settings):
     assert MediaZip.objects.get().status == "failed"
     again = zips.request_zip(Booking.objects.get(pk=b["id"]), "photo", only=[str(a.id)])
     assert again.status == "ready" and MediaZip.objects.count() == 2
+    assert [getattr(r, "event", "") for r in caplog.records].count("zip.failed") == 1
+    built = logged("zip.built")[0]
+    assert (built["zip"], built["files"]) == (str(again.id), 1) and built["size"] > 0
 
 
 def test_a_build_abandoned_by_a_restart_counts_as_failed(job):
@@ -121,9 +124,9 @@ def test_why_a_file_failed_is_in_the_logs_with_its_booking(job, settings, caplog
     init = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()),
                            format="json").json()
     parts = put_parts(init, jpeg(color=(1, 2, 3)), settings)
-    with caplog.at_level(logging.WARNING, logger="apps.media.tasks"):
+    with caplog.at_level(logging.WARNING, logger="vayu.events"):
         env.expert.post(f"/api/v1/media/{init['id']}/complete", {"parts": parts}, format="json")
-    (rec,) = [r for r in caplog.records if r.message == "upload failed verification"]
+    (rec,) = [r for r in caplog.records if r.message == "upload.failed"]
     assert rec.booking == b["id"] and rec.reason == "checksum"
 
 
@@ -139,8 +142,12 @@ def test_a_task_logs_with_the_request_id_that_queued_it():
     assert headers == {"request_id": "req-42"}
     _carry_request_id(headers=None)                                     # nothing to carry it in
     request_id_var.set("-")
-    _restore_request_id(task=SimpleNamespace(request=SimpleNamespace(request_id="req-42")))
+    _restore_request_id(task=SimpleNamespace(request=SimpleNamespace(request_id="req-42")),
+                        task_id="task-7")
     assert request_id_var.get() == "req-42"
+    from apps.core.logging import task_id_var
+
+    assert task_id_var.get() == "task-7"                     # every worker line names its task
     _restore_request_id(task=SimpleNamespace(request=SimpleNamespace()))
     assert request_id_var.get() == "-"
 

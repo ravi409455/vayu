@@ -1,5 +1,6 @@
 """The REST API for other systems (API key auth). A key sees and writes only the forms and fields
 in its scope; DELETE needs the key to have been given it explicitly."""
+import logging
 import uuid
 from typing import Any, cast
 
@@ -12,6 +13,7 @@ from rest_framework.views import APIView
 from apps.accounts import audit
 from apps.bookings import services, submissions
 from apps.bookings.models import Booking, Inspection
+from apps.core import log
 from apps.core.errors import CodedError
 from apps.core.pagination import Pages
 from apps.forms.models import Form, FormType
@@ -156,6 +158,8 @@ class BookingDetail(ExtView):
 
 def need_action(request: Any, action: str) -> None:
     if action not in (request.auth.allowed_actions or []):
+        log.event("api_key.refused", level=logging.WARNING, reason="action_not_allowed",
+                  key_prefix=request.auth.prefix, action=action)
         raise CodedError("ACTION_NOT_ALLOWED", f"This key may not {action.replace('_', ' ')}. "
                          "Ask an Admin to allow it.", 403)
 

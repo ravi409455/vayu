@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import tempfile
+import time
 import zipfile
 from datetime import timedelta
 
@@ -11,6 +12,8 @@ from celery import shared_task
 from django.conf import settings
 from django.core import signing
 from django.utils import timezone
+
+from apps.core import log
 
 from . import storage
 from .models import MediaAsset, MediaZip
@@ -135,13 +138,18 @@ def build_zip(zip_id: str) -> None:
     names = entry_names(places, assets)
     fd, path = tempfile.mkstemp(suffix=".zip")
     os.close(fd)
+    began = time.monotonic()
     try:
         _write(z, assets, names, path)
+        log.event("zip.built", booking=str(z.booking_id), zip=str(z.id), kind=z.kind,
+                  files=len(assets), size=os.path.getsize(path),
+                  duration_ms=round((time.monotonic() - began) * 1000))
     except Exception:
         z.status = "failed"                   # never "Preparing..." for 7 days (F-108)
         MediaZip.objects.filter(pk=z.pk).update(status="failed")
         logging.getLogger(__name__).exception("ZIP build failed", extra={
-            "booking": str(z.booking_id), "zip": str(z.id), "kind": z.kind})
+            "event": "zip.failed", "booking": str(z.booking_id), "zip": str(z.id),
+            "kind": z.kind})
         raise
     finally:
         os.unlink(path)

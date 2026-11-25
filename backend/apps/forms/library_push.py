@@ -9,6 +9,7 @@ from typing import Any
 from django.db import transaction
 
 from apps.accounts import audit
+from apps.core import log
 from apps.core.concurrency import check_row_version
 from apps.core.errors import CodedError
 from apps.integrations.values import publish_warnings
@@ -126,6 +127,8 @@ def _run(actor: Any, item: LibraryItem, *, publish: bool, commit: bool) -> dict[
                      f"{item.kind} {item.key} r{item.revision} -> "
                      f"{', '.join(f['form'] for f in result['forms']) or 'no forms'}"
                      f"{' (published)' if publish else ''}")
+    log.event("library.pushed", user=actor, item=item.id, revision=item.revision,
+              forms=len(result["forms"]), skipped=len(result["skipped"]), published=publish)
     return result
 
 
