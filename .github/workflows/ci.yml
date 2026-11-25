@@ -1,9 +1,14 @@
 name: ci
 # PRs run CI once (on the pull request); main runs on push. A newer push to the same PR cancels the
 # older run, so the runners only work on the latest commit.
+# Docs-only changes (Markdown anywhere, pictures and PDFs under docs/) run no checks; any script or
+# data file, even under docs/, still runs CI.
 on:
-  push: {branches: [main]}
+  push:
+    branches: [main]
+    paths-ignore: ["**/*.md", "docs/**/*.jpg", "docs/**/*.png", "docs/**/*.pdf"]
   pull_request:
+    paths-ignore: ["**/*.md", "docs/**/*.jpg", "docs/**/*.png", "docs/**/*.pdf"]
 permissions: {contents: read}
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}

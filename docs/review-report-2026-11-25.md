@@ -48,6 +48,11 @@ touch each line). Each appendix lists what its reviewer could not check.
 | CI | only 2 green runs in the last 100; newest run: android and e2e **failing** |
 
 ## 2. Scorecard
+
+> **2026-11-25, after the fixes:** the scores below are the review baseline. Every Critical and High
+> finding (C-01…C-03, H-01…H-23) is fixed in `main` (#15, #16); see [`plan-fixes.md`](plan-fixes.md).
+> A fresh re-score needs a new review pass.
+
 Good = nothing above Low · OK = Medium only · Weak = a High · Bad = a Critical · — = not applicable.
 
 | # | Aspect | Backend | Web | Android |
