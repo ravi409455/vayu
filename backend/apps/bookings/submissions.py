@@ -16,6 +16,7 @@ from apps.forms.serializers import VersionTreeSerializer
 from apps.scoring import service as scoring
 
 from . import activity, timing
+from .changes import check_fresh, stamp
 from .models import Booking, Inspection
 from .services import (
     _changed,
@@ -499,10 +500,7 @@ def _check_files(actor, b: Booking, pinned, old: dict, new: dict, changed) -> No
 def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) -> Inspection:
     check_shape(answers)
     insp = Inspection.objects.select_for_update().get(pk=insp.pk)
-    if row_version != insp.row_version:
-        raise err("STALE_INSPECTION", "Someone changed this inspection since you opened it.", 409,
-                  changed_by=insp.last_change.get("by"), changed_at=insp.last_change.get("at"),
-                  changed_keys=insp.last_change.get("keys", []), row_version=insp.row_version)
+    check_fresh(insp, row_version, "STALE_INSPECTION", "inspection")
     b = insp.booking
     pinned = insp.pinned()
     locked = _locked_keys(actor.role, b.stage, pinned, answers, insp.answers)
@@ -517,10 +515,7 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
     keys = sorted(k for _, k in changed)
     if keys:
         insp.answers = new
-        insp.row_version += 1
-        insp.last_edited_by, insp.last_edited_at = actor, timezone.now()
-        insp.last_change = {"by": actor.shown_name, "at": insp.last_edited_at.isoformat(),
-                            "keys": keys}
+        stamp(insp, actor, keys)
         insp.save()
         scoring.recompute(insp)
         chassis = new["inspection"].get("chassis_no")
@@ -563,10 +558,7 @@ def searchable_stages(role: str) -> dict[str, list[str]]:
 @transaction.atomic
 def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Inspection:
     insp = Inspection.objects.select_for_update().get(pk=insp.pk)
-    if row_version != insp.row_version:
-        raise err("STALE_INSPECTION", "Someone changed this inspection since you opened it.", 409,
-                  changed_by=insp.last_change.get("by"), changed_at=insp.last_change.get("at"),
-                  changed_keys=insp.last_change.get("keys", []), row_version=insp.row_version)
+    check_fresh(insp, row_version, "STALE_INSPECTION", "inspection")
     try:
         scoring.validate_overrides(insp.form_version, body)
     except ValueError as e:
@@ -578,10 +570,7 @@ def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Insp
                   409)
     before = {k: v["value"] for k, v in ((insp.scores or {}).get("key_checks") or {}).items()}
     insp.overrides = scoring.apply_overrides(insp.overrides, body)
-    insp.row_version += 1
-    insp.last_edited_by, insp.last_edited_at = actor, timezone.now()
-    insp.last_change = {"by": actor.shown_name, "at": insp.last_edited_at.isoformat(),
-                        "keys": ["overrides"]}
+    stamp(insp, actor, ["overrides"])
     insp.save()
     scoring.recompute(insp)
     if set(body) - {"key_checks"}:

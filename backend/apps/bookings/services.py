@@ -15,6 +15,7 @@ from apps.forms.models import Field, Form, FormType, FormVersion, MasterListItem
 from apps.forms.rules import validate_answers
 
 from . import activity
+from .changes import check_fresh, stamp
 from .models import Booking, Inspection, RescheduleLog
 from .stages import can_transition
 
@@ -86,9 +87,7 @@ def _save(b: Booking) -> None:
 
 
 def _touch(b: Booking, actor, keys: list[str]) -> None:
-    b.row_version += 1
-    b.last_edited_by, b.last_edited_at = actor, timezone.now()
-    b.last_change = {"by": actor.shown_name, "at": b.last_edited_at.isoformat(), "keys": keys}
+    stamp(b, actor, keys)
 
 
 @transaction.atomic
@@ -112,10 +111,7 @@ def create(actor, answers: dict) -> Booking:
 @transaction.atomic
 def edit(actor, b: Booking, new_answers: dict, row_version: int) -> Booking:
     b = Booking.objects.select_for_update().get(pk=b.pk)
-    if row_version != b.row_version:
-        raise err("STALE_BOOKING", "Someone changed this booking since you opened it.", 409,
-                  changed_by=b.last_change.get("by"), changed_at=b.last_change.get("at"),
-                  changed_keys=b.last_change.get("keys", []), row_version=b.row_version)
+    check_fresh(b, row_version, "STALE_BOOKING", "booking")
     forbidden = [k for k in new_answers if k in ACTION_ONLY]
     if forbidden:
         raise err("USE_ACTION", f"{', '.join(forbidden)} change through their own actions.")

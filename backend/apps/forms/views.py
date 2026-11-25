@@ -1,4 +1,3 @@
-from django.db import transaction
 from django.db.models import Max, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, mixins, serializers, status, viewsets
@@ -23,7 +22,6 @@ from .models import (
     Section,
     VersionCheck,
     ensure_draft,
-    lock_draft,
 )
 from .rules import validate_version
 from .serializers import (
@@ -430,17 +428,16 @@ class VersionSettings(generics.GenericAPIView):
                 or not all(isinstance(v, bool) for v in body.values()):
             raise CodedError("INVALID_SETTINGS", "Send use_start and/or use_end as true/false.",
                              400)
-        with transaction.atomic():
-            lock_draft(pk)
-            version = get_object_or_404(FormVersion.objects.select_related("form"), pk=pk)
+        def change(version):
             if version.form.type != "custom":
                 raise CodedError("INVALID_SETTINGS", "Only custom forms have these settings.", 400)
             for k, v in body.items():
                 setattr(version, k, v)
-            version.row_version += 1
-            version.save(update_fields=[*body, "row_version"])
-        audit.record(request.user, "form.settings", "form_version", pk,
-                     f"Begins with start: {version.use_start}, ends with end: {version.use_end}")
+            return list(body)
+
+        version = services.save_draft_setting(
+            request.user, pk, "form.settings", change,
+            lambda v: f"Begins with start: {v.use_start}, ends with end: {v.use_end}")
         return Response({"use_start": version.use_start, "use_end": version.use_end,
                          "row_version": version.row_version})
 
@@ -461,16 +458,14 @@ class RatingConfigView(generics.GenericAPIView):
             raise CodedError("INVALID_RATING_CONFIG", str(e), 400) from e
         from apps.scoring.service import section_keys
 
-        with transaction.atomic():
-            lock_draft(pk)
-            version = get_object_or_404(FormVersion, pk=pk)
-            config = section_keys(version, config)     # stored by section key (F-045)
-            version.rating_config = config
-            version.row_version += 1
-            version.save(update_fields=["rating_config", "row_version"])
-        audit.record(request.user, "form.rating_config", "form_version", pk,
-                     "Updated rating config")
-        return Response({"rating_config": config, "row_version": version.row_version})
+        def change(version):
+            version.rating_config = section_keys(version, config)   # by section key (F-045)
+            return ["rating_config"]
+
+        version = services.save_draft_setting(request.user, pk, "form.rating_config", change,
+                                              lambda v: "Updated rating config")
+        return Response({"rating_config": version.rating_config,
+                         "row_version": version.row_version})
 
 
 class KeyChecksView(generics.GenericAPIView):
@@ -487,16 +482,15 @@ class KeyChecksView(generics.GenericAPIView):
             validate(items)
         except ValueError as e:
             raise CodedError("INVALID_KEY_CHECKS", str(e), 400) from e
-        with transaction.atomic():
-            lock_draft(pk)
-            version = get_object_or_404(FormVersion, pk=pk)
+        def change(version):
             if items and version.form.type != "custom":       # only inspections are reviewed
                 raise CodedError("INVALID_KEY_CHECKS", "Only inspection forms have Key Checks.",
                                  400)
             version.key_checks = items
-            version.row_version += 1
-            version.save(update_fields=["key_checks", "row_version"])
-        audit.record(request.user, "form.key_checks", "form_version", pk, "Updated Key Checks")
+            return ["key_checks"]
+
+        version = services.save_draft_setting(request.user, pk, "form.key_checks", change,
+                                              lambda v: "Updated Key Checks")
         return Response({"key_checks": items, "row_version": version.row_version})
 
 

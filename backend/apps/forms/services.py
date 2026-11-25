@@ -234,3 +234,17 @@ def discard_draft(actor, form: Form) -> None:
     draft.delete()
     audit.record(actor, "form.draft_discard", "form", form.id,
                  f"Discarded draft v{number} of {form.key}")
+
+
+def save_draft_setting(actor, version_id: int, action: str, change, summary) -> FormVersion:
+    """A setting of a draft version (switches, rating config, Key Checks), saved the one way
+    (F-023): lock the draft, [change](version) sets the fields and returns their names, the
+    version goes up, then the audit row says [summary](version)."""
+    with transaction.atomic():
+        lock_draft(version_id)
+        version = get_object_or_404(FormVersion.objects.select_related("form"), pk=version_id)
+        fields = change(version)
+        version.row_version += 1
+        version.save(update_fields=[*fields, "row_version"])
+    audit.record(actor, action, "form_version", version_id, summary(version))
+    return version
