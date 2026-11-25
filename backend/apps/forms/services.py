@@ -9,6 +9,7 @@ from apps.accounts import audit
 from apps.core.concurrency import check_row_version
 from apps.core.errors import CodedError
 
+from . import promote
 from .models import (
     Field,
     Form,
@@ -244,3 +245,77 @@ def save_draft_setting(actor: Any, version_id: int, action: str, change: Any,
         version.save(update_fields=[*fields, "row_version"])
     audit.record(actor, action, "form_version", version_id, summary(version))
     return version
+
+
+def save_version_settings(actor: Any, version_id: int, body: Any) -> FormVersion:
+    """A custom form's two switches: begins with the start form, ends with the end form."""
+    if not isinstance(body, dict) or not body or set(body) - {"use_start", "use_end"} \
+            or not all(isinstance(v, bool) for v in body.values()):
+        raise CodedError("INVALID_SETTINGS", "Send use_start and/or use_end as true/false.", 400)
+
+    def change(version: FormVersion) -> list[str]:
+        if version.form.type != "custom":
+            raise CodedError("INVALID_SETTINGS", "Only custom forms have these settings.", 400)
+        for k, v in body.items():
+            setattr(version, k, v)
+        return list(body)
+
+    return save_draft_setting(
+        actor, version_id, "form.settings", change,
+        lambda v: f"Begins with start: {v.use_start}, ends with end: {v.use_end}")
+
+
+def save_rating_config(actor: Any, version_id: int, config: Any) -> FormVersion:
+    """The draft's rating config, checked, then stored by section key (F-045)."""
+    from apps.scoring.engine import validate_config
+    from apps.scoring.service import section_keys
+
+    try:
+        validate_config(config)
+    except ValueError as e:
+        raise CodedError("INVALID_RATING_CONFIG", str(e), 400) from e
+
+    def change(version: FormVersion) -> list[str]:
+        version.rating_config = section_keys(version, config)
+        return ["rating_config"]
+
+    return save_draft_setting(actor, version_id, "form.rating_config", change,
+                              lambda v: "Updated rating config")
+
+
+def save_key_checks(actor: Any, version_id: int, items: Any) -> FormVersion:
+    """The draft's Key Checks, saved as a whole ordered list (like the rating config)."""
+    from apps.scoring.keychecks import validate
+
+    try:
+        validate(items)
+    except ValueError as e:
+        raise CodedError("INVALID_KEY_CHECKS", str(e), 400) from e
+
+    def change(version: FormVersion) -> list[str]:
+        if items and version.form.type != "custom":       # only inspections are reviewed
+            raise CodedError("INVALID_KEY_CHECKS", "Only inspection forms have Key Checks.", 400)
+        version.key_checks = items
+        return ["key_checks"]
+
+    return save_draft_setting(actor, version_id, "form.key_checks", change,
+                              lambda v: "Updated Key Checks")
+
+
+def publish_warnings(version: FormVersion) -> list[Any]:
+    """What a just-published version leaves to fix: PDF template and integration problems."""
+    from apps.integrations.values import publish_warnings as integration_warnings
+    from apps.reports.service import warnings as pdf_warnings
+
+    return list(pdf_warnings(version)) + list(integration_warnings(version, published=True))
+
+
+def duplicate_form(actor: Any, form: Form, key: Any, name: Any) -> dict[str, Any]:
+    """A copy of [form] (newest version) as a new form with its own key and name: library
+    links, ratings, Key Checks and PDF template come along; it starts as a draft."""
+    latest = form.versions.order_by("-number").first()
+    assert latest is not None  # noqa: S101 - a form always has its first version
+    out = promote.import_bundle(actor, promote.export_bundle(latest),
+                                as_new={"key": key, "name": name})
+    audit.record(actor, "form.duplicate", "form", out["form"], f"Copied {form.key} as {key}")
+    return out
