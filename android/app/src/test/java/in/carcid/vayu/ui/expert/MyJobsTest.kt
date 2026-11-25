@@ -142,6 +142,21 @@ class MyJobsTest {
         assertEquals(0, compose.onAllNodes(hasText("They keep sending", substring = true)).fetchSemanticsNodes().size)
     }
 
+    /** F-194: with the phone's text at 1.3, an overdue lead's date shows in full and the bell count sits clear of the bell. */
+    @Test fun largeTextKeepsDatesWhole() {
+        val late = j("3", "Sunil Das", "10:00", date = "2026-11-22")
+        compose.setContent {
+            val d = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(d.density, 1.3f)) {
+                VayuTheme(ThemeMode.LIGHT) { ExpertHome(me, JobsState(jobs + late), today, {}, {}, ExpertExtras(bell = `in`.carcid.vayu.ui.BellState(unread = 26))) }
+            }
+        }
+        val layout = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithText("22 Nov").fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!(layout)
+        assertTrue("the date is cut off", !layout.single().hasVisualOverflow)
+        compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/my_jobs_large_text.png", roborazziOptions = options)
+    }
+
     @Test fun aFieldOpensTheCameraTheFormBuilderChose() {
         fun f(cfg: Map<String, Any?>) = `in`.carcid.vayu.core.forms.Field("p", "P", "photo", "", false, null, null, true, "edit", cfg)
         assertEquals(true, firstCameraIsBack(f(emptyMap())))                 // Back by default

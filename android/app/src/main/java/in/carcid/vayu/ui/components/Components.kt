@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -65,13 +66,13 @@ fun VayuTopBar(title: String, initials: String, bellCount: Int, onBell: () -> Un
         Text(title, style = MaterialTheme.typography.headlineMedium, color = Vayu.colors.ink,
             modifier = Modifier.weight(1f))
         actions()
-        IconButton(onClick = onBell, modifier = Modifier.semantics {
-            contentDescription = if (bellCount > 0) "Notifications, $bellCount" else "Notifications"
-        }) {
-            Box {
-                Icon(Icons.Outlined.Notifications, contentDescription = null, tint = Vayu.colors.ink)
-                if (bellCount > 0) CountBadge(bellCount, Modifier.align(Alignment.TopEnd).offset(6.dp, (-6).dp))
-            }
+        // the count sits beside the button, not inside it (the button's round clip cut it off)
+        Box {
+            IconButton(onClick = onBell, modifier = Modifier.semantics {
+                contentDescription = if (bellCount > 0) "Notifications, $bellCount" else "Notifications"
+            }) { Icon(Icons.Outlined.Notifications, contentDescription = null, tint = Vayu.colors.ink) }
+            if (bellCount > 0) CountBadge(bellCount, Modifier.align(Alignment.TopEnd).offset((-2).dp, 4.dp)
+                .clearAndSetSemantics { })
         }
         IconButton(onClick = onProfile, modifier = Modifier.semantics { contentDescription = "Profile" }) {
             Avatar(initials)
@@ -83,7 +84,9 @@ fun VayuTopBar(title: String, initials: String, bellCount: Int, onBell: () -> Un
 fun CountBadge(count: Int, modifier: Modifier = Modifier) {
     Box(modifier.heightIn(min = 17.dp).clip(RoundedCornerShape(9.dp)).background(Vayu.colors.bad)
         .padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
-        Text(if (count > 99) "99+" else count.toString(), color = Color.White, fontSize = 10.sp,
+        // a fixed size whatever the phone's text size (the count is also in the bell's description), so it never hides the bell
+        val k = androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtLeast(1f)
+        Text(if (count > 99) "99+" else count.toString(), color = Color.White, fontSize = (10 / k).sp, lineHeight = (12 / k).sp,
             fontWeight = FontWeight.Bold)
     }
 }

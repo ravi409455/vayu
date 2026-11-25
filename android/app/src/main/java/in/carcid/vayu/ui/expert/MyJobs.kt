@@ -356,7 +356,8 @@ private fun JobRow(j: Job, today: LocalDate, d: Draft?, onOpen: (Job) -> Unit) {
     val (label, tone) = statusOf(j, d)
     Column(Modifier.fillMaxWidth().clickable(role = Role.Button) { onOpen(j) }) {
         Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(lead, modifier = Modifier.width(52.dp), fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, softWrap = false,
+            // the column grows with the phone's text size, so "22 Nov" never reads "22 No"
+            Text(lead, modifier = Modifier.width((52 * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtLeast(1f)).dp), fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, softWrap = false,
                 color = when { overdue -> Vayu.colors.warn; j.open -> Vayu.colors.ink; else -> Vayu.colors.muted })
             Column(Modifier.weight(1f)) {
                 // name "…" and status; the booking ID in full; car · type; then a note if there is one
