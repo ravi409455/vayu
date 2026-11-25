@@ -34,7 +34,7 @@ function swapLocal(d: Draft): Draft {
 export function Job() {
   const id = useParams().id!;
   const refresh = useRefresh();
-  const booking = useQuery({ queryKey: ["job", id], queryFn: () => api<Booking>(`bookings/${id}`), refetchInterval: (q) => (q.state.data?.stage === "submitted" ? 4000 : false) });
+  const booking = useQuery({ queryKey: ["job", id], queryFn: ({ signal }) => api<Booking>(`bookings/${id}`, { signal }), refetchInterval: (q) => (q.state.data?.stage === "submitted" ? 4000 : false) });
   useCrumb(booking.data?.booking_id);
   const [session, setSession] = useState<Session | null>(() => loadJSON<Session | null>(sKey(id), null));
   const b = booking.data;

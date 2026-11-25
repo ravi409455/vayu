@@ -18,7 +18,7 @@ export function MasterLists() {
   const items = useQuery({
     queryKey: ["master-list-items", (open ?? lists.data?.[0])?.key],
     enabled: !!(open ?? lists.data?.[0]),
-    queryFn: () => fetchAll<MasterListItem>(`master-lists/${(open ?? lists.data![0])!.key}/items`, { include_archived: 1 }),
+    queryFn: ({ signal }) => fetchAll<MasterListItem>(`master-lists/${(open ?? lists.data![0])!.key}/items`, { include_archived: 1 }, signal),
   });
   const add = useMutation({
     mutationFn: () => api(`master-lists/${(open ?? lists.data![0])!.key}/items`, { body: { key: item.key, label: item.label } }),

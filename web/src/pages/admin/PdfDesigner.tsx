@@ -85,9 +85,9 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
   const draftMeta = template.versions.find((v) => v.status === "draft");
   const latest = template.versions[template.versions.length - 1];
   const vid = (draftMeta ?? latest)?.id;
-  const ver = useQuery({ queryKey: ["pdf-version", vid], enabled: !!vid, queryFn: () => api<TVersion>(`pdf-template-versions/${vid}`) });
+  const ver = useQuery({ queryKey: ["pdf-version", vid], enabled: !!vid, queryFn: ({ signal }) => api<TVersion>(`pdf-template-versions/${vid}`, { signal }) });
   const formVersionId = form?.draft_version?.id ?? form?.published_version?.id;
-  const tree = useQuery({ queryKey: ["form-version", formVersionId], enabled: !!formVersionId, queryFn: () => api<FormVersion>(`form-versions/${formVersionId}`) });
+  const tree = useQuery({ queryKey: ["form-version", formVersionId], enabled: !!formVersionId, queryFn: ({ signal }) => api<FormVersion>(`form-versions/${formVersionId}`, { signal }) });
   const choices = useRefChoices(template.form);
   const sample = useQuery({ queryKey: ["pdf-sample", form?.inspection_type], enabled: !!form?.inspection_type,
     queryFn: async () => (await Promise.all(["completed", "submitted"].map((stage) => api<Page<Booking>>("bookings", { query: { type: form!.inspection_type, stage } })))).flatMap((r) => r.results) });

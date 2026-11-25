@@ -35,7 +35,7 @@ export function Audit() {
   const [page, setPage] = useState(1);
   const set = (p: Partial<typeof f>) => { setF({ ...f, ...p }); setPage(1); };
   const users = useList<User>("users-all", "users");
-  const q = useQuery({ queryKey: ["audit", f, page], queryFn: () => api<Page<Row>>("audit-logs", { query: { ...f, page } }) });
+  const q = useQuery({ queryKey: ["audit", f, page], queryFn: ({ signal }) => api<Page<Row>>("audit-logs", { query: { ...f, page }, signal }) });
   const rows = q.data?.results ?? [];
   return (
     <>

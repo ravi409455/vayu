@@ -67,7 +67,7 @@ type MediaSettings = { photo_days: number; video_days: number };
 function MediaRetention({ edit }: { edit: boolean }) {
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const q = useQuery({ queryKey: ["settings", "media"], queryFn: () => api<MediaSettings>("settings/media") });
+  const q = useQuery({ queryKey: ["settings", "media"], queryFn: ({ signal }) => api<MediaSettings>("settings/media", { signal }) });
   const [v, setV] = useState<MediaSettings | null>(null);
   useEffect(() => { if (q.data) setV(q.data); }, [q.data]);
   const save = useMutation({

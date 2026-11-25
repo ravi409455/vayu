@@ -35,7 +35,7 @@ export function IntegrationEditor() {
   const forms = useList<FormSummary>("forms", "forms");
   const eligible = (forms.data ?? []).filter((f) => f.type === "booking" || f.type === "custom");
   const source = id && id !== "new" ? id : copy;
-  const loaded = useQuery({ queryKey: ["integration", source], queryFn: () => api<Integration>(`integrations/${source}`), enabled: !!source });
+  const loaded = useQuery({ queryKey: ["integration", source], queryFn: ({ signal }) => api<Integration>(`integrations/${source}`, { signal }), enabled: !!source });
   const [d, setD] = useState<Draft | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -50,9 +50,9 @@ export function IntegrationEditor() {
     }
   }, [d, source, loaded.data, eligible, id]);
   const form = eligible.find((f) => f.id === d?.form);
-  const catalogue = useQuery({ queryKey: ["catalogue", d?.form, d?.event], queryFn: () => api<CatalogueEntry[]>("integrations/catalogue", { query: { form: d!.form, event: d!.event } }), enabled: !!d?.form && !!d?.event });
+  const catalogue = useQuery({ queryKey: ["catalogue", d?.form, d?.event], queryFn: ({ signal }) => api<CatalogueEntry[]>("integrations/catalogue", { query: { form: d!.form, event: d!.event }, signal }), enabled: !!d?.form && !!d?.event });
   // every field of the form, whatever the event: the checklist of the standard body lists these
-  const everything = useQuery({ queryKey: ["catalogue", d?.form, "all"], queryFn: () => api<CatalogueEntry[]>("integrations/catalogue", { query: { form: d!.form } }), enabled: !!d?.form });
+  const everything = useQuery({ queryKey: ["catalogue", d?.form, "all"], queryFn: ({ signal }) => api<CatalogueEntry[]>("integrations/catalogue", { query: { form: d!.form }, signal }), enabled: !!d?.form });
   useCrumb(d?.id ? d.name : "New integration");
 
   const save = useMutation({

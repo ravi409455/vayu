@@ -28,7 +28,7 @@ export type Page<T> = { count: number; next: string | null; previous: string | n
 
 export async function api<T = unknown>(
   path: string,
-  opts: { method?: string; body?: unknown; query?: Record<string, string | number | undefined> } = {},
+  opts: { method?: string; body?: unknown; query?: Record<string, string | number | undefined>; signal?: AbortSignal } = {},
 ): Promise<T> {
   const method = opts.method ?? (opts.body === undefined ? "GET" : "POST");
   const q = opts.query
@@ -43,6 +43,7 @@ export async function api<T = unknown>(
     headers,
     credentials: "same-origin",
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    signal: opts.signal,
   });
   if (res.status === 204) return undefined as T;
   const type = res.headers.get("Content-Type") ?? "";

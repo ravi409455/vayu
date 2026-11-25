@@ -11,7 +11,7 @@ export const DEFAULT_TIMING: TimingSettings = { late_grace_minutes: 15, min_minu
 export function useTiming(): TimingSettings {
   const { can } = useAuth();
   const q = useQuery({ queryKey: ["settings", "timing"], enabled: can("settings.view"), staleTime: 60_000,
-    queryFn: () => api<TimingSettings>("settings/timing") });
+    queryFn: ({ signal }) => api<TimingSettings>("settings/timing", { signal }) });
   return q.data ?? DEFAULT_TIMING;
 }
 

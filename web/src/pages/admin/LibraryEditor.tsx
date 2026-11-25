@@ -27,9 +27,9 @@ export function LibraryEditor() {
   const { can } = useAuth();
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const item = useQuery({ queryKey: ["library-item", id], queryFn: () => api<Item>(`library/${id}`) });
+  const item = useQuery({ queryKey: ["library-item", id], queryFn: ({ signal }) => api<Item>(`library/${id}`, { signal }) });
   useCrumb(item.data?.name);
-  const history = useQuery({ queryKey: ["library-history", id], queryFn: () => api<Revision[]>(`library/${id}/history`) });
+  const history = useQuery({ queryKey: ["library-history", id], queryFn: ({ signal }) => api<Revision[]>(`library/${id}/history`, { signal }) });
   const lists = useList<MasterList>("master-lists", "master-lists");
   const [def, setDef] = useState<Definition | null>(null);
   const [name, setName] = useState("");

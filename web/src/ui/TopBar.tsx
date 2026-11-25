@@ -60,7 +60,7 @@ function GlobalSearch() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
   const res = useQuery({ queryKey: ["global-search", q], enabled: q.length >= 2, staleTime: 15_000,
-    queryFn: () => api<Page<Booking>>("bookings", { query: { search: q } }) });
+    queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query: { search: q }, signal }) });
   const hits = (res.data?.results ?? []).slice(0, 6);
   const go = (to: string) => { setOpen(false); setTerm(""); box.current?.blur(); nav(to); };
   const onKey = (e: React.KeyboardEvent) => {

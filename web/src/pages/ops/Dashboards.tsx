@@ -161,8 +161,8 @@ export function Dashboards() {
   const users = useList<User>("users-all", "users");
   const typeLabel = useTypeLabels();
   const cityLabel = useLabels("city");
-  const sum = useQuery({ queryKey: ["dash-summary", from, to], queryFn: () => api<Summary>("dashboards/summary", { query: { date_from: from, date_to: to } }) });
-  const vol = useQuery({ queryKey: ["volume", group, by, from, to], queryFn: () => api<{ rows: Row[] }>("dashboards/volume", { query: { group, by, date_from: from, date_to: to } }) });
+  const sum = useQuery({ queryKey: ["dash-summary", from, to], queryFn: ({ signal }) => api<Summary>("dashboards/summary", { query: { date_from: from, date_to: to }, signal }) });
+  const vol = useQuery({ queryKey: ["volume", group, by, from, to], queryFn: ({ signal }) => api<{ rows: Row[] }>("dashboards/volume", { query: { group, by, date_from: from, date_to: to }, signal }) });
   const rows = vol.data?.rows ?? [];
   const piv = pivot(rows);
   const { keys, cell } = piv;

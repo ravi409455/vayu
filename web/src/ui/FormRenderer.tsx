@@ -137,7 +137,7 @@ function Choices({ name, options, value, onChange, disabled, label, plain }: { n
 }
 
 function ListSelect({ list, value, onChange, disabled, label }: { list: string; value: string; onChange: (v: string) => void; disabled: boolean; label: string }) {
-  const q = useQuery({ queryKey: ["list-items", list], enabled: !!list, staleTime: 300_000, queryFn: () => fetchAll<MasterListItem>(`master-lists/${list}/items`) });
+  const q = useQuery({ queryKey: ["list-items", list], enabled: !!list, staleTime: 300_000, queryFn: ({ signal }) => fetchAll<MasterListItem>(`master-lists/${list}/items`, undefined, signal) });
   const items = (q.data ?? []).filter((i) => !i.archived || i.key === value);
   return <select aria-label={label} disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Choose…</option>{items.map((i) => <option key={i.key} value={i.key}>{i.label}</option>)}</select>;
 }
@@ -148,7 +148,7 @@ function TypeSelect({ value, onChange, disabled, label }: { value: string; onCha
 }
 
 function UserSelect({ role, value, onChange, disabled, label }: { role: string; value: number | null | undefined; onChange: (v: unknown) => void; disabled: boolean; label: string }) {
-  const q = useQuery({ queryKey: ["users-by-role", role], retry: false, staleTime: 300_000, queryFn: () => fetchAll<User>("users", { role }) });
+  const q = useQuery({ queryKey: ["users-by-role", role], retry: false, staleTime: 300_000, queryFn: ({ signal }) => fetchAll<User>("users", { role }, signal) });
   if (q.isError) return <input aria-label={label} disabled value={value ?? ""} readOnly />;
   return <select aria-label={label} disabled={disabled} value={value ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
     <option value="">Choose…</option>{(q.data ?? []).filter((u) => u.is_active).map((u) => <option key={u.id} value={u.id}>{u.name || u.username}</option>)}</select>;

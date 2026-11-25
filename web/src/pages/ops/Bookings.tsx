@@ -61,7 +61,7 @@ const BOARD: string[] = ["draft", "assigned", "in_progress", "submitted", "compl
 
 /** How many bookings a query matches: the same question the list asks, so a number and its list agree. */
 export function useCount(query: Record<string, string>, enabled = true) {
-  return useQuery({ queryKey: ["bookings-page", "count", query], enabled, staleTime: 30_000, queryFn: () => api<Page<Booking>>("bookings", { query }) }).data?.count;
+  return useQuery({ queryKey: ["bookings-page", "count", query], enabled, staleTime: 30_000, queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query, signal }) }).data?.count;
 }
 
 function ViewTab({ v, on, onPick, own }: { v: (typeof VIEWS)[number]; on: boolean; onPick: () => void; own: Record<string, string> }) {
@@ -100,13 +100,13 @@ export function Bookings() {
   const own = Object.fromEntries(Object.entries({ ...f, search }).filter(([k, v]) => v !== "" && !((k === "answer" || k === "value") && !(f.type && f.answer && f.value))));
   const query = { ...own, ...viewQuery(view), page };
   // a new filter keeps the rows on screen until its answer arrives (no flash, an open menu stays put)
-  const q = useQuery({ queryKey: ["bookings-page", query], queryFn: () => api<Page<Booking>>("bookings", { query }), placeholderData: keepPreviousData });
+  const q = useQuery({ queryKey: ["bookings-page", query], queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query, signal }), placeholderData: keepPreviousData });
   const experts = useList<User>("experts", "users", { role: "expert" });
-  const cities = useQuery({ queryKey: ["list-items", "city"], queryFn: () => fetchAll<MasterListItem>("master-lists/city/items") });
+  const cities = useQuery({ queryKey: ["list-items", "city"], queryFn: ({ signal }) => fetchAll<MasterListItem>("master-lists/city/items", undefined, signal) });
   const types = useInspectionTypes();
   // an answer is picked once a type is: only that type's questions (plus check-in and wrap-up)
   const answerFields = useQuery({ queryKey: ["answer-fields", f.type], enabled: can("submissions.view") && !!f.type,
-    queryFn: () => api<AnswerField[]>("bookings/answer-fields", { query: { type: f.type } }) });
+    queryFn: ({ signal }) => api<AnswerField[]>("bookings/answer-fields", { query: { type: f.type }, signal }) });
   const picked = f.type ? (answerFields.data ?? []).find((a) => a.field === f.answer) : undefined;
   const car = useLabels("car_make_model");
   const city = useLabels("city");

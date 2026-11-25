@@ -26,14 +26,14 @@ export function useProblems() {
   const { me, can } = useAuth();
   const on = !!me && me.role !== "expert" && can("bookings.view");
   const opts = { enabled: on, staleTime: 30_000, refetchInterval: 60_000 } as const;
-  const stuck = useQuery({ ...opts, queryKey: ["problems", "stuck"], queryFn: () => api<Stuck[]>("problems/stuck-uploads") });
-  const pdf = useQuery({ ...opts, queryKey: ["problems", "pdf"], queryFn: () => api<ReportProblems>("problems/reports") });
-  const conflicts = useQuery({ ...opts, queryKey: ["problems", "conflict"], queryFn: () => api<Page<Booking>>("bookings", { query: { problem: "conflict" } }) });
-  const types = useQuery({ ...opts, queryKey: ["problems", "type"], queryFn: () => api<Page<Booking>>("bookings", { query: { problem: "type_change" } }) });
+  const stuck = useQuery({ ...opts, queryKey: ["problems", "stuck"], queryFn: ({ signal }) => api<Stuck[]>("problems/stuck-uploads", { signal }) });
+  const pdf = useQuery({ ...opts, queryKey: ["problems", "pdf"], queryFn: ({ signal }) => api<ReportProblems>("problems/reports", { signal }) });
+  const conflicts = useQuery({ ...opts, queryKey: ["problems", "conflict"], queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query: { problem: "conflict" }, signal }) });
+  const types = useQuery({ ...opts, queryKey: ["problems", "type"], queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query: { problem: "type_change" }, signal }) });
   // started late, and finished too quickly: two separate lists (last 7 days), each until someone marks it reviewed
   const t = today();
   const flagged = (flag: Flag) => ({ ...opts, enabled: on && can("bookings.review_timing"), queryKey: ["problems", flag, t],
-    queryFn: () => api<Page<Booking>>("bookings", { query: { timing: flag, reviewed: "0", date_from: addDays(t, -6), date_to: t, order: "schedule" } }) });
+    queryFn: ({ signal }: { signal: AbortSignal }) => api<Page<Booking>>("bookings", { query: { timing: flag, reviewed: "0", date_from: addDays(t, -6), date_to: t, order: "schedule" }, signal }) });
   const late = useQuery(flagged("late"));
   const quick = useQuery(flagged("quick"));
   const reports = reportProblems(pdf.data);
@@ -57,7 +57,7 @@ export function useNeeds(): { needs: Need[]; total: number; loading: boolean; er
   const { me, can } = useAuth();
   const day = today();
   const open = useQuery({ enabled: !!me && me.role !== "expert" && can("bookings.view"), staleTime: 30_000, refetchInterval: 60_000,
-    queryKey: ["bookings-page", "unassigned-today", day], queryFn: () => api<Page<Booking>>("bookings", { query: { stage: "draft", date_from: day, date_to: day, order: "schedule" } }) });
+    queryKey: ["bookings-page", "unassigned-today", day], queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query: { stage: "draft", date_from: day, date_to: day, order: "schedule" }, signal }) });
   const needs: Need[] = [
     ...p.conflicts.map((b) => ({ key: `c${b.id}`, kind: "conflict" as const, tone: "bad" as const, title: `${b.booking_id}: two experts submitted`, meta: "Choose which inspection counts", to: `/booking/${b.id}`, action: "Resolve" })),
     ...(open.data?.results ?? []).map((b) => ({ key: `a${b.id}`, kind: "unassigned" as const, tone: "warn" as const, title: `${b.booking_id} has no expert`, meta: `Today at ${String(b.answers.inspection_time ?? "")} · ${String(b.answers.customer_name ?? "")}`, to: `/booking/${b.id}`, action: "Assign" })),

@@ -19,7 +19,7 @@ export function PushReview({ itemId, itemName, revision, onClose, onDone }: { it
   const [publish, setPublish] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [result, setResult] = useState<PushReport | null>(null);
-  const preview = useQuery({ queryKey: ["push-preview", itemId, revision], queryFn: () => api<PushReport>(`library/${itemId}/push-preview`, { method: "POST" }) });
+  const preview = useQuery({ queryKey: ["push-preview", itemId, revision], queryFn: ({ signal }) => api<PushReport>(`library/${itemId}/push-preview`, { method: "POST", signal }) });
   const run = useMutation({
     mutationFn: () => api<PushReport>(`library/${itemId}/push`, { body: { revision, publish, confirm: publish && confirmed } }),
     onSuccess: (r) => { setResult(r); onDone(); },

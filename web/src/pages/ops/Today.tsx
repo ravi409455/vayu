@@ -35,7 +35,7 @@ export function Today() {
   const refresh = useRefresh();
   const t = today();
   const q = useQuery({ queryKey: ["bookings-page", "today-home", t], refetchInterval: 60_000,      // the whole day, every page
-    queryFn: () => fetchAll<Booking>("bookings", { date_from: t, date_to: t, order: "schedule" }) });
+    queryFn: ({ signal }) => fetchAll<Booking>("bookings", { date_from: t, date_to: t, order: "schedule" }, signal) });
   const experts = useList<User>("experts", "users", { role: "expert" });
   const scroller = useRef<HTMLDivElement>(null);
   const car = useLabels("car_make_model");

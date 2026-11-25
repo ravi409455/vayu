@@ -29,12 +29,12 @@ export function FormBuilder() {
   const { can } = useAuth();
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const form = useQuery({ queryKey: ["form", id], queryFn: () => api<FormSummary>(`forms/${id}`) });
+  const form = useQuery({ queryKey: ["form", id], queryFn: ({ signal }) => api<FormSummary>(`forms/${id}`, { signal }) });
   const f = form.data;
   useCrumb(f?.name);
   const vid = f?.draft_version?.id ?? f?.published_version?.id;
   const draft = !!f?.draft_version;
-  const version = useQuery({ queryKey: ["version", vid], enabled: !!vid, queryFn: () => api<FormVersion>(`form-versions/${vid}`) });
+  const version = useQuery({ queryKey: ["version", vid], enabled: !!vid, queryFn: ({ signal }) => api<FormVersion>(`form-versions/${vid}`, { signal }) });
   const lists = useList<MasterList>("master-lists", "master-lists");
   const v = version.data;
   const [local, setLocal] = useState<FormPage[] | null>(null);

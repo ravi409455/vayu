@@ -11,10 +11,10 @@ export type Usage = { template: number; form: string; draft?: number; published?
 export type SharedItem = { id: number; kind: "theme" | "snippet"; key: string; name: string; revision: number; used_by: Usage[]; content?: unknown };
 
 export function usePictures() {
-  return useQuery({ queryKey: ["pdf-pictures"], queryFn: () => api<Picture[]>("pdf-pictures") });
+  return useQuery({ queryKey: ["pdf-pictures"], queryFn: ({ signal }) => api<Picture[]>("pdf-pictures", { signal }) });
 }
 export function useShared() {
-  return useQuery({ queryKey: ["pdf-shared"], queryFn: () => api<SharedItem[]>("pdf-shared") });
+  return useQuery({ queryKey: ["pdf-shared"], queryFn: ({ signal }) => api<SharedItem[]>("pdf-shared", { signal }) });
 }
 /** One version of a shared item's content (what a template using it shows). */
 export function useSharedContent<T>(item: SharedItem | undefined, revision: number | undefined) {

@@ -104,10 +104,10 @@ function SharedEditor({ item, all, templates, forms, editable, onBack }: {
   const host = templates.find((t) => t.id === tid);
   const form = forms.find((f) => f.id === host?.form);
   const hostVersion = host && (host.versions.find((v) => v.status === "draft") ?? host.versions[host.versions.length - 1]);
-  const hv = useQuery({ queryKey: ["pdf-version", hostVersion?.id], enabled: !!hostVersion, queryFn: () => api<TVersion>(`pdf-template-versions/${hostVersion!.id}`) });
+  const hv = useQuery({ queryKey: ["pdf-version", hostVersion?.id], enabled: !!hostVersion, queryFn: ({ signal }) => api<TVersion>(`pdf-template-versions/${hostVersion!.id}`, { signal }) });
   const content = useQuery({ queryKey: ["pdf-shared", item.id, item.revision], queryFn: async () => (await api<SharedItem>(`pdf-shared/${item.id}`)).content });
   const formVersionId = form?.draft_version?.id ?? form?.published_version?.id;
-  const tree = useQuery({ queryKey: ["form-version", formVersionId], enabled: !!formVersionId, queryFn: () => api<FormVersion>(`form-versions/${formVersionId}`) });
+  const tree = useQuery({ queryKey: ["form-version", formVersionId], enabled: !!formVersionId, queryFn: ({ signal }) => api<FormVersion>(`form-versions/${formVersionId}`, { signal }) });
   const choices = useRefChoices(host?.form ?? 0);
   const sample = useQuery({ queryKey: ["pdf-sample", form?.inspection_type], enabled: !!form?.inspection_type,
     queryFn: async () => (await Promise.all(["completed", "submitted"].map((stage) => api<Page<Booking>>("bookings", { query: { type: form!.inspection_type, stage } })))).flatMap((r) => r.results) });

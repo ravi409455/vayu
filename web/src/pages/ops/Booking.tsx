@@ -67,10 +67,10 @@ function Detail({ id }: { id: string }) {
   const { can } = useAuth();
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const b = useQuery({ queryKey: ["booking", id], queryFn: () => api<Booking>(`bookings/${id}`) });
+  const b = useQuery({ queryKey: ["booking", id], queryFn: ({ signal }) => api<Booking>(`bookings/${id}`, { signal }) });
   useCrumb(b.data?.booking_id);
-  const insps = useQuery({ queryKey: ["inspections", id], queryFn: () => fetchAll<Inspection>(`bookings/${id}/inspections`) });
-  const activity = useQuery({ queryKey: ["activity", id], queryFn: () => api<Activity[]>(`bookings/${id}/activity`) });
+  const insps = useQuery({ queryKey: ["inspections", id], queryFn: ({ signal }) => fetchAll<Inspection>(`bookings/${id}/inspections`, undefined, signal) });
+  const activity = useQuery({ queryKey: ["activity", id], queryFn: ({ signal }) => api<Activity[]>(`bookings/${id}/activity`, { signal }) });
   const [tab, setTab] = useState<Tab | null>(null);
   const [action, setAction] = useState<null | ActionKind>(null);
   const [reviewing, setReviewing] = useState("");
@@ -256,7 +256,7 @@ export function WaitingFiles({ booking, onFinished, onMedia }: { booking: Bookin
   const { fail, say } = useToast();
   const [asking, setAsking] = useState(false);
   const q = useQuery({ queryKey: ["missing-files", booking.id, booking.row_version],
-    queryFn: () => api<{ missing: Missing[]; can_finish: boolean }>(`bookings/${booking.id}/missing-files`) });
+    queryFn: ({ signal }) => api<{ missing: Missing[]; can_finish: boolean }>(`bookings/${booking.id}/missing-files`, { signal }) });
   const missing = q.data?.missing ?? [];
   if (!missing.length) return null;
   const total = missing.reduce((n, m) => n + m.count, 0);
@@ -543,7 +543,7 @@ function MediaTab({ booking, insp, trees, onChanged }: { booking: Booking; insp?
   const [sel, setSel] = useState<string | null>(null);
   const fields = useMemo(() => mediaFields(trees), [trees]);
   const onServer = useQuery({ queryKey: ["booking-media", booking.id], enabled: can("media.manage"),
-    queryFn: () => api<{ id: string; by_ops: boolean }[]>(`bookings/${booking.id}/media`) });
+    queryFn: ({ signal }) => api<{ id: string; by_ops: boolean }[]>(`bookings/${booking.id}/media`, { signal }) });
   const byOps = new Set((onServer.data ?? []).filter((m) => m.by_ops).map((m) => m.id));
   // Ops add or replace photos and videos once the expert has submitted; nobody deletes
   if (!insp) return <Empty title="No inspection yet">Photos and videos show here once the expert starts uploading.</Empty>;
@@ -845,7 +845,7 @@ export function Actions({ kind, booking, experts, onClose, onDone, fail }: { kin
   const [time, setTime] = useState(String(booking.answers.inspection_time ?? ""));
   const [reason, setReason] = useState("");
   const [type, setType] = useState(booking.inspection_type);
-  const reasons = useQuery({ queryKey: ["list-items", kind === "cancel" ? "cancel_reason" : "reschedule_reason"], enabled: kind === "cancel" || kind === "reschedule", queryFn: () => fetchAll<MasterListItem>(`master-lists/${kind === "cancel" ? "cancel_reason" : "reschedule_reason"}/items`) });
+  const reasons = useQuery({ queryKey: ["list-items", kind === "cancel" ? "cancel_reason" : "reschedule_reason"], enabled: kind === "cancel" || kind === "reschedule", queryFn: ({ signal }) => fetchAll<MasterListItem>(`master-lists/${kind === "cancel" ? "cancel_reason" : "reschedule_reason"}/items`, undefined, signal) });
   const types = useInspectionTypes();
   const typeLabel = useTypeLabels();
   const [busy, setBusy] = useState(false);

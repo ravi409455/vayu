@@ -72,7 +72,7 @@ function DeliveryLog({ integration, onClose }: { integration: Integration; onClo
   const { say, fail } = useToast();
   const refresh = useRefresh();
   const [status, setStatus] = useState("");
-  const q = useQuery({ queryKey: ["deliveries", integration.id, status], queryFn: () => api<Page<Delivery>>(`integrations/${integration.id}/deliveries`, { query: { status } }) });
+  const q = useQuery({ queryKey: ["deliveries", integration.id, status], queryFn: ({ signal }) => api<Page<Delivery>>(`integrations/${integration.id}/deliveries`, { query: { status }, signal }) });
   const resend = useMutation({ mutationFn: (d: Delivery) => api(`deliveries/${d.id}/resend`, { body: {} }), onSuccess: () => { say("Re-sent."); void refresh("deliveries"); }, onError: fail });
   return (
     <Modal wide title={`Deliveries: ${integration.name}`} onClose={onClose}>

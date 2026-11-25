@@ -27,8 +27,8 @@ type R = (typeof ROLES)[number];
 export function Roles() {
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const perms = useQuery({ queryKey: ["permissions"], queryFn: () => api<PermissionRow[]>("permissions") });
-  const roles = useQuery({ queryKey: ["roles"], queryFn: () => api<RoleRow[]>("roles") });
+  const perms = useQuery({ queryKey: ["permissions"], queryFn: ({ signal }) => api<PermissionRow[]>("permissions", { signal }) });
+  const roles = useQuery({ queryKey: ["roles"], queryFn: ({ signal }) => api<RoleRow[]>("roles", { signal }) });
   const saved = (r: R): Grants => roles.data?.find((x) => x.role === r)?.permissions ?? {};
   const [draft, setDraft] = useState<Record<R, Grants>>({ ops: {}, expert: {} });
   useEffect(() => { if (roles.data) setDraft({ ops: saved("ops"), expert: saved("expert") }); }, [roles.data]); // eslint-disable-line react-hooks/exhaustive-deps

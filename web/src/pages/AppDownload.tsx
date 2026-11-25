@@ -10,7 +10,7 @@ const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 /** The Android app for experts and Ops: the newest build, straight from our server (signed in only,
  *  REQUIREMENTS §10), with its checksum so it can be checked before installing. */
 export function AppDownload() {
-  const q = useQuery({ queryKey: ["app-latest"], queryFn: () => api<Latest>("app/latest") });
+  const q = useQuery({ queryKey: ["app-latest"], queryFn: ({ signal }) => api<Latest>("app/latest", { signal }) });
   const r = q.data;
   return (
     <div style={{ maxWidth: 680 }}>

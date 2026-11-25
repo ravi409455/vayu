@@ -35,7 +35,7 @@ function ListLabel({ list, value }: { list: string; value: unknown }) {
 }
 
 function UserName({ role, id }: { role: string; id: unknown }) {
-  const q = useQuery({ queryKey: ["users-by-role", role], retry: false, staleTime: 300_000, queryFn: () => fetchAll<User>("users", { role }) });
+  const q = useQuery({ queryKey: ["users-by-role", role], retry: false, staleTime: 300_000, queryFn: ({ signal }) => fetchAll<User>("users", { role }, signal) });
   const u = q.data?.find((x) => x.id === id);
   return <>{u ? u.name || u.username : `#${String(id)}`}</>;
 }
