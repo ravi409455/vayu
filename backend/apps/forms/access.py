@@ -83,7 +83,10 @@ def levels_for(version, role: str, stage: str) -> dict[str, str]:
 
 
 @lru_cache(maxsize=512)
-def _published_levels(version_id: int, kind: str, role: str) -> dict[str, dict[str, str]]:
+def _published_levels(version_id: int, stamp: str, kind: str, role: str
+                      ) -> dict[str, dict[str, str]]:
+    """[stamp]: the version's published_at and row_version, so an entry made from other content
+    (a publish that rolled back, an id reused after a data reset) is never hit."""
     rows = _rows(version_id)
     return {stage: _levels(rows, kind, role, stage) for stage in STAGES}
 
@@ -92,7 +95,8 @@ def levels_by_stage(version, role: str) -> dict[str, dict[str, str]]:
     """{stage: levels_for(version, role, stage)}. A published version never changes, so its
     answer is kept in memory (bounded); treat it as read-only. A draft is read each time."""
     if version.status == "published":
-        return _published_levels(version.id, version.form.type, role)
+        stamp = f"{version.published_at}|{version.row_version}"
+        return _published_levels(version.id, stamp, version.form.type, role)
     rows = _rows(version.id)
     return {stage: _levels(rows, version.form.type, role, stage) for stage in STAGES}
 
