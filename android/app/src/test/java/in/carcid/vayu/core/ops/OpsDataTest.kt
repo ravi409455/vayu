@@ -38,7 +38,7 @@ class OpsDataTest {
             "url":"/api/v1/bookings/b/report/download","preview_url":null,"something_new":1}"""))!!
         assertEquals(3, r.revision); assertEquals("ready", r.status); assertEquals(true, r.outOfDate)
         assertEquals(false, r.regenerate.allowed); assertEquals("Choose which inspection counts first.", r.regenerate.reason)
-        assertEquals("", r.error); assertEquals("https://v/x", r.verifyUrl); assertNotNull(r.url)
+        assertEquals("", r.error); assertNotNull(r.url)
         assertNull(Report.from(kotlinx.serialization.json.Json.parseToJsonElement("""{"code":"NO_REPORT"}""")).takeIf { it?.status?.isNotEmpty() == true })
     }
 

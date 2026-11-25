@@ -30,7 +30,6 @@ data class Report(
     val regenerate: Regenerate = Regenerate(),
     @SerialName("generated_at") val generatedAt: String? = null,
     val error: String = "",
-    @SerialName("verify_url") val verifyUrl: String = "",
     /** The PDF through the server (logged); null until ready. */
     val url: String? = null,
 ) {

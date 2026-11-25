@@ -52,8 +52,9 @@ import java.io.File
 
 /**
  * The PDF report on the booking screen. It updates by itself after any change (the card says
- * "Updating…" and checks again until it's done); Open · Share · Check link. Opening downloads it
- * through the server (logged); sharing the PDF or the check link is logged too.
+ * "Updating…" and checks again until it's done); Open · Share. Opening downloads it through the
+ * server (logged); sharing the PDF is logged too. The check link is printed in the PDF, so there
+ * is no button for it here.
  */
 @Composable
 fun ReportCard(env: OpsEnv, id: String, b: Bk) {
@@ -95,9 +96,9 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
         }
     }
     fun uriOf(f: File) = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", f)
-    // who passed it on, and how, goes on the booking's history first; no record, no share
-    suspend fun logShared(how: String): Boolean = try {
-        env.data.act("POST", "bookings/$id/report/shared", buildJsonObject { put("how", how) }); true
+    // who passed the PDF on goes on the booking's history first; no record, no share
+    suspend fun logShared(): Boolean = try {
+        env.data.act("POST", "bookings/$id/report/shared", buildJsonObject { put("how", "pdf") }); true
     } catch (e: ApiError) { env.say("Couldn't record the share. Check the signal and try again."); false }
     Column(Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Vayu.colors.soft).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -116,14 +117,10 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
             CardButton("Open", Modifier.weight(1f), online) { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }
             CardButton("Share", Modifier.weight(1f), online) { scope.launch {
                 file()?.let {
-                    if (!logShared("pdf")) return@launch
+                    if (!logShared()) return@launch
                     ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/pdf")
                         .putExtra(Intent.EXTRA_STREAM, uriOf(it)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Share the report"))
                 } ?: env.say("Couldn't download the report.")
-            } }
-            if (rep!!.verifyUrl.isNotBlank()) CardButton("Check link", Modifier.weight(1f), online) { scope.launch {
-                if (!logShared("check_link")) return@launch
-                ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, rep!!.verifyUrl), "Share the check link"))
             } }
         }
         // F-219: reports are made again only when Ops press Regenerate (one tap, one request)
