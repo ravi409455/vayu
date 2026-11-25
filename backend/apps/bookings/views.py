@@ -87,8 +87,10 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
             qs = qs.exclude(conflict="")
         elif problem == "type_change":
             qs = qs.filter(alerts__contains=[{"code": "TYPE_CHANGE_REJECTED"}])
+        elif problem == "unverified_time":            # stamped on an unchecked phone clock
+            qs = qs.filter(unverified_time=True)
         elif problem:
-            raise ValidationError({"problem": "Use conflict or type_change."})
+            raise ValidationError({"problem": "Use conflict, type_change or unverified_time."})
         if p.get("timing") or p.get("reviewed"):          # started late / finished too quickly
             if scope_for(self.request.user, "bookings.review_timing", self.request) is None:
                 raise PermissionDenied("You may not see timing flags.")
@@ -230,6 +232,9 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
             {part: request.data.get(key) for part, key in (
                 ("inspection", "form_version"), ("start", "start_version"),
                 ("end", "end_version"))})
+        if request.data.get("unverified_time") is True:
+            submissions.mark_unverified_time(b, insp)
+            insp.refresh_from_db()
         ctx = self.get_serializer_context()
         return Response({
             "booking": BookingSerializer(Booking.objects.get(pk=b.pk), context=ctx).data,
@@ -257,6 +262,9 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         b, insp = submissions.submit(
             request.user, self.get_object(), self._uuid("client_submission_uuid"),
             request.data.get("answers") or {}, version if isinstance(version, int) else None)
+        if request.data.get("unverified_time") is True:        # sent on every submit (F-222)
+            submissions.mark_unverified_time(b, insp)
+            insp.refresh_from_db()
         ctx = self.get_serializer_context()
         return Response({
             "booking": BookingSerializer(Booking.objects.get(pk=b.pk), context=ctx).data,

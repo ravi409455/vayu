@@ -1128,6 +1128,29 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/ext/bookings/{ref}/{action}:
+    post:
+      operationId: ext_bookings_create_2
+      description: |-
+        POST ext/bookings/<ref>/<action>: assign (or reassign) {"expert"}, cancel {"reason"},
+        reschedule {"date", "time", "reason"}, change-type {"inspection_type"}. Each one is a flag on
+        the key, off by default (F-228); audited; the same rules and webhooks as on the web.
+      parameters:
+      - in: path
+        name: action
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: ref
+        schema:
+          type: string
+        required: true
+      tags:
+      - ext
+      responses:
+        '200':
+          description: No response body
   /api/v1/ext/bookings/{ref}/inspection:
     get:
       operationId: ext_bookings_inspection_retrieve
@@ -3579,6 +3602,8 @@ components:
         withdrawn_expert:
           type: integer
           nullable: true
+        unverified_time:
+          type: boolean
       required:
       - booking_id
       - finished_at
@@ -3804,6 +3829,8 @@ components:
         created_at:
           type: string
           format: date-time
+        unverified_time:
+          type: boolean
       required:
       - booking
       - end_version
@@ -4152,6 +4179,8 @@ components:
         withdrawn_expert:
           type: integer
           nullable: true
+        unverified_time:
+          type: boolean
     PatchedCheck:
       type: object
       properties:
@@ -4281,6 +4310,8 @@ components:
         created_at:
           type: string
           format: date-time
+        unverified_time:
+          type: boolean
     PatchedLibraryItem:
       type: object
       properties:

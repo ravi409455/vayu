@@ -145,7 +145,7 @@ forms at the end of the day; the app keeps its generic nature").
 - **A second submit** by the same expert on a lead they already submitted is **refused** ("Already submitted; Ops can edit it"); the same request id still returns the first result.
 - **Logout is blocked while data is unsynced.** If Admin disables an account with unsynced data, the Admin sees a data-loss warning.
 - **Web sign-out** first says what the browser still holds that has not reached the office (inspection drafts, photos and files not sent or not checked yet); signing out anyway deletes them. Every sign-out clears the inspection drafts and queued files from that browser, so nothing stays behind on a shared computer.
-- **Time:** server-corrected using the offset from the last sync. If there's been no sync that day, the last known offset is used and the time is **flagged "unverified"**.
+- **Time:** server-corrected using the offset from the last sync. If there's been no sync that day, the last known offset is used and the time is **flagged "unverified"**. The phone sends `unverified_time` with the start and every submit; the server keeps it (once true, it stays true) on the inspection and its booking, the booking API shows it and the Ops problem queue lists it (`problem=unverified_time`).
 
 ## 7. PDF reports
 - **v1 includes a basic block designer** (web), with one template per inspection form and its own draft → preview → publish (built on staging, promoted with the form).
@@ -180,7 +180,7 @@ forms at the end of the day; the app keeps its generic nature").
   - **Preview** shows the whole request live (method, final URL, headers, body) for the latest job, a job picked by Booking ID, or sample values when the form has no job; it never sends anything or builds a ZIP.
   - **No HMAC signing:** the receiving system is authenticated by a token Admin puts in a header (over https). Retried with backoff, delivery log with re-send, test button (sends the designed request, marked `X-Vayu-Test`).
   - **Links:** PDF links are signed with 7-day expiry. **ZIP links open a "Preparing… x%" page**, which builds the ZIP once, caches it for 7 days, then downloads automatically.
-- **REST API:** full CRUD via **API keys scoped to forms and fields**.
+- **REST API:** full CRUD via **API keys scoped to forms and fields**. A key may also **assign / reassign, cancel, reschedule and change type** (`POST ext/bookings/{ref}/assign|cancel|reschedule|change-type`), each a flag on the key that the Admin turns on (off by default, like delete); every action is audited and fires the same webhooks as on the web.
   - **Delete is off by default** per key; Admin must grant it explicitly.
   - Writes use field keys, bulk updates are supported, and booking lookup works by internal ID (primary) or Booking ID.
   - Auto-generated **Swagger** docs. No rate limiting.

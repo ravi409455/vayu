@@ -27,7 +27,8 @@ class BookingSerializer(serializers.ModelSerializer):
         fields = ["id", "booking_id", "stage", "ops_status", "inspection_type", "assigned_expert",
                   "answers", "row_version", "started_at", "finished_at", "cancel_reason",
                   "released_by", "released_draft_expected", "last_edited_by", "last_edited_at",
-                  "reschedules", "created_at", "conflict", "alerts", "withdrawn_expert"]
+                  "reschedules", "created_at", "conflict", "alerts", "withdrawn_expert",
+                  "unverified_time"]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -64,8 +65,7 @@ class InspectionSerializer(serializers.ModelSerializer):
         model = Inspection
         fields = ["id", "booking", "expert", "status", "answers", "scores", "overrides",
                   "row_version", "form_version", "start_version", "end_version", "submitted_at",
-                  "last_edited_by",
-                  "last_edited_at", "created_at"]
+                  "last_edited_by", "last_edited_at", "created_at", "unverified_time"]
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

@@ -354,6 +354,13 @@ def _locked_keys(role: str, stage: str, pinned: dict, answers: dict, old: dict) 
     return sorted(locked)
 
 
+def mark_unverified_time(b: Booking, insp: Inspection) -> None:
+    """The phone says its clock was not checked when it stamped this work: once true, it stays
+    true, for the inspection and its booking (F-222)."""
+    Inspection.objects.filter(pk=insp.pk).update(unverified_time=True)
+    Booking.objects.filter(pk=b.pk).update(unverified_time=True)
+
+
 def submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id=None):
     try:
         return _submit(actor, b, submission_uuid, answers, form_version_id)

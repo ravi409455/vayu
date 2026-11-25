@@ -68,6 +68,9 @@ class ApiKey(models.Model):
     # {"forms": {"<form key>": ["field", ...] | ["*"]}}: what the key may read and write
     scope = models.JSONField(default=dict)
     allow_delete = models.BooleanField(default=False)
+    # booking actions the key may take, each off until an Admin allows it (F-228): assign
+    # (and reassign), cancel, reschedule, change_type
+    allowed_actions = models.JSONField(default=list, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True,

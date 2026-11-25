@@ -50,6 +50,8 @@ class Booking(models.Model):
     withdrawn_expert = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                          on_delete=models.PROTECT, related_name="+")
     alerts = models.JSONField(default=list)        # [{"code": ..., "at": ..., "detail": ...}]
+    # an inspection on it was done while the phone's clock was not checked (F-222)
+    unverified_time = models.BooleanField(default=False)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT,
                                    related_name="+")
     created_at = models.DateTimeField(default=timezone.now)
@@ -117,6 +119,8 @@ class Inspection(models.Model):
                                        on_delete=models.PROTECT, related_name="+")
     last_edited_at = models.DateTimeField(null=True, blank=True)
     client_started_at = models.DateTimeField(null=True, blank=True)
+    # the phone's clock was not checked against the server at some point (true wins, F-222)
+    unverified_time = models.BooleanField(default=False)
     client_start_uuid = models.UUIDField(null=True, blank=True, unique=True)
     client_submission_uuid = models.UUIDField(null=True, blank=True, unique=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
