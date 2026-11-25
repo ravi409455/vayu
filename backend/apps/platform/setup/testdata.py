@@ -328,7 +328,7 @@ TYPES = ["pdi", "used_car", "ev"]
 def field_tour(admin) -> None:
     """The Field tour form (every field type once, demo_forms): test servers only. Publishing it
     adds "Field tour" to the booking's inspection types."""
-    from apps.core import demo_forms
+    from apps.platform import demo_forms
 
     from . import reports
 

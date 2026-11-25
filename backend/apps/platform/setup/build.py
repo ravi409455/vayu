@@ -1,4 +1,4 @@
-"""Puts a converted spec (apps/core/setup/clappia.py) into a form: builds a draft, publishes it.
+"""Puts a converted spec (apps/platform/setup/clappia.py) into a form: builds a draft, publishes it.
 Running it again with the same spec changes nothing; a different spec publishes a new version
 (inspections already started keep theirs)."""
 import json
@@ -63,6 +63,10 @@ def apply(admin, form: Form, spec: dict, extra: dict | None = None, force: bool 
     system = {f.key: f for f in Field.objects.filter(version=live, is_system=True)} if live \
         else {}
     if live is not None:
+        if "rating_config" in extra:          # it goes live by section key (F-045)
+            from apps.scoring.service import section_keys
+
+            extra = {**extra, "rating_config": section_keys(live, extra["rating_config"])}
         want = _spec_rows(_with_system(spec, system), extra)
         if want == _version_rows(live, tuple(extra)):
             return "unchanged"

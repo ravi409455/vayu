@@ -48,3 +48,22 @@ def test_an_event_nobody_declared_is_refused():
 
     with pytest.raises(ValueError, match="Unknown event"):
         events.emit("booking.udpated", booking="x")
+
+
+def test_core_is_the_bottom_layer_and_imports_no_other_app():
+    """F-003: core (errors, events, tasks, settings, logging) is used by every app and uses none;
+    setup, demo and test data live in apps.platform, on top. testing.py holds test fixtures."""
+    import ast
+    from pathlib import Path
+
+    core = Path(__file__).resolve().parents[1]
+    others = ("accounts", "bookings", "forms", "media", "reports", "integrations", "notify",
+              "scoring", "platform")
+    for path in core.rglob("*.py"):
+        if "tests" in path.parts or "migrations" in path.parts or path.name == "testing.py":
+            continue
+        for node in ast.walk(ast.parse(path.read_text())):
+            module = node.module if isinstance(node, ast.ImportFrom) else None
+            names = [a.name for a in node.names] if isinstance(node, ast.Import) else []
+            for m in [module or "", *names]:
+                assert not any(m.startswith(f"apps.{o}") for o in others), (path.name, m)

@@ -16,7 +16,7 @@ ITEMS = {"city": [("delhi", "Delhi"), ("pune", "Pune")],
 
 class Command(BaseCommand):
     def handle(self, *args, **options):
-        from apps.core.setup.testdata import WIPEABLE, remember_kind, stored_kind
+        from apps.platform.setup.testdata import WIPEABLE, remember_kind, stored_kind
 
         if settings.SETTINGS_MODULE != "vayu.settings.e2e":
             raise CommandError("e2e_reset only runs with DJANGO_SETTINGS_MODULE=vayu.settings.e2e")

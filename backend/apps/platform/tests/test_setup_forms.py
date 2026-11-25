@@ -1,10 +1,10 @@
-"""The setup's forms, each built from its own Clappia app read-out (apps/core/setup/data)."""
+"""The setup's forms, each built from its own Clappia app read-out (apps/platform/setup/data)."""
 import pytest
 
 from apps.accounts.models import Role, User
-from apps.core.setup import build, forms, lists
 from apps.forms.models import Field, Form
 from apps.media.tests.conftest import s3  # noqa: F401  (in-memory storage for the logo)
+from apps.platform.setup import build, forms, lists
 
 pytestmark = pytest.mark.django_db
 
@@ -106,7 +106,7 @@ def test_system_fields_take_clappias_place_and_rules_point_at_our_keys(admin):
 
 
 def test_each_inspection_gets_its_report_in_the_pdi_design(admin, s3):  # noqa: F811
-    from apps.core.setup import reports
+    from apps.platform.setup import reports
     from apps.reports.models import PdfTemplate
 
     put_all(admin)

@@ -31,7 +31,7 @@ curl -fsS https://app.carcid.in/api/v1/health
 ```
 
 ## 4. Forms, reports, lists and staff
-Write the staff file (see `backend/apps/core/setup/users.example.csv`): `username,name,role,phone,password`,
+Write the staff file (see `backend/apps/platform/setup/users.example.csv`): `username,name,role,phone,password`,
 at least one `admin`. Then:
 ```bash
 docker compose -f infra/docker-compose.prod.yml --env-file .env.prod exec api python manage.py setup_platform --users /tmp/staff.csv

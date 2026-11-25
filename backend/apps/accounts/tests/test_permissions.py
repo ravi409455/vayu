@@ -318,7 +318,7 @@ PUBLIC_OR_AUTHENTICATED_ONLY = {"HealthView", "LoginView", "DeviceCheckedRefresh
                                 "AppDownloadView",
                                 # API-key views: authorised by the key and its scope
                                 "Bookings", "BookingDetail", "BulkBookings", "FormAssetShow",
-                                "BookingInspection"}
+                                "BookingInspection", "BookingAction"}
 
 
 def _all_views():

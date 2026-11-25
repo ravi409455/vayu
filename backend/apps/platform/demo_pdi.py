@@ -5,15 +5,15 @@ Every check is a choice from a named option set; each answer carries its print c
 and, when it is a problem, a severity. A check gets a photo (shown and required when the answer
 is a problem) and, on the body frame, a remark. Key Checks are worked out from the answers."""
 
-from apps.core.setup.pdi_report import (  # noqa: F401  (the demo seed reads them here)
+from apps.forms import services as form_services
+from apps.forms.models import Field, Page, Section, VersionCheck
+from apps.platform.setup.pdi_report import (  # noqa: F401  (the demo seed reads them here)
     CATEGORIES,
     CNG,
     TYRES,
     key_checks_list,
     pdf_definition,
 )
-from apps.forms import services as form_services
-from apps.forms.models import Field, Page, Section, VersionCheck
 
 # ---------------------------------------------------------------- option sets
 # (key, label, tone, severity or None)
