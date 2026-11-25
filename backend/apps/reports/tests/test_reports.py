@@ -846,6 +846,12 @@ def test_a_storage_failure_is_recorded_as_such(renv, settings, monkeypatch):
     r = renv.ops.post(f"/api/v1/pdf-template-versions/{draft['id']}/preview",
                       {"booking": b["id"]}, format="json")
     assert r.status_code == 403                 # template editing is Admin-only (R-34)
+    from unittest import mock
+
+    with mock.patch("apps.reports.views.scope_for", return_value=None):   # no reports.view
+        r = renv.admin.post(f"/api/v1/pdf-template-versions/{draft['id']}/preview",
+                            {"booking": b["id"]}, format="json")
+    assert r.status_code == 403 and r.json()["code"] == "FORBIDDEN"
 
 
 @pytest.mark.real_commit

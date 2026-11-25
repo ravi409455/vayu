@@ -93,8 +93,10 @@ class Preview(APIView):
     permission_classes = [perm("pdf_templates.edit")]
 
     def post(self, request, pk):
-        # template editing is Admin-only (R-34), and the Admin may see every report
         tv = get_object_or_404(PdfTemplateVersion.objects.select_related("template__form"), pk=pk)
+        # template editing is Admin-only now (R-34); kept in case that ever changes
+        if scope_for(request.user, "reports.view", request) is None:
+            raise err("FORBIDDEN", "Previews use real data, so they need reports.view.", 403)
         booking = _report_booking(request, request.data.get("booking"))
         insp = booking.counted_inspection()
         if insp is None or insp.form_version.form_id != tv.template.form_id:
