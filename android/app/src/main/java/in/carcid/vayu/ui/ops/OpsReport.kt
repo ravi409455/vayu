@@ -2,6 +2,7 @@ package `in`.carcid.vayu.ui.ops
 
 
 
+import `in`.carcid.vayu.core.ops.Report
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,30 +60,30 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val r = rememberLoad(env, "bookings/$id/report")
-    var rep by remember(r.value) { mutableStateOf(r.value?.data as? JsonObject) }
+    var rep by remember(r.value) { mutableStateOf(Report.from(r.value?.data)) }
     val online = r.value?.offline != true
-    val updating = rep?.s("updating") == "true"
-    val outOfDate = rep?.s("out_of_date") == "true"
+    val updating = rep?.updating == true
+    val outOfDate = rep?.outOfDate == true
     // the server says whether Regenerate can be pressed now, and why not
-    val regen = rep?.o("regenerate")
+    val regen = rep?.regenerate
     var sending by remember { mutableStateOf(false) }
     // while a new revision is being made, look again every few seconds until it's done
     LaunchedEffect(updating, id) {
-        while (rep?.s("updating") == "true") {
+        while (rep?.updating == true) {
             kotlinx.coroutines.delay(4000)
-            val now = try { env.data.api.get("bookings/$id/report") as? JsonObject } catch (e: ApiError) { null } ?: continue
+            val now = try { Report.from(env.data.api.get("bookings/$id/report")) } catch (e: ApiError) { null } ?: continue
             rep = now
-            if (now.s("updating") != "true") env.refresh()
+            if (!now.updating) env.refresh()
         }
     }
     // one download per revision: kept on the phone until a newer one is made
     suspend fun file(): File? {
-        if (rep?.s("url").isNullOrBlank()) return null
+        if (rep?.url.isNullOrBlank()) return null
         val code = b.code.filter { it.isLetterOrDigit() || it == '-' }
         val dir = File(ctx.cacheDir, "reports").apply { mkdirs() }
         // kept only under a real revision number and its time; without them, always a fresh download
-        val rev = rep?.s("revision")?.takeIf { it.isNotBlank() && it.all(Char::isDigit) }
-        val made = rep?.s("generated_at").orEmpty().filter { it.isDigit() }
+        val rev = rep?.revision?.toString()
+        val made = rep?.generatedAt.orEmpty().filter { it.isDigit() }
         // our own name, never the server's (no path tricks in the cache folder)
         val f = File(dir, if (rev != null && made.isNotEmpty()) "report-$code-$rev-$made.pdf" else "report-$code-latest.pdf")
         if (rev != null && made.isNotEmpty() && f.exists()) return f
@@ -100,18 +101,18 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
     } catch (e: ApiError) { env.say("Couldn't record the share. Check the signal and try again."); false }
     Column(Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Vayu.colors.soft).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        val failed = rep?.s("status") == "failed"
+        val failed = rep?.status == "failed"
         Text(when {
             b.conflict.isNotEmpty() -> "Waits for your choice above"
             rep == null -> if (b.stage == "completed") "Being made" else "Made when the booking is completed"
             updating -> "Updating…"
             failed -> "Couldn't be made · tried again by itself"
-            rep!!.s("status") == "ready" -> (if (outOfDate) "Out of date" else "Ready") + (rep!!.s("generated_at").takeIf { it.isNotBlank() }?.let { " · made ${whenStamp(it, env.today()).replaceFirstChar { c -> c.lowercase() }}" } ?: "")
+            rep!!.status == "ready" -> (if (outOfDate) "Out of date" else "Ready") + (rep!!.generatedAt?.takeIf { it.isNotBlank() }?.let { " · made ${whenStamp(it, env.today()).replaceFirstChar { c -> c.lowercase() }}" } ?: "")
             else -> "Being made"
         }, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
-        if (failed && rep?.s("error")?.isNotBlank() == true) Note(rep!!.s("error"), Vayu.colors.badTint)
+        if (failed && rep?.error?.isNotBlank() == true) Note(rep!!.error, Vayu.colors.badTint)
         if (outOfDate && !updating) Note("Something it shows changed since it was made. Regenerate it when you're done.", Vayu.colors.warnTint)
-        if (rep?.s("url")?.isNotBlank() == true) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (rep?.url?.isNotBlank() == true) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CardButton("Open", Modifier.weight(1f), online) { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }
             CardButton("Share", Modifier.weight(1f), online) { scope.launch {
                 file()?.let {
@@ -120,24 +121,24 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
                         .putExtra(Intent.EXTRA_STREAM, uriOf(it)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Share the report"))
                 } ?: env.say("Couldn't download the report.")
             } }
-            if (rep!!.s("verify_url").isNotBlank()) CardButton("Check link", Modifier.weight(1f), online) { scope.launch {
+            if (rep!!.verifyUrl.isNotBlank()) CardButton("Check link", Modifier.weight(1f), online) { scope.launch {
                 if (!logShared("check_link")) return@launch
-                ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, rep!!.s("verify_url")), "Share the check link"))
+                ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, rep!!.verifyUrl), "Share the check link"))
             } }
         }
         // F-219: reports are made again only when Ops press Regenerate (one tap, one request)
         if (rep != null && env.can("submissions.edit")) {
-            val allowed = regen?.s("allowed") == "true"
+            val allowed = regen?.allowed == true
             CardButton(if (sending) "Regenerating…" else "Regenerate", Modifier.fillMaxWidth(), online && allowed && !sending) {
                 sending = true
                 scope.launch {
                     try {
                         env.data.act("POST", "bookings/$id/report/regenerate")
-                        rep = (env.data.api.get("bookings/$id/report") as? JsonObject) ?: rep
+                        rep = Report.from(env.data.api.get("bookings/$id/report")) ?: rep
                     } catch (e: ApiError) { env.say(e.message) } finally { sending = false }
                 }
             }
-            if (!allowed && regen?.s("reason")?.isNotBlank() == true) Text(regen.s("reason"), fontSize = 13.sp, color = Vayu.colors.muted)
+            if (!allowed && regen?.reason?.isNotBlank() == true) Text(regen.reason, fontSize = 13.sp, color = Vayu.colors.muted)
         }
     }
 }
