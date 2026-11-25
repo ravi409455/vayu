@@ -16,7 +16,7 @@ export function ContainerEditor({ kind, item, pages, choices, formKind, parentAc
   const make = () => ({ title: item.title, visible: item.visible, show_if: item.show_if, access: item.access, gate: "gate" in item ? item.gate : false });
   const [d, setD] = useState(make);
   const [pane, setPane] = useState<Pane>("settings");
-  useEffect(() => setD(make()), [item.id, item.title, item.visible, item.show_if, item.access, "gate" in item && item.gate]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setD(make()), [item.id, item.title, item.visible, item.show_if, item.access, "gate" in item && item.gate]); // eslint-disable-line react-hooks/exhaustive-deps -- resets the draft only when the saved values change, not for a new object with the same values
   const locked = "locked" in item && item.locked;
   const dirty = JSON.stringify(d) !== JSON.stringify(make());
   const section = kind === "section" ? (item as FormSection) : null;

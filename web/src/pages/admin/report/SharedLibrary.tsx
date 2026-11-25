@@ -113,7 +113,7 @@ function SharedEditor({ item, all, templates, forms, editable, onBack }: {
     if (content.data === undefined || (theme && !hv.data)) return;
     if (theme) setDef(withIds({ ...withoutTheme(hv.data!.definition), theme_ref: undefined, ...(content.data as ThemeContent) }));
     else setDef(withIds({ schema: 2, pages: [{ title: item.name, style: "normal", parts: (content.data as { parts: Part[] }).parts }] }));
-  }, [content.data, hv.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [content.data, hv.data]); // eslint-disable-line react-hooks/exhaustive-deps -- builds the edited copy once its content and host version arrive, not when the name or kind re-render
   const edit = (d: Definition) => { setDef(d); setDirty(true); };
   const [sel, setSel] = useState<Sel>(null);
   const [settings, setSettings] = useState(theme);
@@ -133,7 +133,7 @@ function SharedEditor({ item, all, templates, forms, editable, onBack }: {
       .then((r) => { if (n === ticket.current) setPreview(r); })
       .catch((e) => { if (n === ticket.current) fail(e); })
       .finally(() => { if (n === ticket.current) setRendering(false); });
-  }, [shown, chosen, hv.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [shown, chosen, hv.data]); // eslint-disable-line react-hooks/exhaustive-deps -- re-renders the preview only for a new definition, booking or host version; fail is a fresh function each render
 
   const fields = useMemo(() => choices.map((c) => ({ value: c.value, label: c.label, type: c.type })), [choices]);
   const snippets = all.filter((i) => i.kind === "snippet" && i.id !== item.id);       // never inside itself

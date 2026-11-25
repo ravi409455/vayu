@@ -42,7 +42,7 @@ export function LibraryEditor() {
   const [error, setError] = useState("");
   const [values, setValues] = useState<Record<string, unknown>>({});
   const it = item.data;
-  useEffect(() => { if (it) { setDef(it.definition); setName(it.name); setPick(null); } }, [it?.id, it?.revision]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (it) { setDef(it.definition); setName(it.name); setPick(null); } }, [it?.id, it?.revision]); // eslint-disable-line react-hooks/exhaustive-deps -- reloads the editor only for another item or revision, so a refetch keeps what is being typed
 
   const edit = can("library.edit");
   const dirty = !!it && !!def && (!sameDef(def, it.definition) || name !== it.name);

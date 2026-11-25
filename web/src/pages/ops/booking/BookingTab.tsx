@@ -20,7 +20,7 @@ export function BookingTab({ booking, tree, onSaved }: { booking: Booking; tree:
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<{ page: FormPage; section: FormSection } | null>(null);
   const [saving, setSaving] = useState(false);
-  useEffect(() => { setValues({ ...booking.answers, ...dirty }); }, [booking.row_version]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setValues({ ...booking.answers, ...dirty }); }, [booking.row_version]); // eslint-disable-line react-hooks/exhaustive-deps -- takes the server's answers only for a new row version; unsaved edits stay on top
   const change = (k: string, v: unknown) => { setValues({ ...values, [k]: v }); setDirty({ ...dirty, [k]: v }); setErrors({ ...errors, [k]: "" }); };
   const cancel = () => { setDirty({}); setErrors({}); setValues(booking.answers); setEditing(null); };
   async function save(rowVersion = booking.row_version) {

@@ -25,7 +25,7 @@ export function Roles() {
   const roles = useQuery({ queryKey: keys.roles(), queryFn: ({ signal }) => api<RoleRow[]>("roles", { signal }) });
   const saved = (r: R): Grants => roles.data?.find((x) => x.role === r)?.permissions ?? {};
   const [draft, setDraft] = useState<Record<R, Grants>>({ ops: {}, expert: {} });
-  useEffect(() => { if (roles.data) setDraft({ ops: saved("ops"), expert: saved("expert") }); }, [roles.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (roles.data) setDraft({ ops: saved("ops"), expert: saved("expert") }); }, [roles.data]); // eslint-disable-line react-hooks/exhaustive-deps -- the draft resets only when the server's roles arrive, not on every render
   const dirty = ROLES.filter((r) => JSON.stringify(draft[r]) !== JSON.stringify(saved(r)));
   const save = useMutation({
     mutationFn: () => Promise.all(dirty.map((r) => api(`roles/${r}/permissions`, { method: "PUT", body: { permissions: draft[r] } }))),

@@ -26,7 +26,7 @@ export function InspectionTab({ booking, insp, trees, activity, onSaved }: { boo
   const [saving, setSaving] = useState(false);
   const rv = insp?.row_version;
   const fromServer = (i: Inspection, d: Parts): Parts => ({ inspection: { ...(i.answers.inspection ?? {}), ...d.inspection }, start: { ...(i.answers.start ?? {}), ...d.start }, end: { ...(i.answers.end ?? {}), ...d.end } });
-  useEffect(() => { if (insp) setVals(fromServer(insp, dirty)); }, [insp?.id, rv]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (insp) setVals(fromServer(insp, dirty)); }, [insp?.id, rv]); // eslint-disable-line react-hooks/exhaustive-deps -- takes the server's answers only for a new inspection or row version; unsaved edits stay on top
   const edited = useMemo(() => {
     const out: Record<Part, Set<string>> = { inspection: new Set(), start: new Set(), end: new Set() };
     activity.filter((r) => r.kind === "inspection_edited" && r.by && r.by.role !== "expert").forEach((r) => r.keys.forEach((k) => { const [part, key] = k.split("."); if (part && key && part in out) out[part as Part].add(key); }));

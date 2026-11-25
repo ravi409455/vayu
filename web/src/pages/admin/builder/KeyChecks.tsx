@@ -32,7 +32,7 @@ export function KeyChecks({ version, choices, edit, run }: { version: FormVersio
   const [items, setItems] = useState<KeyCheck[]>(saved);
   const [sel, setSel] = useState(0);
   useEffect(() => { setItems(version.key_checks ?? []); }, [version.key_checks]);
-  const savedKeys = useMemo(() => new Set(saved.map((k) => k.key)), [saved]);
+  const savedKeys = useMemo(() => new Set((version.key_checks ?? []).map((k) => k.key)), [version.key_checks]);
   const dirty = JSON.stringify(items) !== JSON.stringify(saved);
   const pickable = choices.filter((c) => !MEDIA.has(c.type ?? ""));      // answers only, no photos
   const current = items[Math.min(sel, items.length - 1)];

@@ -31,7 +31,7 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
   const savedVals = (checks ?? []).map(({ id, rule, message, fields }) => ({ id, rule, message, fields }));
   const [vals, setVals] = useState<ValidationDraft[]>(savedVals);
   useEffect(() => setD(field), [field]);
-  useEffect(() => setVals(savedVals), [JSON.stringify(savedVals)]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setVals(savedVals), [JSON.stringify(savedVals)]); // eslint-disable-line react-hooks/exhaustive-deps -- compares the checks by value; the list is a new array each render
   const set = (p: Partial<FieldDraft>) => setD({ ...d, ...p });
   const cfg = d.config as Record<string, unknown>;
   const setCfg = (p: Record<string, unknown>) => set({ config: { ...cfg, ...p } });

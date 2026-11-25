@@ -118,7 +118,7 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
     });
     return saveChain.current;
   };
-  useEffect(() => { if (ok && dirty && saved) { setDirty(false); void save(saved); } }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (ok && dirty && saved) { setDirty(false); void save(saved); } }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps -- saves when the debounced definition changes, not on every keystroke's dirty/ok change
   // leaving (another template, the library, another page) with an edit not sent yet: send it now (F-015)
   const pending = useRef<Definition | null>(null);
   pending.current = ok && dirty ? def : null;
@@ -144,7 +144,7 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
       .then((r) => { if (n === ticket.current) setPreview(r); })
       .catch((e) => { if (n === ticket.current) fail(e); })
       .finally(() => { if (n === ticket.current) setRendering(false); });
-  }, [shown, chosen, v?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [shown, chosen, v?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- re-renders the preview only for a new definition, booking or version; fail is a fresh function each render
 
   async function publish() {
     if (!def || !v) return;

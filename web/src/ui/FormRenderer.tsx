@@ -174,7 +174,7 @@ function AutoStamp({ type, value, label, disabled, preview, onChange }: { type: 
     if (done.current || value || disabled || preview) return;
     done.current = true;
     onChange(nowAs(type));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- stamps once when the page opens, never again
   const shown = value ? (type === "datetime" ? new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : value) : preview ? "Stamped when the expert opens this page" : "…";
   return <p className="auto-stamp" data-testid={`auto-${label}`}>{shown} <span className="muted small">(automatic)</span></p>;
 }
@@ -193,7 +193,7 @@ function Gps({ value, onChange, disabled, preview, auto = true }: { value?: { la
     if (asked.current || value || disabled || preview || !auto) return;
     asked.current = true;
     capture();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- asks for the location once when the page opens, never again
   return (
     <div aria-live="polite">
       {value ? <p className="ok" data-testid="gps-value"><MapPin size={14} aria-hidden /> {value.lat}, {value.lng}{value.accuracy !== undefined && <span className="muted small"> (±{value.accuracy} m)</span>}</p>

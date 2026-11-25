@@ -115,7 +115,7 @@ export function Today() {
     const el = scroller.current;
     if (el) el.scrollTo({ left: Math.max(0, (clampStart(start, lo, hi) - lo) * 2 * slotPx), behavior: smooth ? "smooth" : "auto" });
   };
-  useEffect(() => { goTo(want.current ?? left.current ?? nowAt - 1, false); want.current = null; }, [slotPx, hasJobs]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { goTo(want.current ?? left.current ?? nowAt - 1, false); want.current = null; }, [slotPx, hasJobs]); // eslint-disable-line react-hooks/exhaustive-deps -- scrolls only when the slot width or the lanes change; goTo reads the latest values
   const onScroll = (el: HTMLDivElement) => { const h = lo + el.scrollLeft / (2 * slotPx); left.current = h; setLeftH(h); };
   const pick = (start: number) => { if (mode === "day") { want.current = start; setMode("3h"); } else goTo(start); };
   const step = (dir: number) => goTo(Math.round(leftH) + dir);

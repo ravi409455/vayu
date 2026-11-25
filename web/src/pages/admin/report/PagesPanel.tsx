@@ -66,7 +66,7 @@ export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, 
     if (sel?.kind !== "part") return;
     const pg = pageOf(def, sel.id);
     if (pg && closed.has(pg.id!)) setClosed((c) => { const n = new Set(c); n.delete(pg.id!); return n; });
-  }, [sel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sel]); // eslint-disable-line react-hooks/exhaustive-deps -- opens the page only when the selection moves; the person may fold it again
   const make = (type: PartType, ref?: SharedRef) => (ref ? sharedPart(ref) : newPart(type, firstSection));
   const [adding, setAdding] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));

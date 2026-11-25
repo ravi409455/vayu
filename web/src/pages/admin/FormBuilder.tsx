@@ -51,7 +51,7 @@ export function FormBuilder() {
   const [visibility, setVisibility] = useState<string[] | null>(null);
   const [confirmDel, setConfirmDel] = useState<null | (() => void)>(null);
   const edit = can("forms.edit") && draft;
-  const pages: FormPage[] = local ?? v?.pages ?? [];
+  const pages: FormPage[] = useMemo(() => local ?? v?.pages ?? [], [local, v?.pages]);
   const reload = async () => { await refresh(keys.formVersion(), keys.forms()); setLocal(null); };
   const run = async (fn: () => Promise<unknown>, done?: string) => {
     try { await fn(); if (done) say(done); await reload(); } catch (e) { setLocal(null); fail(e); await reload(); }
