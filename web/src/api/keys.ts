@@ -9,6 +9,8 @@ export const keys = {
   appLatest: () => ["app-latest"],
   /** Users: every list (all, experts, by role) shares the family, so an edit refreshes them all. */
   users: (query?: Query) => with_("users", query),
+  /** What a person's signed-in phones last reported (deactivate and sign-out warnings). */
+  userPhone: (id: Id) => ["users", "phone", id],
   forms: () => ["forms"],
   form: (id: Id) => ["forms", "one", id],
   /** Form versions, one or several at a time: one family, so a save refreshes every copy. */

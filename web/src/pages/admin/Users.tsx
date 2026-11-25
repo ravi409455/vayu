@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { User } from "../../api/types";
@@ -11,6 +11,29 @@ import { fmtStamp } from "../../lib/format";
 import { keys } from "../../api/keys";
 
 const ROLE: Record<string, string> = { admin: "Admin", ops: "Ops", expert: "Expert" };
+
+/** What their signed-in phones last reported (server: users/{id}/phone). */
+type PhoneState = { devices: number; drafts: number; files: number; unknown: boolean; last_seen_at: string | null };
+const n = (k: number, one: string) => `${k} ${one}${k === 1 ? "" : "s"}`;
+
+/** What signing this person out would lose, from their phone's own report (F-243). */
+export function phoneWords(p: PhoneState | undefined): string {
+  if (!p) return "Checking their phone…";
+  if (p.devices === 0) return "They have no phone signed in, so nothing on a phone is lost.";
+  const seen = p.last_seen_at ? ` (last heard from ${fmtStamp(p.last_seen_at)})` : "";
+  if (p.drafts || p.files) {
+    const what = [p.drafts ? n(p.drafts, "unfinished booking") : "", p.files ? n(p.files, "file") : ""].filter(Boolean).join(" and ");
+    return `Their phone still holds ${what} not yet on the server${seen}. These are lost.${p.unknown ? " Another phone has not said what it holds." : ""}`;
+  }
+  if (p.unknown) return "Their phone has not said what it holds: anything not yet sent may be lost.";
+  return `Their phone has sent everything${seen}. Nothing is lost.`;
+}
+
+function PhoneWarning({ user }: { user: User }) {
+  const q = useQuery({ queryKey: keys.userPhone(user.id), staleTime: 0, retry: false,
+    queryFn: ({ signal }) => api<PhoneState>(`users/${user.id}/phone`, { signal }) });
+  return <p>{q.isError ? "Could not check their phone: anything not yet sent may be lost." : phoneWords(q.data)}</p>;
+}
 
 export function Users() {
   const { can } = useAuth();
@@ -125,13 +148,13 @@ export function Users() {
       )}
       {signOut && (
         <Confirm title={`Sign ${signOut.username} out of every device?`} confirmLabel="Sign out" danger onCancel={() => setSignOut(null)} onConfirm={() => out.mutate()}>
-          <p>Any data that was not yet synced from their phone may be lost.</p>
+          <PhoneWarning user={signOut} />
         </Confirm>
       )}
       {deactivate && (
         <Confirm title={`${deactivate.is_active ? "Deactivate" : "Reactivate"} ${deactivate.username}?`} confirmLabel={deactivate.is_active ? "Deactivate" : "Reactivate"}
           danger={deactivate.is_active} onCancel={() => setDeactivate(null)} onConfirm={() => toggle.mutate(deactivate)}>
-          {deactivate.is_active ? <p>They are signed out of every device and cannot sign in. Unsynced data on their phone may be lost.</p> : <p>They can sign in again.</p>}
+          {deactivate.is_active ? <><p>They are signed out of every device and cannot sign in.</p><PhoneWarning user={deactivate} /></> : <p>They can sign in again.</p>}
         </Confirm>
       )}
     </>
