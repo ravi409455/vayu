@@ -209,12 +209,15 @@ class OpsFlowTest {
     }
 
     @Test fun needsYouListsAReportOutOfDate() {
-        server.on("GET problems/reports", """[{"booking":"$B6","booking_id":"DEMO-6","status":"ready","error":"","out_of_date":true}]""")
+        server.on("GET problems/reports", """[{"booking":"$B6","booking_id":"DEMO-6","status":"ready","error":"","problem":"out_of_date","out_of_date_since":"${TODAY}T10:05:00+05:30"},
+            {"booking":"$B14","booking_id":"DEMO-14","status":"failed","error":"Renderer crashed","problem":"failed","out_of_date_since":null}]""")
         server.on("GET bookings", """{"count":0,"results":[]}""")                     // nothing else needs Ops
         show()
         compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).performClick()
         waitFor("Report out of date for DEMO-6")
+        waitFor("Since today")                                                    // when it went out of date
+        waitFor("Report failed for DEMO-14")                                      // a failed row stays a failure
     }
 
     @Test fun todayStatusChipsNarrowTheDay() {
