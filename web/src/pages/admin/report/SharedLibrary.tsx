@@ -4,14 +4,16 @@
 import { ArrowLeft, Link2, Palette, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, type Page } from "../../../api/client";
+import { api } from "../../../api/client";
 import { useRefresh } from "../../../api/hooks";
-import type { Booking, FormSummary, FormVersion } from "../../../api/types";
+import type { FormSummary } from "../../../api/types";
 import { fmtDay } from "../../../lib/format";
 import { useRefChoices } from "../../../lib/useChoices";
 import { Confirm, Empty, Field, Pill, useToast } from "../../../ui/kit";
 import { MoreMenu } from "../../../ui/Menu";
-import { findPart, locate, partName, removePart, shiftPart, themeOf, updatePage, updatePart, withIds, withoutTheme, type Definition, type Part } from "./model";
+import { findPart, freshCopies, locate, partNames, removePart, shiftPart, themeOf, updatePage, updatePart, withIds, withoutIds, withoutTheme, type Definition, type Part, type Template, type TVersion } from "./model";
+import { useFormSections, useSampleBookings } from "./hooks";
+import { useDebounced } from "../../../lib/useDebounced";
 import { PagesPanel, type Sel } from "./PagesPanel";
 import { PageSettings, PartSettings } from "./PartSettings";
 import { Preview, type LayoutPage } from "./Preview";
@@ -19,8 +21,6 @@ import { ReportSettings } from "./ReportSettings";
 import { useShared, type SharedItem, type ThemeContent, type Usage } from "./sharing";
 import { keys } from "../../../api/keys";
 
-type Template = { id: number; form: number; form_key: string; versions: { id: number; number: number; status: string }[] };
-type TVersion = { id: number; definition: Definition };
 
 /** "PDI (uses v4)", "EV (live uses v3, draft uses v4)": who uses an item, at which of its versions. */
 export function usedBy(u: Usage[]): string {
@@ -85,14 +85,6 @@ export function SharedLibrary({ templates, forms, editable }: { templates: Templ
   );
 }
 
-function useDebounced<T>(value: T, ms: number): T {
-  const [v, setV] = useState(value);
-  useEffect(() => { const h = setTimeout(() => setV(value), ms); return () => clearTimeout(h); }, [value, ms]);
-  return v;
-}
-
-const noIds = <T,>(x: T): T => JSON.parse(JSON.stringify(x, (k, v: unknown) => (k === "id" ? undefined : v))) as T;
-
 function SharedEditor({ item, all, templates, forms, editable, onBack }: {
   item: SharedItem; all: SharedItem[]; templates: Template[]; forms: FormSummary[]; editable: boolean; onBack: () => void;
 }) {
@@ -108,10 +100,9 @@ function SharedEditor({ item, all, templates, forms, editable, onBack }: {
   const hv = useQuery({ queryKey: keys.pdfVersion(hostVersion?.id), enabled: !!hostVersion, queryFn: ({ signal }) => api<TVersion>(`pdf-template-versions/${hostVersion!.id}`, { signal }) });
   const content = useQuery({ queryKey: keys.pdfShared(item.id, item.revision), queryFn: async () => (await api<SharedItem>(`pdf-shared/${item.id}`)).content });
   const formVersionId = form?.draft_version?.id ?? form?.published_version?.id;
-  const tree = useQuery({ queryKey: keys.formVersion(formVersionId), enabled: !!formVersionId, queryFn: ({ signal }) => api<FormVersion>(`form-versions/${formVersionId}`, { signal }) });
+  const { sections, sectionNames } = useFormSections(formVersionId);
   const choices = useRefChoices(host?.form ?? 0);
-  const sample = useQuery({ queryKey: keys.pdfSample(form?.inspection_type), enabled: !!form?.inspection_type,
-    queryFn: async () => (await Promise.all(["completed", "submitted"].map((stage) => api<Page<Booking>>("bookings", { query: { type: form!.inspection_type, stage } })))).flatMap((r) => r.results) });
+  const sample = useSampleBookings(form?.inspection_type);
   const [bookingId, setBookingId] = useState("");
   const chosen = bookingId || sample.data?.[0]?.id || "";
 
@@ -144,16 +135,13 @@ function SharedEditor({ item, all, templates, forms, editable, onBack }: {
       .finally(() => { if (n === ticket.current) setRendering(false); });
   }, [shown, chosen, hv.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const sectionNames = useMemo(() => Object.fromEntries((tree.data?.pages ?? []).flatMap((p) => p.sections.map((s) => [`inspection.${s.key}`, s.title]))), [tree.data]);
-  const sections = useMemo(() => (tree.data?.pages ?? []).flatMap((p) => p.sections.filter((s) => s.key).map((s) => ({
-    value: `inspection.${s.key}`, label: `${p.title} → ${s.title} (${s.fields.length})`, fields: s.fields.map((f) => ({ key: f.key, label: f.label || f.key, type: f.type })) }))), [tree.data]);
   const fields = useMemo(() => choices.map((c) => ({ value: c.value, label: c.label, type: c.type })), [choices]);
   const snippets = all.filter((i) => i.kind === "snippet" && i.id !== item.id);       // never inside itself
 
   async function save() {
     if (!def) return;
     setConfirm(false);
-    const body = theme ? themeOf(def) : { parts: noIds(def.pages[0]?.parts ?? []) };
+    const body = theme ? themeOf(def) : { parts: withoutIds(def.pages[0]?.parts ?? []) };
     try {
       const r = await api<SharedItem & { updated: string[] }>("pdf-shared", { body: { kind: item.kind, key: item.key, name: item.name, content: body } });
       setDirty(false);
@@ -164,12 +152,7 @@ function SharedEditor({ item, all, templates, forms, editable, onBack }: {
 
   const part = def && sel?.kind === "part" ? findPart(def, sel.id) : null;
   const page = def && sel?.kind === "page" ? def.pages.find((p) => p.id === sel.id) : null;
-  const names = useMemo(() => {
-    const out: Record<string, string> = {};
-    const walk = (ps: Part[]) => ps.forEach((p) => { out[p.id!] = partName(p, sectionNames); if (p.type === "columns") p.columns.forEach((c) => walk(c.parts)); });
-    def?.pages.forEach((pg) => walk(pg.parts));
-    return out;
-  }, [def, sectionNames]);
+  const names = useMemo(() => (def ? partNames(def, sectionNames) : {}), [def, sectionNames]);
   return (
     <>
       <div className="bar rd-top">
@@ -212,7 +195,7 @@ function SharedEditor({ item, all, templates, forms, editable, onBack }: {
                 onMove={(by) => edit(shiftPart(def, sel.id, by))}
                 onDuplicate={() => {
                   const w = locate(def, sel.id); if (!w) return;
-                  const copy = withIds({ schema: 2, pages: [{ title: "", parts: [noIds(part)] }] }).pages[0]!.parts[0]!;
+                  const copy = freshCopies([part])[0]!;
                   edit(w.set([...w.list.slice(0, w.index + 1), copy, ...w.list.slice(w.index + 1)])); setSel({ kind: "part", id: copy.id! });
                 }} />
             ) : !theme && page && sel?.kind === "page" ? (

@@ -90,6 +90,24 @@ export function findPart(d: Definition, id: string): Part | null {
   return w ? w.list[w.index]! : null;
 }
 
+/** A PDF template as the list sends it, and one of its versions. */
+export type Template = { id: number; form: number; form_key: string; versions: { id: number; number: number; status: string }[] };
+export type TVersion = { id: number; template: number; number: number; status: string; definition: Definition; row_version: number };
+
+/** A deep copy with every "id" dropped (withIds gives the copy fresh ones). */
+export const withoutIds = <T,>(x: T): T => JSON.parse(JSON.stringify(x, (k, v: unknown) => (k === "id" ? undefined : v))) as T;
+/** Copies of these parts with fresh ids, to put beside or instead of the originals. */
+export const freshCopies = (parts: Part[]): Part[] => withIds({ schema: 2, pages: [{ title: "", parts: withoutIds(parts) }] }).pages[0]!.parts;
+
+/** Every part of the definition with its name (for the preview's outlines). */
+export function partNames(d: Definition, sections: Record<string, string> = {}, shared: Record<string, string> = {}): Record<string, string> {
+  const out: Record<string, string> = {};
+  const walk = (parts: Part[]) => parts.forEach((p) => { out[p.id!] = partName(p, sections, shared); if (p.type === "columns") p.columns.forEach((c) => walk(c.parts)); });
+  d.pages.forEach((pg) => walk(pg.parts));
+  return out;
+}
+
+/** The page that holds this part (also inside columns). */
 export function pageOf(d: Definition, partId: string): ReportPage | null {
   return d.pages.find((pg) => JSON.stringify(pg.parts).includes(`"id":"${partId}"`)) ?? null;
 }
@@ -241,7 +259,7 @@ export function replaceRef(p: Part, from: string, to: string): Part {
 export function unlinkShared(d: Definition, id: string, parts: Part[]): Definition {
   const w = locate(d, id);
   if (!w) return d;
-  const fresh = withIds({ schema: 2, pages: [{ title: "", parts: JSON.parse(JSON.stringify(parts, (k, v: unknown) => (k === "id" ? undefined : v))) as Part[] }] }).pages[0]!.parts;
+  const fresh = freshCopies(parts);
   return w.set([...w.list.slice(0, w.index), ...fresh, ...w.list.slice(w.index + 1)]);
 }
 

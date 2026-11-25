@@ -4,7 +4,8 @@ import { useState } from "react";
 import { api, uploadFile } from "../../../api/client";
 import { useRefresh } from "../../../api/hooks";
 import { Field, useToast } from "../../../ui/kit";
-import type { Definition, Part } from "./model";
+import { slugKey } from "../../../lib/fieldTypes";
+import { withoutIds, type Definition, type Part } from "./model";
 import { keys } from "../../../api/keys";
 
 export type Picture = { id: string; name: string; size: number; url: string };
@@ -24,10 +25,7 @@ export function useSharedContent<T>(item: SharedItem | undefined, revision: numb
 }
 
 /** "a-z, 0-9, _" key from a name: "Car C.I.D. theme" -> car_c_i_d_theme. */
-export function keyOf(name: string): string {
-  const k = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
-  return /^[a-z]/.test(k) ? k : `x_${k}`.slice(0, 60);
-}
+export const keyOf = (name: string): string => slugKey(name, "x_", 60);
 
 /** Choose a picture from the library, or upload a new one into it. */
 export function PicturePicker({ label, onPick }: { label: string; onPick: (id: string) => void }) {
@@ -122,7 +120,7 @@ export function ShareForm({ kind, items, content, onSaved, label }: {
 
 /** What a shared part holds, saved from one part of a template. */
 export function snippetContent(part: Part): { parts: Part[] } {
-  return { parts: [JSON.parse(JSON.stringify(part, (k, v: unknown) => (k === "id" ? undefined : v))) as Part] };
+  return { parts: [withoutIds(part)] };
 }
 
 export type ThemeContent = Pick<Definition, "theme" | "bands" | "watermark">;

@@ -49,9 +49,10 @@ export function defaultConfig(type: string): Record<string, unknown> {
   }
 }
 
-export function slugKey(label: string): string {
+/** "a-z, 0-9, _" key from a name, starting with a letter: "Car C.I.D." -> car_c_i_d. */
+export function slugKey(label: string, prefix = "f_", max = 63): string {
   const k = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-  return /^[a-z]/.test(k) ? k.slice(0, 63) : `f_${k}`.slice(0, 63);
+  return /^[a-z]/.test(k) ? k.slice(0, max) : `${prefix}${k}`.slice(0, max);
 }
 
 /** The type of a field in words, with the detail that matters ("Choose one · 4 choices", "Number · km"). */

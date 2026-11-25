@@ -4,7 +4,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, ChevronRight, Code, Columns2, Download, FileText, Link2, GripVertical, Image, LayoutList, ListOrdered, MoveVertical, QrCode, Scissors, Table2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import type { FormPage } from "../../../api/types";
-import { addPart, blankPage, movePage, movePart, newPart, pageFromForm, partName, sharedPart, uid, updatePart, type Definition, type Part, type PartType, type ReportPage, type SharedRef } from "./model";
+import { addPart, blankPage, movePage, movePart, newPart, pageFromForm, pageOf, partName, sharedPart, uid, updatePart, type Definition, type Part, type PartType, type ReportPage, type SharedRef } from "./model";
 import type { SharedItem } from "./sharing";
 
 export type Sel = { kind: "page" | "part"; id: string } | null;
@@ -64,7 +64,7 @@ export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, 
   const toggle = (id: string) => setClosed((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   useEffect(() => {
     if (sel?.kind !== "part") return;
-    const pg = def.pages.find((p) => JSON.stringify(p.parts).includes(`"id":"${sel.id}"`));
+    const pg = pageOf(def, sel.id);
     if (pg && closed.has(pg.id!)) setClosed((c) => { const n = new Set(c); n.delete(pg.id!); return n; });
   }, [sel]); // eslint-disable-line react-hooks/exhaustive-deps
   const make = (type: PartType, ref?: SharedRef) => (ref ? sharedPart(ref) : newPart(type, firstSection));
@@ -79,7 +79,7 @@ export function PagesPanel({ def, sel, onSelect, onChange, formPages, sections, 
   };
   const add = (page: ReportPage, type: PartType, ref?: SharedRef) => {
     const part = make(type, ref);
-    const after = sel?.kind === "part" && JSON.stringify(page.parts).includes(`"id":"${sel.id}"`) ? sel.id : null;
+    const after = sel?.kind === "part" && pageOf(def, sel.id)?.id === page.id ? sel.id : null;
     onChange(addPart(def, page.id!, part, after));
     onSelect({ kind: "part", id: part.id! });
   };
