@@ -43,3 +43,16 @@ def test_a_list_costs_the_same_queries_for_3_or_12_rows(ienv, who, url, params):
     _jobs(ienv, 9, "R")
     many = _queries(client, url, **params)
     assert many <= few, f"{url}: {few} queries for 3 rows, {many} for 12"
+
+
+def test_the_dashboard_summary_counts_in_the_database_and_caps_its_span(ienv):
+    """F-092: aggregates, not every booking row; at most 366 days at once."""
+    _jobs(ienv, 3, "D")
+    few = _queries(ienv.ops, "/api/v1/dashboards/summary", date_from="2026-01-01",
+                   date_to="2026-12-31")
+    _jobs(ienv, 9, "E")
+    assert _queries(ienv.ops, "/api/v1/dashboards/summary", date_from="2026-01-01",
+                    date_to="2026-12-31") <= few
+    r = ienv.ops.get("/api/v1/dashboards/summary", {"date_from": "2020-01-01",
+                                                     "date_to": "2026-12-31"})
+    assert r.status_code == 400
