@@ -61,3 +61,11 @@ that meets it is published.
 
 ## 7. Before launch (not covered here)
 Backups and a restore test, monitoring, CSP, restricting the Firebase API key (plan §9).
+
+## 8. Rolling back a release
+Schema changes reverse with `python manage.py migrate <app> <previous>`. These data migrations
+are **one-way** (their reverse does nothing, so a rollback past them keeps the data as it is now):
+accounts 0004, 0005, 0007, 0009, 0010, 0013, 0014 (permission grants; 0014's sign-out grant does
+reverse); bookings 0006, 0008 (back-filled answers and timing); forms 0008, 0010, 0014, 0015, 0018,
+0019, 0020; integrations 0002, 0003 (dropped webhook fields: restore from a backup); notify 0002;
+reports 0003, 0004. Take a database backup before every release (plan §9).

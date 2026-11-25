@@ -5,17 +5,36 @@ from django.conf import settings
 from django.db import migrations, models
 
 
-def backfill(apps, schema_editor):
-    from apps.bookings import timing
+# copies of apps.bookings.timing as it was (F-123): a migration must not change when that does
 
+
+def _slot(b):
+    from datetime import datetime
+
+    from django.utils import timezone
+
+    t = b.answers.get("inspection_time")
+    if b.inspection_date is None or not isinstance(t, str) or ":" not in t:
+        return None
+    h, m = (int(x) for x in t.split(":")[:2])
+    d = b.inspection_date
+    return timezone.make_aware(datetime(d.year, d.month, d.day, h, m))
+
+
+def _minutes(delta) -> int:
+    return round(delta.total_seconds() / 60)
+
+
+def backfill(apps, schema_editor):
     Booking = apps.get_model("bookings", "Booking")
     Inspection = apps.get_model("bookings", "Inspection")
     for b in Booking.objects.exclude(started_at=None).iterator():
-        timing.stamp_late(b)
+        booked = _slot(b)
+        b.late_minutes = _minutes(b.started_at - booked) if booked else None
         insp = (Inspection.objects.filter(booking=b, status="submitted", expert=b.assigned_expert_id)
                 .order_by("-submitted_at").first())
         if insp and insp.submitted_at:
-            timing.stamp_duration(b, insp.submitted_at)
+            b.duration_minutes = _minutes(insp.submitted_at - b.started_at)
         b.save(update_fields=["late_minutes", "duration_minutes"])
 
 

@@ -17,7 +17,7 @@ def split_answers(apps, schema_editor):
     for side in ("start", "end"):
         latest[side] = (FormVersion.objects.filter(form__type=side, status="published")
                         .order_by("-number").first())
-    for insp in Inspection.objects.all():
+    for insp in Inspection.objects.all().iterator():
         ops = insp.answers.get("ops")
         answers = {k: v for k, v in insp.answers.items() if k != "ops"}
         answers.setdefault("inspection", {})
