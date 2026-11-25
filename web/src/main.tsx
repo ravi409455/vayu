@@ -14,7 +14,7 @@ import "./styles.css";
 const retry = (n: number, e: unknown) => n < 1 && !(e instanceof ApiError && e.status < 500);
 const client = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false, retry } } });
 
-void startMonitoring();                 // off unless VITE_SENTRY_DSN is set
+void startMonitoring(); // off unless VITE_SENTRY_DSN is set
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

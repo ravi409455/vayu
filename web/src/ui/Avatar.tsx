@@ -26,7 +26,23 @@ export function Avatar({ who, size = 32, decorative }: { who: Who; size?: number
   const label = who.name || who.username || "";
   const style = { width: size, height: size, fontSize: Math.round(size * 0.4) };
   if (who.avatar_url && !broken) {
-    return <img className="avatar" style={style} src={who.avatar_url} alt={decorative ? "" : label ? `Picture of ${label}` : "Picture"} onError={() => setBroken(true)} />;
+    return (
+      <img
+        className="avatar"
+        style={style}
+        src={who.avatar_url}
+        alt={decorative ? "" : label ? `Picture of ${label}` : "Picture"}
+        onError={() => setBroken(true)}
+      />
+    );
   }
-  return <span className="avatar initials" style={{ ...style, background: colourFor(label || String(who.id ?? "")) }} {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": label || "Person" })}>{initials(label)}</span>;
+  return (
+    <span
+      className="avatar initials"
+      style={{ ...style, background: colourFor(label || String(who.id ?? "")) }}
+      {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": label || "Person" })}
+    >
+      {initials(label)}
+    </span>
+  );
 }

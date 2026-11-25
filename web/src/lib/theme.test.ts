@@ -2,15 +2,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applySignedOut, applyTheme, isChoice, resolveTheme, THEME_KEY } from "./theme";
 
 // what applyTheme left in storage (the app reads it back in index.html before React starts)
-const cachedTheme = () => { try { const v = localStorage.getItem(THEME_KEY); return isChoice(v) ? v : null; } catch { return null; } };
+const cachedTheme = () => {
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+    return isChoice(v) ? v : null;
+  } catch {
+    return null;
+  }
+};
 
-const media = (dark: boolean) => vi.stubGlobal("matchMedia", (q: string) => ({ matches: dark && q.includes("dark"), addEventListener() {}, removeEventListener() {} }));
+const media = (dark: boolean) =>
+  vi.stubGlobal("matchMedia", (q: string) => ({ matches: dark && q.includes("dark"), addEventListener() {}, removeEventListener() {} }));
 
 function memoryStorage() {
   const m = new Map<string, string>();
-  return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k), clear: () => m.clear() };
+  return {
+    getItem: (k: string) => m.get(k) ?? null,
+    setItem: (k: string, v: string) => void m.set(k, v),
+    removeItem: (k: string) => void m.delete(k),
+    clear: () => m.clear(),
+  };
 }
-beforeEach(() => { vi.stubGlobal("localStorage", memoryStorage()); document.documentElement.removeAttribute("data-theme"); });
+beforeEach(() => {
+  vi.stubGlobal("localStorage", memoryStorage());
+  document.documentElement.removeAttribute("data-theme");
+});
 afterEach(() => vi.unstubAllGlobals());
 
 describe("theme", () => {
@@ -43,7 +59,9 @@ describe("theme", () => {
     localStorage.setItem(THEME_KEY, "purple");
     expect(cachedTheme()).toBeNull();
     expect(isChoice("dark") && !isChoice("purple") && !isChoice(null)).toBe(true);
-    const blocked = () => { throw new Error("blocked"); };
+    const blocked = () => {
+      throw new Error("blocked");
+    };
     vi.stubGlobal("localStorage", { getItem: blocked, setItem: blocked, removeItem: blocked });
     expect(cachedTheme()).toBeNull();
     expect(() => applyTheme("dark")).not.toThrow();

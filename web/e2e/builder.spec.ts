@@ -27,9 +27,21 @@ test.describe("form builder", () => {
     await expect(rows.first()).toBeVisible();
     const before = await rows.allInnerTexts();
     const grip = page.locator(".field-row", { hasText: "Odometer" }).locator(".grip");
-    for (let attempt = 0; attempt < 3; attempt++) {                        // a drag is a gesture: try again if it did not take
-      await drag(page, page.locator(".field-row", { hasText: "Odometer" }).locator(".grip"), page.locator(".field-row", { hasText: "Chassis number" }).locator(".grip"));
-      try { await expect.poll(async () => (await page.locator(".field-row").allInnerTexts()).join("|"), { timeout: 3000 }).not.toBe(before.join("|")); break; } catch { /* again */ }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      // a drag is a gesture: try again if it did not take
+      await drag(
+        page,
+        page.locator(".field-row", { hasText: "Odometer" }).locator(".grip"),
+        page.locator(".field-row", { hasText: "Chassis number" }).locator(".grip"),
+      );
+      try {
+        await expect
+          .poll(async () => (await page.locator(".field-row").allInnerTexts()).join("|"), { timeout: 3000 })
+          .not.toBe(before.join("|"));
+        break;
+      } catch {
+        /* again */
+      }
     }
     void grip;
     await expect.poll(async () => (await page.locator(".field-row").allInnerTexts()).join("|")).not.toBe(before.join("|"));
@@ -37,11 +49,18 @@ test.describe("form builder", () => {
     const serverKeys = async () => {
       const tree = await json(await admin.get(`form-versions/${draftId}`));
       const sections = tree.pages.flatMap((p: { sections: { fields: { key: string }[] }[] }) => p.sections);
-      return sections.find((x: { fields: { key: string }[] }) => x.fields.some((f) => f.key === "odometer")).fields.map((f: { key: string }) => f.key) as string[];
+      return sections
+        .find((x: { fields: { key: string }[] }) => x.fields.some((f) => f.key === "odometer"))
+        .fields.map((f: { key: string }) => f.key) as string[];
     };
-    await expect.poll(async () => { const k = await serverKeys(); return k.indexOf("odometer") < k.indexOf("chassis_no"); }).toBe(true);   // moved above it, on the server
+    await expect
+      .poll(async () => {
+        const k = await serverKeys();
+        return k.indexOf("odometer") < k.indexOf("chassis_no");
+      })
+      .toBe(true); // moved above it, on the server
     await page.reload();
-    expect((await page.locator(".field-row").allInnerTexts()).join("|")).not.toBe(before.join("|"));   // and it stays
+    expect((await page.locator(".field-row").allInnerTexts()).join("|")).not.toBe(before.join("|")); // and it stays
   });
 
   test("discard draft returns to the live version and is refused for a never-published form", async ({ page }) => {
@@ -58,11 +77,11 @@ test.describe("form builder", () => {
     await page.goto("/forms");
     await page.getByRole("button", { name: "New custom form" }).click();
     await page.getByLabel("Name", { exact: true }).fill("Scratch");
-      await page.getByRole("button", { name: "Create" }).click();
+    await page.getByRole("button", { name: "Create" }).click();
     await page.getByRole("button", { name: "More form actions" }).click();
     await page.getByRole("menuitem", { name: "Discard draft" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Discard draft" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: /never been published/ })).toBeVisible();     // an error toast is an alert
+    await expect(page.getByRole("alert").filter({ hasText: /never been published/ })).toBeVisible(); // an error toast is an alert
   });
 
   test("the library is used from the builder: save a field, then add it to a section", async ({ page }) => {
@@ -72,7 +91,10 @@ test.describe("form builder", () => {
     await page.goto("/library");
     await expect(page.getByRole("heading", { name: "Library" })).toBeVisible();
     await page.goto(`/forms/${form.id}`);
-    await page.getByRole("button", { name: /Odometer/ }).first().click();
+    await page
+      .getByRole("button", { name: /Odometer/ })
+      .first()
+      .click();
     await page.getByLabel("Library item name").fill("Odometer reading");
     await page.getByRole("button", { name: "Save to library" }).click();
     await expect(page.getByRole("status").filter({ hasText: "Saved to the library" })).toBeVisible();
@@ -85,14 +107,17 @@ test.describe("form builder", () => {
     if (!form.draft_version) await json(await admin.post(`forms/${form.id}/drafts`, { data: {} }));
     await signIn(page, "admin");
     await page.goto(`/forms/${form.id}`);
-    await page.getByRole("button", { name: /Driver front door/ }).first().click();
+    await page
+      .getByRole("button", { name: /Driver front door/ })
+      .first()
+      .click();
     await page.getByRole("tab", { name: "Access" }).click();
-    await expect(page.getByRole("button", { name: "expert In progress: Can edit" })).toBeVisible();      // the standard rule
+    await expect(page.getByRole("button", { name: "expert In progress: Can edit" })).toBeVisible(); // the standard rule
     await page.getByRole("button", { name: "Ops only" }).click();
     await expect(page.getByRole("button", { name: "expert In progress: Hidden" })).toBeVisible();
     await page.getByRole("button", { name: "Read-only for experts" }).click();
     await expect(page.getByRole("button", { name: "expert In progress: Can see" })).toBeVisible();
-    await page.getByRole("button", { name: "ops Uploading: Can edit" }).click();                 // cycles to the next level
+    await page.getByRole("button", { name: "ops Uploading: Can edit" }).click(); // cycles to the next level
     await page.getByRole("button", { name: "Reset to inherited" }).click();
     await expect(page.getByRole("button", { name: "expert In progress: Can edit" })).toBeVisible();
   });
@@ -102,7 +127,10 @@ test.describe("form builder", () => {
     if (!form.draft_version) await json(await admin.post(`forms/${form.id}/drafts`, { data: {} }));
     await signIn(page, "admin");
     await page.goto(`/forms/${form.id}`);
-    await page.getByRole("button", { name: /Door photo/ }).first().click();
+    await page
+      .getByRole("button", { name: /Door photo/ })
+      .first()
+      .click();
     await page.getByLabel("How files are added").selectOption("camera");
     await page.getByRole("button", { name: "Save field" }).click();
     await expect(page.getByRole("status").filter({ hasText: "Saved" }).first()).toBeVisible();
@@ -121,9 +149,14 @@ test.describe("layout", () => {
     await expect(page.getByRole("link", { name: "Forms" }).getByText("Forms")).toBeVisible();
     await page.getByRole("button", { name: "Collapse the menu" }).click();
     // the label is hidden from the eye only: it stays the link's name for screen readers
-    expect(await page.getByRole("link", { name: "Forms" }).locator(".nav-label").evaluate((e) => e.getBoundingClientRect().width)).toBeLessThanOrEqual(1);
+    expect(
+      await page
+        .getByRole("link", { name: "Forms" })
+        .locator(".nav-label")
+        .evaluate((e) => e.getBoundingClientRect().width),
+    ).toBeLessThanOrEqual(1);
     await page.reload();
-    await expect(page.getByRole("button", { name: "Expand the menu" })).toBeVisible();      // remembered
+    await expect(page.getByRole("button", { name: "Expand the menu" })).toBeVisible(); // remembered
     await page.getByRole("button", { name: "Expand the menu" }).click();
   });
 
@@ -131,9 +164,9 @@ test.describe("layout", () => {
     const { form } = await pdi();
     await signIn(page, "admin");
     await page.goto(`/forms/${form.id}`);
-    await page.getByRole("button", { name: "More info" }).first().hover();                 // hover shows it, no click needed
+    await page.getByRole("button", { name: "More info" }).first().hover(); // hover shows it, no click needed
     await expect(page.getByRole("tooltip")).toContainText("start form");
-    await page.getByRole("button", { name: "More info" }).first().click();                 // a click on top keeps it open
+    await page.getByRole("button", { name: "More info" }).first().click(); // a click on top keeps it open
     await expect(page.getByRole("tooltip")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("tooltip")).toHaveCount(0);
@@ -154,7 +187,7 @@ test.describe("system forms are named and tuned by the Admin", () => {
     await page.goto("/forms");
     const system = page.getByRole("table", { name: "System forms" });
     await expect(system.getByRole("link", { name: "Payment and review" })).toBeVisible();
-    await expect(system.getByText("End form", { exact: true })).toBeVisible();            // still the end form by type
+    await expect(system.getByText("End form", { exact: true })).toBeVisible(); // still the end form by type
     expect((await json(await admin.get(`forms/${end.id}`))).type).toBe("end");
 
     // the payment mode choices are editable like any choice field
@@ -171,8 +204,11 @@ test.describe("system forms are named and tuned by the Admin", () => {
     await expect(page.getByRole("status").filter({ hasText: "Saved" }).first()).toBeVisible();
     const draft = (await json(await admin.get(`forms/${end.id}`))).draft_version;
     const tree = await json(await admin.get(`form-versions/${draft.id}`));
-    const field = tree.pages.flatMap((p: { sections: { fields: { key: string; config: { options: { key: string }[] } }[] }[] }) => p.sections).flatMap((s: { fields: { key: string; config: { options: { key: string }[] } }[] }) => s.fields).find((f: { key: string }) => f.key === "payment_mode");
+    const field = tree.pages
+      .flatMap((p: { sections: { fields: { key: string; config: { options: { key: string }[] } }[] }[] }) => p.sections)
+      .flatMap((s: { fields: { key: string; config: { options: { key: string }[] } }[] }) => s.fields)
+      .find((f: { key: string }) => f.key === "payment_mode");
     expect(field.config.options.map((o: { key: string }) => o.key)).toContain("wallet");
-    expect((await admin.delete(`forms/${end.id}/draft`)).status()).toBe(204);                       // leave no open draft behind
+    expect((await admin.delete(`forms/${end.id}/draft`)).status()).toBe(204); // leave no open draft behind
   });
 });

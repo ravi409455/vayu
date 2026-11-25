@@ -23,15 +23,26 @@ function serve(missing: unknown[], canFinish: boolean) {
 }
 
 function show(onFinished = () => {}, onMedia = () => {}) {
-  render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><ToastProvider>
-    <WaitingFiles booking={booking} onFinished={onFinished} onMedia={onMedia} />
-  </ToastProvider></MemoryRouter></QueryClientProvider>);
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <ToastProvider>
+          <WaitingFiles booking={booking} onFinished={onFinished} onMedia={onMedia} />
+        </ToastProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
 }
 
 describe("waiting for the expert's files (lost phone)", () => {
   it("a required file must be uploaded by Ops before finishing", async () => {
-    serve([{ part: "inspection", key: "odo", label: "Odometer photo", count: 1, required: true },
-      { part: "inspection", key: "front", label: "Front photos", count: 2, required: false }], false);
+    serve(
+      [
+        { part: "inspection", key: "odo", label: "Odometer photo", count: 1, required: true },
+        { part: "inspection", key: "front", label: "Front photos", count: 2, required: false },
+      ],
+      false,
+    );
     const onMedia = vi.fn();
     show(() => {}, onMedia);
     const box = await screen.findByRole("status", { name: "Waiting for files" });
@@ -57,9 +68,18 @@ describe("waiting for the expert's files (lost phone)", () => {
     await waitFor(() => expect(screen.queryByRole("status", { name: "Waiting for files" })).toBeNull());
   });
   it("the history says who finished it and without what", () => {
-    const line = activityText({ at: "", kind: "finished_without_files", by: { id: 1, name: "Priya", role: "ops" },
-      changes: { stage: ["submitted", "completed"], missing: 2 as never }, keys: ["inspection.front", "stage"] },
-    () => "", (k) => k === "inspection.front" ? "Front photos" : k, (k) => String(k));
+    const line = activityText(
+      {
+        at: "",
+        kind: "finished_without_files",
+        by: { id: 1, name: "Priya", role: "ops" },
+        changes: { stage: ["submitted", "completed"], missing: 2 as never },
+        keys: ["inspection.front", "stage"],
+      },
+      () => "",
+      (k) => (k === "inspection.front" ? "Front photos" : k),
+      (k) => String(k),
+    );
     expect(line).toBe("Finished by Priya without 2 files: Front photos");
   });
 });

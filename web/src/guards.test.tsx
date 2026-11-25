@@ -11,8 +11,13 @@ afterEach(() => vi.restoreAllMocks());
 
 function meResponse(me: Partial<Me> | null) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-    me ? new Response(JSON.stringify({ id: 1, username: "u", name: "U", permissions: {}, ...me }), { status: 200, headers: { "Content-Type": "application/json" } })
-       : new Response(JSON.stringify({ detail: "no" }), { status: 401, headers: { "Content-Type": "application/json" } }));
+    me
+      ? new Response(JSON.stringify({ id: 1, username: "u", name: "U", permissions: {}, ...me }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      : new Response(JSON.stringify({ detail: "no" }), { status: 401, headers: { "Content-Type": "application/json" } }),
+  );
 }
 
 function app(path: string, perm?: string) {
@@ -23,10 +28,24 @@ function app(path: string, perm?: string) {
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<p>LOGIN PAGE</p>} />
-            <Route path="/change-password" element={<RequireAuth><p>CHANGE PASSWORD PAGE</p></RequireAuth>} />
+            <Route
+              path="/change-password"
+              element={
+                <RequireAuth>
+                  <p>CHANGE PASSWORD PAGE</p>
+                </RequireAuth>
+              }
+            />
             <Route path="/board" element={<p>BOARD</p>} />
             <Route path="/jobs" element={<p>JOBS</p>} />
-            <Route path="/forms" element={<RequireAuth perm={perm}><p>FORMS PAGE</p></RequireAuth>} />
+            <Route
+              path="/forms"
+              element={
+                <RequireAuth perm={perm}>
+                  <p>FORMS PAGE</p>
+                </RequireAuth>
+              }
+            />
           </Routes>
         </AuthProvider>
       </MemoryRouter>
@@ -58,12 +77,15 @@ describe("route guards", () => {
     expect([homeFor("expert"), homeFor("ops"), homeFor("admin")]).toEqual(["/jobs", "/today", "/forms"]);
   });
   it("navigation follows role and permissions", () => {
-    const titles = (role: string, perms: string[]) => visibleNav(role, (p) => perms.includes(p)).flatMap((g) => g.items.map((i) => i.label));
+    const titles = (role: string, perms: string[]) =>
+      visibleNav(role, (p) => perms.includes(p)).flatMap((g) => g.items.map((i) => i.label));
     expect(titles("expert", [])).toEqual(["My leads"]);
     const ops = titles("ops", ["bookings.view", "dashboards.view", "forms.view"]);
     expect(ops).toEqual(["Today", "Bookings", "Needs you", "Dashboard"]);
     expect(ops).not.toContain("Users");
     expect(ops).not.toContain("My leads");
-    expect(titles("admin", ["users.view", "roles.manage", "forms.view"])).toEqual(expect.arrayContaining(["Users", "Roles & permissions", "Forms"]));
+    expect(titles("admin", ["users.view", "roles.manage", "forms.view"])).toEqual(
+      expect.arrayContaining(["Users", "Roles & permissions", "Forms"]),
+    );
   });
 });

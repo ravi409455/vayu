@@ -9,9 +9,10 @@ const ITERATING = ["some", "all", "none", "filter", "reduce"];
 
 describe("rules never throw", () => {
   it.each(BINARY)("binary %s", (op) => {
-    for (const a of VALUES) for (const b of VALUES) {
-      expect(() => evaluate({ [op]: [{ var: "x" }, { var: "y" }] }, { x: a, y: b })).not.toThrow();
-    }
+    for (const a of VALUES)
+      for (const b of VALUES) {
+        expect(() => evaluate({ [op]: [{ var: "x" }, { var: "y" }] }, { x: a, y: b })).not.toThrow();
+      }
   });
   it.each(["!", "!!"])("unary %s", (op) => {
     for (const a of VALUES) expect(() => evaluate({ [op]: [{ var: "x" }] }, { x: a })).not.toThrow();

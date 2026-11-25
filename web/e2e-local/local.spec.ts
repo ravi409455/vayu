@@ -14,7 +14,7 @@ async function signIn(page: import("@playwright/test").Page, user: string) {
 
 test("the demo is there for each role", async ({ page }) => {
   await signIn(page, "ops");
-  await page.goto("/bookings?view=all");                                     // Ops land on Today; every booking is here
+  await page.goto("/bookings?view=all"); // Ops land on Today; every booking is here
   await expect(page.getByRole("link", { name: "DEMO-1", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "DEMO-3", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Account menu" }).click();

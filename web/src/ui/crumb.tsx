@@ -15,6 +15,9 @@ export const useCrumbText = () => useContext(Ctx).crumb;
  *  tab says it too ("DEMO-7 · Vayu"). */
 export function useCrumb(label: string | undefined) {
   const { setCrumb } = useContext(Ctx);
-  useEffect(() => { setCrumb(label ?? ""); return () => setCrumb(""); }, [label, setCrumb]);
+  useEffect(() => {
+    setCrumb(label ?? "");
+    return () => setCrumb("");
+  }, [label, setCrumb]);
   usePageTitle(label);
 }

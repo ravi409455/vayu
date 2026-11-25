@@ -2,7 +2,13 @@ import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { keys } from "./keys";
 
-const stale = (qc: QueryClient) => qc.getQueryCache().getAll().filter((q) => q.state.isInvalidated).map((q) => JSON.stringify(q.queryKey)).sort();
+const stale = (qc: QueryClient) =>
+  qc
+    .getQueryCache()
+    .getAll()
+    .filter((q) => q.state.isInvalidated)
+    .map((q) => JSON.stringify(q.queryKey))
+    .sort();
 
 describe("one key factory (F-014)", () => {
   it("an Admin's master-list edit refreshes the dropdowns' copy too", async () => {
@@ -15,7 +21,13 @@ describe("one key factory (F-014)", () => {
   });
   it("one form version is one family, however it was loaded", async () => {
     const qc = new QueryClient();
-    for (const k of [keys.formVersion(5), keys.formVersions("live", 1, 2), keys.formVersions("pinned", 5), keys.formVersions("set", "inspection:5")]) qc.setQueryData(k, {});
+    for (const k of [
+      keys.formVersion(5),
+      keys.formVersions("live", 1, 2),
+      keys.formVersions("pinned", 5),
+      keys.formVersions("set", "inspection:5"),
+    ])
+      qc.setQueryData(k, {});
     await qc.invalidateQueries({ queryKey: keys.formVersion() });
     expect(stale(qc)).toHaveLength(4);
   });

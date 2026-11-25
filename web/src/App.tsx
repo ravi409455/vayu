@@ -18,7 +18,9 @@ const Library = lazyPage(() => import("./pages/admin/Library").then((m) => ({ de
 const LibraryEditor = lazyPage(() => import("./pages/admin/LibraryEditor").then((m) => ({ default: m.LibraryEditor })));
 const PdfDesigner = lazyPage(() => import("./pages/admin/PdfDesigner").then((m) => ({ default: m.PdfDesigner })));
 const Integrations = lazyPage(() => import("./pages/admin/Integrations").then((m) => ({ default: m.Integrations })));
-const IntegrationEditor = lazyPage(() => import("./pages/admin/integrations/IntegrationEditor").then((m) => ({ default: m.IntegrationEditor })));
+const IntegrationEditor = lazyPage(() =>
+  import("./pages/admin/integrations/IntegrationEditor").then((m) => ({ default: m.IntegrationEditor })),
+);
 const ApiKeys = lazyPage(() => import("./pages/admin/ApiKeys").then((m) => ({ default: m.ApiKeys })));
 const Promote = lazyPage(() => import("./pages/admin/Promote").then((m) => ({ default: m.Promote })));
 const MyJobs = lazyPage(() => import("./pages/expert/MyJobs").then((m) => ({ default: m.MyJobs })));
@@ -43,43 +45,203 @@ function Home() {
 export function App() {
   return (
     <ErrorBoundary>
-    <Suspense fallback={<p className="muted pad">Loading…</p>}>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/verify/:token" element={<VerifyPage />} />
-        <Route path="/verify/:token/:link" element={<ReportMediaPage />} />
-        <Route path="/zip/:token" element={<ZipPage />} />
-        <Route path="/change-password" element={<RequireAuth><ChangePassword /></RequireAuth>} />
-        <Route element={<RequireAuth><Layout /></RequireAuth>}>
-          <Route path="/" element={<Home />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/app" element={<AppDownload />} />
-          <Route path="/today" element={<RequireAuth perm="bookings.view" not="expert"><Today /></RequireAuth>} />
-          <Route path="/board" element={<Navigate to="/bookings" replace />} />
-          <Route path="/booking/:id" element={<RequireAuth perm="bookings.view" not="expert"><BookingPage /></RequireAuth>} />
-          <Route path="/problems" element={<RequireAuth perm="bookings.view" not="expert"><Problems /></RequireAuth>} />
-          <Route path="/bookings" element={<RequireAuth perm="bookings.view" not="expert"><Bookings /></RequireAuth>} />
-          <Route path="/dashboards" element={<RequireAuth perm="dashboards.view"><Dashboards /></RequireAuth>} />
-          <Route path="/jobs" element={<RequireAuth perm="submissions.fill"><MyJobs /></RequireAuth>} />
-          <Route path="/jobs/:id" element={<RequireAuth perm="submissions.fill"><Job /></RequireAuth>} />
-          <Route path="/users" element={<RequireAuth adminOnly perm="users.view"><Users /></RequireAuth>} />
-          <Route path="/roles" element={<RequireAuth adminOnly perm="roles.manage"><Roles /></RequireAuth>} />
-          <Route path="/lists" element={<RequireAuth adminOnly perm="forms.view"><MasterLists /></RequireAuth>} />
-          <Route path="/settings" element={<RequireAuth perm="settings.view" not="expert"><Settings /></RequireAuth>} />
-          <Route path="/audit" element={<RequireAuth adminOnly perm="audit.view"><Audit /></RequireAuth>} />
-          <Route path="/library" element={<RequireAuth adminOnly perm="library.view"><Library /></RequireAuth>} />
-          <Route path="/library/:id" element={<RequireAuth adminOnly perm="library.view"><LibraryEditor /></RequireAuth>} />
-          <Route path="/pdf" element={<RequireAuth adminOnly perm="pdf_templates.view"><PdfDesigner /></RequireAuth>} />
-          <Route path="/integrations" element={<RequireAuth adminOnly perm="integrations.manage"><Integrations /></RequireAuth>} />
-          <Route path="/integrations/:id" element={<RequireAuth adminOnly perm="integrations.manage"><IntegrationEditor /></RequireAuth>} />
-          <Route path="/api-keys" element={<RequireAuth adminOnly perm="api_keys.manage"><ApiKeys /></RequireAuth>} />
-          <Route path="/promote" element={<RequireAuth adminOnly perm="forms.promote"><Promote /></RequireAuth>} />
-          <Route path="/forms" element={<RequireAuth adminOnly perm="forms.view"><Forms /></RequireAuth>} />
-          <Route path="/forms/:id" element={<RequireAuth adminOnly perm="forms.view"><FormBuilder /></RequireAuth>} />
-        </Route>
-        <Route path="*" element={<Home />} />
-      </Routes>
-    </Suspense>
+      <Suspense fallback={<p className="muted pad">Loading…</p>}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/verify/:token" element={<VerifyPage />} />
+          <Route path="/verify/:token/:link" element={<ReportMediaPage />} />
+          <Route path="/zip/:token" element={<ZipPage />} />
+          <Route
+            path="/change-password"
+            element={
+              <RequireAuth>
+                <ChangePassword />
+              </RequireAuth>
+            }
+          />
+          <Route
+            element={
+              <RequireAuth>
+                <Layout />
+              </RequireAuth>
+            }
+          >
+            <Route path="/" element={<Home />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/app" element={<AppDownload />} />
+            <Route
+              path="/today"
+              element={
+                <RequireAuth perm="bookings.view" not="expert">
+                  <Today />
+                </RequireAuth>
+              }
+            />
+            <Route path="/board" element={<Navigate to="/bookings" replace />} />
+            <Route
+              path="/booking/:id"
+              element={
+                <RequireAuth perm="bookings.view" not="expert">
+                  <BookingPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/problems"
+              element={
+                <RequireAuth perm="bookings.view" not="expert">
+                  <Problems />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/bookings"
+              element={
+                <RequireAuth perm="bookings.view" not="expert">
+                  <Bookings />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/dashboards"
+              element={
+                <RequireAuth perm="dashboards.view">
+                  <Dashboards />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/jobs"
+              element={
+                <RequireAuth perm="submissions.fill">
+                  <MyJobs />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/jobs/:id"
+              element={
+                <RequireAuth perm="submissions.fill">
+                  <Job />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <RequireAuth adminOnly perm="users.view">
+                  <Users />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/roles"
+              element={
+                <RequireAuth adminOnly perm="roles.manage">
+                  <Roles />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/lists"
+              element={
+                <RequireAuth adminOnly perm="forms.view">
+                  <MasterLists />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <RequireAuth perm="settings.view" not="expert">
+                  <Settings />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/audit"
+              element={
+                <RequireAuth adminOnly perm="audit.view">
+                  <Audit />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/library"
+              element={
+                <RequireAuth adminOnly perm="library.view">
+                  <Library />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/library/:id"
+              element={
+                <RequireAuth adminOnly perm="library.view">
+                  <LibraryEditor />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/pdf"
+              element={
+                <RequireAuth adminOnly perm="pdf_templates.view">
+                  <PdfDesigner />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/integrations"
+              element={
+                <RequireAuth adminOnly perm="integrations.manage">
+                  <Integrations />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/integrations/:id"
+              element={
+                <RequireAuth adminOnly perm="integrations.manage">
+                  <IntegrationEditor />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/api-keys"
+              element={
+                <RequireAuth adminOnly perm="api_keys.manage">
+                  <ApiKeys />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/promote"
+              element={
+                <RequireAuth adminOnly perm="forms.promote">
+                  <Promote />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/forms"
+              element={
+                <RequireAuth adminOnly perm="forms.view">
+                  <Forms />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/forms/:id"
+              element={
+                <RequireAuth adminOnly perm="forms.view">
+                  <FormBuilder />
+                </RequireAuth>
+              }
+            />
+          </Route>
+          <Route path="*" element={<Home />} />
+        </Routes>
+      </Suspense>
     </ErrorBoundary>
   );
 }

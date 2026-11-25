@@ -18,12 +18,22 @@ export function applyTheme(choice: ThemeChoice, remember = true): "light" | "dar
   const root = document.documentElement;
   root.dataset.theme = resolved;
   root.style.colorScheme = resolved;
-  if (remember) { try { localStorage.setItem(THEME_KEY, choice); } catch { /* private mode: fine */ } }
+  if (remember) {
+    try {
+      localStorage.setItem(THEME_KEY, choice);
+    } catch {
+      /* private mode: fine */
+    }
+  }
   return resolved;
 }
 
 /** Signed out (and the sign-in page) is always Light, and the cached choice is forgotten. */
 export function applySignedOut(): void {
   applyTheme("light", false);
-  try { localStorage.removeItem(THEME_KEY); } catch { /* fine */ }
+  try {
+    localStorage.removeItem(THEME_KEY);
+  } catch {
+    /* fine */
+  }
 }

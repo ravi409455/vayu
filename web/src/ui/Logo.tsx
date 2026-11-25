@@ -2,7 +2,9 @@
 export function Logo({ big, markOnly }: { big?: boolean; markOnly?: boolean }) {
   return (
     <span className={`logo${big ? " big" : ""}`}>
-      <span className="logo-mark" aria-hidden="true">V</span>
+      <span className="logo-mark" aria-hidden="true">
+        V
+      </span>
       {markOnly ? <span className="sr-only">Vayu</span> : <span className="logo-name">Vayu</span>}
     </span>
   );

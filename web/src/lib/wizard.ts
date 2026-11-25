@@ -15,7 +15,8 @@ export function wizardSteps(trees: Trees, answers: Record<Part, Answers>, ctx: C
   for (const part of ["start", "inspection", "end"] as const) {
     const tree = trees[part];
     if (!tree) continue;
-    for (const p of visiblePages(part, tree, answers[part], ctx)) out.push({ id: `${part[0]}${p.id}`, title: p.title, kind: part, page: p });
+    for (const p of visiblePages(part, tree, answers[part], ctx))
+      out.push({ id: `${part[0]}${p.id}`, title: p.title, kind: part, page: p });
   }
   out.push({ id: "review", title: "Review", kind: "review" });
   return out;
@@ -43,20 +44,32 @@ export type MediaAdd = { part: Part; key: string; id: string; single: boolean };
  *  on the server: finished files go back into the answers. Files that have not finished are left
  *  alone: another device or tab may still be sending them (the server's stuck-upload check reports
  *  the ones that never arrive). */
-export function reconcileMedia(trees: Trees, answers: Record<Part, Answers>, server: ServerMedia[], tracked: (id: string) => boolean): { add: MediaAdd[] } {
+export function reconcileMedia(
+  trees: Trees,
+  answers: Record<Part, Answers>,
+  server: ServerMedia[],
+  tracked: (id: string) => boolean,
+): { add: MediaAdd[] } {
   const fields = new Map<string, { part: Part; type: string; max: number }>();
   for (const part of ["start", "inspection", "end"] as const)
-    for (const p of trees[part]?.pages ?? []) for (const s of p.sections) for (const f of s.fields)
-      if (MEDIA_TYPES.includes(f.type)) fields.set(f.key, { part, type: f.type, max: maxFiles(f) });
+    for (const p of trees[part]?.pages ?? [])
+      for (const s of p.sections)
+        for (const f of s.fields) if (MEDIA_TYPES.includes(f.type)) fields.set(f.key, { part, type: f.type, max: maxFiles(f) });
   const used = new Set<string>();
   for (const part of ["start", "inspection", "end"] as const)
-    for (const v of Object.values(answers[part] ?? {})) for (const id of Array.isArray(v) ? v : [v]) if (typeof id === "string") used.add(id);
+    for (const v of Object.values(answers[part] ?? {}))
+      for (const id of Array.isArray(v) ? v : [v]) if (typeof id === "string") used.add(id);
   const room = new Map<string, number>();
   const add: MediaAdd[] = [];
   for (const m of server) {
     const f = fields.get(m.field_key);
     if (!f || used.has(m.id) || tracked(m.id) || (m.status !== "uploaded" && m.status !== "verified")) continue;
-    const have = room.get(m.field_key) ?? (() => { const v = answers[f.part]?.[m.field_key]; return Array.isArray(v) ? v.length : v ? 1 : 0; })();
+    const have =
+      room.get(m.field_key) ??
+      (() => {
+        const v = answers[f.part]?.[m.field_key];
+        return Array.isArray(v) ? v.length : v ? 1 : 0;
+      })();
     if (have >= f.max) continue;
     room.set(m.field_key, have + 1);
     add.push({ part: f.part, key: m.field_key, id: m.id, single: f.type === "signature" });

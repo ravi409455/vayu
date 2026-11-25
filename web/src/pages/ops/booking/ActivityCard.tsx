@@ -6,29 +6,48 @@ import type { Activity } from "./parts";
 
 /** Admin only (the server sends the old file's id to nobody else): open a replaced file. */
 function openOld(id: string) {
-  const w = window.open("", "_blank");            // opened now, so the pop-up blocker allows it
-  if (w) w.opener = null;                          // the storage page gets no handle on this one
-  void mediaUrl(id).then((l) => { if (l?.url && w) w.location.href = l.url; else w?.close(); });
+  const w = window.open("", "_blank"); // opened now, so the pop-up blocker allows it
+  if (w) w.opener = null; // the storage page gets no handle on this one
+  void mediaUrl(id).then((l) => {
+    if (l?.url && w) w.location.href = l.url;
+    else w?.close();
+  });
 }
 
 /** One line per thing that happened, newest first. */
-export function activityText(r: Activity, expertName: (id: unknown) => string, label: (k: string) => string, typeLabel: (k: unknown) => string): string {
+export function activityText(
+  r: Activity,
+  expertName: (id: unknown) => string,
+  label: (k: string) => string,
+  typeLabel: (k: unknown) => string,
+): string {
   const by = r.by?.name ?? "The system";
   const c = r.changes;
   if (r.kind === "created") return `Created by ${by}`;
   if (r.kind === "inspection_edited") return `${by} changed ${r.keys.length} answer${r.keys.length === 1 ? "" : "s"}`;
   if (r.kind === "ratings_changed") return `${by} changed the ratings`;
   if (r.kind === "report_downloaded") return `${by} downloaded the report`;
-  if (r.kind === "report_shared") return `${by} ${(c?.how as unknown as string) === "pdf" ? "shared the report PDF" : "copied the report's check link"}`;
+  if (r.kind === "report_shared")
+    return `${by} ${(c?.how as unknown as string) === "pdf" ? "shared the report PDF" : "copied the report's check link"}`;
   if (r.kind === "key_checks_changed") {
     const moved = Object.entries(c ?? {}) as [string, [string | null, string | null]][];
-    return moved.length ? `${by} changed ${moved.map(([k, [a, b]]) => `${label(k)}: ${a || "empty"} → ${b || "empty"}`).join("; ")}`
+    return moved.length
+      ? `${by} changed ${moved.map(([k, [a, b]]) => `${label(k)}: ${a || "empty"} → ${b || "empty"}`).join("; ")}`
       : `${by} changed ${r.keys.map(label).join(", ") || "Key Checks"}`;
   }
   if (r.kind === "media_replaced") return `${by} replaced a file in ${r.keys.map(label).join(", ") || "the inspection"}`;
   if (r.kind === "media_added") return `${by} added a file to ${r.keys.map(label).join(", ") || "the inspection"}`;
-  if (r.kind === "finished_without_files") { const n = Number(c?.missing?.[1] ?? c?.missing ?? 0);
-    return `Finished by ${by} without ${n} file${n === 1 ? "" : "s"}${r.keys.filter((k) => k !== "stage").length ? `: ${r.keys.filter((k) => k !== "stage").map(label).join(", ")}` : ""}`; }
+  if (r.kind === "finished_without_files") {
+    const n = Number(c?.missing?.[1] ?? c?.missing ?? 0);
+    return `Finished by ${by} without ${n} file${n === 1 ? "" : "s"}${
+      r.keys.filter((k) => k !== "stage").length
+        ? `: ${r.keys
+            .filter((k) => k !== "stage")
+            .map(label)
+            .join(", ")}`
+        : ""
+    }`;
+  }
   if (r.kind === "late_reviewed") return `Late start reviewed by ${by}`;
   if (r.kind === "quick_reviewed") return `Quick finish reviewed by ${by}`;
   const stage = c.stage?.[1];
@@ -44,9 +63,22 @@ export function activityText(r: Activity, expertName: (id: unknown) => string, l
   return `${by} changed ${r.keys.map(label).join(", ") || "the booking"}`;
 }
 
-export function ActivityCard({ rows, experts, labels, typeLabel }: { rows: Activity[]; experts: User[]; labels: (k: string) => string; typeLabel: (k: unknown) => string }) {
+export function ActivityCard({
+  rows,
+  experts,
+  labels,
+  typeLabel,
+}: {
+  rows: Activity[];
+  experts: User[];
+  labels: (k: string) => string;
+  typeLabel: (k: unknown) => string;
+}) {
   const [all, setAll] = useState(false);
-  const name = (id: unknown) => { const u = experts.find((x) => x.id === id); return u ? u.name || u.username : "an expert"; };
+  const name = (id: unknown) => {
+    const u = experts.find((x) => x.id === id);
+    return u ? u.name || u.username : "an expert";
+  };
   const shown = all ? rows : rows.slice(0, 6);
   return (
     <section className="card" aria-label="Activity">
@@ -56,11 +88,20 @@ export function ActivityCard({ rows, experts, labels, typeLabel }: { rows: Activ
         {shown.map((r, i) => (
           <li key={i} className={r.kind === "inspection_edited" || r.kind === "edited" ? "edit" : r.changes.stage ? "stage" : ""}>
             <div>{activityText(r, name, labels, typeLabel)}</div>
-            {typeof r.changes.media?.[0] === "string" && <button className="link small" onClick={() => openOld(String(r.changes.media![0]))}>Open the old file</button>}
+            {typeof r.changes.media?.[0] === "string" && (
+              <button className="link small" onClick={() => openOld(String(r.changes.media![0]))}>
+                Open the old file
+              </button>
+            )}
             <div className="muted small">{fmtStamp(r.at)}</div>
-          </li>))}
+          </li>
+        ))}
       </ol>
-      {rows.length > 6 && <button className="link" onClick={() => setAll(!all)}>{all ? "Show less" : `Show all ${rows.length}`}</button>}
+      {rows.length > 6 && (
+        <button className="link" onClick={() => setAll(!all)}>
+          {all ? "Show less" : `Show all ${rows.length}`}
+        </button>
+      )}
     </section>
   );
 }

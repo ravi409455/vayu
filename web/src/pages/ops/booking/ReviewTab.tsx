@@ -28,10 +28,16 @@ export function ReviewTab({ booking, insp, trees, onSaved }: { booking: Booking;
   function send(body: Record<string, unknown>): Promise<void> {
     const next = chain.current.then(async () => {
       try {
-        const r = await api<Inspection>(`inspections/${insp!.id}/overrides`, { method: "PATCH", body: { row_version: rv.current, ...body } });
+        const r = await api<Inspection>(`inspections/${insp!.id}/overrides`, {
+          method: "PATCH",
+          body: { row_version: rv.current, ...body },
+        });
         rv.current = r.row_version;
-        say("Saved."); onSaved();
-      } catch (e) { fail(e); }
+        say("Saved.");
+        onSaved();
+      } catch (e) {
+        fail(e);
+      }
     });
     chain.current = next;
     return next;
@@ -40,17 +46,49 @@ export function ReviewTab({ booking, insp, trees, onSaved }: { booking: Booking;
   const nums = [1, 2, 3, 4, 5].map((n) => ({ v: n, label: String(n) }));
   return (
     <div className="stack">
-      {kcs.length > 0 && <section className="card" aria-label="Key Checks">
-        <div className="sheet-head"><h3>Key Checks <InfoTip>Worked out from the answers (or the default). Type over any of them; your text stays even if the answers change, until you reset it.</InfoTip></h3>
-          {!kcOpen && <span className="muted small">Editable once the expert submits.</span>}</div>
-        <div className="kc-rows">
-          {kcs.map((kc) => <KeyCheckRow key={kc.key} id={`kc-${kc.key}`} label={kc.label} v={s?.key_checks?.[kc.key]} disabled={!edit || !kcOpen}
-            onSave={(text) => send({ key_checks: { [kc.key]: text } })} />)}
-        </div>
-      </section>}
+      {kcs.length > 0 && (
+        <section className="card" aria-label="Key Checks">
+          <div className="sheet-head">
+            <h3>
+              Key Checks{" "}
+              <InfoTip>
+                Worked out from the answers (or the default). Type over any of them; your text stays even if the answers change, until you
+                reset it.
+              </InfoTip>
+            </h3>
+            {!kcOpen && <span className="muted small">Editable once the expert submits.</span>}
+          </div>
+          <div className="kc-rows">
+            {kcs.map((kc) => (
+              <KeyCheckRow
+                key={kc.key}
+                id={`kc-${kc.key}`}
+                label={kc.label}
+                v={s?.key_checks?.[kc.key]}
+                disabled={!edit || !kcOpen}
+                onSave={(text) => send({ key_checks: { [kc.key]: text } })}
+              />
+            ))}
+          </div>
+        </section>
+      )}
       <section className="card">
-        <div className="sheet-head"><h3>Overall</h3><span className="pill">{s?.overall?.word ?? "—"}</span><span className="muted small">average {s?.overall?.average ?? "—"} · suggested {s?.overall?.suggested_word ?? "—"}</span>{s?.overall?.overridden && <Pill tone="warn">Overridden</Pill>}</div>
-        <Seg label="Overall word" value={s?.overall?.overridden ? s.overall.word : null} suggested={s?.overall?.suggested_word} options={WORDS.map((w) => ({ v: w, label: w[0]!.toUpperCase() + w.slice(1) }))} disabled={!edit} onPick={(v) => send({ overall: v })} />
+        <div className="sheet-head">
+          <h3>Overall</h3>
+          <span className="pill">{s?.overall?.word ?? "—"}</span>
+          <span className="muted small">
+            average {s?.overall?.average ?? "—"} · suggested {s?.overall?.suggested_word ?? "—"}
+          </span>
+          {s?.overall?.overridden && <Pill tone="warn">Overridden</Pill>}
+        </div>
+        <Seg
+          label="Overall word"
+          value={s?.overall?.overridden ? s.overall.word : null}
+          suggested={s?.overall?.suggested_word}
+          options={WORDS.map((w) => ({ v: w, label: w[0]!.toUpperCase() + w.slice(1) }))}
+          disabled={!edit}
+          onPick={(v) => send({ overall: v })}
+        />
       </section>
       <section className="card">
         <h3 style={{ marginTop: 0 }}>Ratings</h3>
@@ -59,9 +97,20 @@ export function ReviewTab({ booking, insp, trees, onSaved }: { booking: Booking;
             const r = s?.ratings?.[c.key];
             return (
               <div key={c.key} className="rating-row">
-                <div className="grow"><strong>{c.label}</strong> <span className="muted small">Suggested {r?.suggested ?? "—"}</span> {r?.overridden && <Pill tone="warn">Overridden</Pill>}</div>
-                <Seg label={`${c.label} rating`} value={r?.overridden ? r.value : null} suggested={r?.suggested} options={nums} disabled={!edit} onPick={(v) => send({ ratings: { [c.key]: v } })} />
-              </div>);
+                <div className="grow">
+                  <strong>{c.label}</strong> <span className="muted small">Suggested {r?.suggested ?? "—"}</span>{" "}
+                  {r?.overridden && <Pill tone="warn">Overridden</Pill>}
+                </div>
+                <Seg
+                  label={`${c.label} rating`}
+                  value={r?.overridden ? r.value : null}
+                  suggested={r?.suggested}
+                  options={nums}
+                  disabled={!edit}
+                  onPick={(v) => send({ ratings: { [c.key]: v } })}
+                />
+              </div>
+            );
           })}
           {cats.length === 0 && <p className="muted">This form has no rating categories.</p>}
         </div>

@@ -15,12 +15,15 @@ test("J4: Ops review a completed inspection", async ({ page }) => {
   await page.getByRole("radiogroup", { name: "Exterior rating" }).getByRole("radio", { name: "2", exact: true }).click();
   await expect(page.getByText("Overridden").first()).toBeVisible();
   await page.getByRole("tab", { name: "Inspection" }).click();
-  await page.locator("section.sheet", { hasText: "Odometer" }).getByRole("button", { name: "Edit" }).click();   // read first, edit one section
+  await page.locator("section.sheet", { hasText: "Odometer" }).getByRole("button", { name: "Edit" }).click(); // read first, edit one section
   await page.getByLabel("Odometer").fill("150");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("status").filter({ hasText: "recalculated" })).toBeVisible();
   await page.getByRole("tab", { name: "Review" }).click();
-  await expect(page.getByRole("radiogroup", { name: "Exterior rating" }).getByRole("radio", { name: "2", exact: true })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("radiogroup", { name: "Exterior rating" }).getByRole("radio", { name: "2", exact: true })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
 
   // changes do not touch the PDF (F-219): it says it is out of date and keeps revision 1
   const ops = await apiAs("ops");
@@ -54,7 +57,11 @@ test("J4b: someone else saved first: the dialog names them and retries only my c
   const admin = await apiAs("admin");
   const insps = await json(await admin.get(`bookings/${id}/inspections`));
   const insp = (insps.results ?? insps)[0];
-  await json(await admin.patch(`inspections/${insp.id}`, { data: { row_version: insp.row_version, answers: { inspection: { remarks: "Admin wrote this" } } } }));
+  await json(
+    await admin.patch(`inspections/${insp.id}`, {
+      data: { row_version: insp.row_version, answers: { inspection: { remarks: "Admin wrote this" } } },
+    }),
+  );
   await page.getByLabel("Odometer").fill("99");
   await page.getByRole("button", { name: "Save changes" }).click();
   const dialog = page.getByRole("dialog");
@@ -64,6 +71,6 @@ test("J4b: someone else saved first: the dialog names them and retries only my c
   await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
   const after = await json(await admin.get(`bookings/${id}/inspections`));
   const answers = (after.results ?? after)[0].answers.inspection;
-  expect(answers.odometer).toBe(99);                         // mine was applied
-  expect(answers.remarks).toBe("Admin wrote this");         // theirs was not overwritten
+  expect(answers.odometer).toBe(99); // mine was applied
+  expect(answers.remarks).toBe("Admin wrote this"); // theirs was not overwritten
 });

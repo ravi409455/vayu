@@ -7,24 +7,33 @@ import { useFieldChoices, useRefChoices } from "./useChoices";
 
 const json = (x: unknown) => new Response(JSON.stringify(x), { status: 200, headers: { "Content-Type": "application/json" } });
 const ver = (id: number, key: string, extra: Partial<FormVersion> = {}) =>
-  ({ id, pages: [{ sections: [{ fields: [{ key, label: key.toUpperCase(), type: "short_text" }] }] }], ...extra }) as unknown as FormVersion;
+  ({
+    id,
+    pages: [{ sections: [{ fields: [{ key, label: key.toUpperCase(), type: "short_text" }] }] }],
+    ...extra,
+  }) as unknown as FormVersion;
 const forms = [
   { id: 1, type: "booking", published_version: { id: 11 } },
   { id: 2, type: "start", published_version: { id: 21 } },
   { id: 3, type: "custom", published_version: { id: 31, use_start: false }, draft_version: { id: 32, use_start: false } },
   { id: 4, type: "custom", published_version: { id: 41 } },
 ];
-const versions: Record<string, FormVersion> = { 11: ver(11, "city"), 21: ver(21, "selfie"), 32: ver(32, "door", { key_checks: [{ key: "k", label: "Rust", in_report: true }] } as never) };
+const versions: Record<string, FormVersion> = {
+  11: ver(11, "city"),
+  21: ver(21, "selfie"),
+  32: ver(32, "door", { key_checks: [{ key: "k", label: "Rust", in_report: true }] } as never),
+};
 const wrap = ({ children }: { children: ReactNode }) => <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>;
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("one hook builds the fields of all forms (F-030)", () => {
-  const serve = () => vi.spyOn(globalThis, "fetch").mockImplementation(async (u) => {
-    const url = String(u);
-    if (url.endsWith("/forms")) return json(forms);
-    return json(versions[url.split("/").pop()!]);
-  });
+  const serve = () =>
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (u) => {
+      const url = String(u);
+      if (url.endsWith("/forms")) return json(forms);
+      return json(versions[url.split("/").pop()!]);
+    });
   it("a PDF template sees the booking and its own draft, plus its Key Checks; no start when the form skips it", async () => {
     serve();
     const { result } = renderHook(() => useRefChoices(3), { wrapper: wrap });

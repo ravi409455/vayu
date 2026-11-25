@@ -1,7 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { addFieldTo, asField, isSection, moveField, newFieldDef, previewTree, removeFieldFrom, replaceField, ruleChoices, sameDef, SYSTEM_RULE_FIELDS, withDraft, type SectionDef } from "./libraryDef";
+import {
+  addFieldTo,
+  asField,
+  isSection,
+  moveField,
+  newFieldDef,
+  previewTree,
+  removeFieldFrom,
+  replaceField,
+  ruleChoices,
+  sameDef,
+  SYSTEM_RULE_FIELDS,
+  withDraft,
+  type SectionDef,
+} from "./libraryDef";
 
-const tyres: SectionDef = { title: "Tyres", fields: [newFieldDef("fl", "Front left", "number"), newFieldDef("fr", "Front right", "number")] };
+const tyres: SectionDef = {
+  title: "Tyres",
+  fields: [newFieldDef("fl", "Front left", "number"), newFieldDef("fr", "Front right", "number")],
+};
 
 describe("library definitions in the editor", () => {
   it("tells a section from a field", () => {
@@ -10,7 +27,17 @@ describe("library definitions in the editor", () => {
   });
   it("shows a field definition as the field the editor expects, with sensible blanks", () => {
     const f = asField({ key: "k", label: "K", type: "yes_no" });
-    expect(f).toMatchObject({ key: "k", required: false, visible: true, helper_text: "", config: {}, access: {}, show_if: null, locked: false, library: null });
+    expect(f).toMatchObject({
+      key: "k",
+      required: false,
+      visible: true,
+      helper_text: "",
+      config: {},
+      access: {},
+      show_if: null,
+      locked: false,
+      library: null,
+    });
   });
   it("writes only what the editor changed, and never the key or type", () => {
     const d = newFieldDef("k", "Old", "short_text");
@@ -22,8 +49,8 @@ describe("library definitions in the editor", () => {
     const more = addFieldTo(tyres, newFieldDef("rl", "Rear left", "number"));
     expect(more.fields.map((f) => f.key)).toEqual(["fl", "fr", "rl"]);
     expect(moveField(more, "rl", -1).fields.map((f) => f.key)).toEqual(["fl", "rl", "fr"]);
-    expect(moveField(more, "fl", -1)).toBe(more);                         // already first
-    expect(moveField(more, "rl", 1)).toBe(more);                          // already last
+    expect(moveField(more, "fl", -1)).toBe(more); // already first
+    expect(moveField(more, "rl", 1)).toBe(more); // already last
     expect(moveField(more, "ghost", 1)).toBe(more);
     expect(removeFieldFrom(more, "fr").fields.map((f) => f.key)).toEqual(["fl", "rl"]);
     expect(replaceField(more, { ...more.fields[0]!, label: "FL" }).fields[0]!.label).toBe("FL");

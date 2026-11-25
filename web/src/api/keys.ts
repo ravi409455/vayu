@@ -24,7 +24,12 @@ export const keys = {
   bookings: (...parts: unknown[]) => with_("bookings", ...parts),
   /** One booking, and what hangs off it (inspections, activity, report, media, missing files). */
   booking: (id?: string) => with_("booking", id),
-  bookingPart: (id: string, part: "inspections" | "activity" | "report" | "media" | "missing-files", ...rest: unknown[]) => ["booking", id, part, ...rest],
+  bookingPart: (id: string, part: "inspections" | "activity" | "report" | "media" | "missing-files", ...rest: unknown[]) => [
+    "booking",
+    id,
+    part,
+    ...rest,
+  ],
   answerFields: (type: string) => ["answer-fields", type],
   problems: (...parts: unknown[]) => with_("problems", ...parts),
   mediaUrl: (id: string) => ["media-url", id],

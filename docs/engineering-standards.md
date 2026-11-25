@@ -146,7 +146,8 @@ copy the old pattern.
   gate (see `.github/workflows/ci.yml`, job `backend-gates`) stay at 100%.
 
 ## 4. Web (React + TypeScript)
-- `strict` TypeScript, no `any`, no `@ts-ignore`. ESLint clean with zero warnings.
+- `strict` TypeScript, no `any`, no `@ts-ignore`. ESLint clean with zero warnings; formatted by
+  Prettier (`npm run format`; CI runs `npm run format:check`).
 - Server data only through `api()` and TanStack Query; keys come from the query-key module;
   every mutation invalidates what it changed.
 - Every query shows its **loading, empty and error** state; an action is disabled while it is

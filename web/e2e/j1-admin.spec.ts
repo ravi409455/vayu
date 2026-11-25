@@ -21,7 +21,10 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   await addField("Odometer", "Number");
   await addField("Accident history", "Yes / No");
   await addField("Accident details", "Short text");
-  await page.getByRole("button", { name: /Accident details/ }).first().click();
+  await page
+    .getByRole("button", { name: /Accident details/ })
+    .first()
+    .click();
   await page.getByRole("tab", { name: "Logic" }).click();
   await page.getByRole("button", { name: "+ Add condition" }).last().click();
   await page.getByLabel("Field", { exact: true }).last().selectOption({ label: "inspection: Accident history" });
@@ -31,7 +34,10 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   await expect(page.getByRole("status").filter({ hasText: "Saved" }).first()).toBeVisible();
 
   // the first page must be finished before moving on: odometer required
-  await page.getByRole("button", { name: /Odometer/ }).first().click();
+  await page
+    .getByRole("button", { name: /Odometer/ })
+    .first()
+    .click();
   await page.getByRole("tab", { name: "Settings" }).click();
   await page.getByRole("switch", { name: "Required", exact: true }).check();
   await page.getByRole("button", { name: "Save field" }).click();
@@ -62,11 +68,11 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   await preview.getByRole("button", { name: "Next" }).click();
   await expect(preview.getByRole("alert")).toContainText("Finish this page first");
   await expect(preview.getByRole("alert")).toContainText("Odometer");
-  await expect(preview.getByRole("alert")).toContainText("Chassis number");          // a required system field too
+  await expect(preview.getByRole("alert")).toContainText("Chassis number"); // a required system field too
   await preview.getByLabel("Chassis number").fill("MA3TEST");
   await preview.getByLabel("Odometer").fill("1200");
   await preview.getByRole("radio", { name: "Yes" }).click();
-  await expect(preview.getByLabel("Accident details")).toBeVisible();              // the rule showed it
+  await expect(preview.getByLabel("Accident details")).toBeVisible(); // the rule showed it
   await preview.getByRole("button", { name: "Next" }).click();
   await expect(preview.getByText("Page 2 of 2")).toBeVisible();
   await preview.getByRole("button", { name: "Close preview" }).click();
@@ -91,8 +97,8 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   await page.getByRole("button", { name: "+ Add row" }).click();
   await page.getByLabel("Field", { exact: true }).selectOption({ label: "inspection: Odometer" });
   await page.getByLabel("Report label").fill("Kilometres driven");
-  await expect(page.getByText("Unsaved changes…")).toBeVisible();          // never "saved" before it is (F-015)
-  await page.getByRole("tab", { name: "Shared library" }).click();          // leaving at once still sends the edit
+  await expect(page.getByText("Unsaved changes…")).toBeVisible(); // never "saved" before it is (F-015)
+  await page.getByRole("tab", { name: "Shared library" }).click(); // leaving at once still sends the edit
   await page.getByRole("tab", { name: "Used car" }).click();
   await page.getByRole("button", { name: "Condition", exact: true }).click();
   await expect(page.getByLabel("Report label")).toHaveValue("Kilometres driven");
@@ -106,24 +112,53 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   const expert = await apiAs("expert");
   const users = await json(await admin.get("users"));
   const expertId = (users.results ?? users).find((u: { username: string }) => u.username === "expert").id;
-  const b = await json(await ops.post("bookings", { data: { answers: {
-    booking_id: "UC-1", customer_name: "Meera", customer_phone: "9876543210", address: "1 Ring Rd", city: "delhi",
-    inspection_date: "2026-11-24", inspection_time: "10:00", inspection_type: "used_car", car_make_model: "tata_nexon" } } }));
+  const b = await json(
+    await ops.post("bookings", {
+      data: {
+        answers: {
+          booking_id: "UC-1",
+          customer_name: "Meera",
+          customer_phone: "9876543210",
+          address: "1 Ring Rd",
+          city: "delhi",
+          inspection_date: "2026-11-24",
+          inspection_time: "10:00",
+          inspection_type: "used_car",
+          car_make_model: "tata_nexon",
+        },
+      },
+    }),
+  );
   await json(await ops.post(`bookings/${b.id}/assign`, { data: { expert: expertId } }));
   const selfie = await uploadFile(expert, b.id, "selfie", "photo", "image/jpeg", JPEG);
-  await json(await expert.post(`bookings/${b.id}/start`, { data: { client_uuid: crypto.randomUUID(), inspection_type: "used_car", start_answers: { selfie: [selfie] } } }));
-  await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection: { chassis_no: "MA3ABCDEFG123456", odometer: 12345 }, start: { selfie: [selfie] }, end: { taking_payment: false } } } }));
+  await json(
+    await expert.post(`bookings/${b.id}/start`, {
+      data: { client_uuid: crypto.randomUUID(), inspection_type: "used_car", start_answers: { selfie: [selfie] } },
+    }),
+  );
+  await json(
+    await expert.post(`bookings/${b.id}/submit`, {
+      data: {
+        client_submission_uuid: crypto.randomUUID(),
+        answers: {
+          inspection: { chassis_no: "MA3ABCDEFG123456", odometer: 12345 },
+          start: { selfie: [selfie] },
+          end: { taking_payment: false },
+        },
+      },
+    }),
+  );
 
-  await page.reload();                                                        // the picker now finds the booking
+  await page.reload(); // the picker now finds the booking
   await page.getByRole("tab", { name: "Used car" }).click();
   const pdf = page.waitForResponse((r) => r.url().includes("/preview") && r.request().method() === "POST" && r.status() === 200);
-  await page.getByLabel("Booking for the preview").selectOption(b.id);         // picked by Booking ID, not a typed internal id
+  await page.getByLabel("Booking for the preview").selectOption(b.id); // picked by Booking ID, not a typed internal id
   const res = await pdf;
   const body = await res.json();
   expect(Buffer.from(body.pdf, "base64").subarray(0, 4).toString()).toBe("%PDF");
-  expect(body.pages[0].parts.length).toBeGreaterThan(0);                       // where each part sits, for clicking
-  await expect(page.locator("canvas[aria-label=\"Page 1\"]")).toBeVisible();
-  await page.getByRole("button", { name: "Select Condition" }).click();       // click the table in the PDF
+  expect(body.pages[0].parts.length).toBeGreaterThan(0); // where each part sits, for clicking
+  await expect(page.locator('canvas[aria-label="Page 1"]')).toBeVisible();
+  await page.getByRole("button", { name: "Select Condition" }).click(); // click the table in the PDF
   await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Condition");
 
   // sharing: the table becomes a shared part, the look a shared theme
@@ -151,7 +186,9 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   const file = JSON.parse(await (await (await download).createReadStream()).toArray().then((c) => Buffer.concat(c).toString()));
   expect(file.kind).toBe("vayu-report-template");
   expect(file.shared.map((i: { name: string }) => i.name).sort()).toEqual(["Condition block", "House look"]);
-  await page.getByLabel("Template file").setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(file)) });
+  await page
+    .getByLabel("Template file")
+    .setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(file)) });
   await page.getByRole("button", { name: "Import", exact: true }).click();
   await expect(page.getByText(/Imported into draft v2/)).toBeVisible();
 });

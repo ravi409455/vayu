@@ -11,28 +11,52 @@ import { ThemeSync } from "./ThemeSync";
 import { ExpertCell } from "./ui/ExpertCell";
 import { ToastProvider } from "./ui/kit";
 
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 beforeEach(() => document.documentElement.removeAttribute("data-theme"));
 
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 type Handler = (init?: RequestInit) => { status?: number; body: unknown } | unknown;
 function serve(routes: Record<string, Handler>) {
   const calls: { url: string; init?: RequestInit }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     calls.push({ url, init });
-    const hit = Object.entries(routes).filter(([p]) => url.includes(p)).sort((a, b) => b[0].length - a[0].length)[0];
+    const hit = Object.entries(routes)
+      .filter(([p]) => url.includes(p))
+      .sort((a, b) => b[0].length - a[0].length)[0];
     if (!hit) return json({ detail: "not found" }, 404);
     const out = hit[1](init) as { status?: number; body?: unknown } | unknown;
-    return out && typeof out === "object" && "body" in (out as object) ? json((out as { body: unknown }).body, (out as { status?: number }).status ?? 200) : json(out);
+    return out && typeof out === "object" && "body" in (out as object)
+      ? json((out as { body: unknown }).body, (out as { status?: number }).status ?? 200)
+      : json(out);
   });
   return calls;
 }
-const shell = (ui: React.ReactNode) => render(
-  <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-    <MemoryRouter><ToastProvider><AuthProvider>{ui}</AuthProvider></ToastProvider></MemoryRouter>
-  </QueryClientProvider>);
-const ME = { id: 5, username: "expert", name: "Ravi Expert", email: "r@x.in", phone: "+919876500111", role: "expert", permissions: {}, theme: "light", avatar_url: null };
+const shell = (ui: React.ReactNode) =>
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <ToastProvider>
+          <AuthProvider>{ui}</AuthProvider>
+        </ToastProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+const ME = {
+  id: 5,
+  username: "expert",
+  name: "Ravi Expert",
+  email: "r@x.in",
+  phone: "+919876500111",
+  role: "expert",
+  permissions: {},
+  theme: "light",
+  avatar_url: null,
+};
 
 describe("the profile page", () => {
   it("shows the details as read-only text with a note about the Admin", async () => {
@@ -40,13 +64,16 @@ describe("the profile page", () => {
     shell(<Profile />);
     const details = within(await screen.findByRole("region", { name: "Details" }));
     expect(details.getByText("Ravi Expert")).toBeInTheDocument();
-    expect(details.getByText("+91 98765 00111")).toBeInTheDocument();          // shown grouped
+    expect(details.getByText("+91 98765 00111")).toBeInTheDocument(); // shown grouped
     expect(details.getByText("Expert")).toBeInTheDocument();
     expect(details.getByText(/ask an Admin/)).toBeInTheDocument();
-    expect(details.queryByRole("textbox")).toBeNull();                       // nothing to edit
+    expect(details.queryByRole("textbox")).toBeNull(); // nothing to edit
   });
   it("offers Remove picture only when there is a picture, and removes it", async () => {
-    const calls = serve({ "auth/me/picture": () => ({ ...ME, avatar_url: null }), "auth/me": () => ({ ...ME, avatar_url: "/api/v1/users/5/picture?v=1" }) });
+    const calls = serve({
+      "auth/me/picture": () => ({ ...ME, avatar_url: null }),
+      "auth/me": () => ({ ...ME, avatar_url: "/api/v1/users/5/picture?v=1" }),
+    });
     const u = userEvent.setup();
     shell(<Profile />);
     await u.click(await screen.findByRole("button", { name: "Remove picture" }));
@@ -82,7 +109,10 @@ describe("the profile page", () => {
     expect(calls.some((c) => c.init?.method === "PUT")).toBe(false);
   });
   it("shows the server's reason when it refuses a picture", async () => {
-    serve({ "auth/me/picture": () => ({ status: 400, body: { code: "INVALID_IMAGE", detail: "That file is not a usable picture." } }), "auth/me": () => ME });
+    serve({
+      "auth/me/picture": () => ({ status: 400, body: { code: "INVALID_IMAGE", detail: "That file is not a usable picture." } }),
+      "auth/me": () => ME,
+    });
     const u = userEvent.setup();
     shell(<Profile />);
     await screen.findByRole("button", { name: "Upload a picture" });
@@ -94,10 +124,10 @@ describe("the profile page", () => {
     const u = userEvent.setup();
     shell(<Profile />);
     await u.click(await screen.findByRole("radio", { name: /Dark/ }));
-    expect(document.documentElement.dataset.theme).toBe("dark");                // before the server answers
+    expect(document.documentElement.dataset.theme).toBe("dark"); // before the server answers
     await waitFor(() => expect(calls.find((c) => c.url.endsWith("auth/me/profile"))).toBeTruthy());
     expect(JSON.parse(String(calls.find((c) => c.url.endsWith("auth/me/profile"))!.init!.body))).toEqual({ theme: "dark" });
-    expect(screen.getByRole("radio", { name: /Light/ })).toBeChecked();         // until the server's answer comes back
+    expect(screen.getByRole("radio", { name: /Light/ })).toBeChecked(); // until the server's answer comes back
   });
   it("puts the look back if saving the theme fails", async () => {
     serve({ "auth/me/profile": () => ({ status: 500, body: { detail: "boom" } }), "auth/me": () => ME });
@@ -107,7 +137,10 @@ describe("the profile page", () => {
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("light"));
   });
   it("checks the two new passwords match before asking the server, and shows the server's words", async () => {
-    const calls = serve({ "auth/change-password": () => ({ status: 400, body: { old_password: ["Incorrect password."] } }), "auth/me": () => ME });
+    const calls = serve({
+      "auth/change-password": () => ({ status: 400, body: { old_password: ["Incorrect password."] } }),
+      "auth/me": () => ME,
+    });
     const u = userEvent.setup();
     shell(<Profile />);
     const form = within(await screen.findByRole("region", { name: "Password" }));
@@ -139,7 +172,11 @@ describe("the profile page", () => {
 describe("the theme follows the person", () => {
   const media = (dark: boolean) => {
     const listeners: (() => void)[] = [];
-    vi.stubGlobal("matchMedia", () => ({ matches: dark, addEventListener: (_: string, f: () => void) => listeners.push(f), removeEventListener: () => {} }));
+    vi.stubGlobal("matchMedia", () => ({
+      matches: dark,
+      addEventListener: (_: string, f: () => void) => listeners.push(f),
+      removeEventListener: () => {},
+    }));
     return listeners;
   };
   it("uses their saved theme once signed in, and Light when nobody is", async () => {
@@ -164,14 +201,48 @@ describe("the theme follows the person", () => {
 });
 
 describe("the Admin's Users screen", () => {
-  const ADMIN = { id: 1, username: "admin", name: "Asha", role: "admin", permissions: { "users.view": "all", "users.manage": "all" }, theme: "light" };
+  const ADMIN = {
+    id: 1,
+    username: "admin",
+    name: "Asha",
+    role: "admin",
+    permissions: { "users.view": "all", "users.manage": "all" },
+    theme: "light",
+  };
   const people: User[] = [
-    { id: 5, username: "expert", name: "Ravi Expert", email: "", phone: "+919876500111", role: "expert", is_active: true, must_change_password: false, avatar_url: "/api/v1/users/5/picture?v=1" },
-    { id: 6, username: "expert2", name: "Meera", email: "", phone: "", role: "expert", is_active: true, must_change_password: false, avatar_url: null },
+    {
+      id: 5,
+      username: "expert",
+      name: "Ravi Expert",
+      email: "",
+      phone: "+919876500111",
+      role: "expert",
+      is_active: true,
+      must_change_password: false,
+      avatar_url: "/api/v1/users/5/picture?v=1",
+    },
+    {
+      id: 6,
+      username: "expert2",
+      name: "Meera",
+      email: "",
+      phone: "",
+      role: "expert",
+      is_active: true,
+      must_change_password: false,
+      avatar_url: null,
+    },
   ];
-  const page = (calls: ReturnType<typeof serve>) => { void calls; };
+  const page = (calls: ReturnType<typeof serve>) => {
+    void calls;
+  };
   it("edits a phone, and removes a picture only for someone who has one", async () => {
-    const calls = serve({ "auth/me": () => ADMIN, "users/5/picture": () => ({}), "users/5": () => people[0], "users": () => ({ count: 2, next: null, previous: null, results: people }) });
+    const calls = serve({
+      "auth/me": () => ADMIN,
+      "users/5/picture": () => ({}),
+      "users/5": () => people[0],
+      users: () => ({ count: 2, next: null, previous: null, results: people }),
+    });
     page(calls);
     const u = userEvent.setup();
     shell(<Users />);
@@ -187,10 +258,17 @@ describe("the Admin's Users screen", () => {
     expect(screen.queryByRole("button", { name: "Remove picture" })).toBeNull();
     await u.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(calls.some((c) => c.url.endsWith("users/5") && c.init?.method === "PATCH")).toBe(true));
-    expect(JSON.parse(String(calls.find((c) => c.url.endsWith("users/5") && c.init?.method === "PATCH")!.init!.body)).phone).toBe("98765 43210");
+    expect(JSON.parse(String(calls.find((c) => c.url.endsWith("users/5") && c.init?.method === "PATCH")!.init!.body)).phone).toBe(
+      "98765 43210",
+    );
   });
   it("has no Remove picture for someone without one, and shows a phone error from the server", async () => {
-    serve({ "auth/me": () => ADMIN, "users/6": (init) => (init?.method === "PATCH" ? { status: 400, body: { phone: ["Enter a 10-digit Indian mobile number."] } } : people[1]), "users": () => ({ count: 2, next: null, previous: null, results: people }) });
+    serve({
+      "auth/me": () => ADMIN,
+      "users/6": (init) =>
+        init?.method === "PATCH" ? { status: 400, body: { phone: ["Enter a 10-digit Indian mobile number."] } } : people[1],
+      users: () => ({ count: 2, next: null, previous: null, results: people }),
+    });
     const u = userEvent.setup();
     shell(<Users />);
     await screen.findByText("Meera");
@@ -204,7 +282,10 @@ describe("the Admin's Users screen", () => {
 });
 
 describe("the expert in a list", () => {
-  const experts = [{ id: 5, username: "expert", name: "Ravi Expert", avatar_url: "/api/v1/users/5/picture?v=1" }, { id: 6, username: "expert2", name: "", avatar_url: null }] as User[];
+  const experts = [
+    { id: 5, username: "expert", name: "Ravi Expert", avatar_url: "/api/v1/users/5/picture?v=1" },
+    { id: 6, username: "expert2", name: "", avatar_url: null },
+  ] as User[];
   it("shows their picture or initials with their name, a dash for nobody, and #id for someone unknown", () => {
     const { rerender } = render(<ExpertCell id={5} experts={experts} />);
     expect(screen.getByAltText("Picture of Ravi Expert")).toBeInTheDocument();

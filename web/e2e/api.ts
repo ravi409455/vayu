@@ -15,8 +15,11 @@ export async function apiAs(username: string): Promise<APIRequestContext> {
   if (!r.ok()) throw new Error(`login ${username}: ${r.status()}`);
   const csrf = (await ctx.storageState()).cookies.find((c) => c.name === "csrftoken")?.value ?? "";
   const wrap = (m: "post" | "patch" | "put" | "delete" | "get") =>
-    ((url: string, opts: { data?: unknown } = {}) => (ctx[m] as typeof ctx.post)(url, { ...opts, headers: { "X-CSRFToken": csrf } })) as typeof ctx.post;
-  return new Proxy(ctx, { get: (t, p: string) => (["post", "patch", "put", "delete"].includes(p) ? wrap(p as "post") : (t as never)[p]) }) as APIRequestContext;
+    ((url: string, opts: { data?: unknown } = {}) =>
+      (ctx[m] as typeof ctx.post)(url, { ...opts, headers: { "X-CSRFToken": csrf } })) as typeof ctx.post;
+  return new Proxy(ctx, {
+    get: (t, p: string) => (["post", "patch", "put", "delete"].includes(p) ? wrap(p as "post") : (t as never)[p]),
+  }) as APIRequestContext;
 }
 
 export async function json<T = any>(r: Awaited<ReturnType<APIRequestContext["post"]>>): Promise<T> {
@@ -62,29 +65,91 @@ export async function seedForms(): Promise<Pdi> {
   const body = v.pages[0].sections[0];
   await json(await admin.patch(`sections/${body.id}`, { data: { title: "Body" } }));
   await addFields(admin, body.id, [
-    { key: "door", label: "Driver front door", type: "single_choice", required: true, config: { options: [{ key: "ok", label: "OK" }, { key: "dent", label: "Dent", is_defect: true, severity: "minor" }] } },
-    { key: "door_photo", label: "Door photo", type: "photo", config: { max_count: 2 }, required_if: { "==": [{ var: "inspection.door" }, "dent"] }, show_if: { "==": [{ var: "inspection.door" }, "dent"] } },
+    {
+      key: "door",
+      label: "Driver front door",
+      type: "single_choice",
+      required: true,
+      config: {
+        options: [
+          { key: "ok", label: "OK" },
+          { key: "dent", label: "Dent", is_defect: true, severity: "minor" },
+        ],
+      },
+    },
+    {
+      key: "door_photo",
+      label: "Door photo",
+      type: "photo",
+      config: { max_count: 2 },
+      required_if: { "==": [{ var: "inspection.door" }, "dent"] },
+      show_if: { "==": [{ var: "inspection.door" }, "dent"] },
+    },
     { key: "odometer", label: "Odometer", type: "number", config: { unit: "km", min: 0 } },
     { key: "engine_rating", label: "Engine rating", type: "rating", config: { category: "exterior" } },
   ]);
   const page2 = await json(await admin.post(`form-versions/${v.id}/pages`, { data: { title: "Final" } }));
   const sec2 = await json(await admin.post(`pages/${page2.id}/sections`, { data: { title: "Notes" } }));
   await addFields(admin, sec2.id, [{ key: "remarks", label: "Remarks", type: "long_text" }]);
-  await json(await admin.patch(`form-versions/${v.id}/rating-config`, { data: { config: { categories: [{ key: "exterior", label: "Exterior", sections: ["Body"] }] } } }));
+  await json(
+    await admin.patch(`form-versions/${v.id}/rating-config`, {
+      data: { config: { categories: [{ key: "exterior", label: "Exterior", sections: ["Body"] }] } },
+    }),
+  );
   await publish(admin, pdi.id);
   const t = await json(await admin.post("pdf-templates", { data: { form: pdi.id } }));
   const tv = await json(await admin.get(`pdf-template-versions/${t.versions[0].id}`));
-  const definition = { schema: 2, filename: "{{ sys.booking_id }}PDI.pdf",
-    bands: { normal: { header: { left: [{ text: "<strong>PRE DELIVERY CAR INSPECTION REPORT</strong>" }], background: "brand" },
-      footer: { right: [{ text: "Page {{ sys.page }} of {{ sys.pages }}" }] } } },
-    pages: [{ title: "Report", parts: [
-      { type: "photos", per_row: 1, caption: "none", source: { kind: "fields", fields: ["inspection.door_photo"] } },
-      { type: "table", title: "Vehicle", source: { kind: "fields", rows: [{ field: "booking.booking_id", label: "Booking ID" }, { field: "inspection.chassis_no", label: "Chassis Number" }] } },
-      { type: "table", title: "Exterior", source: { kind: "fields", rows: [{ field: "inspection.door", label: "Driver Front Door" }, { field: "inspection.odometer", label: "Odometer" }] } },
-      { type: "table", title: "Overall Rating", source: { kind: "grid", columns: [{ label: "Exterior" }, { label: "Expert rating" }], rows: [{ label: "Rating", cells: [{ field: "inspection.engine_rating" }, { text: "{{ sys.overall }}" }] }] } },
-      { type: "photos", title: "Photos", per_row: 2, source: { kind: "fields", fields: ["inspection.door_photo"] } },
-      { type: "verify" },
-    ] }] };
+  const definition = {
+    schema: 2,
+    filename: "{{ sys.booking_id }}PDI.pdf",
+    bands: {
+      normal: {
+        header: { left: [{ text: "<strong>PRE DELIVERY CAR INSPECTION REPORT</strong>" }], background: "brand" },
+        footer: { right: [{ text: "Page {{ sys.page }} of {{ sys.pages }}" }] },
+      },
+    },
+    pages: [
+      {
+        title: "Report",
+        parts: [
+          { type: "photos", per_row: 1, caption: "none", source: { kind: "fields", fields: ["inspection.door_photo"] } },
+          {
+            type: "table",
+            title: "Vehicle",
+            source: {
+              kind: "fields",
+              rows: [
+                { field: "booking.booking_id", label: "Booking ID" },
+                { field: "inspection.chassis_no", label: "Chassis Number" },
+              ],
+            },
+          },
+          {
+            type: "table",
+            title: "Exterior",
+            source: {
+              kind: "fields",
+              rows: [
+                { field: "inspection.door", label: "Driver Front Door" },
+                { field: "inspection.odometer", label: "Odometer" },
+              ],
+            },
+          },
+          {
+            type: "table",
+            title: "Overall Rating",
+            source: {
+              kind: "grid",
+              columns: [{ label: "Exterior" }, { label: "Expert rating" }],
+              rows: [{ label: "Rating", cells: [{ field: "inspection.engine_rating" }, { text: "{{ sys.overall }}" }] }],
+            },
+          },
+          { type: "photos", title: "Photos", per_row: 2, source: { kind: "fields", fields: ["inspection.door_photo"] } },
+          { type: "verify" },
+        ],
+      },
+    ],
+  };
   const saved = await json(await admin.patch(`pdf-template-versions/${tv.id}`, { data: { definition, row_version: tv.row_version } }));
   await json(await admin.post(`pdf-template-versions/${tv.id}/publish`, { data: { row_version: saved.row_version } }));
   return { formId: pdi.id, bookingFormId: booking.id, startFormId: start.id, endFormId: end.id, templateId: t.id };
@@ -93,7 +158,8 @@ export async function seedForms(): Promise<Pdi> {
 // a valid small JPEG
 export const JPEG = Buffer.from(
   "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAwAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==",
-  "base64");
+  "base64",
+);
 
 async function sha256Hex(buf: Buffer): Promise<string> {
   const { createHash } = await import("node:crypto");
@@ -101,11 +167,34 @@ async function sha256Hex(buf: Buffer): Promise<string> {
 }
 
 /** Uploads one file the way the browser does: initiate, PUT each part, complete. */
-export async function uploadFile(expert: APIRequestContext, bookingId: string, fieldKey: string, kind: string, contentType: string, data: Buffer): Promise<string> {
-  const init = await json(await expert.post("media/initiate", { data: { booking: bookingId, client_uuid: crypto.randomUUID(), field_key: fieldKey, kind, content_type: contentType, size: data.length, sha256: await sha256Hex(data), source: "camera" } }));
+export async function uploadFile(
+  expert: APIRequestContext,
+  bookingId: string,
+  fieldKey: string,
+  kind: string,
+  contentType: string,
+  data: Buffer,
+): Promise<string> {
+  const init = await json(
+    await expert.post("media/initiate", {
+      data: {
+        booking: bookingId,
+        client_uuid: crypto.randomUUID(),
+        field_key: fieldKey,
+        kind,
+        content_type: contentType,
+        size: data.length,
+        sha256: await sha256Hex(data),
+        source: "camera",
+      },
+    }),
+  );
   const parts: { part_number: number; etag: string }[] = [];
   for (const p of init.parts) {
-    const r = await fetch(p.url, { method: "PUT", body: new Uint8Array(data.subarray((p.part_number - 1) * init.part_size, p.part_number * init.part_size)) });
+    const r = await fetch(p.url, {
+      method: "PUT",
+      body: new Uint8Array(data.subarray((p.part_number - 1) * init.part_size, p.part_number * init.part_size)),
+    });
     parts.push({ part_number: p.part_number, etag: r.headers.get("etag")! });
   }
   const done = await json(await expert.post(`media/${init.id}/complete`, { data: { parts } }));
@@ -125,23 +214,53 @@ export type JobOptions = { bookingId: string; door?: string; photo?: boolean; od
 export async function submittedJob(o: JobOptions): Promise<string> {
   const ops = await apiAs("ops");
   const expert = await apiAs("expert");
-  const b = await json(await ops.post("bookings", { data: { answers: {
-    booking_id: o.bookingId, customer_name: "Test Customer", customer_phone: "9876500099", address: "9 Test Street", city: "delhi",
-    inspection_date: tomorrow(), inspection_time: "09:30", inspection_type: o.type ?? "pdi", car_make_model: "maruti_victoris" } } }));
+  const b = await json(
+    await ops.post("bookings", {
+      data: {
+        answers: {
+          booking_id: o.bookingId,
+          customer_name: "Test Customer",
+          customer_phone: "9876500099",
+          address: "9 Test Street",
+          city: "delhi",
+          inspection_date: tomorrow(),
+          inspection_time: "09:30",
+          inspection_type: o.type ?? "pdi",
+          car_make_model: "maruti_victoris",
+        },
+      },
+    }),
+  );
   await json(await ops.post(`bookings/${b.id}/assign`, { data: { expert: await expertId() } }));
-  const selfie = await uploadFile(expert, b.id, "selfie", "photo", "image/jpeg", JPEG);      // the check-in comes first
-  await json(await expert.post(`bookings/${b.id}/start`, { data: { client_uuid: crypto.randomUUID(), inspection_type: o.type ?? "pdi", start_answers: { selfie: [selfie] } } }));
+  const selfie = await uploadFile(expert, b.id, "selfie", "photo", "image/jpeg", JPEG); // the check-in comes first
+  await json(
+    await expert.post(`bookings/${b.id}/start`, {
+      data: { client_uuid: crypto.randomUUID(), inspection_type: o.type ?? "pdi", start_answers: { selfie: [selfie] } },
+    }),
+  );
   const inspection: Record<string, unknown> = { chassis_no: "MA3YPKCSKTJ273129", door: o.door ?? "ok", odometer: o.odometer ?? 100 };
   if (o.photo) inspection.door_photo = [await uploadFile(expert, b.id, "door_photo", "photo", "image/jpeg", JPEG)];
-  await json(await expert.post(`bookings/${b.id}/submit`, { data: { client_submission_uuid: crypto.randomUUID(), answers: { inspection, start: { selfie: [selfie] }, end: { taking_payment: false } } } }));
+  await json(
+    await expert.post(`bookings/${b.id}/submit`, {
+      data: {
+        client_submission_uuid: crypto.randomUUID(),
+        answers: { inspection, start: { selfie: [selfie] }, end: { taking_payment: false } },
+      },
+    }),
+  );
   return b.id as string;
 }
 
-export async function waitForReport(bookingId: string): Promise<{ url: string; verify_url: string; filename: string; stale: boolean; revision: number }> {
+export async function waitForReport(
+  bookingId: string,
+): Promise<{ url: string; verify_url: string; filename: string; stale: boolean; revision: number }> {
   const ops = await apiAs("ops");
   for (let i = 0; i < 60; i++) {
     const r = await ops.get(`bookings/${bookingId}/report`);
-    if (r.ok()) { const j = await r.json(); if (j.status === "ready") return j; }
+    if (r.ok()) {
+      const j = await r.json();
+      if (j.status === "ready") return j;
+    }
     await new Promise((res) => setTimeout(res, 500));
   }
   throw new Error("report never became ready");

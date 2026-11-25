@@ -3,7 +3,20 @@
 export function caretPoint(el: HTMLTextAreaElement, pos: number): { left: number; top: number; line: number } {
   const cs = getComputedStyle(el);
   const mirror = document.createElement("div");
-  for (const p of ["fontFamily", "fontSize", "fontWeight", "letterSpacing", "lineHeight", "paddingTop", "paddingLeft", "paddingRight", "paddingBottom", "borderTopWidth", "borderLeftWidth", "tabSize"] as const) {
+  for (const p of [
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "letterSpacing",
+    "lineHeight",
+    "paddingTop",
+    "paddingLeft",
+    "paddingRight",
+    "paddingBottom",
+    "borderTopWidth",
+    "borderLeftWidth",
+    "tabSize",
+  ] as const) {
     (mirror.style as unknown as Record<string, string>)[p] = cs[p];
   }
   mirror.style.cssText += ";position:absolute;visibility:hidden;white-space:pre;top:0;left:0;box-sizing:border-box;";

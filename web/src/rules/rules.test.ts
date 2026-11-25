@@ -4,8 +4,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { evaluate, evaluateForm, type FormSpec } from "./rules";
 
-const load = (name: string) =>
-  JSON.parse(readFileSync(new URL(`../../../shared/rule-vectors/${name}`, import.meta.url), "utf8"));
+const load = (name: string) => JSON.parse(readFileSync(new URL(`../../../shared/rule-vectors/${name}`, import.meta.url), "utf8"));
 
 type EvalCase = { name: string; rule: unknown; data: unknown; expected: unknown };
 type FormCase = {

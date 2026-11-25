@@ -22,7 +22,7 @@ const Ctx = createContext<Auth | null>(null);
  *  the screens watching a query that no longer exists). */
 function wipe(qc: QueryClient): void {
   qc.removeQueries({ predicate: (q) => q.queryKey[0] !== keys.me()[0] });
-  uploads.reset();                  // nothing keeps sending (or retrying) under the next person
+  uploads.reset(); // nothing keeps sending (or retrying) under the next person
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -45,7 +45,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setApiHandlers({
       onUnauthorized: () => {
         // only when someone WAS signed in: the first "who am I" call is allowed to be a 401
-        if (qc.getQueryData(["me"])) { wipe(qc); qc.setQueryData(["me"], null); }
+        if (qc.getQueryData(["me"])) {
+          wipe(qc);
+          qc.setQueryData(["me"], null);
+        }
       },
     });
   }, [qc]);
@@ -68,7 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout: async () => {
         try {
           await api("auth/logout", { method: "POST", body: {} });
-        } finally {                       // even if the call fails, this browser forgets the person and their work
+        } finally {
+          // even if the call fails, this browser forgets the person and their work
           wipe(qc);
           await wipeWork();
           qc.setQueryData(["me"], null);

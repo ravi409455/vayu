@@ -7,5 +7,18 @@ export function AnswerNear({ insp, trees, f }: { insp: Inspection; trees: Trees;
   if (!q) return null;
   const v = (insp.answers[f.part] ?? {})[q.key];
   const sev = defectOf(q, v);
-  return <p className="small" style={{ margin: "6px 0 0" }}>{q.label}: <strong className={sev ? "bad-text" : ""}><AnswerValue f={q} v={v} /></strong>{sev && <> <span className="pill bad">{sev}</span></>}</p>;
+  return (
+    <p className="small" style={{ margin: "6px 0 0" }}>
+      {q.label}:{" "}
+      <strong className={sev ? "bad-text" : ""}>
+        <AnswerValue f={q} v={v} />
+      </strong>
+      {sev && (
+        <>
+          {" "}
+          <span className="pill bad">{sev}</span>
+        </>
+      )}
+    </p>
+  );
 }

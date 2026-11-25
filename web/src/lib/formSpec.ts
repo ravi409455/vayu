@@ -21,19 +21,34 @@ export function specFromTree(kind: Kind, tree: Pick<FormVersion, "pages" | "chec
       containers.push({ id: `s${s.id}`, kind: "section", parent: `p${p.id}`, visible: s.visible, show_if: s.show_if });
       for (const f of s.fields) {
         fields.push({
-          key: f.key, type: f.type, section: `s${s.id}`, visible: f.visible, show_if: f.show_if, required: f.required,
-          required_if: f.required_if, options: (f.config.options as FieldSpec["options"]) ?? undefined,
+          key: f.key,
+          type: f.type,
+          section: `s${s.id}`,
+          visible: f.visible,
+          show_if: f.show_if,
+          required: f.required,
+          required_if: f.required_if,
+          options: (f.config.options as FieldSpec["options"]) ?? undefined,
           rule: f.type === "derived" ? f.config.rule : undefined,
         });
       }
     }
   }
-  return { form: kind, containers, fields, checks: (tree.checks ?? []).map((c) => ({ rule: c.rule, message: c.message, fields: c.fields })) };
+  return {
+    form: kind,
+    containers,
+    fields,
+    checks: (tree.checks ?? []).map((c) => ({ rule: c.rule, message: c.message, fields: c.fields })),
+  };
 }
 
 /** Evaluate one form given its own answers and the other forms' answers. */
 export function evaluateTree(kind: Kind, tree: Pick<FormVersion, "pages" | "checks">, values: Answers, ctx: Ctx = {}): Result {
-  return evaluateForm(specFromTree(kind, tree), { booking: ctx.booking, start: ctx.start, end: ctx.end, inspection: ctx.inspection, [kind]: values }, today());
+  return evaluateForm(
+    specFromTree(kind, tree),
+    { booking: ctx.booking, start: ctx.start, end: ctx.end, inspection: ctx.inspection, [kind]: values },
+    today(),
+  );
 }
 
 export type Gap = { key: string; label: string; page: number; pageTitle: string };
@@ -48,7 +63,9 @@ export function missingFields(kind: Kind, tree: Pick<FormVersion, "pages" | "che
         if (NOT_ASKED_TYPES.includes(f.type)) return;
         if (r.visible[f.key] && r.required[f.key] && isEmpty(values[f.key]))
           out.push({ key: f.key, label: f.label || f.key, page: i, pageTitle: p.title });
-      })));
+      }),
+    ),
+  );
   return out;
 }
 
@@ -62,11 +79,13 @@ export function visiblePages(kind: Kind, tree: Pick<FormVersion, "pages" | "chec
 export function submittable(kind: Kind, tree: Pick<FormVersion, "pages" | "checks">, values: Answers, ctx: Ctx = {}): Answers {
   const r = evaluateTree(kind, tree, values, ctx);
   const out: Answers = {};
-  for (const p of tree.pages) for (const s of p.sections) for (const f of s.fields) {
-    if (NOT_ASKED_TYPES.includes(f.type)) continue;
-    const v = values[f.key];
-    if (r.visible[f.key] && !isEmpty(v)) out[f.key] = v;
-  }
+  for (const p of tree.pages)
+    for (const s of p.sections)
+      for (const f of s.fields) {
+        if (NOT_ASKED_TYPES.includes(f.type)) continue;
+        const v = values[f.key];
+        if (r.visible[f.key] && !isEmpty(v)) out[f.key] = v;
+      }
   return out;
 }
 

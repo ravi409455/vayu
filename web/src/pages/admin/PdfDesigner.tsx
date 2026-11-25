@@ -9,7 +9,24 @@ import { fmtDay } from "../../lib/format";
 import { useRefChoices } from "../../lib/useChoices";
 import { Confirm, Empty, LoadError, PageHeader, Pill, useToast } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
-import { findPart, freshCopies, locate, partNames, removePart, replaceRef, sharedPart, shiftPart, unlinkShared, updatePage, updatePart, withIds, type Definition, type Part, type Template, type TVersion } from "./report/model";
+import {
+  findPart,
+  freshCopies,
+  locate,
+  partNames,
+  removePart,
+  replaceRef,
+  sharedPart,
+  shiftPart,
+  unlinkShared,
+  updatePage,
+  updatePart,
+  withIds,
+  type Definition,
+  type Part,
+  type Template,
+  type TVersion,
+} from "./report/model";
 import { useFormSections, useSampleBookings } from "./report/hooks";
 import { useDebounced } from "../../lib/useDebounced";
 import { PagesPanel, type Sel } from "./report/PagesPanel";
@@ -31,32 +48,87 @@ export function PdfDesigner() {
   const forms = useList<FormSummary>(keys.forms(), "forms");
   const [tid, setTid] = useState<number | "library" | null>(null);
   const library = tid === "library";
-  const t = library ? null : (templates.data ?? []).find((x) => x.id === tid) ?? (templates.data ?? [])[0] ?? null;
+  const t = library ? null : ((templates.data ?? []).find((x) => x.id === tid) ?? (templates.data ?? [])[0] ?? null);
   const formName = (x: Template) => (forms.data ?? []).find((f) => f.id === x.form)?.name ?? x.form_key;
   const editable = can("pdf_templates.edit");
   const withoutTemplate = (forms.data ?? []).filter((f) => f.type === "custom" && !(templates.data ?? []).some((x) => x.form === f.id));
-  const make = useMutation({ mutationFn: (form: number) => api<Template>("pdf-templates", { body: { form } }), onSuccess: (r) => { void refresh(keys.pdfTemplates()); setTid(r.id); }, onError: fail });
+  const make = useMutation({
+    mutationFn: (form: number) => api<Template>("pdf-templates", { body: { form } }),
+    onSuccess: (r) => {
+      void refresh(keys.pdfTemplates());
+      setTid(r.id);
+    },
+    onError: fail,
+  });
   return (
     <>
       <PageHeader title="PDF templates">
         {editable && withoutTemplate.length > 0 && (
-          <select aria-label="Create a template for" value="" onChange={(e) => e.target.value && make.mutate(Number(e.target.value))} style={{ maxWidth: 240 }}>
-            <option value="">+ New template for…</option>{withoutTemplate.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select>)}
+          <select
+            aria-label="Create a template for"
+            value=""
+            onChange={(e) => e.target.value && make.mutate(Number(e.target.value))}
+            style={{ maxWidth: 240 }}
+          >
+            <option value="">+ New template for…</option>
+            {withoutTemplate.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        )}
       </PageHeader>
       {templates.isError && <LoadError error={templates.error} what="PDF templates" onRetry={templates.refetch} />}
-      <div className="tabs" role="tablist" aria-label="Templates">{(templates.data ?? []).map((x) => (
-        <button key={x.id} role="tab" aria-selected={(t?.id ?? null) === x.id} className={t?.id === x.id ? "on" : ""} onClick={() => setTid(x.id)}>{formName(x)}</button>))}
-        <button role="tab" aria-selected={library} className={`rd-libtab${library ? " on" : ""}`} onClick={() => setTid("library")}>Shared library</button></div>
-      {library ? <SharedLibrary templates={templates.data ?? []} forms={forms.data ?? []} editable={editable} />
-        : t ? <Designer key={t.id} template={t} form={(forms.data ?? []).find((f) => f.id === t.form)} editable={editable} refresh={() => refresh(keys.pdfTemplates())}
-        copyTargets={withoutTemplate} onOpen={setTid} />
-        : <Empty title="No PDF templates yet">Create one for an inspection form with “New template for…”.</Empty>}
+      <div className="tabs" role="tablist" aria-label="Templates">
+        {(templates.data ?? []).map((x) => (
+          <button
+            key={x.id}
+            role="tab"
+            aria-selected={(t?.id ?? null) === x.id}
+            className={t?.id === x.id ? "on" : ""}
+            onClick={() => setTid(x.id)}
+          >
+            {formName(x)}
+          </button>
+        ))}
+        <button role="tab" aria-selected={library} className={`rd-libtab${library ? " on" : ""}`} onClick={() => setTid("library")}>
+          Shared library
+        </button>
+      </div>
+      {library ? (
+        <SharedLibrary templates={templates.data ?? []} forms={forms.data ?? []} editable={editable} />
+      ) : t ? (
+        <Designer
+          key={t.id}
+          template={t}
+          form={(forms.data ?? []).find((f) => f.id === t.form)}
+          editable={editable}
+          refresh={() => refresh(keys.pdfTemplates())}
+          copyTargets={withoutTemplate}
+          onOpen={setTid}
+        />
+      ) : (
+        <Empty title="No PDF templates yet">Create one for an inspection form with “New template for…”.</Empty>
+      )}
     </>
   );
 }
 
-function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
-  template: Template; form?: FormSummary; editable: boolean; refresh: () => unknown; copyTargets: FormSummary[]; onOpen: (id: number) => void;
+function Designer({
+  template,
+  form,
+  editable,
+  refresh,
+  copyTargets,
+  onOpen,
+}: {
+  template: Template;
+  form?: FormSummary;
+  editable: boolean;
+  refresh: () => unknown;
+  copyTargets: FormSummary[];
+  onOpen: (id: number) => void;
 }) {
   const { say, fail } = useToast();
   const sharedItems = useShared();
@@ -66,13 +138,30 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
   const importInput = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState<unknown>(null);
   const [copying, setCopying] = useState(false);
-  const [pagesShown, setPagesShown] = useState(() => { try { return localStorage.getItem("rd-pages") !== "hidden"; } catch { return true; } });
-  const showPages = (v: boolean) => { setPagesShown(v); try { localStorage.setItem("rd-pages", v ? "shown" : "hidden"); } catch { /* private window */ } };
+  const [pagesShown, setPagesShown] = useState(() => {
+    try {
+      return localStorage.getItem("rd-pages") !== "hidden";
+    } catch {
+      return true;
+    }
+  });
+  const showPages = (v: boolean) => {
+    setPagesShown(v);
+    try {
+      localStorage.setItem("rd-pages", v ? "shown" : "hidden");
+    } catch {
+      /* private window */
+    }
+  };
   const reload = useRefresh();
   const draftMeta = template.versions.find((v) => v.status === "draft");
   const latest = template.versions[template.versions.length - 1];
   const vid = (draftMeta ?? latest)?.id;
-  const ver = useQuery({ queryKey: keys.pdfVersion(vid), enabled: !!vid, queryFn: ({ signal }) => api<TVersion>(`pdf-template-versions/${vid}`, { signal }) });
+  const ver = useQuery({
+    queryKey: keys.pdfVersion(vid),
+    enabled: !!vid,
+    queryFn: ({ signal }) => api<TVersion>(`pdf-template-versions/${vid}`, { signal }),
+  });
   const formVersionId = form?.draft_version?.id ?? form?.published_version?.id;
   const { tree, sections, sectionNames } = useFormSections(formVersionId);
   const choices = useRefChoices(template.form);
@@ -86,7 +175,11 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
   const [settings, setSettings] = useState(false);
   const [discard, setDiscard] = useState(false);
   const [showWarnings, setShowWarnings] = useState(false);
-  const [preview, setPreview] = useState<{ pdf: string; pages: LayoutPage[]; checks?: { page: number; code: string; message: string }[] } | null>(null);
+  const [preview, setPreview] = useState<{
+    pdf: string;
+    pages: LayoutPage[];
+    checks?: { page: number; code: string; message: string }[];
+  } | null>(null);
   const [rendering, setRendering] = useState(false);
   const [checks, setChecks] = useState<{ issues: Issue[]; unused: Unused[] }>({ issues: [], unused: [] });
   const v = ver.data;
@@ -94,11 +187,21 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
   const ok = editable && draft;
   const chosen = bookingId || sample.data?.[0]?.id || "";
 
-  useEffect(() => { if (v) { setDef(withIds({ ...v.definition, pages: v.definition.pages ?? [] })); rowVersion.current = v.row_version; setDirty(false); setSaving("saved"); } }, [v]);
+  useEffect(() => {
+    if (v) {
+      setDef(withIds({ ...v.definition, pages: v.definition.pages ?? [] }));
+      rowVersion.current = v.row_version;
+      setDirty(false);
+      setSaving("saved");
+    }
+  }, [v]);
 
   const fieldChoices = useMemo(() => choices.map((c) => ({ value: c.value, label: c.label, type: c.type })), [choices]);
 
-  const edit = (d: Definition) => { setDef(d); setDirty(true); };
+  const edit = (d: Definition) => {
+    setDef(d);
+    setDirty(true);
+  };
 
   // autosave: the draft follows every change, a moment after it
   const saved = useDebounced(def, 700);
@@ -107,26 +210,42 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
     saveChain.current = saveChain.current.then(async () => {
       setSaving("saving");
       try {
-        const r = await api<TVersion>(`pdf-template-versions/${v!.id}`, { method: "PATCH", body: { definition: d, row_version: rowVersion.current } });
+        const r = await api<TVersion>(`pdf-template-versions/${v!.id}`, {
+          method: "PATCH",
+          body: { definition: d, row_version: rowVersion.current },
+        });
         rowVersion.current = r.row_version;
         setSaving("saved");
       } catch (e) {
         setSaving("error");
-        if (e instanceof ApiError && e.code === "STALE_DRAFT") say("Someone else changed this draft. Reload the page to see their version.");
+        if (e instanceof ApiError && e.code === "STALE_DRAFT")
+          say("Someone else changed this draft. Reload the page to see their version.");
         else fail(e);
       }
     });
     return saveChain.current;
   };
-  useEffect(() => { if (ok && dirty && saved) { setDirty(false); void save(saved); } }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps -- saves when the debounced definition changes, not on every keystroke's dirty/ok change
+  useEffect(() => {
+    if (ok && dirty && saved) {
+      setDirty(false);
+      void save(saved);
+    }
+  }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps -- saves when the debounced definition changes, not on every keystroke's dirty/ok change
   // leaving (another template, the library, another page) with an edit not sent yet: send it now (F-015)
   const pending = useRef<Definition | null>(null);
   pending.current = ok && dirty ? def : null;
   const flush = useRef(save);
   flush.current = save;
-  useEffect(() => () => { if (pending.current) void flush.current(pending.current); }, []);
+  useEffect(
+    () => () => {
+      if (pending.current) void flush.current(pending.current);
+    },
+    [],
+  );
   useEffect(() => {
-    const warn = (e: BeforeUnloadEvent) => { if (pending.current) e.preventDefault(); };
+    const warn = (e: BeforeUnloadEvent) => {
+      if (pending.current) e.preventDefault();
+    };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
@@ -137,13 +256,26 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
   useEffect(() => {
     if (!shown || !v) return;
     const n = ++ticket.current;
-    void api<{ issues: Issue[]; unused: Unused[] }>(`pdf-template-versions/${v.id}/checks`, { body: { definition: shown } }).then((r) => { if (n === ticket.current) setChecks(r); }).catch(() => {});
+    void api<{ issues: Issue[]; unused: Unused[] }>(`pdf-template-versions/${v.id}/checks`, { body: { definition: shown } })
+      .then((r) => {
+        if (n === ticket.current) setChecks(r);
+      })
+      .catch(() => {});
     if (!chosen) return;
     setRendering(true);
-    api<{ pdf: string; pages: LayoutPage[]; checks: { page: number; code: string; message: string }[] }>(`pdf-template-versions/${v.id}/preview`, { body: { booking: chosen, definition: shown } })
-      .then((r) => { if (n === ticket.current) setPreview(r); })
-      .catch((e) => { if (n === ticket.current) fail(e); })
-      .finally(() => { if (n === ticket.current) setRendering(false); });
+    api<{ pdf: string; pages: LayoutPage[]; checks: { page: number; code: string; message: string }[] }>(
+      `pdf-template-versions/${v.id}/preview`,
+      { body: { booking: chosen, definition: shown } },
+    )
+      .then((r) => {
+        if (n === ticket.current) setPreview(r);
+      })
+      .catch((e) => {
+        if (n === ticket.current) fail(e);
+      })
+      .finally(() => {
+        if (n === ticket.current) setRendering(false);
+      });
   }, [shown, chosen, v?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- re-renders the preview only for a new definition, booking or version; fail is a fresh function each render
 
   async function publish() {
@@ -151,12 +283,25 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
     await save(def);
     try {
       await api(`pdf-template-versions/${v.id}/publish`, { body: { row_version: rowVersion.current } });
-      say("Published. New and re-made reports use this layout."); await reload(keys.pdfVersion()); void refresh();
-    } catch (e) { fail(e); setShowWarnings(true); }
+      say("Published. New and re-made reports use this layout.");
+      await reload(keys.pdfVersion());
+      void refresh();
+    } catch (e) {
+      fail(e);
+      setShowWarnings(true);
+    }
   }
   async function discardDraft() {
-    try { await api(`pdf-template-versions/${v!.id}`, { method: "DELETE" }); setDiscard(false); say("Draft discarded. The live layout is unchanged."); await reload(keys.pdfVersion()); await refresh(); }
-    catch (e) { setDiscard(false); fail(e); }
+    try {
+      await api(`pdf-template-versions/${v!.id}`, { method: "DELETE" });
+      setDiscard(false);
+      say("Draft discarded. The live layout is unchanged.");
+      await reload(keys.pdfVersion());
+      await refresh();
+    } catch (e) {
+      setDiscard(false);
+      fail(e);
+    }
   }
   async function exportFile() {
     if (!v) return;
@@ -168,17 +313,30 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
       a.download = `${template.form_key}-report-v${v.number}.json`;
       a.click();
       URL.revokeObjectURL(a.href);
-    } catch (e) { fail(e); }
+    } catch (e) {
+      fail(e);
+    }
   }
   async function importFile() {
     const file = importing;
     setImporting(null);
     try {
       const r = await api<TVersion & { issues: Issue[]; notes: string[] }>(`pdf-templates/${template.id}/import`, { body: file });
-      await refresh(); await reload(keys.pdfVersion(), keys.pdfShared(), keys.pdfPictures());
-      say([`Imported into draft v${r.number}.`, ...r.notes, r.issues.length ? `${r.issues.length} thing${r.issues.length === 1 ? "" : "s"} to fix: see warnings.` : ""].filter(Boolean).join(" "));
+      await refresh();
+      await reload(keys.pdfVersion(), keys.pdfShared(), keys.pdfPictures());
+      say(
+        [
+          `Imported into draft v${r.number}.`,
+          ...r.notes,
+          r.issues.length ? `${r.issues.length} thing${r.issues.length === 1 ? "" : "s"} to fix: see warnings.` : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
       if (r.issues.length) setShowWarnings(true);
-    } catch (e) { fail(e); }
+    } catch (e) {
+      fail(e);
+    }
   }
   async function unlink(p: Extract<Part, { type: "snippet" }>) {
     const item = snippets.find((x) => x.key === p.ref.key);
@@ -187,7 +345,9 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
       const r = await api<SharedItem>(`pdf-shared/${item.id}`, { query: { revision: String(p.ref.revision) } });
       edit(unlinkShared(def, p.id!, (r.content as { parts: Part[] }).parts));
       setSel(null);
-    } catch (e) { fail(e); }
+    } catch (e) {
+      fail(e);
+    }
   }
   function openPdf() {
     if (!preview) return;
@@ -206,94 +366,321 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
     <>
       <div className="bar rd-top">
         {draftMeta ? <Pill tone="warn">Draft v{draftMeta.number}, not live yet</Pill> : <Pill tone="ok">Live v{latest?.number}</Pill>}
-        <span className="muted small">{!draft ? "Start a draft to change it." : saving === "saving" ? "Saving…" : saving === "error" ? "Not saved" : dirty ? "Unsaved changes…" : "All changes saved"}</span>
+        <span className="muted small">
+          {!draft
+            ? "Start a draft to change it."
+            : saving === "saving"
+              ? "Saving…"
+              : saving === "error"
+                ? "Not saved"
+                : dirty
+                  ? "Unsaved changes…"
+                  : "All changes saved"}
+        </span>
         <span className="grow" />
-        <label className="bar small muted" style={{ margin: 0 }}>Show with
-          <select aria-label="Booking for the preview" value={chosen} onChange={(e) => setBookingId(e.target.value)} style={{ maxWidth: 280 }}>
+        <label className="bar small muted" style={{ margin: 0 }}>
+          Show with
+          <select
+            aria-label="Booking for the preview"
+            value={chosen}
+            onChange={(e) => setBookingId(e.target.value)}
+            style={{ maxWidth: 280 }}
+          >
             {(sample.data ?? []).length === 0 && <option value="">No completed booking of this form yet</option>}
-            {(sample.data ?? []).map((bk) => <option key={bk.id} value={bk.id}>{bk.booking_id} · {String(bk.answers.customer_name ?? "")} · {fmtDay(bk.answers.inspection_date)}</option>)}
-          </select></label>
+            {(sample.data ?? []).map((bk) => (
+              <option key={bk.id} value={bk.id}>
+                {bk.booking_id} · {String(bk.answers.customer_name ?? "")} · {fmtDay(bk.answers.inspection_date)}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="menu-wrap">
-          <button type="button" aria-expanded={showWarnings} className={checks.issues.length ? "danger" : ""} onClick={() => setShowWarnings(!showWarnings)}>
-            <AlertTriangle size={14} aria-hidden /> {warnCount ? `${warnCount} warning${warnCount === 1 ? "" : "s"}` : "No warnings"}</button>
+          <button
+            type="button"
+            aria-expanded={showWarnings}
+            className={checks.issues.length ? "danger" : ""}
+            onClick={() => setShowWarnings(!showWarnings)}
+          >
+            <AlertTriangle size={14} aria-hidden /> {warnCount ? `${warnCount} warning${warnCount === 1 ? "" : "s"}` : "No warnings"}
+          </button>
           {showWarnings && (
             <div className="menu rd-warn" role="dialog" aria-label="Warnings">
               {checks.issues.map((i, k) => (
-                <div key={k} className="rd-warn-row bad"><strong>Must fix</strong> {i.message}
+                <div key={k} className="rd-warn-row bad">
+                  <strong>Must fix</strong> {i.message}
                   <div className="bar" style={{ margin: "4px 0 0" }}>
-                    {i.part && <button type="button" className="link small" onClick={() => { setSel({ kind: "part", id: i.part! }); setShowWarnings(false); }}>Show the part</button>}
+                    {i.part && (
+                      <button
+                        type="button"
+                        className="link small"
+                        onClick={() => {
+                          setSel({ kind: "part", id: i.part! });
+                          setShowWarnings(false);
+                        }}
+                      >
+                        Show the part
+                      </button>
+                    )}
                     {ok && i.part && i.ref && i.suggestion && (
-                      <button type="button" className="sm" onClick={() => { const p = findPart(def, i.part!); if (p) edit(updatePart(def, i.part!, replaceRef(p, i.ref!, i.suggestion!))); }}>Use {i.suggestion}</button>)}
+                      <button
+                        type="button"
+                        className="sm"
+                        onClick={() => {
+                          const p = findPart(def, i.part!);
+                          if (p) edit(updatePart(def, i.part!, replaceRef(p, i.ref!, i.suggestion!)));
+                        }}
+                      >
+                        Use {i.suggestion}
+                      </button>
+                    )}
                   </div>
-                </div>))}
-              {layoutChecks.map((c, k) => <div key={`l${k}`} className="rd-warn-row"><strong>Layout, page {c.page}</strong> {c.message}</div>)}
-              {checks.unused.length > 0 && <div className="rd-warn-row"><strong>{checks.unused.length} form field{checks.unused.length === 1 ? " is" : "s are"} not in this report</strong>
-                <ul>{checks.unused.slice(0, 12).map((u) => <li key={u.key}>{u.section} → {u.label}</li>)}{checks.unused.length > 12 && <li>…and {checks.unused.length - 12} more</li>}</ul></div>}
-              {warnCount === 0 && <p className="muted small" style={{ padding: 8 }}>Every field of the form is in the report and nothing points at a missing field.</p>}
-            </div>)}
+                </div>
+              ))}
+              {layoutChecks.map((c, k) => (
+                <div key={`l${k}`} className="rd-warn-row">
+                  <strong>Layout, page {c.page}</strong> {c.message}
+                </div>
+              ))}
+              {checks.unused.length > 0 && (
+                <div className="rd-warn-row">
+                  <strong>
+                    {checks.unused.length} form field{checks.unused.length === 1 ? " is" : "s are"} not in this report
+                  </strong>
+                  <ul>
+                    {checks.unused.slice(0, 12).map((u) => (
+                      <li key={u.key}>
+                        {u.section} → {u.label}
+                      </li>
+                    ))}
+                    {checks.unused.length > 12 && <li>…and {checks.unused.length - 12} more</li>}
+                  </ul>
+                </div>
+              )}
+              {warnCount === 0 && (
+                <p className="muted small" style={{ padding: 8 }}>
+                  Every field of the form is in the report and nothing points at a missing field.
+                </p>
+              )}
+            </div>
+          )}
         </div>
-        <button type="button" onClick={() => setSettings(true)}><Settings2 size={14} aria-hidden /> Report settings</button>
-        <MoreMenu label="More template actions" items={[
-          { label: "Open the PDF", onClick: openPdf, hidden: !preview },
-          { label: "Export (backup file)", onClick: () => void exportFile() },
-          { label: "Import a template file…", onClick: () => importInput.current?.click(), hidden: !editable },
-          { label: "Copy to another form…", onClick: () => setCopying(true), hidden: !editable || copyTargets.length === 0 },
-          { label: "Discard draft", danger: true, onClick: () => setDiscard(true), hidden: !ok || !template.versions.some((x) => x.status === "published") },
-        ]} />
-        {editable && !draftMeta && <button className="primary" onClick={async () => { try { await api(`pdf-templates/${template.id}/drafts`, { body: {} }); await refresh(); } catch (e) { fail(e); } }}>Start a new draft</button>}
-        {ok && <button className="primary" onClick={publish}>Publish</button>}
+        <button type="button" onClick={() => setSettings(true)}>
+          <Settings2 size={14} aria-hidden /> Report settings
+        </button>
+        <MoreMenu
+          label="More template actions"
+          items={[
+            { label: "Open the PDF", onClick: openPdf, hidden: !preview },
+            { label: "Export (backup file)", onClick: () => void exportFile() },
+            { label: "Import a template file…", onClick: () => importInput.current?.click(), hidden: !editable },
+            { label: "Copy to another form…", onClick: () => setCopying(true), hidden: !editable || copyTargets.length === 0 },
+            {
+              label: "Discard draft",
+              danger: true,
+              onClick: () => setDiscard(true),
+              hidden: !ok || !template.versions.some((x) => x.status === "published"),
+            },
+          ]}
+        />
+        {editable && !draftMeta && (
+          <button
+            className="primary"
+            onClick={async () => {
+              try {
+                await api(`pdf-templates/${template.id}/drafts`, { body: {} });
+                await refresh();
+              } catch (e) {
+                fail(e);
+              }
+            }}
+          >
+            Start a new draft
+          </button>
+        )}
+        {ok && (
+          <button className="primary" onClick={publish}>
+            Publish
+          </button>
+        )}
       </div>
-      {discard && <Confirm title="Discard this draft?" danger confirmLabel="Discard draft" onCancel={() => setDiscard(false)} onConfirm={discardDraft}><p>Your unpublished changes to this layout are thrown away. The live layout is not affected.</p></Confirm>}
+      {discard && (
+        <Confirm
+          title="Discard this draft?"
+          danger
+          confirmLabel="Discard draft"
+          onCancel={() => setDiscard(false)}
+          onConfirm={discardDraft}
+        >
+          <p>Your unpublished changes to this layout are thrown away. The live layout is not affected.</p>
+        </Confirm>
+      )}
       {settings && <ReportSettings def={def} onChange={edit} onClose={() => setSettings(false)} readOnly={!ok} themes={themes} />}
-      <input ref={importInput} type="file" accept="application/json,.json" hidden aria-label="Template file" onChange={async (e) => {
-        const f = e.target.files?.[0];
-        e.target.value = "";
-        if (!f) return;
-        try { setImporting(JSON.parse(await f.text())); } catch { say("That file is not a template file (JSON)."); }
-      }} />
+      <input
+        ref={importInput}
+        type="file"
+        accept="application/json,.json"
+        hidden
+        aria-label="Template file"
+        onChange={async (e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (!f) return;
+          try {
+            setImporting(JSON.parse(await f.text()));
+          } catch {
+            say("That file is not a template file (JSON).");
+          }
+        }}
+      />
       {importing !== null && (
-        <Confirm title="Import this template file?" confirmLabel="Import" onCancel={() => setImporting(null)} onConfirm={() => void importFile()}>
-          <p>Everything in the file replaces this template's draft: pages, parts, settings, pictures and shared items. The live layout does not change until you publish.</p>
-          <p className="muted small">Anything the file uses that this form does not have is listed under warnings and marked “fix” in the pages list, with the closest match to use instead.</p>
-        </Confirm>)}
-      {copying && <CopyDialog targets={copyTargets} onCancel={() => setCopying(false)} onCopy={async (formId) => {
-        try { const r = await api<{ id: number }>(`pdf-templates/${template.id}/copy`, { body: { form: formId } }); setCopying(false); await refresh(); onOpen(r.id); say("Copied. The new template is a draft; check its warnings."); }
-        catch (e) { fail(e); }
-      }} />}
+        <Confirm
+          title="Import this template file?"
+          confirmLabel="Import"
+          onCancel={() => setImporting(null)}
+          onConfirm={() => void importFile()}
+        >
+          <p>
+            Everything in the file replaces this template's draft: pages, parts, settings, pictures and shared items. The live layout does
+            not change until you publish.
+          </p>
+          <p className="muted small">
+            Anything the file uses that this form does not have is listed under warnings and marked “fix” in the pages list, with the
+            closest match to use instead.
+          </p>
+        </Confirm>
+      )}
+      {copying && (
+        <CopyDialog
+          targets={copyTargets}
+          onCancel={() => setCopying(false)}
+          onCopy={async (formId) => {
+            try {
+              const r = await api<{ id: number }>(`pdf-templates/${template.id}/copy`, { body: { form: formId } });
+              setCopying(false);
+              await refresh();
+              onOpen(r.id);
+              say("Copied. The new template is a draft; check its warnings.");
+            } catch (e) {
+              fail(e);
+            }
+          }}
+        />
+      )}
       <div className={`rd-layout${pagesShown ? "" : " no-left"}`}>
-        {!pagesShown && <button type="button" className="rd-rail" onClick={() => showPages(true)} aria-label="Show the pages list"><ChevronsRight size={16} aria-hidden /><span>Pages</span></button>}
-        {pagesShown && <aside className="card rd-left" aria-label="Pages">
-          <div className="rd-h bar" style={{ margin: 0 }}><span className="grow">Pages</span>
-            <button type="button" className="icon-btn" aria-label="Hide the pages list" title="Hide the pages list" onClick={() => showPages(false)}><ChevronsLeft size={15} aria-hidden /></button></div>
-          <PagesPanel def={def} sel={sel} onSelect={setSel} onChange={edit} formPages={tree.data?.pages ?? []} sections={sectionNames} readOnly={!ok} snippets={snippets} bad={bad} />
-        </aside>}
+        {!pagesShown && (
+          <button type="button" className="rd-rail" onClick={() => showPages(true)} aria-label="Show the pages list">
+            <ChevronsRight size={16} aria-hidden />
+            <span>Pages</span>
+          </button>
+        )}
+        {pagesShown && (
+          <aside className="card rd-left" aria-label="Pages">
+            <div className="rd-h bar" style={{ margin: 0 }}>
+              <span className="grow">Pages</span>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="Hide the pages list"
+                title="Hide the pages list"
+                onClick={() => showPages(false)}
+              >
+                <ChevronsLeft size={15} aria-hidden />
+              </button>
+            </div>
+            <PagesPanel
+              def={def}
+              sel={sel}
+              onSelect={setSel}
+              onChange={edit}
+              formPages={tree.data?.pages ?? []}
+              sections={sectionNames}
+              readOnly={!ok}
+              snippets={snippets}
+              bad={bad}
+            />
+          </aside>
+        )}
         <section className="rd-mid" aria-label="Preview">
-          <div className="rd-status muted small">{rendering ? "Updating…" : chosen ? "This is the real PDF. Click a part to change it." : "Complete one booking inspected with this form to see the report with real answers."}</div>
-          {preview ? <Preview pdf={preview.pdf} pages={preview.pages} selected={sel?.kind === "part" ? sel.id : null} names={nameMap} onSelect={(id) => setSel({ kind: "part", id })} />
-            : <Empty title={chosen ? "Drawing the report…" : "Nothing to show yet"} />}
+          <div className="rd-status muted small">
+            {rendering
+              ? "Updating…"
+              : chosen
+                ? "This is the real PDF. Click a part to change it."
+                : "Complete one booking inspected with this form to see the report with real answers."}
+          </div>
+          {preview ? (
+            <Preview
+              pdf={preview.pdf}
+              pages={preview.pages}
+              selected={sel?.kind === "part" ? sel.id : null}
+              names={nameMap}
+              onSelect={(id) => setSel({ kind: "part", id })}
+            />
+          ) : (
+            <Empty title={chosen ? "Drawing the report…" : "Nothing to show yet"} />
+          )}
         </section>
         <aside className="card rd-right" aria-label="Settings">
           {part && sel?.kind === "part" ? (
-            <PartSettings key={sel.id} part={part} ctx={{ sections, fields: fieldChoices, readOnly: !ok, snippets }}
-              onShared={ok ? (item) => {
-                const w = locate(def, sel.id); if (!w) return;
-                const linked = { ...sharedPart({ key: item.key, revision: item.revision }), id: sel.id };
-                edit(w.set(w.list.map((x, i) => (i === w.index ? linked : x))));
-                say(item.updated.length ? `Shared. Also updated: ${item.updated.join(", ")}.` : "Shared. Add it to other reports from “+ Add to this page”.");
-              } : undefined}
+            <PartSettings
+              key={sel.id}
+              part={part}
+              ctx={{ sections, fields: fieldChoices, readOnly: !ok, snippets }}
+              onShared={
+                ok
+                  ? (item) => {
+                      const w = locate(def, sel.id);
+                      if (!w) return;
+                      const linked = { ...sharedPart({ key: item.key, revision: item.revision }), id: sel.id };
+                      edit(w.set(w.list.map((x, i) => (i === w.index ? linked : x))));
+                      say(
+                        item.updated.length
+                          ? `Shared. Also updated: ${item.updated.join(", ")}.`
+                          : "Shared. Add it to other reports from “+ Add to this page”.",
+                      );
+                    }
+                  : undefined
+              }
               onUnlink={ok && part.type === "snippet" ? () => void unlink(part) : undefined}
               onChange={(p) => edit(updatePart(def, sel.id, p))}
-              onDelete={() => { edit(removePart(def, sel.id)); setSel(null); }}
+              onDelete={() => {
+                edit(removePart(def, sel.id));
+                setSel(null);
+              }}
               onMove={(by) => edit(shiftPart(def, sel.id, by))}
-              onDuplicate={() => { const w = locate(def, sel.id); if (!w) return; const copy = freshCopies([part])[0]!; edit(w.set([...w.list.slice(0, w.index + 1), copy, ...w.list.slice(w.index + 1)])); setSel({ kind: "part", id: copy.id! }); }} />
+              onDuplicate={() => {
+                const w = locate(def, sel.id);
+                if (!w) return;
+                const copy = freshCopies([part])[0]!;
+                edit(w.set([...w.list.slice(0, w.index + 1), copy, ...w.list.slice(w.index + 1)]));
+                setSel({ kind: "part", id: copy.id! });
+              }}
+            />
           ) : page && sel?.kind === "page" ? (
             <fieldset disabled={!ok} className="rd-fieldset">
-              <PageSettings page={page} fields={fieldChoices} onChange={(p) => edit(updatePage(def, sel.id, p))} onDelete={() => { edit({ ...def, pages: def.pages.filter((p) => p.id !== sel.id) }); setSel(null); }} />
+              <PageSettings
+                page={page}
+                fields={fieldChoices}
+                onChange={(p) => edit(updatePage(def, sel.id, p))}
+                onDelete={() => {
+                  edit({ ...def, pages: def.pages.filter((p) => p.id !== sel.id) });
+                  setSel(null);
+                }}
+              />
             </fieldset>
           ) : (
             <div className="rd-settings-body">
-              <p className="muted small">Click a part in the report or in the pages list to change it. The pages list shows the report from top to bottom; each page starts on a new sheet.</p>
-              <p className="muted small">Header, footer, colours, fonts, watermark and the file name are in <button type="button" className="link" onClick={() => setSettings(true)}>Report settings</button>.</p>
+              <p className="muted small">
+                Click a part in the report or in the pages list to change it. The pages list shows the report from top to bottom; each page
+                starts on a new sheet.
+              </p>
+              <p className="muted small">
+                Header, footer, colours, fonts, watermark and the file name are in{" "}
+                <button type="button" className="link" onClick={() => setSettings(true)}>
+                  Report settings
+                </button>
+                .
+              </p>
             </div>
           )}
         </aside>
@@ -302,14 +689,21 @@ function Designer({ template, form, editable, refresh, copyTargets, onOpen }: {
   );
 }
 
-
 function CopyDialog({ targets, onCancel, onCopy }: { targets: FormSummary[]; onCancel: () => void; onCopy: (form: number) => void }) {
   const [form, setForm] = useState(targets[0]?.id ?? 0);
   return (
     <Confirm title="Copy this template" confirmLabel="Copy" onCancel={onCancel} onConfirm={() => onCopy(form)}>
       <p>Start another form's report from this layout. The copy is a draft; anything its form does not have shows as a warning to fix.</p>
-      <label className="small">For the form <select aria-label="Copy for the form" value={form} onChange={(e) => setForm(Number(e.target.value))}>
-        {targets.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
+      <label className="small">
+        For the form{" "}
+        <select aria-label="Copy for the form" value={form} onChange={(e) => setForm(Number(e.target.value))}>
+          {targets.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.name}
+            </option>
+          ))}
+        </select>
+      </label>
     </Confirm>
   );
 }

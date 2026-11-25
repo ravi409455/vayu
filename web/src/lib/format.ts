@@ -5,11 +5,21 @@ const pad = (n: number) => String(n).padStart(2, "0");
 /** A calendar date (built from y/m/d, not a moment in time) as YYYY-MM-DD. */
 export const isoDay = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 export const TIME_ZONE = "Asia/Kolkata";
-const parts = new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+const parts = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
 /** A moment as India sees it: its day, "HH:MM", hours since midnight and seconds. */
 export function ist(d: Date): { day: string; hhmm: string; hours: number; seconds: number } {
   const p = Object.fromEntries(parts.formatToParts(d).map((x) => [x.type, x.value]));
-  const h = Number(p.hour) % 24, m = Number(p.minute);
+  const h = Number(p.hour) % 24,
+    m = Number(p.minute);
   return { day: `${p.year}-${p.month}-${p.day}`, hhmm: `${pad(h)}:${pad(m)}`, hours: h + m / 60, seconds: Number(p.second) };
 }
 export const today = (now = new Date()) => ist(now).day;

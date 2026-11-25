@@ -9,8 +9,16 @@ afterEach(() => vi.useRealTimers());
 describe("dialogs (H-19)", () => {
   function Opener() {
     const [open, setOpen] = useState(false);
-    return <><button onClick={() => setOpen(true)}>Open it</button>
-      {open && <Modal title="Name it" onClose={() => setOpen(false)}><input aria-label="Name" /></Modal>}</>;
+    return (
+      <>
+        <button onClick={() => setOpen(true)}>Open it</button>
+        {open && (
+          <Modal title="Name it" onClose={() => setOpen(false)}>
+            <input aria-label="Name" />
+          </Modal>
+        )}
+      </>
+    );
   }
   it("moves focus in, closes on Escape, and gives focus back", async () => {
     render(<Opener />);
@@ -18,7 +26,7 @@ describe("dialogs (H-19)", () => {
     await userEvent.setup().click(opener);
     expect(screen.getByRole("dialog", { name: "Name it" })).toBeInTheDocument();
     expect(screen.getByLabelText("Name")).toHaveFocus();
-    fireEvent(screen.getByRole("dialog"), new Event("cancel", { cancelable: true }));     // what Escape fires on a modal dialog
+    fireEvent(screen.getByRole("dialog"), new Event("cancel", { cancelable: true })); // what Escape fires on a modal dialog
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(opener).toHaveFocus();
   });
@@ -33,8 +41,17 @@ describe("dialogs (H-19)", () => {
 describe("Confirm sends once (F-112)", () => {
   it("a double click while the action runs sends it once", async () => {
     let done!: () => void;
-    const act1 = vi.fn(() => new Promise<void>((r) => { done = r; }));
-    render(<Confirm title="Go?" onConfirm={act1} onCancel={() => {}}>x</Confirm>);
+    const act1 = vi.fn(
+      () =>
+        new Promise<void>((r) => {
+          done = r;
+        }),
+    );
+    render(
+      <Confirm title="Go?" onConfirm={act1} onCancel={() => {}}>
+        x
+      </Confirm>,
+    );
     const u = userEvent.setup();
     await u.dblClick(screen.getByRole("button", { name: "Confirm" }));
     expect(act1).toHaveBeenCalledTimes(1);
@@ -43,7 +60,11 @@ describe("Confirm sends once (F-112)", () => {
     expect(screen.getByRole("button", { name: "Confirm" })).toBeEnabled();
   });
   it("busy keeps the button disabled", () => {
-    render(<Confirm title="Go?" busy onConfirm={() => {}} onCancel={() => {}}>x</Confirm>);
+    render(
+      <Confirm title="Go?" busy onConfirm={() => {}} onCancel={() => {}}>
+        x
+      </Confirm>,
+    );
     expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
   });
 });
@@ -51,15 +72,28 @@ describe("Confirm sends once (F-112)", () => {
 describe("toasts (F-184, F-032)", () => {
   function Say() {
     const { say } = useToast();
-    return <><button onClick={() => say("Saved.")}>ok</button><button onClick={() => say("Could not save", true)}>bad</button></>;
+    return (
+      <>
+        <button onClick={() => say("Saved.")}>ok</button>
+        <button onClick={() => say("Could not save", true)}>bad</button>
+      </>
+    );
   }
   it("an error stays until closed and is announced at once; good news fades", () => {
     vi.useFakeTimers();
-    render(<ToastProvider><Say /></ToastProvider>);
+    render(
+      <ToastProvider>
+        <Say />
+      </ToastProvider>,
+    );
     fireEvent.click(screen.getByText("ok"));
-    act(() => { vi.advanceTimersByTime(3000); });
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
     fireEvent.click(screen.getByText("bad"));
-    act(() => { vi.advanceTimersByTime(10_000); });          // the first toast's timer does not take the error away
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    }); // the first toast's timer does not take the error away
     expect(screen.getByRole("alert")).toHaveTextContent("Could not save");
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("alert")).toBeNull();
@@ -68,7 +102,11 @@ describe("toasts (F-184, F-032)", () => {
 
 describe("form fields (F-179)", () => {
   it("the input points at its help and error text and says it is wrong", () => {
-    render(<Field label="Phone" help="10 digits" error="Too short"><input /></Field>);
+    render(
+      <Field label="Phone" help="10 digits" error="Too short">
+        <input />
+      </Field>,
+    );
     const input = screen.getByLabelText("Phone");
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(input).toHaveAccessibleDescription("10 digits Too short");

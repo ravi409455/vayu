@@ -18,7 +18,10 @@ test("J5: a designed request reaches the receiver, the ZIP downloads and the ver
   const server: Server = createServer((req, res) => {
     let body = "";
     req.on("data", (c) => (body += c));
-    req.on("end", () => { hits.push({ method: req.method!, url: req.url!, headers: req.headers, body }); res.writeHead(200).end("ok"); });
+    req.on("end", () => {
+      hits.push({ method: req.method!, url: req.url!, headers: req.headers, body });
+      res.writeHead(200).end("ok");
+    });
   });
   await new Promise<void>((r) => server.listen(9099, "127.0.0.1", r));
   try {
@@ -36,9 +39,11 @@ test("J5: a designed request reaches the receiver, the ZIP downloads and the ver
     await page.getByRole("textbox", { name: "Header value 1" }).fill("abc123");
     await page.getByRole("button", { name: "Custom" }).click();
     const json = page.getByRole("textbox", { name: "Body (JSON)" });
-    await json.fill('{\n  "ref": "{{job.booking_id}}",\n  "report": "{{link.pdf}}",\n  "images": "{{link.image_zip}}",\n  "customer": {\n    "name": "');
+    await json.fill(
+      '{\n  "ref": "{{job.booking_id}}",\n  "report": "{{link.pdf}}",\n  "images": "{{link.image_zip}}",\n  "customer": {\n    "name": "',
+    );
     await json.press("End");
-    await json.pressSequentially("{{cust");                                           // typing {{ suggests the values of this form
+    await json.pressSequentially("{{cust"); // typing {{ suggests the values of this form
     await page.getByRole("option", { name: /Customer name/ }).click();
     await json.pressSequentially('"\n  }\n}');
     await expect(page.getByText("Valid JSON.")).toBeVisible();
@@ -48,7 +53,7 @@ test("J5: a designed request reaches the receiver, the ZIP downloads and the ver
     await expect(preview).toContainText("X-Token: abc123");
     await expect(preview).toContainText('"customer"');
     await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL((u) => u.pathname === "/integrations");              // a refused save stays here (and shows why)
+    await page.waitForURL((u) => u.pathname === "/integrations"); // a refused save stays here (and shows why)
     await expect(page.getByText("Receiver", { exact: true })).toBeVisible({ timeout: 15_000 });
 
     // a real job with a photo, completed
@@ -57,14 +62,14 @@ test("J5: a designed request reaches the receiver, the ZIP downloads and the ver
     await expect.poll(() => hits.filter((h) => h.headers["x-vayu-event"] === "pdf.ready").length, { timeout: 30_000 }).toBeGreaterThan(0);
     const hit = hits.find((h) => h.headers["x-vayu-event"] === "pdf.ready")!;
     expect(hit.method).toBe("PUT");
-    expect(hit.url).toBe("/hook/J5-1");                                           // the Booking ID went into the path
+    expect(hit.url).toBe("/hook/J5-1"); // the Booking ID went into the path
     expect(hit.headers["x-token"]).toBe("abc123");
-    expect(hit.headers["x-vayu-signature"]).toBeUndefined();                      // no signing: the token header is the proof
+    expect(hit.headers["x-vayu-signature"]).toBeUndefined(); // no signing: the token header is the proof
     const payload = JSON.parse(hit.body);
     expect(payload.ref).toBe("J5-1");
     expect(payload.report).toMatch(/^http/);
     expect(payload.images).toMatch(/\/zip\//);
-    expect(payload.customer.name).toBe("Test Customer");                          // only what was mapped
+    expect(payload.customer.name).toBe("Test Customer"); // only what was mapped
     expect(Object.keys(payload).sort()).toEqual(["customer", "images", "ref", "report"]);
 
     // the test button sends the same designed request, marked as a test
@@ -73,7 +78,10 @@ test("J5: a designed request reaches the receiver, the ZIP downloads and the ver
     await expect.poll(() => hits.some((h) => h.headers["x-vayu-test"] === "1")).toBe(true);
 
     // the delivery log shows it
-    await page.getByRole("button", { name: /^Actions for / }).first().click();
+    await page
+      .getByRole("button", { name: /^Actions for / })
+      .first()
+      .click();
     await page.getByRole("menuitem", { name: "Deliveries" }).click();
     await expect(page.getByRole("dialog").locator("tr", { hasText: "PDF ready" })).toContainText("Delivered");
     await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
@@ -103,9 +111,9 @@ test("a GET or DELETE integration has no body, and the editor says what a bookin
   await signIn(page, "admin");
   await page.goto("/integrations/new");
   await page.getByRole("textbox", { name: "Name", exact: true }).fill("Lookup");
-  await expect(page.getByRole("combobox", { name: "Form", exact: true }).locator("option:checked")).toHaveText("PDI");   // an inspection form first
+  await expect(page.getByRole("combobox", { name: "Form", exact: true }).locator("option:checked")).toHaveText("PDI"); // an inspection form first
   await page.getByRole("combobox", { name: "Form", exact: true }).selectOption({ label: "Booking" });
-  await expect(page.getByRole("combobox", { name: "Send when" }).locator("option")).toHaveCount(3);   // the booking form: booking events only
+  await expect(page.getByRole("combobox", { name: "Send when" }).locator("option")).toHaveCount(3); // the booking form: booking events only
   await page.getByRole("combobox", { name: "Method" }).selectOption("GET");
   await expect(page.getByText("No body is sent with GET.")).toBeVisible();
   await page.getByRole("textbox", { name: "URL", exact: true }).fill("http://127.0.0.1:9099/lookup/");

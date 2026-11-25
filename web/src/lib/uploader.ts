@@ -17,18 +17,23 @@ export async function hashBlob(blob: Blob): Promise<string> {
 /** Sizes the picture to at most 2048 px on its long edge as JPEG. Anything the browser cannot
  *  decode (or a picture that is already small) is sent as it is. */
 export async function shrinkImage(file: Blob): Promise<Blob> {
-  if (!file.type.startsWith("image/") || file.type === "image/png" && file.size < 300_000) return file;
+  if (!file.type.startsWith("image/") || (file.type === "image/png" && file.size < 300_000)) return file;
   try {
     const bmp = await createImageBitmap(file);
     const scale = Math.min(1, MAX_EDGE / Math.max(bmp.width, bmp.height));
-    if (scale === 1 && file.type === "image/jpeg") { bmp.close(); return file; }
+    if (scale === 1 && file.type === "image/jpeg") {
+      bmp.close();
+      return file;
+    }
     const c = document.createElement("canvas");
     c.width = Math.round(bmp.width * scale);
     c.height = Math.round(bmp.height * scale);
     c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
     bmp.close();
     return await new Promise<Blob>((res) => c.toBlob((b) => res(b ?? file), "image/jpeg", 0.85));
-  } catch { return file; }
+  } catch {
+    return file;
+  }
 }
 
 export type Part = { part_number: number; url?: string };
@@ -36,13 +41,16 @@ type Initiated = { id: string; status: string; part_size: number; parts?: Part[]
 
 const live = new Set<XMLHttpRequest>();
 /** Sign-out: stop every part that is being sent. */
-export function abortTransfers(): void { live.forEach((x) => x.abort()); live.clear(); }
+export function abortTransfers(): void {
+  live.forEach((x) => x.abort());
+  live.clear();
+}
 
 function putPart(url: string, body: Blob, onBytes: (n: number) => void): Promise<string> {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
     x.open("PUT", url);
-    x.timeout = 300_000;                  // a stalled part must not hold its slot for ever
+    x.timeout = 300_000; // a stalled part must not hold its slot for ever
     x.upload.onprogress = (e) => onBytes(e.loaded);
     x.onload = () => {
       live.delete(x);
@@ -50,32 +58,56 @@ function putPart(url: string, body: Blob, onBytes: (n: number) => void): Promise
       if (x.status >= 200 && x.status < 300 && etag) resolve(etag);
       else reject(new Error(`part upload failed (${x.status})`));
     };
-    x.onerror = x.ontimeout = () => { live.delete(x); reject(new Error("network")); };
-    x.onabort = () => { live.delete(x); reject(new Error("stopped")); };
+    x.onerror = x.ontimeout = () => {
+      live.delete(x);
+      reject(new Error("network"));
+    };
+    x.onabort = () => {
+      live.delete(x);
+      reject(new Error("stopped"));
+    };
     live.add(x);
     x.send(body);
   });
 }
 
 export type UploadSpec = {
-  clientUuid: string; bookingId: string; fieldKey: string; kind: string; contentType: string;
-  sha256: string; source: "camera" | "gallery"; blob: Blob;
-  replaces?: string;                 // Ops: the file this one takes the place of
+  clientUuid: string;
+  bookingId: string;
+  fieldKey: string;
+  kind: string;
+  contentType: string;
+  sha256: string;
+  source: "camera" | "gallery";
+  blob: Blob;
+  replaces?: string; // Ops: the file this one takes the place of
 };
 
 /** Registers the upload with the server (safe to repeat: same client UUID, same asset). */
 export function initiate(s: UploadSpec): Promise<Initiated> {
-  return api<Initiated>("media/initiate", { body: {
-    booking: s.bookingId, client_uuid: s.clientUuid, field_key: s.fieldKey, kind: s.kind,
-    content_type: s.contentType, size: s.blob.size, sha256: s.sha256, source: s.source,
-    ...(s.replaces ? { replaces: s.replaces } : {}) } });
+  return api<Initiated>("media/initiate", {
+    body: {
+      booking: s.bookingId,
+      client_uuid: s.clientUuid,
+      field_key: s.fieldKey,
+      kind: s.kind,
+      content_type: s.contentType,
+      size: s.blob.size,
+      sha256: s.sha256,
+      source: s.source,
+      ...(s.replaces ? { replaces: s.replaces } : {}),
+    },
+  });
 }
 
 /** Sends what is missing and finishes. Returns once the bytes are on the server, with the status the
  *  server gives then: "uploaded" means the checksum is still to be checked (that happens later). */
 export async function transfer(s: UploadSpec, onProgress: (fraction: number) => void): Promise<{ id: string; status: string }> {
   let init = await initiate(s);
-  if (init.status === "verified") { onProgress(1); return { id: init.id, status: init.status }; }
+  if (init.status === "verified") {
+    onProgress(1);
+    return { id: init.id, status: init.status };
+  }
   const size = s.blob.size;
   const have = new Map<number, string>();
   if (init.status === "pending") {
@@ -86,19 +118,30 @@ export async function transfer(s: UploadSpec, onProgress: (fraction: number) => 
   let done = 0;
   for (const p of parts) {
     const slice = s.blob.slice((p.part_number - 1) * init.part_size, Math.min(size, p.part_number * init.part_size));
-    if (have.has(p.part_number) || !p.url) { done += slice.size; continue; }
+    if (have.has(p.part_number) || !p.url) {
+      done += slice.size;
+      continue;
+    }
     let etag = "";
     for (let attempt = 0; ; attempt++) {
-      try { etag = await putPart(p.url, slice, (n) => onProgress((done + n) / size)); break; }
-      catch (e) { if (attempt >= 3 || (e as Error).message === "stopped") throw e; await new Promise((r) => setTimeout(r, 500 * 2 ** attempt)); }
+      try {
+        etag = await putPart(p.url, slice, (n) => onProgress((done + n) / size));
+        break;
+      } catch (e) {
+        if (attempt >= 3 || (e as Error).message === "stopped") throw e;
+        await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+      }
     }
     have.set(p.part_number, etag);
     done += slice.size;
     onProgress(done / size);
   }
   if (init.status === "pending") {
-    init = await api<Initiated>(`media/${init.id}/complete`, { body: {
-      parts: [...have].map(([part_number, etag]) => ({ part_number, etag })) } });
+    init = await api<Initiated>(`media/${init.id}/complete`, {
+      body: {
+        parts: [...have].map(([part_number, etag]) => ({ part_number, etag })),
+      },
+    });
   }
   onProgress(1);
   return { id: init.id, status: init.status };

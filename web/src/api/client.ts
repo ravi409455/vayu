@@ -32,8 +32,12 @@ export async function api<T = unknown>(
 ): Promise<T> {
   const method = opts.method ?? (opts.body === undefined ? "GET" : "POST");
   const q = opts.query
-    ? "?" + new URLSearchParams(Object.entries(opts.query).filter(([, v]) => v !== undefined && v !== "")
-        .map(([k, v]) => [k, String(v)])).toString()
+    ? "?" +
+      new URLSearchParams(
+        Object.entries(opts.query)
+          .filter(([, v]) => v !== undefined && v !== "")
+          .map(([k, v]) => [k, String(v)]),
+      ).toString()
     : "";
   const headers: Record<string, string> = { Accept: "application/json" };
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
@@ -64,8 +68,7 @@ export function explain(e: unknown): string {
   if (e.status === 426) return "This app is out of date. Reload the page.";
   if (e.status === 429) return "Too many tries. Wait a minute and try again.";
   if (e.status >= 500) return "The server had a problem. Try again in a moment.";
-  const fields = e.body && typeof e.body === "object"
-    ? Object.entries(e.body).filter(([k]) => !["code", "detail"].includes(k)) : [];
+  const fields = e.body && typeof e.body === "object" ? Object.entries(e.body).filter(([k]) => !["code", "detail"].includes(k)) : [];
   const first = fields.find(([, v]) => typeof v === "string" || (Array.isArray(v) && typeof v[0] === "string"));
   if (e.message.startsWith("Request failed") && first) {
     const v = first[1];
@@ -87,11 +90,21 @@ export function staleInfo(e: unknown): { by: string; at: string; keys: string[];
 }
 
 /** Upload one file as multipart form data (the builder's pictures). */
-export async function uploadFile<T>(path: string, file: File, method: "POST" | "PUT" = "POST", fields: Record<string, string> = {}): Promise<T> {
+export async function uploadFile<T>(
+  path: string,
+  file: File,
+  method: "POST" | "PUT" = "POST",
+  fields: Record<string, string> = {},
+): Promise<T> {
   const body = new FormData();
   body.append("file", file);
   for (const [k, v] of Object.entries(fields)) body.append(k, v);
-  const res = await fetch(`/api/v1/${path.replace(/^\//, "")}`, { method, body, credentials: "same-origin", headers: { "X-CSRFToken": csrfToken(), Accept: "application/json" } });
+  const res = await fetch(`/api/v1/${path.replace(/^\//, "")}`, {
+    method,
+    body,
+    credentials: "same-origin",
+    headers: { "X-CSRFToken": csrfToken(), Accept: "application/json" },
+  });
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     const err = new ApiError(res.status, data);

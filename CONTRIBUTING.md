@@ -45,6 +45,7 @@ uv run pytest -n 4 --cov --cov-fail-under=85
 ```bash
 npx tsc --noEmit
 npm run lint          # typescript-eslint, react-hooks, jsx-a11y; a switch-off needs "-- reason"
+npm run format:check  # Prettier (npm run format fixes it)
 npx vitest run
 npx playwright test   # journeys; own ports and database
 ```
