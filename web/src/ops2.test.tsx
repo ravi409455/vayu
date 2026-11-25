@@ -3,7 +3,7 @@ import type { FormField } from "./api/types";
 import { addDays, fmtDay, fmtPhone, fmtSlot, fmtStamp, fmtTime } from "./lib/format";
 import { activityText } from "./pages/ops/booking/ActivityCard";
 import { viewQuery } from "./lib/bookingViews";
-import { dayWindow } from "./pages/ops/Today";
+import { dayWindow } from "./lib/schedule";
 import { defectOf } from "./ui/AnswerSheet";
 
 const NOW = new Date(2026, 10, 23, 14, 20);   // Mon 23 Nov 2026, 2:20 pm
@@ -139,7 +139,8 @@ describe("audit log links", () => {
 
 describe("integration words", () => {
   it("names events and delivery errors in words", async () => {
-    const { eventWord, errorWord } = await import("./pages/admin/Integrations");
+    const { errorWord } = await import("./pages/admin/Integrations");
+    const { eventWord } = await import("./lib/integrationDef");
     expect(eventWord("booking.updated")).toBe("Booking updated");
     expect(eventWord("pdf.ready")).toBe("PDF ready");
     expect(errorWord("blocked_address")).toMatch(/not allowed/);

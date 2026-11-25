@@ -20,7 +20,7 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
   field: FormField; choices: FieldChoice[]; lists: { key: string; name: string }[]; categories: string[];
   /** the other fields of this field's section (a photo can show one of them) */
   siblings?: { key: string; label: string; type: string }[];
-  onSave: (d: FieldDraft, validations?: ValidationDraft[]) => void; onDelete: () => void; readOnly: boolean; kind?: string;
+  onSave: (d: FieldDraft, validations?: ValidationDraft[]) => void; onDelete?: () => void; readOnly: boolean; kind?: string;
   /** this field's validations (answer rules that point at it); given: the Logic tab edits them */
   checks?: Validation[];
   parents?: { section?: Access; page?: Access }; extra?: React.ReactNode; outside?: React.ReactNode;
@@ -200,7 +200,7 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
       {outside}
       {!readOnly && (
         <div className="insp-foot">
-          {!field.is_system && <button className="link danger-link" onClick={onDelete}><Trash2 size={14} aria-hidden /> Delete field</button>}
+          {!field.is_system && onDelete && <button className="link danger-link" onClick={onDelete}><Trash2 size={14} aria-hidden /> Delete field</button>}
           <span className="grow muted small" style={{ textAlign: "right" }}>{dirty ? "Unsaved changes" : ""}</span>
           <button className="primary" disabled={!dirty || vals.some((v) => !v.message.trim() || !v.rule)}
             title={vals.some((v) => !v.rule) ? "Finish the validation's condition" : vals.some((v) => !v.message.trim()) ? "Every validation needs a message" : undefined}

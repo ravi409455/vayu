@@ -34,7 +34,7 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   return <label className="check"><input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} /> {label}</label>;
 }
 
-export function PageSettings({ page, onChange, onDelete, fields }: { page: ReportPage; onChange: (p: Partial<ReportPage>) => void; onDelete: () => void; fields: Ctx["fields"] }) {
+export function PageSettings({ page, onChange, onDelete, fields }: { page: ReportPage; onChange: (p: Partial<ReportPage>) => void; onDelete?: () => void; fields: Ctx["fields"] }) {
   return (
     <div className="rd-settings-body">
       <Field label="Page name" help="Shown in the pages list and in a contents list."><input value={page.title} onChange={(e) => onChange({ title: e.target.value })} /></Field>
@@ -43,7 +43,7 @@ export function PageSettings({ page, onChange, onDelete, fields }: { page: Repor
       </Field>
       <p className="muted small">{page.style === "full" ? "No header or footer: for a divider or a full-page design." : page.style === "cover" ? "Uses the cover header and footer (Report settings)." : "Uses the normal header and footer (Report settings)."} Each page starts on a new sheet; long pages carry on over several.</p>
       <ConditionBuilder label="Show this page only if" value={page.show_if ?? null} onChange={(r) => onChange({ show_if: r ?? undefined })} fields={fields} />
-      <button type="button" className="danger" onClick={onDelete}><Trash2 size={14} aria-hidden /> Delete page</button>
+      {onDelete && <button type="button" className="danger" onClick={onDelete}><Trash2 size={14} aria-hidden /> Delete page</button>}
     </div>
   );
 }

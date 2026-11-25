@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { api, ApiError, explain } from "../../api/client";
 import { STAGE_LABEL, STAGE_TONE, useLabels, useTypeLabels } from "../../api/labels";
 import type { Booking } from "../../api/types";

@@ -9,13 +9,6 @@ import { keys } from "../../api/keys";
 type Grants = Record<string, "all" | "own">;
 type RoleRow = { role: string; locked: boolean; permissions: Grants };
 
-/** Next grant for one permission: off -> own -> all -> off (unscoped permissions: off <-> all). */
-export function nextGrant(scoped: boolean, now: "own" | "all" | undefined): "own" | "all" | undefined {
-  if (!now) return scoped ? "own" : "all";
-  if (now === "own") return "all";
-  return undefined;
-}
-
 const ROLES = ["ops", "expert"] as const;
 /** Permissions nothing on the web shows Ops (their pages are Today, Bookings, Needs you, Dashboards,
  *  Settings; the rest are Admin pages), so the screen does not offer them to Ops (F-224). The

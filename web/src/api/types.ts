@@ -92,6 +92,4 @@ export type ApiKeyRow = {
   id: string; name: string; prefix: string; scope: { forms: Record<string, string[]> };
   allow_delete: boolean; revoked_at: string | null; last_used_at: string | null; key?: string;
 };
-export type AuditRow = { id: number; actor_name?: string; actor?: string; action: string; target_type: string; target_id: string; summary: string; created_at: string };
 export type PermissionRow = { key: string; group: string; label: string; scoped: boolean; grantable: boolean };
-export type Role_ = { role: string; permissions: Record<string, "all" | "own"> };

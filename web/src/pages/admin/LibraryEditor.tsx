@@ -1,13 +1,13 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { MasterList } from "../../api/types";
 import { useAuth } from "../../auth";
 import { FIELD_TYPES, slugKey } from "../../lib/fieldTypes";
-import { addFieldTo, asField, isSection, moveField, newFieldDef, previewTree, removeFieldFrom, replaceField, ruleChoices, sameDef, SYSTEM_RULE_FIELDS, withDraft, type Definition, type FieldDef, type SectionDef } from "../../lib/libraryDef";
+import { addFieldTo, asField, isSection, moveField, newFieldDef, previewTree, removeFieldFrom, replaceField, ruleChoices, sameDef, SYSTEM_RULE_FIELDS, withDraft, type Definition, type FieldDef } from "../../lib/libraryDef";
 import { AccessEditor } from "../../ui/AccessEditor";
 import { ConditionBuilder } from "../../ui/ConditionBuilder";
 import { FormRenderer } from "../../ui/FormRenderer";
@@ -104,7 +104,7 @@ export function LibraryEditor() {
             )}
             {openField && (
               <div style={{ marginTop: 14 }}>
-                <FieldEditor field={asField(openField, 1)} choices={choices} lists={catalogue} categories={[]} readOnly={!edit} kind="inspection" onSave={(d) => setField(openField, d)} onDelete={() => {}} />
+                <FieldEditor field={asField(openField, 1)} choices={choices} lists={catalogue} categories={[]} readOnly={!edit} kind="inspection" onSave={(d) => setField(openField, d)} />
               </div>)}
           </div>
           <div className="card" aria-label="Preview">

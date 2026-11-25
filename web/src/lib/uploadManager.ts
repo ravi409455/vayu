@@ -240,4 +240,3 @@ export function summary(list: UploadState[]): { done: number; total: number } {
   return { done: list.filter((s) => s.status === "done").length, total: list.length };
 }
 /** For tests. */
-export const _reset = reset;

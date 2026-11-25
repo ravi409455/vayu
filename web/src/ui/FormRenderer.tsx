@@ -2,7 +2,7 @@ import { Camera, Image as ImageIcon, ImageOff, MapPin, Paperclip, Video as Video
 import { maxFiles } from "../lib/fieldTypes";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, ApiError } from "../api/client";
+import { ApiError } from "../api/client";
 import { fetchAll } from "../api/hooks";
 import { ist } from "../lib/format";
 import { LINK_REFRESH_MS } from "./MediaThumb";

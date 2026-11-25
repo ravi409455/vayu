@@ -9,7 +9,6 @@ import { Confirm, Empty, LoadError, Modal, PageHeader, Pill, useToast, when } fr
 import { MoreMenu } from "../../ui/Menu";
 import { keys } from "../../api/keys";
 
-export { eventWord };
 const ERROR_WORD: Record<string, string> = {
   integration_disabled: "Integration switched off", request_failed: "The request could not be built", missing_path_value: "A value in the URL path was empty",
   timeout: "No answer in time", blocked_address: "Address not allowed (private network)", connection_error: "Could not connect",

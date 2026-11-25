@@ -10,7 +10,7 @@ import { slugKey } from "../../lib/fieldTypes";
 import { ImportDialog } from "./builder/ImportForm";
 import { keys } from "../../api/keys";
 
-export const TYPE_LABEL: Record<FormType, string> = { booking: "Booking form", start: "Start form", end: "End form", custom: "Custom form" };
+const TYPE_LABEL: Record<FormType, string> = { booking: "Booking form", start: "Start form", end: "End form", custom: "Custom form" };
 const SYSTEM_ORDER: FormType[] = ["booking", "start", "end"];
 
 function Versions({ x }: { x: FormSummary }) {

@@ -9,7 +9,6 @@ import { useAuth } from "../../auth";
 import { photoOfDefault } from "../../lib/fieldTypes";
 import { nsOf, useFieldChoices } from "../../lib/useChoices";
 import { applyDrag, isEmptyBody, reorderBody, type Ref } from "../../lib/tree";
-import { type FieldChoice } from "../../ui/ConditionBuilder";
 import { Confirm, Field, InfoTip, LoadError, Modal, NameDialog, PageHeader, Pill, Tabs, useToast } from "../../ui/kit";
 import { AddFieldDialog, AddSectionDialog } from "./builder/AddDialogs";
 import { Canvas, type Sel } from "./builder/Canvas";

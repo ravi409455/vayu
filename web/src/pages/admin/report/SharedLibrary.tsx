@@ -200,7 +200,7 @@ function SharedEditor({ item, all, templates, forms, editable, onBack }: {
                 }} />
             ) : !theme && page && sel?.kind === "page" ? (
               <fieldset disabled={!editable} className="rd-fieldset">
-                <PageSettings page={page} fields={fields} onChange={(p) => edit(updatePage(def, sel.id, p))} onDelete={() => {}} />
+                <PageSettings page={page} fields={fields} onChange={(p) => edit(updatePage(def, sel.id, p))} />
               </fieldset>
             ) : (
               <div className="rd-settings-body">

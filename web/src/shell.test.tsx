@@ -7,10 +7,9 @@ import { ApiError, api, explain, staleInfo } from "./api/client";
 import { AuthProvider, useAuth } from "./auth";
 import { homeFor, RequireAuth } from "./guards";
 import { visibleNav } from "./Layout";
-import { nextGrant, OPS_NOT_ON_WEB } from "./pages/admin/Roles";
+import { OPS_NOT_ON_WEB } from "./pages/admin/Roles";
 import { FieldEditor } from "./pages/admin/builder/FieldEditor";
 import { FormBuilder, PublishDialog } from "./pages/admin/FormBuilder";
-import { AccessMatrix } from "./ui/AccessMatrix";
 import type { FormField, Me } from "./api/types";
 import * as uploads from "./lib/uploadManager";
 
@@ -120,16 +119,6 @@ describe("error handling", () => {
   });
 });
 
-describe("permission grid", () => {
-  it("cycles off -> own -> all -> off for scoped permissions", () => {
-    expect(nextGrant(true, undefined)).toBe("own");
-    expect(nextGrant(true, "own")).toBe("all");
-    expect(nextGrant(true, "all")).toBeUndefined();
-    expect(nextGrant(false, undefined)).toBe("all");
-    expect(nextGrant(false, "all")).toBeUndefined();
-  });
-});
-
 const FIELD: FormField = {
   id: 1, section: 1, key: "door", label: "Door", helper_text: "", type: "single_choice", config: { options: [{ key: "ok", label: "OK" }] },
   required: false, required_if: null, show_if: null, visible: true, order: 0, is_system: false, access: {}, locked: false, library: null,
@@ -195,19 +184,6 @@ describe("publish dialog", () => {
     rerender(<PublishDialog state={{ issues: [], warnings: [{ path: "", code: "FIELD_NOT_IN_PDF", message: "Field 'odometer' is not shown in the PDF template." }], done: true }} onClose={noop} onPublish={noop} />);
     expect(screen.getByText("Published")).toBeInTheDocument();
     expect(screen.getByText(/odometer/)).toBeInTheDocument();
-  });
-});
-
-describe("access matrix editor", () => {
-  it("changes one cell and one whole row", async () => {
-    const onChange = vi.fn();
-    const u = userEvent.setup();
-    render(<AccessMatrix value={{}} onChange={onChange} />);
-    await u.selectOptions(screen.getByLabelText("expert Uploading"), "hidden");
-    expect(onChange).toHaveBeenLastCalledWith({ expert: { submitted: "hidden" } });
-    await u.selectOptions(screen.getByLabelText("ops all stages"), "view");
-    const all = onChange.mock.lastCall![0] as Record<string, Record<string, string>>;
-    expect(Object.values(all.ops!)).toEqual(Array(6).fill("view"));
   });
 });
 

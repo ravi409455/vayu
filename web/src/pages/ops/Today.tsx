@@ -22,7 +22,6 @@ const GUTTER = 36;                 // room at each end of the grid so a time lab
 const CHOSEN = "vayu:today-experts";  // the experts picked in the Experts menu, kept per browser
 
 const LANE_H = 76;                 // height of one row of boxes; a lane with overlapping jobs gets more rows
-export { dayWindow };
 
 const KIND: Record<string, string> = { draft: "open", assigned: "next", in_progress: "prog", submitted: "prog", completed: "done", cancelled: "off" };
 
