@@ -306,7 +306,7 @@ class UserViewSet(viewsets.ModelViewSet):
         if request.user.pk != user.pk and not scope_for(request.user, "users.view", request):
             raise CodedError("NOT_FOUND", "No picture.", 404)
         row = User.objects.defer(None).filter(pk=user.pk).values("avatar", "avatar_version").first()
-        assert row is not None
+        assert row is not None  # noqa: S101 - invariant, narrows the type
         if not row["avatar"]:
             raise CodedError("NOT_FOUND", "No picture.", 404)
         etag = f'W/"{user.pk}-{row["avatar_version"]}"'

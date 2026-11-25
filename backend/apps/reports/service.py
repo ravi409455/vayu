@@ -58,7 +58,7 @@ def create_draft(actor, t: PdfTemplate) -> PdfTemplateVersion:
     if t.versions.filter(status="draft").exists():
         raise err("DRAFT_EXISTS", "This template already has a draft.", 409)
     last = t.versions.order_by("-number").first()
-    assert last is not None  # a template always has its first version
+    assert last is not None  # noqa: S101 - a template always has its first version
     d = PdfTemplateVersion.objects.create(template=t, number=last.number + 1,
                                           definition=last.definition)
     audit.record(actor, "pdf_template.draft_create", "pdf_template", t.id, f"Draft v{d.number}")

@@ -29,7 +29,7 @@ class _Rollback(Exception):
 
 def photo(seed: int) -> bytes:
     """A 2048 px picture with texture (a flat colour would compress to nothing)."""
-    rnd = random.Random(seed)
+    rnd = random.Random(seed)  # noqa: S311 - seeded test data, not security
     tint = Image.new("RGB", (2048, 1536), tuple(rnd.randrange(256) for _ in range(3)))
     img = Image.blend(Image.effect_noise((2048, 1536), 60).convert("RGB"), tint, 0.4)
     buf = io.BytesIO()

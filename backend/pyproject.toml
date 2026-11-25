@@ -55,13 +55,34 @@ target-version = "py312"
 extend-exclude = ["*/migrations/*"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "DJ"]
+select = ["E", "F", "I", "B", "UP", "DJ", "S", "C90"]
 ignore = ["DJ008"]  # no Django admin, so no __str__ boilerplate
 
+[tool.ruff.lint.mccabe]
+max-complexity = 12
+
 [tool.ruff.lint.per-file-ignores]
-"**/tests/*" = ["E501", "F811"]  # F811: fixtures imported, used by name
-"apps/reports/render.py" = ["E501"]  # embedded CSS/HTML
+"**/tests/*" = ["E501", "F811", "S101", "S105", "S106", "S107"]  # F811: fixtures imported, used by name; S: asserts and test passwords
+"apps/reports/render.py" = ["E501", "C901"]  # embedded CSS/HTML
 "apps/platform/demo_forms.py" = ["E501"]  # a data table
+# Complexity allow list (C901, max 12; render.py is above): it only shrinks. Split a function, then drop its line.
+"apps/bookings/submissions.py" = ["C901"]
+"apps/bookings/views.py" = ["C901"]
+"apps/forms/library.py" = ["C901"]
+"apps/forms/promote.py" = ["C901"]
+"apps/forms/rules.py" = ["C901"]
+"apps/forms/services.py" = ["C901"]
+"apps/integrations/values.py" = ["C901"]
+"apps/integrations/views.py" = ["C901"]
+"apps/media/services/uploads.py" = ["C901"]
+"apps/platform/demo_pdi.py" = ["C901"]
+"apps/platform/setup/clappia.py" = ["C901"]
+"apps/platform/setup/testdata.py" = ["C901"]
+"apps/reports/context.py" = ["C901"]
+"apps/reports/definition.py" = ["C901"]
+"apps/scoring/engine.py" = ["C901"]
+"apps/scoring/keychecks.py" = ["C901"]
+"apps/scoring/service.py" = ["C901"]
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]

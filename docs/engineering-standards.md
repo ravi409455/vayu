@@ -141,7 +141,7 @@ copy the old pattern.
 - Migrations: reversible, or the reason is written in the migration and the runbook. Data
   migrations don't import app code. Never edit an applied migration.
 - Outgoing calls (webhooks, storage, push): timeouts, the address guard, no secrets in logs.
-- Types and style: `ruff` clean, `mypy apps vayu` clean, lines ≤ 100, type hints on new functions.
+- Types and style: `ruff` clean (includes security `S` and complexity `C90`, max 12; the allow list in `pyproject.toml` only shrinks), `mypy apps vayu` clean, lines ≤ 100, type hints on new functions.
 - Tests: pytest, real database, API-level where possible. The modules with a 100% branch-coverage
   gate (see `.github/workflows/ci.yml`, job `backend-gates`) stay at 100%.
 

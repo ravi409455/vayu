@@ -39,7 +39,7 @@ def affected(item: LibraryItem) -> list[tuple[Form, FormVersion]]:
     out = []
     for form in Form.objects.filter(pk__in=form_ids).order_by("id"):
         latest = form.versions.order_by("-number").first()
-        assert latest is not None
+        assert latest is not None  # noqa: S101 - invariant, narrows the type
         if any(o.library_revision != item.revision for o in _usages(latest, item)):
             out.append((form, latest))
     return out

@@ -126,7 +126,7 @@ class FormViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Creat
         library links, ratings, Key Checks and PDF template come along; it starts as a draft."""
         form = self.get_object()
         latest = form.versions.order_by("-number").first()
-        assert latest is not None
+        assert latest is not None  # noqa: S101 - invariant, narrows the type
         d = request.data if isinstance(request.data, dict) else {}
         out = promote.import_bundle(request.user, promote.export_bundle(latest),
                                     as_new={"key": d.get("key"), "name": d.get("name")})

@@ -426,7 +426,7 @@ class CopyTemplate(APIView):
         t = get_object_or_404(PdfTemplate, pk=pk)
         form = get_object_or_404(Form, pk=request.data.get("form"))
         last = t.versions.order_by("-number").first()
-        assert last is not None
+        assert last is not None  # noqa: S101 - invariant, narrows the type
         return Response(_template_body(transfer.copy_template(request.user, last, form)),
                         status=status.HTTP_201_CREATED)
 
