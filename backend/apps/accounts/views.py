@@ -186,7 +186,11 @@ class HeartbeatView(APIView):
         if any(type(v) is not int or v < 0 for v in counts.values()):
             raise CodedError("INVALID_COUNTS", "drafts and files must be whole numbers, 0 or more.",
                              400)
-        Device.objects.filter(pk=device_id).update(unsynced=counts, last_seen_at=timezone.now())
+        seen: dict = {"unsynced": counts, "last_seen_at": timezone.now()}
+        version = body.get("app_version")
+        if isinstance(version, str) and version.strip():      # optional; kept for metrics (F-247)
+            seen["app_version"] = version.strip()[:32]
+        Device.objects.filter(pk=device_id).update(**seen)
         return Response({"server_time": timezone.now(),
                          "min_app_version": settings.MIN_APP_VERSION})
 

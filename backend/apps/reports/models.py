@@ -74,8 +74,25 @@ def mark_out_of_date(reports) -> None:
     reports.update(stale=True)
 
 
+class ReportRender(models.Model):
+    """One try at making a booking's PDF, kept for metrics (F-247): the Report row only holds
+    the latest state, so failures and render times would otherwise be overwritten."""
+
+    report = models.ForeignKey("Report", on_delete=models.CASCADE, related_name="renders")
+    revision = models.PositiveIntegerField()            # the revision this try was making
+    started_at = models.DateTimeField()
+    finished_at = models.DateTimeField(default=timezone.now)
+    ok = models.BooleanField()
+    error = models.CharField(max_length=40, blank=True)  # timeout | storage_failed | render_failed
+    template_version = models.ForeignKey(PdfTemplateVersion, null=True, blank=True,
+                                         on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        indexes = [models.Index(fields=["started_at"])]
+
+
 class Report(models.Model):
-    """The latest PDF of a booking. Older revisions are not kept."""
+    """The latest PDF of a booking. Older revisions are not kept (each try is in ReportRender)."""
 
     booking = models.OneToOneField("bookings.Booking", on_delete=models.CASCADE,
                                    related_name="report")
