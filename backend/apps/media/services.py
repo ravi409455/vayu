@@ -357,9 +357,9 @@ def drop_zips(zips_qs) -> None:
 def report_out_of_date(booking_id) -> None:
     """Something the report shows changed: its PDF is marked out of date (Ops press Regenerate;
     nothing is made again by itself)."""
-    from apps.reports.models import Report
+    from apps.reports.models import Report, mark_out_of_date
 
-    Report.objects.filter(booking_id=booking_id).update(stale=True)
+    mark_out_of_date(Report.objects.filter(booking_id=booking_id))
 
 
 def progress(asset: MediaAsset) -> dict:

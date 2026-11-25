@@ -3,14 +3,14 @@ completes. After that nothing makes it again by itself: any change it shows (ans
 Key Checks, ratings, booking details) only marks it out of date, and Ops press Regenerate."""
 from apps.core import tasks as core_tasks
 
-from .models import Report
+from .models import Report, mark_out_of_date
 
 CHANGES = ("inspection.updated", "media.deleted", "booking.updated")
 
 
 def on_event(name: str, payload: dict) -> None:
     if name in CHANGES:
-        Report.objects.filter(booking_id=payload["booking"]).update(stale=True)
+        mark_out_of_date(Report.objects.filter(booking_id=payload["booking"]))
     elif name == "inspection.completed":
         from .tasks import render_report
 

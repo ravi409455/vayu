@@ -82,3 +82,30 @@ def test_retention_covers_documents_signatures_and_cancelled_jobs(job, settings)
         a.refresh_from_db()
         assert a.status == "purged" and not storage.exists(a.key)
         assert not any(storage.exists(k) for k in print_keys(a.id))
+
+
+def test_a_zip_whose_build_fails_is_shown_failed_and_made_again(job, settings):
+    """F-080 / F-108."""
+    from unittest import mock
+
+    from apps.media import zips
+
+    env, b = job
+    a = _files(env, b, settings)
+    with mock.patch.object(zips.storage, "upload_file", side_effect=OSError("R2 down")), \
+            pytest.raises(OSError):
+        zips.request_zip(Booking.objects.get(pk=b["id"]), "photo", only=[str(a.id)])
+    assert MediaZip.objects.get().status == "failed"
+    again = zips.request_zip(Booking.objects.get(pk=b["id"]), "photo", only=[str(a.id)])
+    assert again.status == "ready" and MediaZip.objects.count() == 2
+
+
+def test_a_build_abandoned_by_a_restart_counts_as_failed(job):
+    from apps.media import zips
+
+    env, b = job
+    z = MediaZip.objects.create(booking_id=b["id"], kind="photo")          # still "building"
+    assert not zips.failed(z)
+    MediaZip.objects.filter(pk=z.pk).update(created_at=timezone.now() - timedelta(minutes=31))
+    z.refresh_from_db()
+    assert zips.failed(z)

@@ -122,6 +122,10 @@ def test_the_pdf_benchmark_renders_cleans_up_and_reports(renv):
     assert not Booking.objects.filter(booking_id__startswith="BENCH").exists()      # rolled back
     assert not MediaAsset.objects.exists()
     assert not storage.exists("bench/x")
+    from django.core.management.base import CommandError
+
+    with pytest.raises(CommandError, match="Only 0 of 2 photos"):        # F-082: no false PASS
+        call_command("bench_pdf", photos=2, form="pdi", field="door_photo", stdout=StringIO())
 
 
 def test_the_pdf_benchmark_needs_a_published_form_and_a_user(db):

@@ -1,11 +1,9 @@
 import logging
-import time
 from datetime import timedelta
 
 from botocore.exceptions import ClientError
 from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
-from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -15,7 +13,7 @@ from apps.core import events
 from apps.media import storage
 
 from . import context, definition, render, shared
-from .models import PdfTemplateVersion, Report
+from .models import PdfTemplateVersion, Report, mark_out_of_date
 
 MAX_RETRIES = 2
 SOFT_LIMIT, HARD_LIMIT = 300, 330        # seconds: 150 photos must fit with room to spare
@@ -74,9 +72,10 @@ def _render_with_retries(booking, insp, tv, token: str, revision: int):
         except SoftTimeLimitExceeded:
             raise                              # out of time: retrying would only be killed
         except Exception:  # noqa: BLE001
+            # tried again at once: sleeping would hold the only PDF worker and eat the time
+            # limit; a lasting failure is tried again later by the sweep (F-093)
             if attempt == MAX_RETRIES:
                 raise
-            time.sleep(settings.PDF_RETRY_DELAY)
     raise AssertionError("unreachable")  # pragma: no cover
 
 
@@ -100,7 +99,7 @@ def render_report(booking_id: str) -> str:
     # of date again, never lost
     claimed = Report.objects.filter(pk=report.pk).filter(
         Q(render_started_at__isnull=True) | Q(render_started_at__lt=now - STUCK_AFTER)
-    ).update(render_started_at=now, stale=False)
+    ).update(render_started_at=now, stale=False, stale_since=None)
     if not claimed:
         return "busy"
     report.refresh_from_db()
@@ -120,9 +119,10 @@ def render_report(booking_id: str) -> str:
         # kept beside it for Ops
         # the last PDF no longer shows the data that asked for a new one: out of date again
         Report.objects.filter(pk=report.pk).update(status="ready" if report.key else "failed",
-                                                   stale=bool(report.key),
                                                    error=reason, render_started_at=None,
                                                    retry_at=timezone.now() + RETRY_FAILED)
+        if report.key:
+            mark_out_of_date(Report.objects.filter(pk=report.pk))
         if not report.error:                         # alert once, not on every retry
             events.emit("alert.pdf_failed", booking=str(booking.id), reason=reason)
         return "failed"

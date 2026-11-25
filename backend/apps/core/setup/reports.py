@@ -180,25 +180,32 @@ def definition(version, form_key: str, logo: str, watermark: str) -> dict:
     return base
 
 
-def _shared(admin, definition: dict) -> dict:
-    """The look and the disclaimer as shared items (one edit changes every report)."""
+def _shared(admin, definition: dict, force: bool = False) -> dict:
+    """The look and the disclaimer as shared items (one edit changes every report). Made once;
+    after that they are the Admin's, saved again only when [force]d (H-11)."""
     from apps.reports import shared
+    from apps.reports.models import SharedItem
+
+    def save(kind, key, name, content):
+        found = SharedItem.objects.filter(kind=kind, key=key).first()
+        return found if found is not None and not force else shared.save(
+            admin, kind, key, name, content)[0]
 
     theme = {k: definition.pop(k) for k in shared.THEME_KEYS if k in definition}
-    item, _ = shared.save(admin, "theme", "carcid", "Car C.I.D.", theme)
+    item = save("theme", "carcid", "Car C.I.D.", theme)
     definition["theme_ref"] = {"key": "carcid", "revision": item.revision}
     text = (ASSETS / "pdi-disclaimer.html").read_text()
-    item, _ = shared.save(admin, "snippet", "disclaimer", "Report disclaimer",
-                          {"parts": [{"type": "text", "columns": 2, "size": "fine",
-                                      "html": text}]})
+    item = save("snippet", "disclaimer", "Report disclaimer",
+                {"parts": [{"type": "text", "columns": 2, "size": "fine", "html": text}]})
     page = next(p for p in definition["pages"] if p["title"] == "Disclaimer")
     page["parts"] = [{"type": "snippet", "ref": {"key": "disclaimer",
                                                  "revision": item.revision}}]
     return definition
 
 
-def apply(admin, form_key: str) -> str:
-    """The form's report template matches its live version ("unchanged" | "published v<n>")."""
+def apply(admin, form_key: str, force: bool = False) -> str:
+    """The form's report template, made when it has none ("published v<n>"); a template already
+    live is the Admin's and is "kept" unless [force]d, never over a draft they have open."""
     from apps.reports import service as reports
     from apps.reports.models import PdfTemplate
 
@@ -207,15 +214,22 @@ def apply(admin, form_key: str) -> str:
     logo, mark = brand(admin)
     from apps.reports.service import validate_definition
 
-    want = validate_definition(_shared(admin, definition(version, form_key, logo, mark)))
+    from .build import SetupRefused
+
     template = PdfTemplate.objects.filter(form=form).first() or reports.create_template(admin,
                                                                                          form)
     live = template.versions.filter(status="published").order_by("-number").first()
+    if live is not None and not force:
+        return "kept"
+    want = validate_definition(_shared(admin, definition(version, form_key, logo, mark), force))
     if live is not None and json.dumps(live.definition, sort_keys=True) == json.dumps(
             want, sort_keys=True):
         return "unchanged"
-    draft = template.versions.filter(status="draft").first() or reports.create_draft(admin,
-                                                                                    template)
+    draft = template.versions.filter(status="draft").first()
+    if live is not None and draft is not None:
+        raise SetupRefused(f"The {form.name} report has a draft open in the designer: publish or "
+                           "discard it first. Nothing was changed.")
+    draft = draft or reports.create_draft(admin, template)
     saved = reports.save_definition(admin, draft, want, draft.row_version)
     v = reports.publish(admin, saved, saved.row_version)
     return f"published v{v.number}"

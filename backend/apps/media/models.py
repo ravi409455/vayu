@@ -41,6 +41,10 @@ class MediaAsset(models.Model):
 
     class Meta:
         ordering = ["created_at"]
+        # the stuck-upload list and the hourly purge (F-091)
+        indexes = [models.Index(fields=["status", "created_at"], name="media_status_created"),
+                   models.Index(fields=["kind", "status", "created_at"],
+                                name="media_kind_status_created")]
 
 
 class MediaZip(models.Model):

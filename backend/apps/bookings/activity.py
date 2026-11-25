@@ -28,49 +28,59 @@ def for_user(b, user, since=None) -> list[dict]:
     when the person may see that field at the booking's current stage; rows about an inspection
     form whose submissions they may not see are left out. ``since``: only what others did after it
     (the phone's "what Ops changed" banner)."""
+    return for_bookings([b], user, since)[b.id]
+
+
+def for_bookings(bookings, user, since=None) -> dict:
+    """for_user of many bookings at once, in a fixed number of queries (the phone's sync, H-12)."""
+    from apps.accounts.permissions import scope_for
     from apps.forms.access import hidden_inspection_forms
 
+    from .models import BookingActivity
     from .services import booking_form_version
 
     role = user.role
     admin = role == "admin"
-    booking_levels = {} if admin else levels_for(booking_form_version(), role, b.stage)
+    booking_version = None if admin else booking_form_version()
     hidden_forms = set() if admin else set(hidden_inspection_forms(user))
-    insp_levels: dict = {}
+    levels: dict = {}
 
-    def shown(row, key: str) -> bool:
+    def level(version, stage, key) -> str:
+        if (version.id, stage) not in levels:
+            levels[(version.id, stage)] = levels_for(version, role, stage)
+        return levels[(version.id, stage)].get(key, "hidden")
+
+    def shown(b, row, key: str) -> bool:
         if admin or key in COLUMNS:
             return True
         if key.startswith("check."):          # a Key Check: Ops' review, never for experts
             return role != "expert"
         if row.inspection_id is None:
-            return booking_levels.get(key, "hidden") != "hidden"
+            return level(booking_version, b.stage, key) != "hidden"
         part, _, field = key.partition(".")
-        cache_key = (row.inspection_id, part)
-        if cache_key not in insp_levels:
-            version = row.inspection.pinned().get(part)
-            insp_levels[cache_key] = levels_for(version, role, b.stage) if version else {}
-        return insp_levels[cache_key].get(field, "hidden") != "hidden"
+        version = row.inspection.pinned().get(part)
+        return version is not None and level(version, b.stage, field) != "hidden"
 
-    from apps.accounts.permissions import scope_for
-
-    rows = b.activity.select_related("actor", "inspection__form_version",
-                                     "inspection__start_version", "inspection__end_version")
+    rows = BookingActivity.objects.filter(booking__in=bookings).select_related(
+        "actor", "inspection__form_version", "inspection__start_version",
+        "inspection__end_version")
     if scope_for(user, "bookings.review_timing") is None:
         rows = rows.exclude(kind__in=TIMING_KINDS)
     if role == "expert":
         rows = rows.exclude(kind__in=REPORT_KINDS + REVIEW_KINDS)
     if since is not None:
         rows = rows.filter(at__gt=since).exclude(actor=user)
-    out = []
-    for row in rows[:200]:
-        if row.inspection_id and row.inspection.form_version.form_id in hidden_forms:
-            continue
-        out.append({
+    by_booking: dict = {}
+    for row in rows:
+        by_booking.setdefault(row.booking_id, []).append(row)
+    out: dict = {}
+    for b in bookings:
+        out[b.id] = [{
             "at": row.at.isoformat(), "kind": row.kind,
             "by": None if row.actor is None else {"id": row.actor.pk, "role": row.actor.role,
                                                   "name": row.actor.name or row.actor.username},
-            "changes": {k: v for k, v in row.changes.items() if shown(row, k)},
-            "keys": [k for k in row.keys if shown(row, k)],
-        })
+            "changes": {k: v for k, v in row.changes.items() if shown(b, row, k)},
+            "keys": [k for k in row.keys if shown(b, row, k)],
+        } for row in by_booking.get(b.id, [])[:200]
+            if not (row.inspection_id and row.inspection.form_version.form_id in hidden_forms)]
     return out

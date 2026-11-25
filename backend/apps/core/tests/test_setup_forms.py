@@ -14,15 +14,16 @@ def admin():
     return User.objects.create_user(username="setup_admin", password="x" * 12, role=Role.ADMIN)
 
 
-def put_all(admin) -> dict:
+def put_all(admin, force=False) -> dict:
     lists.apply()
-    out = {"booking": build.apply(admin, build.system_form("booking"), forms.booking()),
-           "start": build.apply(admin, build.system_form("start"), forms.start()),
-           "end": build.apply(admin, build.system_form("end"), forms.end(admin))}
+    out = {"booking": build.apply(admin, build.system_form("booking"), forms.booking(),
+                                  force=force),
+           "start": build.apply(admin, build.system_form("start"), forms.start(), force=force),
+           "end": build.apply(admin, build.system_form("end"), forms.end(admin), force=force)}
     for key, name, itype, _ in forms.INSPECTIONS:
         spec, extra = forms.inspection(key)
         out[key] = build.apply(admin, build.ensure_form(admin, key=key, name=name, itype=itype),
-                               spec, extra)
+                               spec, extra, force=force)
     return out
 
 
@@ -34,7 +35,42 @@ def live_fields(key):
 def test_every_form_publishes_and_a_second_run_changes_nothing(admin):
     first = put_all(admin)
     assert all(r.startswith("published") for r in first.values()), first
-    assert put_all(admin) == {k: "unchanged" for k in first}
+    assert put_all(admin) == {k: "kept" for k in first}               # the Admin's now (H-11)
+    assert put_all(admin, force=True) == {k: "unchanged" for k in first}
+
+
+def test_a_re_run_keeps_the_admins_edits_and_never_touches_their_draft(admin):
+    from apps.bookings.tests.conftest import custom_form, publish_draft  # noqa: F401
+    from apps.forms import services as form_services
+    from apps.forms.models import FormVersion
+
+    put_all(admin)
+    form = Form.objects.get(key="pdi")
+    live = form.versions.get(status="published")
+    Field.objects.filter(version=live, key="chassis_no").update(label="ADMIN LABEL")
+    draft = form_services.create_draft(admin, form)
+    Field.objects.filter(version=draft, key="chassis_no").update(label="ADMIN DRAFT WORK")
+    assert put_all(admin)["pdi"] == "kept"
+    assert live_fields("pdi")["chassis_no"].label == "ADMIN LABEL"
+    assert Field.objects.get(version=draft, key="chassis_no").label == "ADMIN DRAFT WORK"
+    with pytest.raises(build.SetupRefused, match="draft open"):
+        put_all(admin, force=True)
+    assert FormVersion.objects.filter(pk=draft.pk, status="draft").exists()
+
+
+def test_a_forced_run_publishes_a_new_version_with_clean_section_keys(admin):
+    from apps.forms.models import Section
+
+    put_all(admin)
+    form = Form.objects.get(key="pdi")
+    live = form.versions.get(status="published")
+    Field.objects.filter(version=live, key="chassis_no").update(label="ADMIN LABEL")
+    keys = set(Section.objects.filter(version=live).values_list("key", flat=True))
+    assert put_all(admin, force=True)["pdi"].startswith("published v2")
+    new = form.versions.filter(status="published").order_by("-number").first()
+    assert set(Section.objects.filter(version=new).values_list("key", flat=True)) == keys
+    assert live_fields("pdi")["chassis_no"].label != "ADMIN LABEL"
+    assert form.versions.filter(pk=live.pk).exists()                  # never deleted
 
 
 def test_each_inspection_keeps_its_own_apps_choices(admin):
@@ -76,7 +112,8 @@ def test_each_inspection_gets_its_report_in_the_pdi_design(admin, s3):  # noqa: 
     put_all(admin)
     for key, *_ in forms.INSPECTIONS:
         assert reports.apply(admin, key).startswith("published")
-        assert reports.apply(admin, key) == "unchanged"
+        assert reports.apply(admin, key) == "kept"
+        assert reports.apply(admin, key, force=True) == "unchanged"
     def latest(k):
         v = PdfTemplate.objects.get(form__key=k).versions.filter(
             status="published").order_by("-number").first()
@@ -111,3 +148,30 @@ def test_the_setup_command_runs_twice_and_adds_staff_from_the_file(tmp_path, s3)
     out = StringIO()
     call_command("setup_platform", users=str(staff), stdout=out)
     assert "published" not in out.getvalue() and "users added: 0" in out.getvalue()
+
+
+def test_a_forced_setup_needs_the_server_name_and_keeps_the_admins_disclaimer(tmp_path, s3,  # noqa: F811
+                                                                                settings):
+    from django.core.management import call_command
+    from django.core.management.base import CommandError
+
+    from apps.reports import shared
+    from apps.reports.models import SharedItem
+
+    staff = tmp_path / "staff.csv"
+    staff.write_text("username,name,role,phone,password\nboss,Boss,admin,,Boss-pass-123\n")
+    call_command("setup_platform", users=str(staff))
+    boss = User.objects.get(username="boss")
+    item = SharedItem.objects.get(key="disclaimer")
+    content = item.revisions.get(revision=item.revision).content
+    edited = {"parts": [{**content["parts"][0], "html": "<p>ADMIN LEGAL</p>"}]}
+    shared.save(boss, "snippet", "disclaimer", "Report disclaimer", edited)
+    call_command("setup_platform")                                      # a plain re-run
+    item.refresh_from_db()
+    assert "ADMIN LEGAL" in str(item.revisions.get(revision=item.revision).content)
+    settings.SERVER_NAME = "prod-1"
+    with pytest.raises(CommandError, match="server's name"):
+        call_command("setup_platform", force=True, confirm="wrong")
+    call_command("setup_platform", force=True, confirm="prod-1")
+    item.refresh_from_db()
+    assert "ADMIN LEGAL" not in str(item.revisions.get(revision=item.revision).content)

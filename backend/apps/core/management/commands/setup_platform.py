@@ -3,8 +3,10 @@ PDI, Used Car and EV inspection forms (each from its own Clappia app, docs/clapp
 their Key Checks, ratings and PDF reports, and the staff from a users file.
 
 Safe on any server, production included: it never deletes anything and never adds test data.
-Running it again changes nothing unless the setup itself changed (then it publishes a new
-version; inspections already started keep theirs). Users already there are left as they are.
+Running it again only adds what is missing: forms, templates, shared parts and list items
+already there are the Admin's and are kept (users too). `--force --confirm <server name>`
+publishes the setup's forms and templates again as new versions (inspections already started
+keep theirs); it stops if the Admin has a draft open.
 
     python manage.py setup_platform --users staff.csv
 
@@ -61,8 +63,16 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--users", help="CSV of staff to create (username,name,role,phone,"
                                             "password)")
+        parser.add_argument("--force", action="store_true",
+                            help="publish the setup's forms and templates again")
+        parser.add_argument("--confirm", default="", help="this server's name (with --force)")
 
-    def handle(self, *args, users=None, **options):
+    def handle(self, *args, users=None, force=False, confirm="", **options):
+        from django.conf import settings
+
+        if force and (not settings.SERVER_NAME or confirm != settings.SERVER_NAME):
+            raise CommandError("--force replaces the setup's forms and templates: type this "
+                               "server's name back with --confirm. Nothing was changed.")
         rows = read_users(users) if users else []
         from apps.core.setup.testdata import remember_kind
 
@@ -73,14 +83,20 @@ class Command(BaseCommand):
             if admin is None:
                 raise CommandError("No Admin yet: give a users file with at least one admin.")
             report = {"users added": len(made), "list items added": lists.apply()}
-            report["booking"] = build.apply(admin, build.system_form("booking"), forms.booking())
-            report["start"] = build.apply(admin, build.system_form("start"), forms.start())
-            report["end"] = build.apply(admin, build.system_form("end"), forms.end(admin))
-            for key, name, itype, _ in forms.INSPECTIONS:
-                spec, extra = forms.inspection(key)
-                form = build.ensure_form(admin, key=key, name=name, itype=itype)
-                report[key] = build.apply(admin, form, spec, extra)
-                report[f"{key} report"] = reports.apply(admin, key)
+            try:
+                report["booking"] = build.apply(admin, build.system_form("booking"),
+                                                forms.booking(), force=force)
+                report["start"] = build.apply(admin, build.system_form("start"), forms.start(),
+                                              force=force)
+                report["end"] = build.apply(admin, build.system_form("end"), forms.end(admin),
+                                            force=force)
+                for key, name, itype, _ in forms.INSPECTIONS:
+                    spec, extra = forms.inspection(key)
+                    form = build.ensure_form(admin, key=key, name=name, itype=itype)
+                    report[key] = build.apply(admin, form, spec, extra, force=force)
+                    report[f"{key} report"] = reports.apply(admin, key, force=force)
+            except build.SetupRefused as e:
+                raise CommandError(str(e)) from e
         for k, v in report.items():
             self.stdout.write(f"  {k}: {v}")
         if printed:                  # never into logs (F-233): a file only the operator can read

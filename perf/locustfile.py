@@ -14,10 +14,13 @@ import random
 from locust import HttpUser, between, task
 
 
-def login(client, user_env: str, pass_env: str) -> None:
-    r = client.post("/api/v1/auth/login", json={"username": os.environ[user_env], "password": os.environ[pass_env], "client": "web"})
+def login(client, user_env: str, pass_env: str, client_kind: str = "web") -> None:
+    r = client.post("/api/v1/auth/login", json={"username": os.environ[user_env], "password": os.environ[pass_env], "client": client_kind})
     r.raise_for_status()
-    client.headers["X-CSRFToken"] = client.cookies.get("csrftoken", "")
+    if client_kind == "web":
+        client.headers["X-CSRFToken"] = client.cookies.get("csrftoken", "")
+    else:  # the phone: a bearer token, as the app sends it
+        client.headers["Authorization"] = f"Bearer {r.json()['access']}"
 
 
 class OpsUser(HttpUser):
@@ -55,14 +58,15 @@ class ExpertUser(HttpUser):
     wait_time = between(5, 15)
 
     def on_start(self):
-        login(self.client, "LOAD_EXPERT_USER", "LOAD_EXPERT_PASSWORD")
+        # the expert's real path is the phone (F-083): it signs in as the app and syncs
+        login(self.client, "LOAD_EXPERT_USER", "LOAD_EXPERT_PASSWORD", client_kind="mobile")
         self.ids: list[str] = []
 
     @task(4)
-    def my_jobs(self):
-        r = self.client.get("/api/v1/bookings", name="/bookings (expert)")
+    def sync(self):
+        r = self.client.get("/api/v1/sync/jobs", name="/sync/jobs")
         if r.ok:
-            self.ids = [b["id"] for b in r.json().get("results", [])]
+            self.ids = [j["id"] for j in r.json().get("jobs", [])]
 
     @task(2)
     def one_job(self):
