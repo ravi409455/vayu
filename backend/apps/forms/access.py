@@ -1,6 +1,7 @@
 """Field-level access: per role and booking stage, a field (or its section/page) is hidden, view
 or edit. Separate from action permissions (apps/accounts/catalog.py). The most specific layer
 that defines a role+stage wins; if none does, the caller's default policy applies."""
+from functools import lru_cache
 from typing import Any
 
 from .fieldtypes import SYSTEM_FILLED  # the field-type registry
@@ -53,23 +54,47 @@ def default_level(role: str, stage: str, kind: str, ftype: str) -> str:
     return "view" if stage in ("submitted", "completed") else "hidden"
 
 
+def _rows(version_id: int) -> list[tuple[str, str, dict, dict, dict]]:
+    """(key, type, field access, section access, page access) of every field of a version."""
+    from .models import Field, Page, Section
+
+    pages = {p.id: p.access for p in Page.objects.filter(version_id=version_id)}
+    sections = {s.id: (s.access, pages.get(s.page_id, {}))
+                for s in Section.objects.filter(version_id=version_id)}
+    return [(f.key, f.type, f.access, *sections[f.section_id])
+            for f in Field.objects.filter(version_id=version_id)]
+
+
+def _levels(rows: list[tuple[str, str, dict, dict, dict]], kind: str, role: str,
+            stage: str) -> dict[str, str]:
+    out = {}
+    for key, ftype, f_access, s_access, p_access in rows:
+        level = resolve(role, stage, f_access, s_access, p_access)
+        if level is None or (role == "expert" and ftype in SYSTEM_FILLED):
+            level = default_level(role, stage, kind, ftype)
+        out[key] = level
+    return out
+
+
 def levels_for(version, role: str, stage: str) -> dict[str, str]:
     """{field key: hidden|view|edit} for a role at a stage. Experts never get write access to
     system-filled fields, even if a layer says so."""
-    from .models import Field, Page, Section
+    return _levels(_rows(version.id), version.form.type, role, stage)
 
-    kind = version.form.type
-    pages = {p.id: p.access for p in Page.objects.filter(version=version)}
-    sections = {s.id: (s.access, pages.get(s.page_id, {}))
-                for s in Section.objects.filter(version=version)}
-    out = {}
-    for f in Field.objects.filter(version=version):
-        s_access, p_access = sections[f.section_id]
-        level = resolve(role, stage, f.access, s_access, p_access)
-        if level is None or (role == "expert" and f.type in SYSTEM_FILLED):
-            level = default_level(role, stage, kind, f.type)
-        out[f.key] = level
-    return out
+
+@lru_cache(maxsize=512)
+def _published_levels(version_id: int, kind: str, role: str) -> dict[str, dict[str, str]]:
+    rows = _rows(version_id)
+    return {stage: _levels(rows, kind, role, stage) for stage in STAGES}
+
+
+def levels_by_stage(version, role: str) -> dict[str, dict[str, str]]:
+    """{stage: levels_for(version, role, stage)}. A published version never changes, so its
+    answer is kept in memory (bounded); treat it as read-only. A draft is read each time."""
+    if version.status == "published":
+        return _published_levels(version.id, version.form.type, role)
+    rows = _rows(version.id)
+    return {stage: _levels(rows, version.form.type, role, stage) for stage in STAGES}
 
 
 def visible_answers(levels: dict[str, str], answers: dict, role: str) -> dict:

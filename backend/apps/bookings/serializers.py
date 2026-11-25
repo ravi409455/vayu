@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.accounts.permissions import scope_for
-from apps.forms.access import hidden_inspection_forms, levels_for, visible_answers
+from apps.forms.access import hidden_inspection_forms, levels_by_stage, visible_answers
 
 from . import timing
 from .models import Booking, Inspection, RescheduleLog
@@ -44,7 +44,7 @@ class BookingSerializer(serializers.ModelSerializer):
                 cache["version"] = booking_form_version()
             key = (role, instance.stage)
             if key not in cache:
-                cache[key] = levels_for(cache["version"], role, instance.stage)
+                cache[key] = levels_by_stage(cache["version"], role)[instance.stage]
             data["answers"] = visible_answers(cache[key], data["answers"], role)
             if "timing" not in cache:               # Admin / Ops only, never Experts
                 allowed = scope_for(request.user, "bookings.review_timing", request) is not None
@@ -97,7 +97,7 @@ class InspectionSerializer(serializers.ModelSerializer):
         """levels_for, once per version, role and stage in a request (F-090)."""
         cache = self.context.setdefault("_inspection_levels", {})
         if (version.id, role, stage) not in cache:
-            cache[(version.id, role, stage)] = levels_for(version, role, stage)
+            cache[(version.id, role, stage)] = levels_by_stage(version, role)[stage]
         return cache[(version.id, role, stage)]
 
     @staticmethod

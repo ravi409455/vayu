@@ -239,7 +239,12 @@ def test_chassis_search_follows_the_same_rule(ienv, booking):  # noqa: F811
     assert ids(ienv.ops, "search=273129") == ["SA37926"]
     from apps.forms.models import Field
 
+    from apps.forms import access
+
+    # a published version never changes in the app; this test changes one behind its back, so
+    # the cached levels (Q5.1) are dropped too
     Field.objects.filter(key="chassis_no").update(access={"ops": {"completed": "hidden"}})
+    access._published_levels.cache_clear()
     assert ids(ienv.ops, "search=273129") == []
     assert ids(ienv.admin, "search=273129") == ["SA37926"]
 

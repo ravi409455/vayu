@@ -12,7 +12,7 @@ from apps.core import events, log
 from apps.core import tasks as core_tasks
 from apps.core.concurrency import check_row_version
 from apps.core.errors import CodedError, fail
-from apps.forms.access import STAGES, levels_for, role_may_see_submissions
+from apps.forms.access import STAGES, levels_by_stage, levels_for, role_may_see_submissions
 from apps.forms.models import PARTS, Field, Form, FormType, FormVersion, VersionStatus
 from apps.forms.rules import validate_answers
 from apps.forms.serializers import VersionTreeSerializer
@@ -546,17 +546,22 @@ def searchable_stages(role: str) -> dict[str, list[str]]:
         booking_version = booking_form_version()
     except CodedError:                  # no booking form yet means no bookings either
         return {}
-    by_stage = {s: levels_for(booking_version, role, s) for s in STAGES}
+    by_stage = levels_by_stage(booking_version, role)
     out = {c: [s for s in STAGES if by_stage[s].get(key, "hidden") != "hidden"]  # fail closed
            for c, key in BOOKING_SEARCH.items()}
-    versions = [v for f in Form.objects.filter(type=FormType.CUSTOM, is_active=True)
-                if (v := latest_published(f))]
-    chassis = {s: [levels_for(v, role, s).get("chassis_no", "hidden") for v in versions]
+    forms = list(Form.objects.filter(type=FormType.CUSTOM))
+    if any(not role_may_see_submissions(role, f) for f in forms):
+        out["chassis_no"] = []                  # a hidden submission must not be searchable
+        return out
+    latest: dict[int, FormVersion] = {}         # each active form's newest published version
+    for v in FormVersion.objects.filter(
+            form__in=[f for f in forms if f.is_active], status=VersionStatus.PUBLISHED
+    ).select_related("form").order_by("form_id", "-number"):
+        latest.setdefault(v.form_id, v)
+    levels = [levels_by_stage(v, role) for v in latest.values()]
+    chassis = {s: [lv[s].get("chassis_no", "hidden") for lv in levels]
                or ["hidden"] for s in STAGES}                    # no form to say: closed
     out["chassis_no"] = [s for s in STAGES if "hidden" not in chassis[s]]
-    if any(not role_may_see_submissions(role, f) for f in Form.objects.filter(
-            type=FormType.CUSTOM)):
-        out["chassis_no"] = []                  # a hidden submission must not be searchable
     return out
 
 
