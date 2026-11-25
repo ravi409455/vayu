@@ -91,7 +91,7 @@ class MasterListItemViewSet(mixins.UpdateModelMixin, viewsets.GenericViewSet):
 
 class FormViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
                   mixins.UpdateModelMixin, viewsets.GenericViewSet):
-    queryset = Form.objects.order_by("type", "key")
+    queryset = Form.objects.order_by("type", "key").prefetch_related("versions")
     serializer_class = FormSerializer
     permission_classes = [perm("forms.view", "forms.edit")]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]  # delete: the draft
@@ -259,6 +259,12 @@ class LibraryViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         if p.get("q"):
             qs = qs.filter(Q(key__icontains=p["q"]) | Q(name__icontains=p["q"]))
         return qs if self.action == "list" else LibraryItem.objects.all()
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        if self.action == "list":
+            ctx["used_in"] = library.used_in_counts()
+        return ctx
 
     def create(self, request, *args, **kwargs):
         d = request.data
