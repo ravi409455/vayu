@@ -29,16 +29,18 @@ data class Field(
         val key = it["key"] as? String ?: return@mapNotNull null          // a broken option is left out, not a crash
         Option(key, (it["label"] as? String) ?: key, it["is_defect"] == true, it["severity"] as? String)
     } }
-    val editable: Boolean get() = level == "edit" && type !in SYSTEM_MADE
+    /** What this type is (FieldTypes: one place per type). */
+    val fieldType: FieldType get() = FieldTypes.of(type)
+    val editable: Boolean get() = level == "edit" && !fieldType.systemMade
     /** Never typed by the expert: computed, or only shown. */
-    val answerable: Boolean get() = type !in SYSTEM_MADE && type != "image"
-    val isMedia: Boolean get() = type in MEDIA
+    val answerable: Boolean get() = fieldType.answerable
+    val isMedia: Boolean get() = fieldType.media
     /** "Most files" for this field; one when the form doesn't say (the agreed default, same as the server). */
     val maxCount: Int get() = if (type == "signature") 1 else (config["max_count"] as? Number)?.toInt() ?: 1
 
     companion object {
-        val MEDIA = setOf("photo", "video", "file", "signature")
-        val SYSTEM_MADE = setOf("derived", "rating")
+        val MEDIA: Set<String> = FieldTypes.all.filter { it.media }.map { it.key }.toSet()
+        val SYSTEM_MADE: Set<String> = FieldTypes.all.filter { it.systemMade }.map { it.key }.toSet()
     }
 }
 
