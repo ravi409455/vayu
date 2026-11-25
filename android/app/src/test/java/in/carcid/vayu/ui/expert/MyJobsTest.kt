@@ -3,6 +3,7 @@ package `in`.carcid.vayu.ui.expert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -97,6 +98,48 @@ class MyJobsTest {
         compose.onNodeWithText("Zoya Merchant").assertIsDisplayed()
         compose.onNodeWithText("Submit anyway").assertIsDisplayed()
         compose.onNodeWithText("Discard draft").assertIsDisplayed()
+    }
+
+    @Test fun discardingADraftFromTheListOrTheLeadAsksFirst() {
+        val moved = j("42", "Zoya Merchant", "20:45").copy(assignedToMe = false)
+        val draft = `in`.carcid.vayu.core.draft.Draft("42", "DEMO-42", "Zoya Merchant", emptyMap(), "tour")
+        val gone = mutableListOf<String>()
+        compose.setContent { VayuTheme(ThemeMode.LIGHT) {
+            ExpertHome(me, JobsState(jobs + moved), today, {}, {}, ExpertExtras(drafts = mapOf("42" to draft), onDiscard = { gone += it }))
+        } }
+        compose.onNodeWithText("Discard draft").performClick()
+        compose.onNodeWithText("Discard DEMO-42?").assertIsDisplayed()
+        compose.onNodeWithText("Keep it").performClick()
+        assertEquals(emptyList<String>(), gone)
+        compose.onNodeWithText("Zoya Merchant").performClick()              // the lead page asks too
+        compose.onNodeWithText("Discard draft").performClick()
+        assertEquals(emptyList<String>(), gone)
+        compose.onAllNodes(hasText("Discard draft")).onLast().performClick()  // the dialog's button
+        assertEquals(listOf("42"), gone)
+    }
+
+    @Test fun aCancelledLeadSaysSoAndWhy() {
+        val gone = j("42", "Zoya Merchant", "20:45", stage = "cancelled").copy(cancelReason = "Customer cancelled")
+        val draft = `in`.carcid.vayu.core.draft.Draft("42", "DEMO-42", "Zoya Merchant", emptyMap(), "tour")
+        compose.setContent { VayuTheme(ThemeMode.LIGHT) {
+            JobDetailScreen(gone, ready = true, today = today, onBack = {}, onStart = {}, draft = draft)
+        } }
+        compose.onNodeWithText("Cancelled").assertIsDisplayed()
+        compose.onNodeWithText("Ops cancelled this lead: Customer cancelled.").assertIsDisplayed()
+        assertEquals(0, compose.onAllNodes(hasText("Ready to work without signal")).fetchSemanticsNodes().size)
+    }
+
+    @Test fun theSubmittedScreenSaysFilesKeepSendingOnlyWhileSomeAreLeft() {
+        fun f(sent: Boolean) = `in`.carcid.vayu.core.draft.LocalFile("p", "inspection", "door", "photo", "p", "image/jpeg", "camera", 1, "x", "Door", sent = sent)
+        val left = androidx.compose.runtime.mutableStateOf(true)
+        compose.setContent { VayuTheme(ThemeMode.LIGHT) {
+            SubmittedScreen(`in`.carcid.vayu.core.draft.Draft("42", "DEMO-42", "Zoya Merchant", emptyMap(), "tour",
+                files = listOf(f(true), f(!left.value)), submitSent = true), onClose = {})
+        } }
+        compose.onNodeWithText("They keep sending in the background, even with the app closed.").assertIsDisplayed()
+        left.value = false
+        compose.onNodeWithText("All files sent").assertIsDisplayed()
+        assertEquals(0, compose.onAllNodes(hasText("They keep sending", substring = true)).fetchSemanticsNodes().size)
     }
 
     @Test fun aFieldOpensTheCameraTheFormBuilderChose() {

@@ -36,6 +36,8 @@ data class Job(
     val report: String? = null,
     /** Form version per part (start, inspection, end); null = that part has no form. */
     val versions: Map<String, Int?>,
+    /** Why Ops cancelled it, as its list label ("" when not cancelled). */
+    val cancelReason: String = "",
 ) {
     val open: Boolean get() = stage in OPEN
     companion object { val OPEN = setOf("assigned", "in_progress", "submitted") }
@@ -137,6 +139,7 @@ class JobStore(private val file: File) {
                 versions = j.obj("versions").mapValues { it.value.jsonPrimitive.intOrNull },
                 typeKey = type,
                 report = j["report"]?.jsonPrimitive?.contentOrNull,
+                cancelReason = j.str("cancel_reason").let { if (it.isEmpty()) "" else label("cancel_reason", it) },
             )
         }.sortedWith(compareBy({ it.date }, { it.time }))
     }

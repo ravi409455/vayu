@@ -208,6 +208,7 @@ fun ExpertHome(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit
     }
     val inspecting = state.jobs.firstOrNull { it.id == inspectId }
     val open = state.jobs.firstOrNull { it.id == openId }
+    var discarding by remember { mutableStateOf<Job?>(null) }
     Box(Modifier.fillMaxSize()) {
         when {
             inspecting != null && extras.inspection != null -> InspectionScreen(remember(inspecting.id) { extras.inspection.invoke(inspecting) },
@@ -226,7 +227,7 @@ fun ExpertHome(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit
                 JobDetailScreen(open, ready = open.id in state.ready, today = today, onBack = { openId = null },
                     draft = d, blocked = cannotStart(open, d, open.id in state.ready, extras),
                     notices = extras.notices.filter { it.first == open.id }.map { it.second },
-                    onStart = { inspectId = open.id }, onDiscard = { extras.onDiscard(open.id); say("Draft discarded.") })
+                    onStart = { inspectId = open.id }, onDiscard = { discarding = open })
             }
             uploads -> {
                 BackHandler { uploads = false }
@@ -236,8 +237,17 @@ fun ExpertHome(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit
             else -> MyJobsScreen(me, state, today, onProfile, refresh, extras, onOpen = { j ->
                 val d = extras.drafts[j.id]
                 if (d != null && d.locked) inspectId = j.id else openId = j.id
-            }, onUploads = { uploads = true }, onDiscard = { extras.onDiscard(it); say("Draft discarded.") },
+            }, onUploads = { uploads = true }, onDiscard = { id -> discarding = state.jobs.firstOrNull { it.id == id } },
                 onSubmitAnyway = { inspectId = it.id }, onBell = { bell = true })
+        }
+        // a mis-tap beside "Submit anyway" must not destroy work: same question as Uploads
+        discarding?.let { j ->
+            androidx.compose.material3.AlertDialog(onDismissRequest = { discarding = null },
+                title = { Text("Discard ${j.bookingId}?") },
+                text = { Text("Its answers and photos on this phone are cleared. This cannot be undone.") },
+                confirmButton = { androidx.compose.material3.TextButton({ discarding = null; extras.onDiscard(j.id); say("Draft discarded.") }) {
+                    Text("Discard draft", color = Vayu.colors.bad) } },
+                dismissButton = { androidx.compose.material3.TextButton({ discarding = null }) { Text("Keep it") } })
         }
         androidx.compose.material3.SnackbarHost(snack, Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp))
     }
@@ -381,9 +391,12 @@ fun JobDetailScreen(j: Job, ready: Boolean, today: LocalDate, onBack: () -> Unit
             Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back to My jobs", tint = Vayu.colors.ink)
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-            Text(j.customer, fontSize = 26.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink,
+            Text(j.customer.ifBlank { j.bookingId }, fontSize = 26.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink,
                 modifier = Modifier.padding(top = 4.dp))
-            Text(j.bookingId, color = Vayu.colors.ink2, fontWeight = FontWeight.Medium)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(j.bookingId, color = Vayu.colors.ink2, fontWeight = FontWeight.Medium)
+                if (j.stage == "cancelled") StatusDot("Cancelled", Tone.BAD)
+            }
             Text(listOf(dayLabel(j.date, today), time12(j.time)).filter { it.isNotEmpty() }.joinToString(", "), color = Vayu.colors.muted)
             Row(Modifier.padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 // digits only: a stored "*#06#"-style code must never reach the dialer
@@ -398,13 +411,15 @@ fun JobDetailScreen(j: Job, ready: Boolean, today: LocalDate, onBack: () -> Unit
                     uri.openUri("https://www.google.com/maps/search/?api=1&query=" + URLEncoder.encode(place, "UTF-8"))
                 }
             }
+            if (j.stage == "cancelled") { Spacer(Modifier.height(12.dp))
+                Banner("Ops cancelled this lead" + (if (j.cancelReason.isNotBlank()) ": ${j.cancelReason}." else "."), Tone.BAD, null) }
             notices.forEach { Spacer(Modifier.height(12.dp)); Banner(it, Tone.WARN, {}) }
             Spacer(Modifier.height(14.dp))
             Info("Car", j.car)
             Info("Inspection", j.type)
             Info("Address", place)
             Info("Phone", phoneLabel(j.phone))
-            if (ready) Row(Modifier.padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically,
+            if (ready && j.open) Row(Modifier.padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = Vayu.colors.ok, modifier = Modifier.size(18.dp))
                 Text("Ready to work without signal", color = Vayu.colors.ok, style = MaterialTheme.typography.bodyMedium)

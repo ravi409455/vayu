@@ -132,7 +132,7 @@ fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Un
                                 if (i > 0) HorizontalDivider(color = Vayu.colors.line)
                                 Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(role = Role.Button) { onOpen(b.id) }.padding(vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text(b.time, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink2, fontSize = 14.sp, maxLines = 1, softWrap = false)
+                                    Text(time12(b.time), fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink2, fontSize = 14.sp, maxLines = 1, softWrap = false)
                                     Column(Modifier.weight(1f)) {
                                         Text(b.customer.ifBlank { b.code }, color = Vayu.colors.ink, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         Text(b.code, fontSize = 13.sp, color = Vayu.colors.ink2)

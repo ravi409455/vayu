@@ -214,19 +214,20 @@ fun ToggleChip(label: String, on: Boolean, onToggle: (Boolean) -> Unit) {
     }
 }
 
-/** Info / warning / problem message; every banner can be closed (the offline strip cannot). */
+/** Info / warning / problem message; closable when [onClose] is given (the offline strip never is). */
 @Composable
-fun Banner(text: String, tone: Tone, onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun Banner(text: String, tone: Tone, onClose: (() -> Unit)?, modifier: Modifier = Modifier) {
     val (bg, fg) = when (tone) {
         Tone.WARN -> Vayu.colors.warnTint to Vayu.colors.warn
         Tone.BAD -> Vayu.colors.badTint to Vayu.colors.bad
         Tone.OK -> Vayu.colors.okTint to Vayu.colors.ok
         else -> Vayu.colors.infoTint to Vayu.colors.info
     }
-    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(bg).padding(start = 14.dp, top = 4.dp, bottom = 4.dp),
+    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(bg)
+        .padding(start = 14.dp, top = 4.dp, bottom = 4.dp, end = if (onClose == null) 14.dp else 0.dp).heightIn(min = 40.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Text(text, style = MaterialTheme.typography.bodyLarge, fontSize = 14.sp, color = fg, modifier = Modifier.weight(1f))
-        IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, contentDescription = "Close", tint = fg) }
+        if (onClose != null) IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, contentDescription = "Close", tint = fg) }
     }
 }
 

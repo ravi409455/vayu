@@ -32,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.AlertDialog
@@ -324,6 +325,9 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
             Text("Pages", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Vayu.colors.ink, modifier = Modifier.weight(1f))
             if (needed > 0) Text("$needed still needed", color = Vayu.colors.bad, fontSize = 14.sp)
         }
+        // why the pages below can't be opened, before them (not at the end of a long list)
+        if (gate != -1) Text("Finish ${steps[gate].title} to open the other pages.", color = Vayu.colors.ink2, fontSize = 13.sp,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
         LazyColumn(Modifier.heightIn(max = 560.dp)) {
             itemsIndexed(steps) { i, s ->
                 val miss = missingOn(s)
@@ -333,7 +337,8 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
                     .background(if (i == index) Vayu.colors.soft else Vayu.colors.bg).padding(horizontal = 20.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(Modifier.size(28.dp).clip(CircleShape).background(if (done) Vayu.colors.ok else Vayu.colors.soft), contentAlignment = Alignment.Center) {
-                        Text(if (done) "✓" else "${i + 1}", fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                        if (i >= lockedFrom) Icon(Icons.Outlined.Lock, contentDescription = "locked", tint = Vayu.colors.muted, modifier = Modifier.size(16.dp))
+                        else Text(if (done) "✓" else "${i + 1}", fontSize = 13.sp, fontWeight = FontWeight.Bold,
                             color = if (done) androidx.compose.ui.graphics.Color.White else Vayu.colors.ink2)
                     }
                     Text(if (s.isReview) "Review and submit" else s.title, modifier = Modifier.weight(1f),
@@ -346,8 +351,6 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
                 }
             }
             item {
-                if (gate != -1) Text("Finish ${steps[gate].title} to open the other pages.", color = Vayu.colors.muted, fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                 Text("Discard draft…", color = Vayu.colors.bad, fontWeight = FontWeight.SemiBold, modifier = Modifier
                     .clickable(role = Role.Button) { pages = false; confirm = "discard" }.padding(horizontal = 20.dp, vertical = 16.dp))
                 Spacer(Modifier.height(16.dp))
@@ -462,7 +465,7 @@ fun SubmittedScreen(draft: Draft, onClose: () -> Unit) {
                 Box(Modifier.padding(top = 8.dp).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(Vayu.colors.line)) {
                     Box(Modifier.fillMaxWidth(sent.toFloat() / total).height(6.dp).background(Vayu.colors.ok))
                 }
-                Text("They keep sending in the background, even with the app closed.", color = Vayu.colors.muted, fontSize = 13.sp,
+                if (sent < total) Text("They keep sending in the background, even with the app closed.", color = Vayu.colors.muted, fontSize = 13.sp,
                     modifier = Modifier.padding(top = 8.dp).fillMaxWidth())
             }
             Column(Modifier.fillMaxWidth().padding(top = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {

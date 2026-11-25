@@ -37,6 +37,13 @@ class JobStoreTest {
         assertTrue(JobStore(file).readyOffline(j))
     }
 
+    @Test fun aCancelledJobKeepsOpsReasonAsItsLabel() {
+        val p = Json.parseToJsonElement(payload(job("2", stage = "cancelled").replace("\"my_draft\":null", "\"my_draft\":null,\"cancel_reason\":\"customer\"")).toString()
+            .replace("\"lists\":{", "\"lists\":{\"cancel_reason\":[{\"key\":\"customer\",\"label\":\"Customer cancelled\"}],")).jsonObject
+        JobStore(file).apply(p, phoneNow = 0)
+        assertEquals("Customer cancelled", JobStore(file).jobs().single().cancelReason)
+    }
+
     @Test fun formsAreKeptAcrossSyncsAndDroppedWhenNoJobUsesThem() {
         val s = JobStore(file)
         s.apply(payload(job("1"), forms = """{"7":{"pages":[]}}"""), 0)

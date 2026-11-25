@@ -115,6 +115,7 @@ class OpsFlowTest {
         waitFor("Meera Expert")
         compose.onNode(hasText("Ravi Expert", substring = true)).performClick()          // expand: their jobs
         compose.onNodeWithText("Arjun Mehta").assertIsDisplayed()
+        compose.onNodeWithText("3:30\u00A0pm").assertIsDisplayed()                       // the same 12-hour times as "Next at"
         shot("ops_today")
     }
 

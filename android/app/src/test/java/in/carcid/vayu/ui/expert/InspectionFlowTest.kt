@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -113,6 +114,16 @@ class InspectionFlowTest {
         // the sheet is its own window: capture the whole screen
         @OptIn(com.github.takahirom.roborazzi.ExperimentalRoborazziApi::class)
         com.github.takahirom.roborazzi.captureScreenRoboImage("src/test/screenshots/page_list.png", roborazziOptions = options)
+    }
+
+    @Test fun lockedPagesSayWhyAtTheTopAndShowALock() {
+        show()
+        model.set("start", "travel", "car")
+        compose.onNodeWithContentDescription("Page 1 of 5, open the page list").performClick()
+        val why = compose.onNodeWithText("Finish Vehicle to open the other pages.").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val exterior = compose.onNodeWithText("Exterior").fetchSemanticsNode().boundsInRoot
+        assertTrue("the reason comes before the locked pages", why.top < exterior.top)
+        assertTrue(compose.onAllNodesWithContentDescription("locked").fetchSemanticsNodes().isNotEmpty())
     }
 
     @Test fun reviewListsWhatIsMissingThenSubmitLocksTheAnswers() {
