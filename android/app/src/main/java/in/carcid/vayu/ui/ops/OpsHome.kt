@@ -119,7 +119,7 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
                 pop()
                 if (r.id == null) push(Route.Booking(saved))
                 if (assign) scope.launch {
-                    runCatching { data.load("bookings/$saved") }.getOrNull()?.let { assigning = Bk(it.data as kotlinx.serialization.json.JsonObject) }
+                    `in`.carcid.vayu.core.attempt { data.load("bookings/$saved") }.getOrNull()?.let { (it.data as? kotlinx.serialization.json.JsonObject)?.let { o -> assigning = Bk(o) } }
                 }
             }
         }

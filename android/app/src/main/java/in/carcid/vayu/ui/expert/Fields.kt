@@ -336,7 +336,7 @@ private fun Gps(f: Field, value: Any?, readOnly: Boolean, env: FieldEnv, onChang
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = if (v != null) Vayu.colors.ok else Vayu.colors.muted, modifier = Modifier.size(18.dp))
         Text(when {
-            v != null -> "Location recorded · %.4f, %.4f".format((v["lat"] as Number).toDouble(), (v["lng"] as Number).toDouble()) +
+            v != null -> "Location recorded" + ((v["lat"] as? Number)?.let { lat -> (v["lng"] as? Number)?.let { lng -> " · %.4f, %.4f".format(lat.toDouble(), lng.toDouble()) } } ?: "") +
                 ((v["accuracy"] as? Number)?.let { " (±${it.toInt()} m)" } ?: "")
             state == "busy" -> "Finding your location…"
             state == "off" -> "Location is off on this phone"

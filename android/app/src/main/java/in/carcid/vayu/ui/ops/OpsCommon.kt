@@ -245,7 +245,8 @@ fun shown(v: Any?): String = when (v) {
     // ponytail: no comma under 10,000, so a year reads 2022 (47,000 km still gets one)
     is Double -> if (v % 1.0 != 0.0) v.toString() else if (kotlin.math.abs(v) < 10_000) v.toLong().toString() else "%,d".format(v.toLong())
     is List<*> -> if (v.all { it is String && it.length == 36 }) "${v.size} file${if (v.size == 1) "" else "s"}" else v.joinToString(", ")
-    is Map<*, *> -> if (v["lat"] != null) "%.4f, %.4f".format((v["lat"] as Number).toDouble(), (v["lng"] as Number).toDouble()) else v.toString()
+    is Map<*, *> -> { val lat = v["lat"] as? Number; val lng = v["lng"] as? Number
+        if (lat != null && lng != null) "%.4f, %.4f".format(lat.toDouble(), lng.toDouble()) else v.toString() }
     else -> v.toString()
 }
 

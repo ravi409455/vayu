@@ -14,6 +14,12 @@ import java.time.ZoneId
 
 /** The words Ops screens show for server values (found testing on a phone). */
 class OpsTextTest {
+    /** F-051: a place answer missing its longitude shows as it is, never a crash. */
+    @Test fun aPlaceWithoutLongitudeDoesNotCrash() {
+        assertEquals("12.9716, 77.5946", shown(mapOf("lat" to 12.9716, "lng" to 77.5946)))
+        assertEquals("{lat=12.9716}", shown(mapOf("lat" to 12.9716)))
+    }
+
     /** F-037: Ops count an answer the way the expert's page and the rules do (spaces or an empty place are not answers). */
     @Test fun opsCountAnswersLikeTheExpertPage() {
         assertEquals(listOf(false, false, false, false, true, true),

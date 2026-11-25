@@ -94,6 +94,19 @@ class SignInFlowTest {
         compose.waitUntil(5_000) { !java.io.File(root, "drafts-3").exists() }
     }
 
+    /** F-051: a draft file the phone can't read is never deleted by sign-out: sign-out says so and stops. */
+    @Test fun aDraftThatCantBeReadStopsTheSignOut() {
+        signedIn("expert")
+        server.on("POST auth/logout", "", 204)
+        launch(); signIn(); waitFor("My leads")
+        val bad = java.io.File(root, "drafts-3").apply { mkdirs() }.resolve("00000000-0000-0000-0000-000000000009.json").apply { writeText("{not json") }
+        compose.onNodeWithContentDescription("Profile").performClick()
+        compose.onNodeWithText("Sign out").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("can't be read", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        org.junit.Assert.assertTrue(bad.exists())
+        org.junit.Assert.assertEquals(0, server.bodiesOf("POST auth/logout").size)
+    }
+
     /** F-077: signed out without signal, the server's sign-in for this phone is ended at the next sign-in. */
     @Test fun aSignOutWithoutSignalIsFinishedAtTheNextSignIn() {
         signedIn("expert")

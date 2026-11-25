@@ -389,7 +389,7 @@ fun AssignSheet(env: OpsEnv, b: Bk, onClose: () -> Unit, onAssign: (Int) -> Unit
             LazyColumn(Modifier.heightIn(max = 520.dp)) {
                 items(env.labels.experts.filter { find.isBlank() || it.s("name").contains(find, true) || it.s("username").contains(find, true) },
                     key = { it.s("id") }) { u ->
-                    val uid = u.int("id")!!
+                    val uid = u.int("id") ?: return@items
                     val theirs = jobs.filter { it.expert == uid && it.id != b.id }
                     val clash = at?.let { a -> theirs.firstOrNull { o -> runCatching { LocalTime.parse(o.time) }.getOrNull()?.let { java.time.Duration.between(it, a).abs().toMinutes() < 90 } == true } }
                     val name = u.s("name").ifBlank { u.s("username") }

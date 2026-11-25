@@ -31,6 +31,13 @@ class FormTreeTest {
         assertEquals(6, f("photo", mapOf("max_count" to 6)).maxCount)
     }
 
+    /** F-051: an option without a key (a broken form) is left out instead of crashing the screen. */
+    @Test fun anOptionWithoutAKeyIsLeftOut() {
+        val f = Field("k", "K", "single", "", false, null, null, true, "edit",
+            mapOf("options" to listOf(mapOf("label" to "No key"), mapOf("key" to "ok", "label" to "OK"))))
+        assertEquals(listOf("ok"), f.options.map { it.key })
+    }
+
     @Test fun requiredQuestionsAreMissingUntilAnswered() {
         val f = filled()
         assertEquals(listOf("travel"), f.gaps("start").map { it.key })
