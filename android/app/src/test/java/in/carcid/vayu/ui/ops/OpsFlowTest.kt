@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.printToString
 import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import `in`.carcid.vayu.core.api.Api
@@ -105,7 +106,21 @@ class OpsFlowTest {
     }
 
     private fun waitFor(text: String) = compose.waitUntil(5_000) { compose.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty() }
-    private fun shot(name: String) = compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/$name.png", roborazziOptions = options)
+    private fun shot(name: String) { settled(); compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/$name.png", roborazziOptions = options) }
+
+    /**
+     * The screen as it stays. Each part of an Ops screen loads on its own (produceState on IO threads,
+     * which waitForIdle doesn't wait for), so a picture taken too early catches a part still loading:
+     * wait until no request has reached the server and nothing on screen has changed for half a second.
+     */
+    private fun settled() {
+        var last = ""; var since = System.currentTimeMillis()
+        compose.waitUntil(10_000) {
+            val now = server.requests.size.toString() + compose.onNode(isRoot()).printToString(Int.MAX_VALUE)
+            if (now != last) { last = now; since = System.currentTimeMillis() }
+            System.currentTimeMillis() - since >= 500
+        }
+    }
 
     @Test fun todayShowsTheDayUnassignedAndExperts() {
         show()
