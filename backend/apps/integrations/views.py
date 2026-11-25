@@ -160,13 +160,14 @@ def _clean_integration(data: dict, current: Integration | None = None, *,
     return out
 
 
-def body(i: Integration) -> dict:
+def body(i: Integration, cache: dict | None = None) -> dict:
     return {"id": str(i.id), "form": i.form_id, "form_key": i.form.key, "name": i.name,
             "event": i.event, "method": i.method, "url": i.url, "query": i.query,
             "headers": i.headers, "body_mode": i.body_mode, "body": i.body,
             "include_data": i.include_data, "include_pdf": i.include_pdf,
             "include_image_zip": i.include_image_zip, "include_video_zip": i.include_video_zip,
-            "fields": i.fields, "is_active": i.is_active, "broken_refs": values.broken_refs(i),
+            "fields": i.fields, "is_active": i.is_active,
+            "broken_refs": values.broken_refs(i, cache=cache),
             "created_at": i.created_at}
 
 
@@ -186,7 +187,8 @@ class IntegrationList(APIView):
         qs = Integration.objects.select_related("form")
         if request.query_params.get("form", "").isdigit():
             qs = qs.filter(form_id=request.query_params["form"])
-        return Response([body(i) for i in qs])
+        cache: dict = {}
+        return Response([body(i, cache) for i in qs])
 
     def post(self, request):
         i = Integration(created_by=request.user, **_clean_integration(request.data))

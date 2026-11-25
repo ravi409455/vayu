@@ -280,8 +280,10 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
 
     @action(detail=True, methods=["get"])
     def inspections(self, request, pk=None):
-        qs = self.get_object().inspections.exclude(
-            form_version__form_id__in=hidden_inspection_forms(request.user))
+        qs = self.get_object().inspections.select_related(
+            "booking", "form_version__form", "start_version__form", "end_version__form",
+            "last_edited_by",
+        ).exclude(form_version__form_id__in=hidden_inspection_forms(request.user))
         if scope_for(request.user, "submissions.view", request) == "own":
             qs = qs.filter(expert_id=request.user.pk)
         return Response(InspectionSerializer(qs, many=True,

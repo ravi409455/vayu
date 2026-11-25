@@ -46,3 +46,22 @@ def test_form_vector(case):
 
 def test_vector_files_are_substantial():
     assert len(EVAL) >= 50 and len(FORM) >= 60 and len(ROBUST) >= 1000
+
+
+ANSWERS = json.loads((VECTORS / "answer_vectors.json").read_text())
+
+
+@pytest.mark.parametrize("case", ANSWERS, ids=[c["name"] for c in ANSWERS])
+def test_answer_vector(case, db):
+    """F-020: the Android answer checks and the server's clean_answer agree, case by case."""
+    from types import SimpleNamespace
+
+    from apps.forms.fieldtypes import AnswerError, clean_answer
+
+    field = SimpleNamespace(type=case["type"], config=case["config"], key="f")
+    try:
+        clean_answer(field, case["value"])
+        got = None
+    except AnswerError as e:
+        got = e.code
+    assert got == case["expected"]

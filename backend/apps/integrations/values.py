@@ -228,13 +228,20 @@ def used_refs(integ) -> set[str]:
     return {r for t in texts for r in refs_in(t)}
 
 
-def broken_refs(integ, override: dict | None = None) -> list[str]:
-    """Values the integration uses whose field is not in the form's live version any more."""
-    have = {e["ref"] for e in catalogue(integ.form, None, override)}
+def broken_refs(integ, override: dict | None = None, cache: dict | None = None) -> list[str]:
+    """Values the integration uses whose field is not in the form's live version any more.
+    [cache]: shared by a list, so each form's values are worked out once (F-089)."""
+    cache = {} if cache is None else cache
+    if ("refs", integ.form_id) not in cache:
+        cache[("refs", integ.form_id)] = {e["ref"] for e in catalogue(integ.form, None, override)}
+    have = cache[("refs", integ.form_id)]
     broken = {r for r in used_refs(integ) if r not in have}
     if integ.body_mode == "standard" and integ.include_data and integ.fields:
-        keys = {f.key for v in versions(integ.form, override).items()
+        if ("keys", integ.form_id) not in cache:
+            cache[("keys", integ.form_id)] = {
+                f.key for v in versions(integ.form, override).items()
                 if v[0] in ("booking", "inspection") for f in _fields(v[1])}
+        keys = cache[("keys", integ.form_id)]
         broken |= {f"field.{k}" for k in integ.fields if k not in keys}
     return sorted(broken)
 

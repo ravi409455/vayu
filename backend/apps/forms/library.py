@@ -238,6 +238,16 @@ def usages(item: LibraryItem) -> list[dict]:
     return [{"form": f, "version": n, "status": s} for f, n, s in sorted(rows)]
 
 
+def used_in_counts() -> dict:
+    """{library item id: how many forms use it}, for every item in two queries."""
+    forms: dict = {}
+    for model in (Field, Section):
+        for item_id, key in model.objects.filter(library_item__isnull=False).values_list(
+                "library_item_id", "version__form__key"):
+            forms.setdefault(item_id, set()).add(key)
+    return {k: len(v) for k, v in forms.items()}
+
+
 def delete_item(actor, item: LibraryItem) -> None:
     if usages(item):
         raise CodedError("IN_USE", "This item is used by a form; archive it instead.", 409)

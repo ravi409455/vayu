@@ -75,8 +75,9 @@ def find(ref: str) -> Booking:
     return b
 
 
-def booking_body(request, b: Booking) -> dict:
-    allowed = need_form(request, booking_form())
+def booking_body(request, b: Booking, allowed: list[str] | None = None) -> dict:
+    """[allowed]: the key's booking fields when the caller already looked them up (a list)."""
+    allowed = need_form(request, booking_form()) if allowed is None else allowed
     return {"id": str(b.id), "booking_id": b.booking_id, "stage": b.stage,
             "inspection_type": b.inspection_type, "assigned_expert": b.assigned_expert_id,
             "row_version": b.row_version, "created_at": b.created_at,
@@ -90,7 +91,7 @@ class ExtView(APIView):
 
 class Bookings(ExtView):
     def get(self, request):
-        need_form(request, booking_form())
+        allowed = need_form(request, booking_form())
         qs = Booking.objects.all()
         p = request.query_params
         for param, column in (("stage", "stage"), ("type", "inspection_type"),
@@ -101,7 +102,8 @@ class Bookings(ExtView):
             qs = qs.filter(booking_id__icontains=p["search"].strip())
         paginator = PageNumberPagination()
         page = paginator.paginate_queryset(qs, request, view=self)
-        return paginator.get_paginated_response([booking_body(request, b) for b in page or []])
+        return paginator.get_paginated_response([booking_body(request, b, allowed)
+                                                 for b in page or []])
 
     def post(self, request):
         allowed = need_form(request, booking_form())
