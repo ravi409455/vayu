@@ -1,3 +1,8 @@
+"""Form builder bodies: master lists, forms, the version tree, fields, sections, pages, checks and
+library items, with their validation."""
+from typing import Any
+
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.core.errors import CodedError
@@ -116,11 +121,11 @@ class FormSerializer(serializers.ModelSerializer):
         return attrs
 
     # read from the prefetched versions (the forms list prefetches them, F-089)
-    def get_draft_version(self, obj):
+    def get_draft_version(self, obj) -> dict[str, Any] | None:
         return _version_ref(next((v for v in obj.versions.all()
                                   if v.status == VersionStatus.DRAFT), None))
 
-    def get_published_version(self, obj):
+    def get_published_version(self, obj) -> dict[str, Any] | None:
         live = [v for v in obj.versions.all() if v.status == VersionStatus.PUBLISHED]
         return _version_ref(max(live, key=lambda v: v.number) if live else None)
 
@@ -148,10 +153,10 @@ class FieldSerializer(serializers.ModelSerializer):
         read_only_fields = ["is_system"]
         extra_kwargs = {"section": {"required": False}}
 
-    def get_library(self, obj):
+    def get_library(self, obj) -> dict[str, Any] | None:
         return _library_info(obj, self.context)
 
-    def get_locked(self, obj):
+    def get_locked(self, obj) -> bool:
         return library.locked(obj)
 
     def validate_section(self, section):
@@ -204,10 +209,10 @@ class SectionSerializer(serializers.ModelSerializer):
         read_only_fields = ["key"]
         extra_kwargs = {"page": {"required": False}}
 
-    def get_library(self, obj):
+    def get_library(self, obj) -> dict[str, Any] | None:
         return _library_info(obj, self.context)
 
-    def get_locked(self, obj):
+    def get_locked(self, obj) -> bool:
         return obj.library_item_id is not None
 
     def validate(self, attrs):
@@ -269,9 +274,11 @@ class VersionTreeSerializer(serializers.ModelSerializer):
 
     checks = serializers.SerializerMethodField()
 
+    @extend_schema_field(CheckSerializer(many=True))
     def get_checks(self, obj):
         return CheckSerializer(VersionCheck.objects.filter(version=obj), many=True).data
 
+    @extend_schema_field(PageSerializer(many=True))
     def get_pages(self, obj):
         pages = Page.objects.filter(version=obj).prefetch_related(
             "sections__library_item", "sections__fields__library_item",
@@ -287,7 +294,7 @@ class LibraryItemSerializer(serializers.ModelSerializer):
         model = LibraryItem
         fields = ["id", "kind", "key", "name", "definition", "revision", "archived", "used_in"]
 
-    def get_used_in(self, obj):
+    def get_used_in(self, obj) -> int:
         """How many forms use this item (counted once for a whole list, F-089)."""
         counts = self.context.get("used_in")
         if counts is not None:
@@ -301,5 +308,5 @@ class LibraryItemDetailSerializer(LibraryItemSerializer):
     class Meta(LibraryItemSerializer.Meta):
         fields = [*LibraryItemSerializer.Meta.fields, "usages"]
 
-    def get_usages(self, obj):
+    def get_usages(self, obj) -> list[dict[str, Any]]:
         return library.usages(obj)

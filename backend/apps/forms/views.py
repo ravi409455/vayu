@@ -1,3 +1,5 @@
+"""Form builder API: master lists, forms, versions and their parts, the library, publish,
+promote (export / import) and form pictures."""
 from django.db.models import Max, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, mixins, serializers, status, viewsets
@@ -141,7 +143,6 @@ class VersionDetail(generics.RetrieveAPIView):
 
 class ReorderVersion(generics.GenericAPIView):
     permission_classes = [perm("forms.edit")]
-    serializer_class = serializers.Serializer
 
     def post(self, request, pk):
         v = services.reorder(request.user, pk, request.data)
@@ -334,7 +335,6 @@ class _LinkAction(generics.GenericAPIView):
     """accept-update / unlink / save-to-library on a field or a section."""
 
     permission_classes = [perm("forms.edit")]
-    serializer_class = serializers.Serializer
     model: type[Field] | type[Section] = Field
     result: type[serializers.ModelSerializer] = FieldSerializer
 
@@ -413,7 +413,6 @@ class PublishVersion(generics.GenericAPIView):
 class VersionSettings(generics.GenericAPIView):
     """A custom form's two switches: begins with the start form, ends with the end form."""
     permission_classes = [perm("forms.view", "forms.edit")]
-    serializer_class = serializers.Serializer
 
     def patch(self, request, pk):
         version = services.save_version_settings(request.user, pk, request.data)
@@ -423,7 +422,6 @@ class VersionSettings(generics.GenericAPIView):
 
 class RatingConfigView(generics.GenericAPIView):
     permission_classes = [perm("forms.view", "forms.edit")]
-    serializer_class = serializers.Serializer
 
     def patch(self, request, pk):
         config = request.data.get("config")
@@ -438,7 +436,6 @@ class KeyChecksView(generics.GenericAPIView):
     """The draft's Key Checks, saved as a whole ordered list (like the rating config)."""
 
     permission_classes = [perm("forms.view", "forms.edit")]
-    serializer_class = serializers.Serializer
 
     def patch(self, request, pk):
         items = request.data.get("key_checks")
@@ -448,7 +445,6 @@ class KeyChecksView(generics.GenericAPIView):
 
 class PromoteExport(generics.GenericAPIView):
     permission_classes = [perm("forms.promote")]
-    serializer_class = serializers.Serializer
 
     def get(self, request):
         if not request.query_params.get("version"):
@@ -460,7 +456,6 @@ class PromoteExport(generics.GenericAPIView):
 
 class PromoteImport(generics.GenericAPIView):
     permission_classes = [perm("forms.promote")]
-    serializer_class = serializers.Serializer
 
     def post(self, request):
         key, name = request.query_params.get("as_new_key"), request.query_params.get("as_new_name")
@@ -472,7 +467,6 @@ class PromoteImport(generics.GenericAPIView):
 class FormAssetUpload(generics.GenericAPIView):
     """POST a picture (multipart field 'file'); returns the id to put in an image field."""
     permission_classes = [perm("forms.edit")]
-    serializer_class = serializers.Serializer
 
     def post(self, request):
         file = request.FILES.get("file")

@@ -5,7 +5,7 @@ info:
 paths:
   /api/v1/api-keys:
     get:
-      operationId: api_keys_retrieve
+      operationId: api_keys_list
       tags:
       - api-keys
       security:
@@ -110,7 +110,7 @@ paths:
                 $ref: '#/components/schemas/Error'
   /api/v1/api-keys/{id}:
     get:
-      operationId: api_keys_retrieve_2
+      operationId: api_keys_retrieve
       parameters:
       - in: path
         name: id
@@ -1061,6 +1061,8 @@ paths:
         name: id
         schema:
           type: string
+          format: uuid
+        description: A UUID string identifying this booking.
         required: true
       tags:
       - bookings
@@ -1111,6 +1113,8 @@ paths:
         name: id
         schema:
           type: string
+          format: uuid
+        description: A UUID string identifying this booking.
         required: true
       tags:
       - bookings
@@ -1223,6 +1227,8 @@ paths:
         name: id
         schema:
           type: string
+          format: uuid
+        description: A UUID string identifying this booking.
         required: true
       tags:
       - bookings
@@ -1404,6 +1410,8 @@ paths:
         name: id
         schema:
           type: string
+          format: uuid
+        description: A UUID string identifying this booking.
         required: true
       tags:
       - bookings
@@ -1470,6 +1478,8 @@ paths:
         name: id
         schema:
           type: string
+          format: uuid
+        description: A UUID string identifying this booking.
         required: true
       tags:
       - bookings
@@ -1670,6 +1680,8 @@ paths:
         name: id
         schema:
           type: string
+          format: uuid
+        description: A UUID string identifying this booking.
         required: true
       tags:
       - bookings
@@ -1721,6 +1733,8 @@ paths:
         name: id
         schema:
           type: string
+          format: uuid
+        description: A UUID string identifying this booking.
         required: true
       tags:
       - bookings
@@ -2258,6 +2272,8 @@ paths:
         name: id
         schema:
           type: string
+          format: uuid
+        description: A UUID string identifying this booking.
         required: true
       tags:
       - bookings
@@ -2326,6 +2342,8 @@ paths:
         name: id
         schema:
           type: string
+          format: uuid
+        description: A UUID string identifying this booking.
         required: true
       tags:
       - bookings
@@ -2389,6 +2407,8 @@ paths:
         name: id
         schema:
           type: string
+          format: uuid
+        description: A UUID string identifying this booking.
         required: true
       tags:
       - bookings
@@ -3057,7 +3077,7 @@ paths:
                 $ref: '#/components/schemas/Error'
   /api/v1/ext/bookings:
     get:
-      operationId: ext_bookings_retrieve
+      operationId: ext_bookings_list
       tags:
       - ext
       security:
@@ -3160,7 +3180,7 @@ paths:
                 $ref: '#/components/schemas/Error'
   /api/v1/ext/bookings/{ref}:
     get:
-      operationId: ext_bookings_retrieve_2
+      operationId: ext_bookings_retrieve
       parameters:
       - in: path
         name: ref
@@ -3320,7 +3340,7 @@ paths:
                 $ref: '#/components/schemas/Error'
   /api/v1/ext/bookings/{ref}/{action}:
     post:
-      operationId: ext_bookings_create_2
+      operationId: ext_bookings_action
       description: |-
         POST ext/bookings/<ref>/<action>: assign (or reassign) {"expert"}, cancel {"reason"},
         reschedule {"date", "time", "reason"}, change-type {"inspection_type"}. Each one is a flag on
@@ -3738,12 +3758,31 @@ paths:
         required: true
       tags:
       - fields
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
       security:
       - deviceToken: []
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
         '400':
           description: Invalid request
           content:
@@ -3786,12 +3825,31 @@ paths:
         required: true
       tags:
       - fields
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
       security:
       - deviceToken: []
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
         '400':
           description: Invalid request
           content:
@@ -3834,12 +3892,31 @@ paths:
         required: true
       tags:
       - fields
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
       security:
       - deviceToken: []
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
         '400':
           description: Invalid request
           content:
@@ -3877,12 +3954,31 @@ paths:
         in an image field.
       tags:
       - form-assets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
       security:
       - deviceToken: []
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
         '400':
           description: Invalid request
           content:
@@ -4095,12 +4191,31 @@ paths:
         required: true
       tags:
       - form-versions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
       security:
       - deviceToken: []
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
         '400':
           description: Invalid request
           content:
@@ -4268,12 +4383,31 @@ paths:
         required: true
       tags:
       - form-versions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
       security:
       - deviceToken: []
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
         '400':
           description: Invalid request
           content:
@@ -4315,12 +4449,31 @@ paths:
         required: true
       tags:
       - form-versions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
       security:
       - deviceToken: []
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
         '400':
           description: Invalid request
           content:
@@ -4364,12 +4517,31 @@ paths:
         required: true
       tags:
       - form-versions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
       security:
       - deviceToken: []
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
         '400':
           description: Invalid request
           content:
@@ -5146,7 +5318,7 @@ paths:
                 $ref: '#/components/schemas/Error'
   /api/v1/integrations:
     get:
-      operationId: integrations_retrieve
+      operationId: integrations_list
       tags:
       - integrations
       security:
@@ -5251,7 +5423,7 @@ paths:
                 $ref: '#/components/schemas/Error'
   /api/v1/integrations/{id}:
     get:
-      operationId: integrations_retrieve_2
+      operationId: integrations_retrieve
       parameters:
       - in: path
         name: id
@@ -7518,7 +7690,7 @@ paths:
                 $ref: '#/components/schemas/Error'
   /api/v1/pdf-shared:
     get:
-      operationId: pdf_shared_retrieve
+      operationId: pdf_shared_list
       description: Shared themes and parts. POST saves a new version and moves every
         template using it.
       tags:
@@ -7627,7 +7799,7 @@ paths:
                 $ref: '#/components/schemas/Error'
   /api/v1/pdf-shared/{id}:
     get:
-      operationId: pdf_shared_retrieve_2
+      operationId: pdf_shared_retrieve
       description: GET one item (any version); PATCH {name} renames it; DELETE removes
         an unused one.
       parameters:
@@ -8667,7 +8839,12 @@ paths:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
         '400':
           description: Invalid request
           content:
@@ -8703,12 +8880,31 @@ paths:
       operationId: promote_import_create
       tags:
       - promote
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
       security:
       - deviceToken: []
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
         '400':
           description: Invalid request
           content:
@@ -9021,12 +9217,31 @@ paths:
         required: true
       tags:
       - sections
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
       security:
       - deviceToken: []
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
         '400':
           description: Invalid request
           content:
@@ -9195,12 +9410,31 @@ paths:
         required: true
       tags:
       - sections
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
       security:
       - deviceToken: []
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
         '400':
           description: Invalid request
           content:
@@ -9243,12 +9477,31 @@ paths:
         required: true
       tags:
       - sections
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
       security:
       - deviceToken: []
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
         '400':
           description: Invalid request
           content:
@@ -10069,7 +10322,7 @@ paths:
                 $ref: '#/components/schemas/Error'
   /api/v1/verify/{token}/{link}:
     get:
-      operationId: verify_retrieve_2
+      operationId: verify_media_retrieve
       description: |-
         Public, behind a link in the PDF: starts (or reuses) the ZIP and says where to wait for
         it. The report token is the credential, as for the verify page.
@@ -10376,10 +10629,12 @@ components:
           readOnly: true
         access: {}
         library:
-          type: string
+          type: object
+          additionalProperties: {}
+          nullable: true
           readOnly: true
         locked:
-          type: string
+          type: boolean
           readOnly: true
       required:
       - id
@@ -10462,10 +10717,14 @@ components:
           default: ''
         submission_roles: {}
         draft_version:
-          type: string
+          type: object
+          additionalProperties: {}
+          nullable: true
           readOnly: true
         published_version:
-          type: string
+          type: object
+          additionalProperties: {}
+          nullable: true
           readOnly: true
       required:
       - draft_version
@@ -10580,7 +10839,9 @@ components:
         archived:
           type: boolean
         used_in:
-          type: string
+          type: integer
+          description: How many forms use this item (counted once for a whole list,
+            F-089).
           readOnly: true
       required:
       - definition
@@ -10611,10 +10872,15 @@ components:
         archived:
           type: boolean
         used_in:
-          type: string
+          type: integer
+          description: How many forms use this item (counted once for a whole list,
+            F-089).
           readOnly: true
         usages:
-          type: string
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
           readOnly: true
       required:
       - definition
@@ -10990,10 +11256,12 @@ components:
           readOnly: true
         access: {}
         library:
-          type: string
+          type: object
+          additionalProperties: {}
+          nullable: true
           readOnly: true
         locked:
-          type: string
+          type: boolean
           readOnly: true
     PatchedForm:
       type: object
@@ -11020,10 +11288,14 @@ components:
           default: ''
         submission_roles: {}
         draft_version:
-          type: string
+          type: object
+          additionalProperties: {}
+          nullable: true
           readOnly: true
         published_version:
-          type: string
+          type: object
+          additionalProperties: {}
+          nullable: true
           readOnly: true
     PatchedInspection:
       type: object
@@ -11091,7 +11363,9 @@ components:
         archived:
           type: boolean
         used_in:
-          type: string
+          type: integer
+          description: How many forms use this item (counted once for a whole list,
+            F-089).
           readOnly: true
     PatchedMasterList:
       type: object
@@ -11177,10 +11451,12 @@ components:
             $ref: '#/components/schemas/Field'
           readOnly: true
         library:
-          type: string
+          type: object
+          additionalProperties: {}
+          nullable: true
           readOnly: true
         locked:
-          type: string
+          type: boolean
           readOnly: true
     PatchedUser:
       type: object
@@ -11220,6 +11496,10 @@ components:
           type: string
         avatar_url:
           type: string
+          nullable: true
+          description: |-
+            Where this person's picture is served from (the version busts the browser's cache);
+            null when they have none.
           readOnly: true
         last_login:
           type: string
@@ -11316,10 +11596,12 @@ components:
             $ref: '#/components/schemas/Field'
           readOnly: true
         library:
-          type: string
+          type: object
+          additionalProperties: {}
+          nullable: true
           readOnly: true
         locked:
-          type: string
+          type: boolean
           readOnly: true
       required:
       - fields
@@ -11421,6 +11703,10 @@ components:
           type: string
         avatar_url:
           type: string
+          nullable: true
+          description: |-
+            Where this person's picture is served from (the version busts the browser's cache);
+            null when they have none.
           readOnly: true
         last_login:
           type: string
@@ -11460,10 +11746,14 @@ components:
           maximum: 2147483647
           minimum: 0
         pages:
-          type: string
+          type: array
+          items:
+            $ref: '#/components/schemas/Page'
           readOnly: true
         checks:
-          type: string
+          type: array
+          items:
+            $ref: '#/components/schemas/Check'
           readOnly: true
         rating_config: {}
         key_checks: {}

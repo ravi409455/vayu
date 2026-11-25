@@ -1,3 +1,5 @@
+"""Reports API: PDF templates (drafts, publish, preview, checks), shared parts, a booking's report
+(download, regenerate), problems and the public verify page."""
 import base64
 
 from django.conf import settings
@@ -5,6 +7,7 @@ from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
@@ -378,6 +381,7 @@ class SharedItems(APIView):
 
     permission_classes = [perm("pdf_templates.view", "pdf_templates.edit")]
 
+    @extend_schema(operation_id="pdf_shared_list")
     def get(self, request):
         qs = SharedItem.objects.order_by("kind", "name")
         if kind := request.query_params.get("kind"):

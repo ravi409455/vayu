@@ -1,3 +1,4 @@
+"""Request and response bodies for sign-in, the current user, users, passwords and the audit log."""
 from rest_framework import serializers
 
 from apps.core.phone import InvalidPhone, normalize
@@ -18,7 +19,7 @@ class UserSerializer(serializers.ModelSerializer):
                   "last_login"]
         read_only_fields = ["must_change_password", "locked_until", "last_login"]
 
-    def get_avatar_url(self, obj):
+    def get_avatar_url(self, obj) -> str | None:
         """Where this person's picture is served from (the version busts the browser's cache);
         null when they have none."""
         if not obj.has_avatar:

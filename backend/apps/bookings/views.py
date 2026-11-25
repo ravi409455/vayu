@@ -1,3 +1,5 @@
+"""Bookings API: the list (filters, search, counts), detail, Ops actions, inspections and the
+expert app's sync."""
 import re
 import uuid
 from datetime import date
@@ -51,6 +53,8 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         return [perm(key)()] if key else [perm("bookings.view")()]
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):          # the OpenAPI generator
+            return Booking.objects.none()
         qs = Booking.objects.select_related(
             "last_edited_by", "released_by", "late_reviewed_by", "quick_reviewed_by",
         ).prefetch_related("reschedules__by")

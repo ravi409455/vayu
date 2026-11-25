@@ -4,6 +4,7 @@ import uuid
 from typing import Any
 
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -46,6 +47,7 @@ def delivery_body(d: Delivery) -> dict[str, Any]:
 class IntegrationList(APIView):
     permission_classes = [perm("integrations.manage")]
 
+    @extend_schema(operation_id="integrations_list")
     def get(self, request: Request) -> Response:
         qs = Integration.objects.select_related("form")
         if request.query_params.get("form", "").isdigit():
@@ -261,6 +263,7 @@ def key_body(k: ApiKey, full_key: str | None = None) -> dict[str, Any]:
 class ApiKeyList(APIView):
     permission_classes = [perm("api_keys.manage")]
 
+    @extend_schema(operation_id="api_keys_list")
     def get(self, request: Request) -> Response:
         return Response([key_body(k) for k in ApiKey.objects.all()])
 

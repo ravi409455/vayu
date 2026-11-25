@@ -237,9 +237,8 @@ def test_chassis_search_follows_the_same_rule(ienv, booking):  # noqa: F811
     start(ienv.expert, booking)
     submit(ienv.expert, booking)                      # no media: booking goes straight to 'completed'
     assert ids(ienv.ops, "search=273129") == ["SA37926"]
-    from apps.forms.models import Field
-
     from apps.forms import access
+    from apps.forms.models import Field
 
     # a published version never changes in the app; this test changes one behind its back, so
     # the cached levels (Q5.1) are dropped too

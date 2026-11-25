@@ -5,6 +5,7 @@ import uuid
 from typing import Any, cast
 
 from django.db import transaction
+from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
@@ -92,6 +93,7 @@ class ExtView(APIView):
 
 
 class Bookings(ExtView):
+    @extend_schema(operation_id="ext_bookings_list")
     def get(self, request: Any) -> Response:
         allowed = need_form(request, booking_form())
         qs = Booking.objects.all()
@@ -182,6 +184,7 @@ class BookingAction(ExtView):
               "reschedule": ["inspection_date", "inspection_time"],
               "change_type": ["inspection_type"]}
 
+    @extend_schema(operation_id="ext_bookings_action")
     def post(self, request: Any, ref: Any, action: Any) -> Response:
         name = action.replace("-", "_")
         if name not in self.ACTIONS:
