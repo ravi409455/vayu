@@ -12,6 +12,14 @@ infra/     docker compose + Caddy
 docs/      setup guides, benchmarks
 ```
 
+## Documentation
+- How to use it: `docs/guides/` ([Admin](docs/guides/admin.md), [Ops](docs/guides/ops.md),
+  [Expert](docs/guides/expert.md)).
+- How it is built: [docs/architecture.md](docs/architecture.md); how to change it:
+  [CONTRIBUTING.md](CONTRIBUTING.md) and `docs/engineering-standards.md`.
+- For other systems: [docs/integrations/](docs/integrations/README.md); logging:
+  [docs/logging.md](docs/logging.md); error codes: [docs/error-codes.md](docs/error-codes.md).
+
 ## Run it on your laptop
 `scripts/local.sh up`, then open http://localhost:5173. Details: `docs/local.md`.
 
