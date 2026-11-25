@@ -7,6 +7,16 @@ from django.utils import timezone
 KINDS = ("photo", "video", "file", "signature")
 
 
+class MediaStatus(models.TextChoices):
+    """Where an upload is (F-008); compares equal to its plain string."""
+    PENDING = "pending"            # registered, parts on their way
+    UPLOADED = "uploaded"          # every part arrived, not checked yet
+    VERIFYING = "verifying"        # a check is running
+    VERIFIED = "verified"
+    FAILED = "failed"              # checksum, not a picture / video: the phone sends it again
+    PURGED = "purged"              # removed by the retention setting
+
+
 class MediaAsset(models.Model):
     """One uploaded photo/video/file/signature. The phone picks `client_uuid` so a retried
     request never creates a duplicate; the id is what form answers reference."""
@@ -23,8 +33,8 @@ class MediaAsset(models.Model):
     size = models.BigIntegerField()
     sha256 = models.CharField(max_length=64)
     source = models.CharField(max_length=10, default="camera")  # camera | gallery (internal only)
-    # pending | uploaded | verifying | verified | failed | purged
-    status = models.CharField(max_length=10, default="pending")
+    status = models.CharField(max_length=10, choices=MediaStatus.choices,
+                              default=MediaStatus.PENDING)
     key = models.CharField(max_length=200)
     preview_key = models.CharField(max_length=200, blank=True)
     # a JPEG copy (at most 2048 px) for the PDF when the original is HEIC or bigger; the
