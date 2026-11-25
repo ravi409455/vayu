@@ -286,8 +286,11 @@ class OpsFlowTest {
         compose.onNodeWithText("Ravi Expert").performClick()
         compose.onNodeWithText("Meera Expert").performClick()
         compose.onNodeWithText("Done · 2 chosen").performClick()
-        compose.waitUntil(5_000) { server.queries.any { "stage=assigned" in it && "expert=3,4" in it } }
+        // what the person sees first, then the request: under Robolectric with Compose 1.11 the list
+        // behind a closed sheet redraws only once the screen is read (on a phone the request leaves in
+        // 0.2-0.4 s, checked 15 times on the OnePlus)
         waitFor("Today · Assigned · 2 experts")
+        compose.waitUntil(5_000) { server.queries.any { "stage=assigned" in it && "expert=3,4" in it } }
         compose.onNodeWithContentDescription("All filters, 2 on").assertIsDisplayed()
         shot("ops_bookings_quick")
         // the Filter view starts from the same choices
@@ -299,8 +302,8 @@ class OpsFlowTest {
         compose.onNodeWithText("Upcoming").performClick()
         compose.onNodeWithContentDescription("Remove Status").performClick()
         compose.onNodeWithText("Show bookings").performClick()
+        waitFor("Upcoming · 2 experts")                                            // what the person sees first
         compose.waitUntil(5_000) { server.queries.any { it.startsWith("date_from=2026-11-25&order=schedule") && "expert=3,4" in it && "stage" !in it } }
-        waitFor("Upcoming · 2 experts")
         compose.onNodeWithContentDescription("Status: any").assertIsDisplayed()       // and back in the quick row
         compose.onNodeWithText("Clear").performClick()
         waitFor("Showing 5 · Today")
