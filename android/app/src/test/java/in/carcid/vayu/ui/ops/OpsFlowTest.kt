@@ -187,14 +187,17 @@ class OpsFlowTest {
         }
     } }
 
-    /** Ops pass on the PDF only: the check link is printed in it, so the card has no button for it. */
-    @Test fun theReportCardOffersOpenAndShareOnly() {
+    /** Ops pass on the PDF only: the check link is printed in it, so the card has no button for it; one row of buttons. */
+    @Test fun theReportCardHasOpenShareAndRegenerateInOneRow() {
         server.on("GET bookings/$B6/report", report(outOfDate = false, allowed = true))
         showReport()
         waitFor("Ready")
         compose.onNodeWithText("Open").assertExists()
         compose.onNodeWithText("Share").assertExists()
         compose.onNodeWithText("Check link").assertDoesNotExist()
+        // the three buttons share one row, to save space
+        val tops = listOf("Open", "Share", "Regenerate").map { compose.onNodeWithText(it).fetchSemanticsNode().boundsInRoot.top }
+        assertEquals(1, tops.distinct().size)
     }
 
     /** F-219: a report out of date says so, and one tap on Regenerate sends one request, then shows the new state. */
