@@ -2,6 +2,10 @@ import { API_ROOT } from "./ports";
 // Test helpers that talk straight to the API (setup and checks), not through the screens.
 import { request, type APIRequestContext, type Page } from "@playwright/test";
 
+/** Tomorrow in India (YYYY-MM-DD): a booking made for it is never "started late" today. A fixed
+ *  date here made the timing test fail the day after it was written. */
+export const tomorrow = () => new Date(Date.now() + (5.5 + 24) * 3600_000).toISOString().slice(0, 10);
+
 export const API = `${API_ROOT}/api/v1`;
 export const PASSWORD = "Passw0rd-e2e";
 
@@ -123,7 +127,7 @@ export async function submittedJob(o: JobOptions): Promise<string> {
   const expert = await apiAs("expert");
   const b = await json(await ops.post("bookings", { data: { answers: {
     booking_id: o.bookingId, customer_name: "Test Customer", customer_phone: "9876500099", address: "9 Test Street", city: "delhi",
-    inspection_date: "2026-11-25", inspection_time: "09:30", inspection_type: o.type ?? "pdi", car_make_model: "maruti_victoris" } } }));
+    inspection_date: tomorrow(), inspection_time: "09:30", inspection_type: o.type ?? "pdi", car_make_model: "maruti_victoris" } } }));
   await json(await ops.post(`bookings/${b.id}/assign`, { data: { expert: await expertId() } }));
   const selfie = await uploadFile(expert, b.id, "selfie", "photo", "image/jpeg", JPEG);      // the check-in comes first
   await json(await expert.post(`bookings/${b.id}/start`, { data: { client_uuid: crypto.randomUUID(), inspection_type: o.type ?? "pdi", start_answers: { selfie: [selfie] } } }));
