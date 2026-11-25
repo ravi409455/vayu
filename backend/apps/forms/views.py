@@ -459,9 +459,12 @@ class RatingConfigView(generics.GenericAPIView):
             validate_config(config)
         except ValueError as e:
             raise CodedError("INVALID_RATING_CONFIG", str(e), 400) from e
+        from apps.scoring.service import section_keys
+
         with transaction.atomic():
             lock_draft(pk)
             version = get_object_or_404(FormVersion, pk=pk)
+            config = section_keys(version, config)     # stored by section key (F-045)
             version.rating_config = config
             version.row_version += 1
             version.save(update_fields=["rating_config", "row_version"])

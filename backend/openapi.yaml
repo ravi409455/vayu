@@ -3799,8 +3799,7 @@ components:
         expert:
           type: integer
         status:
-          type: string
-          maxLength: 10
+          $ref: '#/components/schemas/InspectionStatusEnum'
         answers: {}
         scores: {}
         overrides: {}
@@ -3838,6 +3837,18 @@ components:
       - form_version
       - id
       - start_version
+    InspectionStatusEnum:
+      enum:
+      - draft
+      - submitted
+      - superseded
+      - released
+      type: string
+      description: |-
+        * `draft` - Draft
+        * `submitted` - Submitted
+        * `superseded` - Superseded
+        * `released` - Released
     KindEnum:
       enum:
       - field
@@ -4280,8 +4291,7 @@ components:
         expert:
           type: integer
         status:
-          type: string
-          maxLength: 10
+          $ref: '#/components/schemas/InspectionStatusEnum'
         answers: {}
         scores: {}
         overrides: {}
@@ -4566,14 +4576,6 @@ components:
         * `submitted` - submitted
         * `completed` - completed
         * `cancelled` - cancelled
-    StatusEnum:
-      enum:
-      - draft
-      - published
-      type: string
-      description: |-
-        * `draft` - Draft
-        * `published` - Published
     User:
       type: object
       properties:
@@ -4640,7 +4642,7 @@ components:
           minimum: 0
         status:
           allOf:
-          - $ref: '#/components/schemas/StatusEnum'
+          - $ref: '#/components/schemas/VersionTreeStatusEnum'
           default: draft
         published_at:
           type: string
@@ -4668,6 +4670,14 @@ components:
       - id
       - number
       - pages
+    VersionTreeStatusEnum:
+      enum:
+      - draft
+      - published
+      type: string
+      description: |-
+        * `draft` - Draft
+        * `published` - Published
     _FromLibraryBody:
       type: object
       properties:

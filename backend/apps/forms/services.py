@@ -142,10 +142,14 @@ def publish_version(actor, version_id: int, row_version: int) -> FormVersion:
         if issues:
             raise CodedError("PUBLISH_BLOCKED", "Fix these problems before publishing.", 400,
                              issues=[i.__dict__ for i in issues])
+        from apps.scoring.service import section_keys
+
         version.status = VersionStatus.PUBLISHED
         version.published_at = timezone.now()
         version.row_version = F("row_version") + 1
-        version.save(update_fields=["status", "published_at", "row_version"])
+        # whoever wrote the config (setup, promote, the demo), it goes live by section key
+        version.rating_config = section_keys(version, version.rating_config)
+        version.save(update_fields=["status", "published_at", "row_version", "rating_config"])
         version.refresh_from_db()
         audit.record(actor, "form.publish", "form_version", version.id,
                      f"Published {version.form.key} v{version.number}")
