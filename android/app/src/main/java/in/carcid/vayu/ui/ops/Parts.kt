@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.ui.expert.answered
+
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.input.pointer.pointerInput
@@ -151,8 +153,6 @@ fun problemOf(f: Field, v: Any?): String? {
     val picked = when (v) { is String -> listOf(v); is List<*> -> v.filterIsInstance<String>(); else -> emptyList() }
     return f.options.firstOrNull { it.isDefect && it.key in picked }?.let { (it.severity ?: "problem").replaceFirstChar(Char::uppercase) }
 }
-
-fun answered(v: Any?) = v != null && v != "" && !(v is List<*> && v.isEmpty())
 
 /** How much of one part (start, inspection, end) is answered, and how many answers are problems. */
 fun partCounts(data: Loaded3, filled: Filled, part: String): Pair<Int, Int> {
