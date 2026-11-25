@@ -623,7 +623,7 @@
         errorLine1="    val img by produceState&lt;ImageBitmap?>(null, m.s(&quot;id&quot;)) {"
         errorLine2="               ~~~~~~~~~~~~">
         <location
-            file="src/main/java/in/carcid/vayu/ui/ops/Parts.kt"
+            file="src/main/java/in/carcid/vayu/ui/ops/OpsMedia.kt"
             line="515"
             column="16"/>
     </issue>
@@ -634,7 +634,7 @@
         errorLine1="    val img by produceState&lt;Any?>(null, m.s(&quot;id&quot;)) {"
         errorLine2="               ~~~~~~~~~~~~">
         <location
-            file="src/main/java/in/carcid/vayu/ui/ops/Parts.kt"
+            file="src/main/java/in/carcid/vayu/ui/ops/OpsMedia.kt"
             line="531"
             column="16"/>
     </issue>
