@@ -34,8 +34,23 @@ the place this plan names (the server's env file or a GitHub secret).
 | Working mode | The owner clicks, this plan guides. Claude writes all code and config. |
 | Order | Staging end to end first. Production is then a copy of what worked. |
 
-Rough monthly cost: production server $48, staging $24, managed Postgres $15, server backups
-about $14, R2 and Sentry and uptime checks on free tiers. **About $100 a month.**
+Rough monthly cost: production server $48, staging $24, managed Postgres $15, staging server
+backup about $5, R2 and Sentry and uptime checks on free tiers. **About $95 a month.**
+
+This plan was reviewed a second time on 2026-11-26 (as a senior engineer and a DevOps engineer
+would) and corrected; the rules that came out of that review are in §1a.
+
+## 1a. Rules that keep us out of trouble
+
+1. **Every database change must also work with the previous release.** Example: to remove a
+   column, release A stops using it, release B (later) deletes it. Then rolling the code back
+   one release is always safe.
+2. **One build, two servers.** Production runs the exact files staging just proved, web app
+   included. Nothing is rebuilt for production.
+3. **Deploy outside 9 am to 8 pm** unless it is an urgent fix. A deploy restarts the services:
+   for 10 to 20 seconds phones and browsers get an error and retry.
+4. **No secret is shared** between staging and production.
+5. **A backup that was never restored is not a backup.** Restore drill monthly.
 
 ## 2. What it looks like when done
 
@@ -70,6 +85,8 @@ an uptime checker pings the health page every minute; Firebase sends pushes.
 4. The Firebase JSON file is named in the env file but never handed to the containers.
 5. The API can't yet talk to a database that demands an encrypted connection (managed Postgres does).
 6. No backups, no restore test, no alerts, no security headers (CSP).
+   Also: the compose file gives the PDF worker up to 6 GB of memory, more than the whole staging
+   server has (4 GB).
 7. No deploy pipeline; `main` has no branch protection (fresh review, High #8).
 8. Old addresses (`app.carcid.in`, `verify.carcid.in`) are written into code, the Android app and docs.
 9. The QR link page lives at `/verify/<code>`; the decision is `/report/verify/<code>`.
@@ -118,27 +135,37 @@ All **[CODE]**. One PR, CI must be green. Nothing here needs a server.
 
 | # | Change | Why |
 |---|---|---|
-| 1.1 | **Web image**: a Dockerfile that builds the web app and puts the files inside a Caddy image. | So Caddy can serve the portal. |
+| 1.1 | **Web image**: a Dockerfile that builds the web app and puts the files inside a Caddy image. **One image for both servers**: the web app reads which server it is on from its own address (`vayu-staging…` → Sentry label `staging`, else `production`), so nothing is baked in per server. | So Caddy can serve the portal, and rule 2 holds. |
 | 1.2 | **Caddyfile**: `/api/*` goes to the API; everything else serves the web app (unknown paths fall back to `index.html`); compression on; long cache for hashed files, no cache for `index.html`. | The portal and the QR page load. |
 | 1.3 | **Security headers in Caddy**, CSP included: scripts and styles only from our own address; pictures and uploads only from our address and the R2 address; errors only to Sentry; no framing by other sites. On staging it starts in "report only" mode for a few days, then is enforced. | F-251 / R-29. |
 | 1.4 | **QR page moves** to `/report/verify/<code>`. `VERIFY_BASE_URL` becomes `https://vayu.carcid.in/report/verify`. Tests updated. | Owner's decision. No report has been printed with the old path. |
 | 1.5 | **New addresses everywhere**: `.env.example`, settings defaults, the Android release URL (`https://vayu.carcid.in/api/v1/`), the text on the Android sign-in help, the load-test example, docs. | Old names would send phones to a dead address. |
-| 1.6 | **Compose file** takes the env file as a setting (`.env.staging` or `.env.prod`), pulls ready-made images by tag instead of building on the server, mounts the Firebase JSON read-only, keeps the schedule file and Redis data on a disk, limits log size. Postgres becomes optional (on for staging, off for production). | Gaps 3 and 4. |
+| 1.6 | **Compose file** takes the env file as a setting (`.env.staging` or `.env.prod`), pulls ready-made images by tag instead of building on the server, mounts the Firebase JSON read-only, keeps the schedule file and Redis data on a disk, limits log size. Postgres becomes optional (on for staging, off for production). **Worker counts and memory limits come from the env file** (staging: PDF worker 1.5 GB, 2 web workers; production: 6 GB, 4). Workers get 60 seconds to finish their job when stopped. | Gaps 3, 4 and 6. |
 | 1.7 | **Database settings**: `DB_SSLMODE` (set to `require` on production) and a kept-open connection, so we stay well under the managed database's connection limit. | Gap 5. |
 | 1.8 | **Health checks in compose** for api and workers, and a one-off "migrate" step that runs before the new API starts. | A bad release stops before it takes traffic. |
-| 1.9 | **Backup script** `infra/backup.sh`: dump the database, compress, upload to the backups bucket, delete local copy, then ping the uptime checker ("backup ran"). **Restore script** `infra/restore.sh`: download a dump into a scratch database and print row counts. | §Phase 5. |
+| 1.9 | **Backup script** `infra/backup.sh`: dump the database, compress, **encrypt** (tool: `age`; the server holds only the locking key, the unlocking key lives in Bitwarden), upload to the backups bucket, delete local copy, then ping the uptime checker ("backup ran"). **Restore script** `infra/restore.sh`: download a dump, unlock it, load it into a **throwaway Postgres container** and print row counts. | §Phase 5. Dumps hold customer names and phone numbers. |
 | 1.10 | **Deploy workflow** `.github/workflows/deploy.yml` (details in Phase 4). | Gap 7. |
 | 1.11 | **Android "Vayu Staging"**: a `staging` build type: id `in.carcid.vayu.staging`, name "Vayu Staging", a different icon colour, talks to `vayu-staging.carcid.in`, signed with the same key. | Owner's decision. |
 | 1.12 | **Runbook rewrite** (`docs/runbook-new-server.md`) to match all of the above, and `docs/accounts-setup.md` corrected. | One true set of instructions. |
 | 1.13 | `scripts/local.sh` worker listens on all queues (fresh review, High #1). Tiny, and it lets us rehearse on the Mac. | Local rehearsal works. |
+| 1.14 | **Server setup script** `infra/bootstrap.sh`: everything in step 3.1 as one file. Staging and production run the same file. | Hand-typed commands drift; a script does not. |
+| 1.15 | **"Workers alive" ping**: a scheduled job that runs every 5 minutes and pings the uptime checker. | If the scheduler, the workers or Redis die quietly, the pings stop and Slack hears about it. |
+| 1.16 | **Deploy script** `infra/deploy.sh <commit>` on the server: pull, migrate, restart, wait for health, put the old images back if health fails. The workflow only calls this script. | Lets us lock the robot's key to this one command (4.1). |
+| 1.17 | **Load test logs in slowly** (a few users a second, each from its own test login), because sign-in allows 20 tries a minute per address. | Otherwise the test fails on the sign-in limit, not on speed. |
+| 1.18 | **Dependabot** for Docker base images and GitHub Actions; actions pinned to exact versions. | Old base images collect security holes. |
 
 Check before the PR: on the Mac, start the production compose file with a throwaway env file and
 open `http://localhost` → the portal loads, sign-in works, a QR link opens.
 
 The other new High findings from the fresh review (#2 to #7: resubmit gap, phone files stuck
 after Ops close a lead, 50-row lists, API-key switches, PDF never retried, Roles page) are app
-fixes, not deployment. They go in their own fix PR and **must be merged before production gets
-real users**. Staging can be built without them.
+fixes. They go in their own fix PR and **must be merged before production gets real users**.
+Staging can be built without them.
+
+Two of them matter more once we deploy, because **every deploy restarts the workers**: "a first
+PDF that never started is never retried" (High #6) and "interrupted photo checks are never
+retried" (Medium). A job cut by a restart is put back in the queue (checked: `acks_late` is on),
+but these two are the safety net when that fails. Both are in the production gate (§9).
 
 ---
 
@@ -187,11 +214,14 @@ You already have the buckets. Check and add:
 3. On each of the three buckets → **Settings → Object lifecycle rules → Add rule**: "Abort
    incomplete multipart uploads after 7 days". On `vayu-backups` also add "Delete objects after
    35 days".
-4. **Manage API tokens → Create API token**, three times, each **Object Read & Write** and each
+4. On `vayu-backups` → **Settings → Bucket lock rules → Add rule**: lock all objects for
+   **30 days**. Now nobody, not even someone who breaks into the server, can delete a backup
+   younger than 30 days. (The 35-day delete rule above then clears old ones.)
+5. **Manage API tokens → Create API token**, three times, each **Object Read & Write** and each
    limited to **one bucket**: `vayu-staging-app`, `vayu-prod-app`, `vayu-backups-writer`.
    Each shows an Access Key ID and Secret **once**: save each straight into Bitwarden.
    (One token per server means a leak on staging can never touch production photos.)
-5. If an older token covers both buckets, delete it after both servers run on the new ones.
+6. If an older token covers both buckets, delete it after both servers run on the new ones.
 
 ### 2.5 [YOU] Firebase
 1. console.firebase.google.com → project `vayu` → gear → **Project settings → General → Add app →
@@ -228,7 +258,10 @@ You already have the buckets. Check and add:
    require status checks to pass (pick the CI jobs), block force pushes. (Fresh review, High #8.)
 2. **Settings → Environments → New environment** `staging`. Then another, `production`, and on
    it tick **Required reviewers** → add yourself. This is the Approve button.
-3. Secrets come in Phase 4, once the server exists.
+3. **Settings → Actions → General → Fork pull request workflows** → choose **Require approval
+   for all outside collaborators**. The repo is public: this stops a stranger's PR from running
+   our workflows without you looking first.
+4. Secrets come in Phase 4, once the server exists.
 
 Done when: Claude can `dig` the staging name and you have, in Bitwarden: 3 R2 key pairs,
 2 Firebase JSON files, 3 DSNs, 1 Sentry token.
@@ -238,6 +271,7 @@ Done when: Claude can `dig` the staging name and you have, in Bitwarden: 3 R2 ke
 ## Phase 3 · Staging server setup (about half a day)
 
 ### 3.1 [SERVER] Lock the server down (Claude, over SSH with your approval)
+One script does all of this, `infra/bootstrap.sh` (1.14), so production later gets exactly the same:
 - Create a user `deploy` (no password, your SSH key), allowed to run Docker. Turn off root login
   and password login for SSH.
 - Firewall on the server itself (`ufw`): only 22, 80, 443.
@@ -257,6 +291,10 @@ nano /srv/vayu/.env.staging
 Lines you fill: `DJANGO_SECRET_KEY` (Claude gives a command that makes a random one on the
 server), `DB_PASSWORD` (same), `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `SENTRY_DSN`,
 and the backups bucket key pair. Save with Ctrl+O, Enter, Ctrl+X.
+
+For backup encryption Claude gives one command that makes a key pair on your Mac: the
+**unlocking** half goes into Bitwarden only (never on a server); the **locking** half is not a
+secret and goes in the env file as `BACKUP_PUBLIC_KEY`.
 
 Then the Firebase file, from your Mac:
 ```bash
@@ -279,8 +317,10 @@ curl -fsS https://vayu-staging.carcid.in/api/v1/health
 ### 3.4 [SERVER] Forms, staff and test data
 ```bash
 docker compose ... exec api python manage.py setup_platform --users /tmp/staff.csv
-docker compose ... exec api python manage.py seed_test_data
+docker compose ... exec api python manage.py seed_test_data --confirm staging-1 --password '<from Bitwarden>'
 ```
+Staging is on the open internet and the code is public, so the testers' password is a **random
+one made in Bitwarden** (20+ characters), never a guessable one.
 The first adds forms, reports, lists and the test staff. The second adds test bookings; it only
 works because this server's kind is `test`.
 
@@ -291,26 +331,35 @@ works because this server's kind is `test`.
 ### How a release travels
 1. A PR merges to `main`. CI runs (as today).
 2. **Build once**: the API image and the web image are built and stored in GitHub's image store
-   (GHCR), labelled with the commit id, for example `abc1234`. The web image is built once per
-   server kind, because the Sentry address is baked into the web files.
+   (GHCR), labelled with the commit id, for example `abc1234`. A merge that only changes `docs/`
+   builds and deploys nothing.
 3. **Staging deploys by itself**: the workflow logs in to staging as `deploy`, pulls images
    `abc1234`, runs database migrations, restarts the services, waits for the health page to say
    ok. If health fails, it puts the previous images back and the run goes red (Slack alert).
+   This is safe because of rule 1 (§1a): the old code still works with the new database.
 4. **Production waits** for you. GitHub shows "Review deployments" → you check staging → press
    **Approve**. The workflow then takes a database dump (safety copy), and does the same steps
    on production with the **same images** that staging just proved.
-5. **Rollback**: Actions → Deploy → **Run workflow** → type an older commit id → Approve.
-   Code goes back in about 3 minutes. Database changes do not always go back (the runbook lists
-   the one-way ones), which is why step 4 takes a dump first.
+5. **Rollback of code**: Actions → Deploy → **Run workflow** → type the previous commit id →
+   Approve. Code goes back in about 3 minutes; the database is left as it is (rule 1 makes that safe
+   for one release back).
+6. **When a database change itself was wrong** (rare, and the only case where data goes back):
+   stop the services, restore the dump taken in step 4 (or "restore to a point in time", §5.3),
+   deploy the previous commit, check counts. Everything typed in since that dump is lost, so this
+   is the owner's call, not automatic. The runbook carries the exact commands.
 
 ### 4.1 [YOU] A separate key for the robot
 The pipeline needs its own door key, not yours. Claude gives one command to make it on your Mac;
 then:
-- Repo → Settings → **Environments → staging → Add secret**: `SSH_KEY` (paste the private half),
-  `SSH_HOST` (`vayu-staging.carcid.in`), and `VITE_SENTRY_DSN`.
+- Repo → Settings → **Environments → staging → Add secret**: `SSH_KEY` (paste the private half)
+  and `SSH_HOST` (`vayu-staging.carcid.in`).
 - Repo → Settings → **Secrets and variables → Actions**: `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`.
-- Claude adds the public half to the server's `deploy` user. Delete the private file from the Mac
-  once it is in GitHub and Bitwarden.
+- Web Sentry DSN: a repo **variable** (not a secret; it is visible in any browser anyway).
+- Claude adds the public half to the server, **locked to one command**: this key can only run
+  `infra/deploy.sh <commit>`. It cannot open a shell or read the env file. So if the key ever
+  leaks, the worst someone can do is redeploy a version we already built.
+- Delete the private file from the Mac once it is in GitHub and Bitwarden.
+- The deploy workflow runs only for `main` and by hand; never for pull requests.
 
 ### 4.2 Prove it
 Merge a tiny docs change → watch staging update without anyone touching the server → then run a
@@ -324,16 +373,17 @@ rollback to the previous commit and forward again.
 
 | What | Where it lives | Backup | Worst-case loss |
 |---|---|---|---|
-| Production database | Managed Postgres | DigitalOcean: restore to any minute, last 7 days. Plus our nightly dump in `vayu-backups` (35 days). Plus a dump before every deploy. | Minutes |
+| Production database | Managed Postgres | DigitalOcean: restore to any minute, last 7 days. Plus our nightly dump in `vayu-backups` (encrypted, locked against deletion for 30 days, kept 35). Plus a dump before every deploy. | Minutes |
 | Staging database | Docker on staging | Nightly dump to `vayu-backups/staging/` | 1 day (test data only) |
-| Photos, videos, PDFs | R2 | R2 keeps several copies itself. The app's key can delete, so the key lives only on the server. | None expected |
+| Photos, videos, PDFs | R2 | R2 keeps several copies itself. There is **no undo**: a file the app deletes is gone. Only the clean-up job deletes, and the key lives only on the server. Accepted risk. | None expected |
 | Server settings (`.env`, Firebase file) | The server | Bitwarden holds every value; the server can be rebuilt from the runbook in about an hour. | None |
-| Whole server | Droplet | DigitalOcean weekly backup | Rebuild from runbook |
+| Whole server | Droplet | Staging: DigitalOcean weekly backup. Production: none needed (it holds no data); rebuild with `bootstrap.sh` + one deploy, about 30 minutes. | Nothing |
 | Android keystore | Mac | Bitwarden + 2 offline copies (Phase 0) | None |
 | Redis (job queue) | Docker | Not backed up. If lost, jobs in flight are redone by the hourly checks. | A few delayed jobs |
 
 ### 5.2 [SERVER] Nightly dump
-A timer on each server runs `infra/backup.sh` at 02:00 IST. Its last line pings the uptime
+A timer on each server runs `infra/backup.sh` at 02:00 IST (the servers' clocks are UTC, so the
+timer says 20:30). Its last line pings the uptime
 checker's "heartbeat" address: **if a night passes with no ping, Slack gets "backup missed"**.
 A backup that fails silently is the usual way backups fail.
 
@@ -341,10 +391,17 @@ A backup that fails silently is the usual way backups fail.
 On staging, run `infra/restore.sh` against last night's dump: it loads into a scratch database,
 prints counts of bookings, users and files, and we compare them with the live staging numbers.
 Then scratch is deleted. **Done once now, and on the first Monday of every month.** Write the
-date and the time it took in `docs/runbook-new-server.md`. For production, the drill restores the
-production dump into a scratch database **on the production server** (customer data never goes
-to staging) and, once, a managed "restore to a point in time" into a new temporary database
-cluster, which is then destroyed.
+date and the time it took in `docs/runbook-new-server.md`. For production, the drill loads the
+production dump into a **throwaway Postgres container on the production server** (customer data
+never goes to staging, and the managed database's small disk is not touched).
+
+**Restore to a point in time** (the managed database's own feature) is rehearsed once before
+launch, because it does not put data back in place: it makes a **new** database with a new
+address. The procedure, also in the runbook:
+1. DigitalOcean → Databases → `vayu-prod-db` → Backups → **Restore from backup** → pick the minute.
+2. On the new cluster: Trusted sources → add `vayu-prod`.
+3. On the server: change `DB_HOST` in `.env.prod` to the new address, run a deploy of the same commit.
+4. Check booking and user counts, then destroy the old cluster (after a day, not at once).
 
 ### 5.4 [YOU] Uptime checks
 1. betterstack.com (Better Stack Uptime, free plan) → sign up with the company email.
@@ -354,7 +411,9 @@ cluster, which is then destroyed.
    certificate expires.
 3. **Heartbeats → Create heartbeat** `staging-backup`, expected every 1 day, grace 3 hours. Copy
    its URL into `.env.staging` as `BACKUP_HEARTBEAT_URL` (treat as a secret). Same later for production.
-4. **Integrations → Slack** → send to `#vayu-alerts`. Add your email and phone as on-call contact.
+4. **Heartbeats → Create heartbeat** `staging-workers`, expected every 5 minutes, grace 10
+   minutes → URL into the env file as `WORKERS_HEARTBEAT_URL` (1.15). Same later for production.
+5. **Integrations → Slack** → send to `#vayu-alerts`. Add your email and phone as on-call contact.
 
 ### 5.5 [YOU] Server alerts
 DigitalOcean → **Monitoring → Create alert policy**, four policies, applied to both droplets,
@@ -363,6 +422,8 @@ sent to email and Slack (`#vayu-alerts`):
 - Memory used above 90% for 10 min.
 - CPU above 90% for 10 min.
 - (Production database) Databases → your cluster → **Alerts**: disk above 80%, connections above 80%.
+  The 1 GB database allows about 22 connections and we use about 14 (4 web, 7 workers, scheduler,
+  backup). Adding a worker later means moving to the 2 GB size first.
 
 ### 5.6 What a normal bad day looks like
 - *Slack says "vayu.carcid.in is down".* Open Actions: did a deploy just run? → roll back (§Phase 4).
@@ -387,8 +448,8 @@ Staging is "done" only when all of these pass. Each is a line in the runbook's c
    labelled `staging`, with readable code lines → the Slack alert arrives.
 6. **Security headers**: securityheaders.com and SSL Labs both grade **A** for the staging address.
    The CSP report shows nothing blocked during steps 1 and 2 → switch CSP from "report only" to enforced.
-7. **Load test** (`perf/locustfile.py`, 200 users for 10 minutes): 95 of 100 requests under
-   half a second, no errors. Staging is half the size of production; if it only just fails,
+7. **Load test** (`perf/locustfile.py`, 200 users for 10 minutes, signing in slowly, 1.17): 95 of
+   100 requests under half a second, no errors. Staging is half the size of production; if it only just fails,
    resize the droplet up for one hour (about $0.07) and run again before changing code.
 8. **Backup and restore drill** passed (5.3).
 9. **Rollback** rehearsed (4.2).
@@ -402,8 +463,9 @@ Staging is "done" only when all of these pass. Each is a line in the runbook's c
 Same steps as staging, with these differences.
 
 ### 7.1 [YOU] Production server
-Create → Droplets → BLR1, Ubuntu 24.04, **4 vCPU / 8 GB**, Backups and Monitoring ticked, your
-SSH key, hostname `vayu-prod`. Add it to the `vayu-web` firewall. Tell Claude the IP.
+Create → Droplets → BLR1, Ubuntu 24.04, **4 vCPU / 8 GB**, Monitoring ticked (Backups not
+needed: this server holds no data), your SSH key, hostname `vayu-prod`. Add it to the `vayu-web`
+firewall. Tell Claude the IP. Claude runs the same `infra/bootstrap.sh` as on staging.
 
 ### 7.2 [YOU] Managed database
 Create → **Databases** → PostgreSQL **16** → region **BLR1** → Basic, **1 GB / 1 vCPU** ($15; grow
@@ -413,6 +475,7 @@ later with two clicks, no downtime worth noting) → name `vayu-prod-db` → Cre
 - **Users & Databases** → add database `vayu` and user `vayu`. Copy the password to Bitwarden.
 - **Connection details** → choose **VPC network** (the private address) → note host and port
   (not secret; tell Claude).
+- **Settings → Maintenance window** → Sunday, 21:30 UTC (3 am Monday IST).
 
 ### 7.3 [YOU] DNS
 Registrar → Add record: Type **A**, Name **`vayu`**, Value **production IP**, TTL 600.
@@ -425,8 +488,8 @@ As 3.2, into `/srv/vayu/.env.prod`. Differences: `VAYU_SERVER_KIND=production`,
 **No secret is shared between staging and production.**
 
 ### 7.5 GitHub
-Environments → `production` → secrets `SSH_KEY` (a new robot key, not staging's), `SSH_HOST`,
-`VITE_SENTRY_DSN`.
+Environments → `production` → secrets `SSH_KEY` (a new robot key, not staging's, locked to the
+deploy command the same way) and `SSH_HOST`.
 
 ### 7.6 First production deploy
 Actions → Deploy → Approve. Then `setup_platform --users` with the **real staff file** (the owner
@@ -451,10 +514,11 @@ Production is now ready and empty of real work. Opening it to the team is the la
 | Database password (one per server) | server / DigitalOcean | server env file |
 | R2 key pairs: staging app, prod app, backups | Cloudflare | server env file |
 | Firebase service-account JSON (one per server) | Firebase | `/srv/vayu/secrets/` on the server |
-| Sentry DSNs (server, web, Android) | Sentry | server env file; GitHub environment secret (web); build machine (Android) |
+| Sentry DSNs (server, web, Android) | Sentry | server env file; GitHub repo variable (web; not really secret); build machine (Android) |
+| Backup unlocking key | your Mac | **Bitwarden only**, never on a server |
 | Sentry auth token | Sentry | GitHub secret; build machine (Android) |
 | Robot SSH keys (one per server) | your Mac | GitHub environment secret |
-| Backup heartbeat URLs | Better Stack | server env file |
+| Backup and workers heartbeat URLs | Better Stack | server env file |
 | Android keystore + passwords | your Mac | `~/vayu-keys/` + 2 offline copies |
 | Owner SSH key | your Mac | `~/.ssh/` |
 
@@ -466,15 +530,16 @@ delete the old one. Each line above is independent, so one leak means one change
 | Phase | Who | Time | Needs |
 |---|---|---|---|
 | 0 Safety | Owner | 1 h | nothing |
-| 1 Code PR | Claude | 1 day | nothing (can run alongside 0 and 2) |
+| 1 Code PR | Claude | 1½–2 days | nothing (can run alongside 0 and 2) |
 | 2 Accounts | Owner, guided | 2 h | Phase 0 |
 | 3 Staging server | Claude + owner for secrets | ½ day | 1, 2 |
 | 4 Pipeline | Claude + owner for secrets | ½ day | 3 |
 | 5 Backups and alerts | Claude + owner | ½ day | 4 |
 | 6 Prove staging | Claude + owner's phone | 1 day | 5 |
-| 7 Production | Both | ½ day | 6 passed, fix PR for Highs #2–#7 merged |
+| 7 Production | Both | ½ day | Phase 0 done, Phase 6 passed, fix PR merged (Highs #2–#7 and the "interrupted photo check" retry) |
 
-About **5 working days** end to end.
+**6 to 8 working days** end to end. Five is the best case; first-time dashboard work and DNS
+waits usually add a day or two.
 
 ## 10. Done when
 
@@ -494,6 +559,9 @@ About **5 working days** end to end.
 - A second server or automatic failover. One server with fast restore is right for this size;
   revisit if a one-hour outage becomes unacceptable.
 - Cloudflare in front of the site (DNS stays at the registrar). Revisit if we see attack traffic.
+- A central log store. Logs stay on each server (size-limited, about a week) and errors go to
+  Sentry. Revisit the first time we can't answer "what happened at 3 pm last Tuesday".
+- Zero-downtime deploys. A 10 to 20 second blip outside working hours is fine at this size.
 
 ## 12. After launch (small, but do them)
 
