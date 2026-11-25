@@ -142,7 +142,12 @@ function GlobalSearch() {
               Searching…
             </span>
           )}
-          {!res.isLoading && hits.length === 0 && (
+          {res.isError && (
+            <span className="muted small" role="alert" style={{ padding: "8px 10px" }}>
+              Could not search right now. Check the connection and try again.
+            </span>
+          )}
+          {res.isSuccess && hits.length === 0 && (
             <span className="muted small" style={{ padding: "8px 10px" }}>
               No booking matches “{q}”.
             </span>

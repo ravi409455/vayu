@@ -109,6 +109,16 @@ def test_the_clock_allowance_covers_a_phone_a_few_minutes_off(two_versions):
     assert Inspection.objects.get(booking_id=booking["id"]).form_version_id == old.id
 
 
+def test_a_phone_clock_far_behind_still_keeps_the_newest_version(two_versions):
+    """A phone can't hold a version that was not out yet: a slow clock never refuses the newest."""
+    env, booking, old = two_versions
+    new = _publish_new_inspection_version(env, STARTED + timedelta(hours=2))
+    r = start(env.expert, booking, form_version=new.id)      # the phone says 10:00, it was 12:00+
+    assert r.status_code == 200, r.json()
+    assert Inspection.objects.get(booking_id=booking["id"]).form_version_id == new.id
+    assert "FORM_VERSION_REFUSED" not in _alerts(booking)
+
+
 def test_a_version_that_was_already_old_at_the_start_is_refused_and_ops_are_told(two_versions):
     env, booking, old = two_versions
     _publish_new_inspection_version(env, STARTED - timedelta(hours=3))
@@ -287,3 +297,20 @@ def test_sync_never_sends_unpublished_or_unknown_versions_for_drafts(two_version
     body = env.expert.get("/api/v1/sync/jobs", {"drafts": f"{draft},999999"}).json()
     assert str(draft) not in body["forms"] and "999999" not in body["forms"]
     assert env.expert.get("/api/v1/sync/jobs", {"drafts": "x"}).status_code == 400
+
+
+def test_a_start_time_without_a_zone_is_read_in_the_servers_zone(two_versions):
+    env, booking, _ = two_versions
+    r = start(env.expert, booking, client_started_at="2026-10-14T10:00:00")
+    assert r.status_code == 200, r.json()
+
+
+def test_an_impossible_start_time_is_a_400_not_a_500(two_versions):
+    env, booking, _ = two_versions
+    r = start(env.expert, booking, client_started_at="2026-13-45T10:00:00+05:30")
+    assert r.status_code == 400 and r.json()["code"] == "INVALID"
+
+
+def test_a_start_time_that_is_not_a_date_time_is_read_as_now(two_versions):
+    env, booking, _ = two_versions
+    assert start(env.expert, booking, client_started_at="soon").status_code == 200

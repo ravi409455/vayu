@@ -154,7 +154,7 @@ private fun expertExtras(vm: AppViewModel, me: `in`.carcid.vayu.core.api.Me): Ex
             sentBytes = drafts.sentBytes(),
             inspection = { job ->
                 val verified = vm.jobs.verified()
-                InspectionModel.begin(drafts, job, verified)
+                InspectionModel.begin(drafts, job, verified, store.bookingAnswers(job.id))
                 InspectionEnv(InspectionModel(drafts, store, job.id, vm.jobs::now, vm.graph.kick, vm.jobs::verified), drafts, me.name.ifBlank { me.username },
                     verified, vm.jobs::now, store::list, store.types(),
                     asset = { id -> loadAsset(ctx.cacheDir, id, vm.graph.api::formAsset) },

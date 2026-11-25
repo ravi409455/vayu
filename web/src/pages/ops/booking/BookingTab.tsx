@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError, explain } from "../../../api/client";
+import { answerErrors, api, ApiError, explain } from "../../../api/client";
 import type { Booking, FormPage, FormSection, FormVersion } from "../../../api/types";
 import { useAuth } from "../../../auth";
 import type { Answers } from "../../../lib/formSpec";
@@ -49,7 +49,7 @@ export function BookingTab({ booking, tree, onSaved }: { booking: Booking; tree:
       say("Saved.");
       onSaved();
     } catch (e) {
-      if (e instanceof ApiError && e.body.errors) setErrors(e.body.errors as Record<string, string>);
+      if (answerErrors(e)) setErrors(answerErrors(e)!);
       else if (e instanceof ApiError && e.code === "FIELD_ACCESS")
         setErrors(Object.fromEntries(((e.body.keys as string[]) ?? []).map((k) => [k, "You cannot change this now."])));
       else if (e instanceof ApiError && e.code === "DUPLICATE_BOOKING_ID") setErrors({ booking_id: explain(e) });

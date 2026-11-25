@@ -416,3 +416,49 @@ def test_problems_name_failed_and_stuck_renders(done):
     Report.objects.filter(pk=r.pk).update(error="", render_started_at=timezone.now()
                                           - tasks.STUCK_AFTER - timedelta(seconds=5))
     assert env.ops.get("/api/v1/problems/reports").json()[0]["problem"] == "stuck"
+
+
+# ---------------------------------------------------------------- H-5 a lost first report
+
+def _lose_the_first_report(b, minutes=11):
+    Report.objects.filter(booking_id=b["id"]).delete()             # the first render never ran
+    Inspection.objects.filter(booking_id=b["id"]).update(
+        submitted_at=timezone.now() - timedelta(minutes=minutes))
+
+
+def test_a_first_report_that_never_came_is_made_by_the_sweep(done):
+    env, b, _ = done
+    _lose_the_first_report(b, minutes=1)
+    with mock.patch("apps.reports.tasks.render_report.delay") as render:
+        assert tasks.sweep_reports() == 0                       # its render may still be queued
+    _lose_the_first_report(b)
+    assert tasks.sweep_reports() == 1
+    assert Report.objects.get(booking_id=b["id"]).status == "ready"
+    _lose_the_first_report(b, minutes=60 * 24 * 3)                  # too old: Ops only
+    with mock.patch("apps.reports.tasks.render_report.delay") as render:
+        assert tasks.sweep_reports() == 0
+    render.assert_not_called()
+
+
+def test_the_catch_up_never_makes_a_second_revision(done):
+    env, b, r = done
+    assert tasks.render_report(b["id"], first_only=True) == "skipped"
+    assert Report.objects.get(pk=r.pk).revision == r.revision
+
+
+def test_problems_name_a_completed_booking_with_no_report(done):
+    env, b, _ = done
+    _lose_the_first_report(b)
+    (row,) = env.ops.get("/api/v1/problems/reports").json()
+    assert row["problem"] == "missing" and row["booking"] == b["id"]
+    Booking.objects.filter(pk=b["id"]).update(conflict="TWO_EXPERTS")   # Ops choose first
+    assert env.ops.get("/api/v1/problems/reports").json() == []
+
+
+def test_an_out_of_date_report_in_conflict_is_not_offered_for_regenerate(done):
+    """L-5: during a conflict the server refuses Regenerate, so Needs you does not offer it."""
+    env, b, r = done
+    Report.objects.filter(pk=r.pk).update(stale=True)
+    assert env.ops.get("/api/v1/problems/reports").json()[0]["problem"] == "out_of_date"
+    Booking.objects.filter(pk=b["id"]).update(conflict="TWO_EXPERTS")
+    assert env.ops.get("/api/v1/problems/reports").json() == []

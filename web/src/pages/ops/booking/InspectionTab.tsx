@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, ApiError } from "../../../api/client";
+import { answerErrors, api, ApiError } from "../../../api/client";
 import type { Booking, FormPage, FormSection, Inspection } from "../../../api/types";
 import { useAuth } from "../../../auth";
 import { missingFields } from "../../../lib/formSpec";
@@ -97,7 +97,7 @@ export function InspectionTab({
       say("Saved. Ratings and Key Checks were recalculated.");
       onSaved();
     } catch (e) {
-      if (e instanceof ApiError && e.body.errors) setErrors(e.body.errors as Record<string, string>);
+      if (answerErrors(e)) setErrors(answerErrors(e)!);
       else if (e instanceof ApiError && e.code === "FIELD_ACCESS")
         setErrors(Object.fromEntries(((e.body.keys as string[]) ?? []).map((k) => [k, "You cannot change this now."])));
       else fail(e);

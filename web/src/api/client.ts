@@ -10,6 +10,7 @@ export class ApiError extends Error {
     this.status = status;
     this.code = typeof body.code === "string" ? body.code : `HTTP_${status}`;
     this.body = body;
+    this.name = "ApiError"; // kept by the minifier, so monitoring can tell it apart
   }
 }
 
@@ -74,7 +75,25 @@ export function explain(e: unknown): string {
     const v = first[1];
     return `${first[0]}: ${Array.isArray(v) ? v[0] : v}`;
   }
+  // a field error: the server's detail is the first field's message; say which field it is
+  const named =
+    e.body?.fields && typeof e.body.fields === "object" ? Object.entries(e.body.fields as Record<string, unknown>)[0] : undefined;
+  if (named && named[0] !== "non_field_errors" && Array.isArray(named[1]) && named[1][0] === e.message)
+    return `${named[0].replace(/_/g, " ")}: ${e.message}`;
   return e.message;
+}
+
+/** An INVALID_ANSWERS refusal, per field: the server's sentence (the Admin's own check message
+ *  included) where it sent one, never a bare code. Null for any other error. */
+export function answerErrors(e: unknown): Record<string, string> | null {
+  if (!(e instanceof ApiError) || !e.body.errors || typeof e.body.errors !== "object") return null;
+  const said = (e.body.messages && typeof e.body.messages === "object" ? e.body.messages : {}) as Record<string, unknown>;
+  return Object.fromEntries(
+    Object.entries(e.body.errors as Record<string, unknown>).map(([k, v]) => [
+      k,
+      typeof said[k] === "string" ? (said[k] as string) : String(v),
+    ]),
+  );
 }
 
 /** A 409 "someone else saved first" carries who, when and which fields. */

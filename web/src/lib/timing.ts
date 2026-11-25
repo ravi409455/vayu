@@ -10,14 +10,18 @@ export const DEFAULT_TIMING: TimingSettings = { late_grace_minutes: 15, min_minu
 
 /** The limits, for anyone who may see the Settings page (Admin, Ops); the defaults otherwise. */
 export function useTiming(): TimingSettings {
+  return useTimingQuery().data ?? DEFAULT_TIMING;
+}
+
+/** The saved limits as a query: the Settings page shows a failed load as one, never as defaults. */
+export function useTimingQuery() {
   const { can } = useAuth();
-  const q = useQuery({
+  return useQuery({
     queryKey: keys.settings("timing"),
     enabled: can("settings.view"),
     staleTime: 60_000,
     queryFn: ({ signal }) => api<TimingSettings>("settings/timing", { signal }),
   });
-  return q.data ?? DEFAULT_TIMING;
 }
 
 /** 40 -> "40 min", 125 -> "2 h 5 min", 7125 -> "4 days 22 h". */

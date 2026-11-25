@@ -76,7 +76,7 @@ def missing_files(booking: Booking) -> list[dict[str, Any]]:
 def finish_without_missing(actor: Any, booking: Booking) -> Booking:
     """Ops finish a job whose expert's files will not come (a lost phone): only once every
     required field has its file. Missing optional files are left out of the report; if they
-    arrive later they are added and the report is made again (verify_asset)."""
+    arrive later they are added and the report is marked out of date (Ops press Regenerate)."""
     with transaction.atomic():
         b = Booking.objects.select_for_update().get(pk=booking.pk)
         if b.stage != "submitted":

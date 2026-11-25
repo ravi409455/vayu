@@ -1,5 +1,5 @@
 # Used for production AND staging; the difference is the env file (--env-file).
-# Usage: docker compose -f infra/docker-compose.prod.yml --env-file .env.prod up -d
+# Usage: docker compose -f infra/docker-compose.prod.yml --env-file .env.prod up -d --build
 services:
   api:
     build: ../backend
@@ -9,10 +9,20 @@ services:
       DJANGO_SETTINGS_MODULE: vayu.settings.prod
       DB_HOST: postgres
       REDIS_URL: redis://redis:6379/0
-    depends_on: [postgres, redis]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
     command: >
       sh -c "python manage.py migrate --noinput &&
              gunicorn vayu.wsgi -c gunicorn.conf.py"
+    volumes: &firebase   # the Firebase JSON for pushes, read-only (FIREBASE_JSON: its path on the server)
+      - ${FIREBASE_JSON:?set FIREBASE_JSON to the Firebase service-account file on the server}:/run/secrets/firebase-service-account.json:ro
+    healthcheck:   # the API answers at all (not /health: a dead worker must not restart the API)
+      test: ["CMD", "python", "-c", "import http.client, os; c = http.client.HTTPConnection('localhost', 8000, timeout=5); c.request('GET', '/api/v1/auth/me', headers={'Host': os.environ['APP_HOST']}); c.getresponse()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
   worker:
     build: ../backend
     restart: always
@@ -21,8 +31,11 @@ services:
       DJANGO_SETTINGS_MODULE: vayu.settings.prod
       DB_HOST: postgres
       REDIS_URL: redis://redis:6379/0
-    depends_on: [postgres, redis]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
     command: celery -A vayu worker -Q default,uploads,notify -c 4
+    volumes: *firebase   # pushes go out from the notify queue
   zip-worker:                 # ZIPs and storage clean-up, apart so they never hold up uploads
     build: ../backend
     restart: always
@@ -31,9 +44,11 @@ services:
       DJANGO_SETTINGS_MODULE: vayu.settings.prod
       DB_HOST: postgres
       REDIS_URL: redis://redis:6379/0
-    depends_on: [postgres, redis]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
     command: celery -A vayu worker -Q zips,purge -c 2
-  beat:                       # schedules the webhook retry check, once a minute
+  beat:                       # the schedules: webhook retries, report and upload sweeps, purge, alerts
     build: ../backend
     restart: always
     env_file: ../.env.prod
@@ -41,7 +56,9 @@ services:
       DJANGO_SETTINGS_MODULE: vayu.settings.prod
       DB_HOST: postgres
       REDIS_URL: redis://redis:6379/0
-    depends_on: [postgres, redis]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
     command: celery -A vayu beat --schedule /tmp/celerybeat-schedule
   pdf-worker:
     build: ../backend
@@ -51,9 +68,11 @@ services:
       DJANGO_SETTINGS_MODULE: vayu.settings.prod
       DB_HOST: postgres
       REDIS_URL: redis://redis:6379/0
-    depends_on: [postgres, redis]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
     command: celery -A vayu worker -Q pdf -c 1   # one PDF render at a time
-    mem_limit: 6g
+    mem_limit: 4g   # an 8 GB box also runs Postgres, Redis, the API and the other workers
   postgres:
     image: postgres:16-alpine
     restart: always
@@ -63,19 +82,34 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${DB_USER}"]
+      interval: 10s
+      retries: 10
   redis:
     image: redis:7-alpine
     restart: always
+    # queued renders, checks and webhooks survive a Redis restart
+    command: redis-server --appendonly yes
     volumes: ["redisdata:/data"]
-  caddy:
-    image: caddy:2-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 10
+  caddy:                      # TLS, the web app, the customer verify page, and /api to the API
+    build:
+      context: ..
+      dockerfile: infra/web.Dockerfile
+      args:
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+        VITE_SENTRY_ENV: ${VITE_SENTRY_ENV:-production}
     restart: always
     ports: ["80:80", "443:443"]
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddydata:/data
     environment:
       APP_HOST: ${APP_HOST}
+      VERIFY_HOST: ${VERIFY_HOST}
     depends_on: [api]
 volumes:
   pgdata:

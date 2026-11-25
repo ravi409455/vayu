@@ -85,12 +85,18 @@ class LoginView(APIView):
 
 class DeviceCheckedRefreshView(TokenRefreshView):
     throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "login"
+    # its own budget: many phones behind one mobile-network address renew every 30 minutes and
+    # must not use up the sign-in limit (L-2)
+    throttle_scope = "refresh"
     serializer_class = DeviceCheckedRefreshSerializer
 
 
-@extend_schema(responses=obj("Me", id=s_.IntegerField(), username=s_.CharField(),
-                             role=s_.CharField(), permissions=s_.DictField(child=s_.CharField())))
+@extend_schema(responses=obj("Me", **{
+    "id": s_.IntegerField(), "username": s_.CharField(), "name": s_.CharField(),
+    "email": s_.CharField(), "role": s_.CharField(), "phone": s_.CharField(),
+    "must_change_password": s_.BooleanField(), "avatar_url": s_.CharField(allow_null=True),
+    "theme": s_.CharField(), "notify_prefs": s_.DictField(),
+    "permissions": s_.DictField(child=s_.CharField())}))
 class MeView(APIView):
     allow_password_change_pending = True
 

@@ -24,6 +24,13 @@ describe("error handling", () => {
     expect(explain(new ApiError(500, {}))).toMatch(/server had a problem/);
     expect(explain(new ApiError(400, { code: "X", detail: "Booking ID 'A' is already used." }))).toBe("Booking ID 'A' is already used.");
     expect(explain(new ApiError(400, { city: ["Not a valid choice."] }))).toBe("city: Not a valid choice.");
+    // the server's shape (one_shape): detail is the first field's message, fields name it
+    const field = { inspection_date: ["Enter a valid date."] };
+    expect(explain(new ApiError(400, { ...field, code: "INVALID", detail: "Enter a valid date.", fields: field }))).toBe(
+      "inspection date: Enter a valid date.",
+    );
+    const general = { non_field_errors: ["Pick one."] };
+    expect(explain(new ApiError(400, { code: "INVALID", detail: "Pick one.", fields: general }))).toBe("Pick one.");
     expect(explain(new TypeError("network"))).toMatch(/connection/);
   });
   it("reads who changed a booking from a 409", () => {

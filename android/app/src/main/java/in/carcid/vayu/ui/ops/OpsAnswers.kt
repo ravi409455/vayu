@@ -56,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import `in`.carcid.vayu.core.api.ApiError
+import `in`.carcid.vayu.core.api.answerErrors
 import `in`.carcid.vayu.core.forms.Field
 import `in`.carcid.vayu.core.forms.Filled
 import `in`.carcid.vayu.core.forms.Page
@@ -259,7 +260,7 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
                                 error = when (e.code) {
                                     "STALE_INSPECTION" -> "Someone else saved this inspection meanwhile. Their version is loaded now; check and save again."
                                         .also { env.refresh() }
-                                    "INVALID_ANSWERS" -> (e.extra["errors"] as? JsonObject)?.s(f.key)?.ifBlank { null }?.let { refusalText(it) } ?: e.message
+                                    "INVALID_ANSWERS" -> e.answerErrors()[f.key]?.ifBlank { null }?.let { refusalText(it) } ?: e.message
                                     "FIELD_ACCESS" -> "You can't change this at this stage."
                                     else -> e.message
                                 }

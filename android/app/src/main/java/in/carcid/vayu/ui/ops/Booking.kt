@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.allPages
 import `in`.carcid.vayu.core.ops.ListItem
 import `in`.carcid.vayu.core.ops.MediaItem
 import `in`.carcid.vayu.core.ops.Inspection
@@ -363,7 +364,7 @@ fun Confirm(title: String, text: String, yes: String, onClose: () -> Unit, onYes
 @Composable
 fun AssignSheet(env: OpsEnv, b: Bk, onClose: () -> Unit, onAssign: (Int) -> Unit) {
     val day = b.date.ifEmpty { env.today().toString() }
-    val jobs = rememberLoad(env, "bookings?date_from=$day&date_to=$day&order=schedule").value?.data?.rows().orEmpty().map(::Bk).filter { it.stage != "cancelled" }
+    val jobs = rememberLoad(env, allPages("bookings?date_from=$day&date_to=$day&order=schedule")).value?.data?.rows().orEmpty().map(::Bk).filter { it.stage != "cancelled" }
     var find by remember { mutableStateOf("") }
     var pick by remember { mutableStateOf(b.expert) }
     val at = runCatching { LocalTime.parse(b.time) }.getOrNull()

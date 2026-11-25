@@ -49,6 +49,19 @@ class DraftStoreTest {
         assertTrue(File(dir, "$BOOKING.json").exists())
     }
 
+    @Test fun startingALeadWhoseDraftCantBeReadKeepsTheDamagedOne() {
+        // N-4: a new draft may be started, but the old file is moved aside, never overwritten or swept
+        dir.mkdirs(); File(dir, "$BOOKING.json").writeText("{not json")
+        val store = DraftStore(dir)
+        store.setAsideDamaged(BOOKING)
+        store.save(draft().copy(step = 1))
+        assertEquals("{not json", File(dir, "$BOOKING.damaged").readText())
+        assertEquals(listOf(BOOKING), store.unreadable())                  // sign-out still stops
+        val shot = file("orphan.jpg")
+        store.sweep()
+        assertTrue(shot.exists())                                         // its photos might be these
+    }
+
     @Test fun filesNoDraftRefersToAreSweptOnceAnHourOld() {
         val kept = file("kept.jpg")
         val store = DraftStore(dir)

@@ -51,8 +51,8 @@ import kotlinx.serialization.json.put
 import java.io.File
 
 /**
- * The PDF report on the booking screen. It updates by itself after any change (the card says
- * "Updating…" and checks again until it's done); Open · Share · Regenerate in one row. Opening downloads it through the
+ * The PDF report on the booking screen. A change only marks it out of date; Ops press Regenerate
+ * (the card says "Updating…" and checks again until it's done); Open · Share · Regenerate in one row. Opening downloads it through the
  * server (logged); sharing the PDF is logged too. The check link is printed in the PDF, so there
  * is no button for it here.
  */
@@ -103,20 +103,24 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
     Column(Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Vayu.colors.soft).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         val failed = rep?.status == "failed"
+        // completed with no report at all (its first render was lost or had no layout): Ops make it (H-5)
+        val missing = rep == null && r.error != null && b.stage == "completed" && b.conflict.isEmpty()
         Text(when {
             b.conflict.isNotEmpty() -> "Waits for your choice above"
+            missing -> "Not made yet"
             rep == null -> if (b.stage == "completed") "Being made" else "Made when the booking is completed"
             updating -> "Updating…"
             failed -> "Couldn't be made · tried again by itself"
             rep!!.status == "ready" -> (if (outOfDate) "Out of date" else "Ready") + (rep!!.generatedAt?.takeIf { it.isNotBlank() }?.let { " · made ${whenStamp(it, env.today()).replaceFirstChar { c -> c.lowercase() }}" } ?: "")
             else -> "Being made"
         }, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
-        if (failed && rep?.error?.isNotBlank() == true) Note(rep!!.error, Vayu.colors.badTint)
+        if (failed && rep?.error?.isNotBlank() == true) Note(reportError(rep!!.error), Vayu.colors.badTint)
+        if (missing) Note("The booking is completed but its PDF was not made. Make it now.", Vayu.colors.warnTint)
         if (outOfDate && !updating) Note("Something it shows changed since it was made. Regenerate it when you're done.", Vayu.colors.warnTint)
         // one row, to save space: Open · Share · Regenerate (each only when it applies)
         val hasFile = rep?.url?.isNotBlank() == true
-        val canRegenerate = rep != null && env.can("submissions.edit")
-        val allowed = regen?.allowed == true
+        val canRegenerate = (rep != null || missing) && env.can("submissions.edit")
+        val allowed = regen?.allowed == true || missing
         if (hasFile || canRegenerate) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (hasFile) CardButton("Open", Modifier.weight(1f), online) { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }
             if (hasFile) CardButton("Share", Modifier.weight(1f), online) { scope.launch {
@@ -127,7 +131,7 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
                 } ?: env.say("Couldn't download the report.")
             } }
             // F-219: reports are made again only when Ops press Regenerate (one tap, one request)
-            if (canRegenerate) CardButton(if (sending) "Regenerating…" else "Regenerate", Modifier.weight(1f), online && allowed && !sending) {
+            if (canRegenerate) CardButton(if (sending) "Regenerating…" else if (missing) "Make the PDF" else "Regenerate", Modifier.weight(1f), online && allowed && !sending) {
                 sending = true
                 env.actions.send("POST", "bookings/$id/report/regenerate", refused = { e -> env.say(e.message); sending = false }) {
                     scope.launch { try { rep = Report.from(env.data.api.get("bookings/$id/report")) ?: rep } catch (e: ApiError) { } finally { sending = false } }
@@ -152,3 +156,11 @@ private fun CardButton(text: String, modifier: Modifier, enabled: Boolean = true
 @Composable
 private fun Note(text: String, bg: Color) = Text(text, fontSize = 13.sp, color = Vayu.colors.ink2,
     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(bg).padding(12.dp))
+
+/** Why the last render failed, in words (the server sends a code). */
+fun reportError(code: String): String = when (code) {
+    "render_failed" -> "The PDF could not be made."
+    "timeout" -> "Making it took too long."
+    "storage_failed" -> "It could not be saved."
+    else -> "It could not be made."
+}

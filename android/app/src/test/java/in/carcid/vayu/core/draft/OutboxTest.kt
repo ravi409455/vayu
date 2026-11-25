@@ -163,6 +163,16 @@ class OutboxTest {
         assertEquals(emptyMap<String, String>(), drafts.get(BOOKING)!!.withAnswer("inspection", "odometer", 1.0).fieldErrors)
     }
 
+    @Test fun theServersOwnWordsForARefusedAnswerAreShown() = runBlocking {
+        // M-1: the Admin's check message reaches the expert, not a code
+        ready()
+        server.on("POST bookings/$BOOKING/submit", """{"code":"INVALID_ANSWERS","detail":"Some answers are invalid.",
+            "errors":{"odometer":"check_failed","door":"required"},"messages":{"odometer":"Odometer must be under 9,99,999 km."}}""", 400)
+        outbox.run()
+        assertEquals(mapOf("odometer" to "Odometer must be under 9,99,999 km.", "door" to "required"), drafts.get(BOOKING)!!.fieldErrors)
+        assertEquals("Odometer must be under 9,99,999 km.", `in`.carcid.vayu.core.forms.refusalText(drafts.get(BOOKING)!!.fieldErrors["odometer"]!!))
+    }
+
     @Test fun aFileThatArrivesDamagedIsSentAgainLater() = runBlocking {
         ready()
         server.on("POST media/0000bbbb-0000-0000-0000-000000000001/complete", """{"status":"failed"}""")
@@ -241,6 +251,41 @@ class OutboxTest {
             .removeFile("inspection", "door_photos", f.id)
         assertTrue(drafts.get(BOOKING)!!.files.isEmpty())
         assertFalse(drafts.get(BOOKING)!!.unsent)
+    }
+
+    @Test fun aFileRefusedAtUploadTimeAfterTheLeadClosedNoLongerBlocksSignOut() = runBlocking {
+        // N-1: registered and submitted, then Ops cancelled; the phone asks again before sending the bytes
+        ready()
+        drafts.update(BOOKING) { d -> d.copy(startSent = true, submitSent = true,
+            files = d.files.map { it.copy(serverId = "0000bbbb-0000-0000-0000-000000000001") }) }
+        server.on("POST media/initiate", """{"code":"BOOKING_CLOSED","detail":"A cancelled lead takes no new files."}""", 409)
+        assertTrue(outbox.run())
+        val f = drafts.get(BOOKING)!!.files.single()
+        assertTrue(f.refused && !f.sent)
+        assertEquals("A cancelled lead takes no new files.", f.error)          // the server's reason is shown
+        assertFalse(drafts.get(BOOKING)!!.unsent)                               // sign-out is no longer blocked
+        val tries = server.bodiesOf("POST media/initiate").size
+        outbox.run()
+        assertEquals(tries, server.bodiesOf("POST media/initiate").size)        // not retried for ever
+    }
+
+    @Test fun aRefusalWhilePickingUpFilesFromBeforeIsSaidNotDropped() = runBlocking {
+        // N-5: the lead was deleted or moved away: "files from before" answers 404
+        ready()
+        drafts.update(BOOKING) { it.copy(reconcile = true) }
+        server.on("GET bookings/$BOOKING/media", """{"code":"NOT_FOUND","detail":"Booking not found."}""", 404)
+        outbox.run()
+        val d = drafts.get(BOOKING)!!
+        assertEquals(JOB_CLOSED, d.problemCode)                                 // Uploads offers Discard
+        assertNotNull(d.problem)
+    }
+
+    @Test fun aDraftKeepsTheBookingsAnswersForWhenTheLeadLeavesTheList() {
+        // N-6: rules on booking.* still see the booking once the lead is off the list
+        val d = Draft(BOOKING, "DEMO-2", "Arjun", mapOf("inspection" to 7), "pdi", bookingAnswers = mapOf("city" to "pune"))
+        assertEquals(mapOf("city" to "pune"), Draft.fromJson(d.toJson()).bookingAnswers)
+        val off = jobs.filled("00000000-0000-0000-0000-000000000009", mapOf("inspection" to 7), emptyMap(), "2026-11-24", d.bookingAnswers)
+        assertEquals("pune", off?.booking?.get("city"))
     }
 
     @Test fun aFileThatFailsTheServersCheckLaterIsSentAgainAndKeptUntilChecked() = runBlocking {

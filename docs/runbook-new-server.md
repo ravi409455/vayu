@@ -7,7 +7,8 @@ Caddy in front for TLS. Staging is the same, with its own env file, bucket and S
 - DNS: `app.carcid.in` (and `verify.carcid.in`) point at the server.
 - An R2 bucket and a key pair for this server only.
 - A Sentry DSN (the server refuses to start without one).
-- The Firebase service-account JSON, copied to the server outside the repo.
+- The Firebase service-account JSON, copied to the server outside the repo (its path goes in
+  `FIREBASE_JSON`; compose mounts it read-only into the API and the worker).
 
 ## 2. Env file
 ```bash
@@ -22,24 +23,31 @@ start without them. Set `VAYU_SERVER_KIND=production` (or `test` for staging) an
 docker compose -f infra/docker-compose.prod.yml --env-file .env.prod up -d --build
 ```
 The `api` service runs the migrations, then gunicorn (`backend/gunicorn.conf.py`: access log
-without query strings or tokens). Workers: `worker` (default, uploads, notify), `zip-worker`
+without query strings or tokens). `caddy` is built from `infra/web.Dockerfile`: it serves the web
+app on `APP_HOST` and the customer check page on `VERIFY_HOST` (a QR link `/<token>` goes on to
+`/verify/<token>`), forwards `/api` to the API and gets the TLS certificates. Workers: `worker` (default, uploads, notify), `zip-worker`
 (ZIPs, storage clean-up), `pdf-worker` (one render at a time) and `beat` (schedules).
 
-Check health (database, Redis, storage, workers):
+Check health (database, Redis, storage, workers, the push credential):
 ```bash
 curl -fsS https://app.carcid.in/api/v1/health
 ```
 
 ## 4. Forms, reports, lists and staff
 Write the staff file (see `backend/apps/platform/setup/users.example.csv`): `username,name,role,phone,password`,
-at least one `admin`. Then:
+at least one `admin`. The commands run inside the `api` container, so copy the file in first and
+the made-up passwords out afterwards:
 ```bash
-docker compose -f infra/docker-compose.prod.yml --env-file .env.prod exec api python manage.py setup_platform --users /tmp/staff.csv
+C="docker compose -f infra/docker-compose.prod.yml --env-file .env.prod"
+$C cp staff.csv api:/tmp/staff.csv
+$C exec api python manage.py setup_platform --users /tmp/staff.csv
+$C cp api:/tmp/staff.csv.passwords ./staff.csv.passwords && chmod 600 ./staff.csv.passwords
+$C exec api rm /tmp/staff.csv /tmp/staff.csv.passwords
 ```
 - It writes the server kind into the database (the wipe guards read it), adds the master lists,
   the booking / check-in / wrap-up forms, the PDI, Used Car and EV forms with their reports, and
   the staff.
-- Passwords it made up are in `/tmp/staff.csv.passwords` (readable by you only). Hand them out,
+- Passwords it made up are in `staff.csv.passwords` (copied out above, readable by you only). Hand them out,
   then delete the file. Everyone changes their password at first sign-in.
 - Running it again only adds what is missing; it never changes what an Admin edited.
   `--force --confirm <VAYU_SERVER_NAME>` publishes the setup's forms and templates again as new
@@ -48,7 +56,8 @@ docker compose -f infra/docker-compose.prod.yml --env-file .env.prod exec api py
 
 ## 5. The Android app
 ```bash
-docker compose -f infra/docker-compose.prod.yml --env-file .env.prod exec api python manage.py publish_apk /tmp/vayu.apk --version-code 1 --version-name 1.0.0 --notes "First release"
+$C cp vayu.apk api:/tmp/vayu.apk
+$C exec api python manage.py publish_apk /tmp/vayu.apk --version-code 1 --version-name 1.0.0 --notes "First release"
 ```
 Experts download it from the web portal (signed in). Raise `MIN_APP_VERSION` only after the build
 that meets it is published.
@@ -60,7 +69,8 @@ that meets it is published.
 - `GET /api/v1/health` is `{"status": "ok"}`.
 
 ## 7. Before launch (not covered here)
-Backups and a restore test, monitoring, CSP, restricting the Firebase API key (plan §9).
+Backups and a restore test, monitoring, CSP, restricting the Firebase API key, images built in CI
+and pulled from a registry (a rollback image), image scanning (plan §9).
 
 ## 8. Rolling back a release
 Schema changes reverse with `python manage.py migrate <app> <previous>`. These data migrations

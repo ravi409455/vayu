@@ -2,7 +2,7 @@ import { Link2, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useList } from "../../../api/hooks";
 import { defaultConfig, FIELD_TYPES, iconFor, slugKey, typeLabel } from "../../../lib/fieldTypes";
-import { Field, Modal, Tabs } from "../../../ui/kit";
+import { Field, LoadError, Modal, Tabs } from "../../../ui/kit";
 import { keys } from "../../../api/keys";
 
 type LibItem = {
@@ -125,7 +125,8 @@ export function AddFieldDialog({
                 </button>
               </div>
             ))}
-          {(lib.data ?? []).filter((i) => !i.archived).length === 0 && (
+          {lib.isError && <LoadError error={lib.error} what="the library" onRetry={lib.refetch} />}
+          {lib.isSuccess && (lib.data ?? []).filter((i) => !i.archived).length === 0 && (
             <p className="empty-state">The library has no fields yet. Use “Save to library” on any field to add one.</p>
           )}
         </>
@@ -213,7 +214,8 @@ export function AddSectionDialog({
           <button onClick={() => onLibrary(i.id, false)}>Copy</button>
         </div>
       ))}
-      {items.length === 0 && <p className="muted small">No library sections yet.</p>}
+      {lib.isError && <LoadError error={lib.error} what="the library" onRetry={lib.refetch} />}
+      {lib.isSuccess && items.length === 0 && <p className="muted small">No library sections yet.</p>}
     </Modal>
   );
 }

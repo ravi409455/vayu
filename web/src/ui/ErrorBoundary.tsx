@@ -12,10 +12,11 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: 
   }
   render() {
     if (!this.state.failed) return this.props.children;
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
     return (
       <div className="empty-state load-error" role="alert" style={{ margin: 24 }}>
-        <strong>Something went wrong on this page.</strong>
-        <span>Reload to try again. What you saved is kept.</span>
+        <strong>{offline ? "No connection: this page could not be opened." : "Something went wrong on this page."}</strong>
+        <span>{offline ? "Reload once you are back online. What you saved is kept." : "Reload to try again. What you saved is kept."}</span>
         <button className="primary" onClick={() => location.reload()}>
           Reload
         </button>
@@ -41,12 +42,13 @@ export function lazyPage(load: () => Promise<{ default: ComponentType }>) {
       (e: unknown) => {
         let first = false;
         try {
-          first = !sessionStorage.getItem(RELOADED);
+          first = !sessionStorage.getItem(RELOADED) && navigator.onLine !== false;
           if (first) sessionStorage.setItem(RELOADED, "1");
         } catch {
           /* blocked: do not loop */
         }
-        if (!first) throw e;
+        // offline, a reload would only land on the browser's "no internet" page and lose the app
+        if (!first || navigator.onLine === false) throw e;
         location.reload();
         return new Promise<{ default: ComponentType }>(() => {});
       },

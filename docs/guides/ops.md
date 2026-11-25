@@ -57,7 +57,8 @@ Nothing completes and no report is made until you do.
 
 The PDF is made once, by itself, when the booking completes (all files checked). After that,
 changes only mark it **Out of date**: press **Regenerate** when you are done editing (one new PDF;
-only the newest is kept). Report words: Ready · Being made · Out of date · Failed. If Regenerate is
+only the newest is kept). Report words: Ready · Updating… · Out of date · Failed. A completed booking
+whose PDF never came shows **No report yet** with **Make the PDF**, and is listed in Needs you. If Regenerate is
 off, the page says why (for example during a conflict, or after old photos were removed by the
 retention setting).
 

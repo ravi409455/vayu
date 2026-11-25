@@ -72,8 +72,28 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
         clearNotices()                     // the next person on this phone never sees them
         root.listFiles()?.filter { it.name.startsWith("notes-") }?.forEach { it.delete() }
         ops(userId).clear()
+        clearDownloads()
+    }
+
+    private fun clearDownloads() {
         cache?.listFiles()?.filter { it.name.startsWith("media-") || it.name == "reports" || it.name.endsWith(".up") }
             ?.forEach { it.deleteRecursively() }
+    }
+
+    /**
+     * At sign-in: what an earlier person left when their session ended by itself (or the app was
+     * killed mid sign-out) goes, unless they still have work to send (N-8): their saved Ops copies
+     * and downloads always, their lead list and sent drafts when nothing of theirs is unsent.
+     */
+    @Synchronized fun forgetOthers(userId: Int) {
+        val others = root.listFiles().orEmpty()
+            .mapNotNull { Regex("^(?:jobs|ops|drafts)-(\\d+)").find(it.name)?.groupValues?.get(1)?.toIntOrNull() }.toSet() - userId
+        for (id in others) {
+            File(root, "ops-$id").deleteRecursively()
+            val store = drafts(id)
+            if (store.all().none { it.unsent } && store.unreadable().isEmpty()) { forgetDrafts(id, all = false); forgetJobs(id) }
+        }
+        if (others.isNotEmpty()) clearDownloads()
     }
 
     /**
@@ -94,7 +114,7 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
     }
 
     fun outbox(userId: Int): Outbox = Outbox(api, drafts(userId), BuildConfig.VERSION_CODE) { d ->
-        jobs(userId).filled(d.bookingId, d.versions, d.answers, LocalDate.now().toString())
+        jobs(userId).filled(d.bookingId, d.versions, d.answers, LocalDate.now().toString(), d.bookingAnswers)
     }
 
     /**
@@ -112,10 +132,11 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
     fun prune(userId: Int, now: java.time.Instant = java.time.Instant.now()) {
         val jobs = jobs(userId).jobs().associateBy { it.id }
         val drafts = drafts(userId)
-        // a copy the server said it already had may differ from it: kept 7 days after its submit, then
-        // tidied like the rest (sign-out removes it at once)
+        // a copy the server said it already had may differ from it: kept 7 days after the server said so
+        // (work sent offline long after its submit gets its 7 days too), then tidied like the rest
+        // (sign-out removes it at once)
         fun keptAWhile(d: Draft) = d.problemCode == `in`.carcid.vayu.core.draft.ALREADY_SUBMITTED &&
-            d.submittedAt?.let { runCatching { java.time.OffsetDateTime.parse(it).toInstant() }.getOrNull() }
+            (d.problemAt ?: d.submittedAt)?.let { runCatching { java.time.OffsetDateTime.parse(it).toInstant() }.getOrNull() }
                 ?.let { java.time.Duration.between(it, now) < java.time.Duration.ofDays(7) } != false
         drafts.all().filter { d -> d.submitSent && d.files.all { it.verified } && jobs[d.bookingId].let { it == null || it.stage == "completed" } &&
             !keptAWhile(d) }
@@ -142,7 +163,7 @@ class VayuApp : Application() {
     }
 
     val graph: Graph by lazy {
-        val tokens = PrefsTokenStore(this)
+        val tokens = PrefsTokenStore(this, onPlain = { io.sentry.Sentry.captureException(it) })
         Graph(Api(BuildConfig.API_URL, tokens), tokens, filesDir, { OutboxWorker.enqueue(this) }, cacheDir,
             onJobs = { Reminders.schedule(this, graph, it) },
             clearNotices = { forgetLeftovers(this) },

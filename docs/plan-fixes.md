@@ -1,9 +1,7 @@
 # Plan: fixes from the full review (2026-11-25)
 
-Status: **done (2026-11-25).** Batches 0–8, the §7 refactors (quality plan Q1–Q7, Prettier included) and the
-review blockers merged to `main` in #15 (6923742) and #16 (cf1e4e6); CI green on both. Every Critical and High
-finding has a fix commit and a test that changed with it. Still open: the owner items (web Sentry DSN, support
-contact line), the phone check of the Ops multi-status filter, and §9 before launch. Source: [`review-report-2026-11-25.md`](review-report-2026-11-25.md)
+Status: **done** (fix round merged 2026-11-25, PRs #15 to #17; phone check of the Ops multi-status filter passed; a second review's findings fixed in the
+follow-up PR, see its body). The §6 re-score was not redone as a number: the second review is the check. Source: [`review-report-2026-11-25.md`](review-report-2026-11-25.md)
 (findings **C-01…C-03**, **H-01…H-23** in §3; every finding numbered **F-001…F-252** in §3b; first-pass
 **R-01…R-38** in [`review-report-2026-11-24.md`](review-report-2026-11-24.md)).
 Comes before the quality plan ([`plan-quality.md`](plan-quality.md)); the big refactors go there (§7).

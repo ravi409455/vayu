@@ -100,7 +100,7 @@ export function VerifyPage() {
               {v.generated_at ? `, made ${fmtStamp(v.generated_at)}` : ""}
             </dd>
           </dl>
-          {!v.current && <p className="muted small">A newer version of this report is being prepared.</p>}
+          {!v.current && <p className="muted small">Some details were updated after this version was made.</p>}
         </div>
       )}
     </main>

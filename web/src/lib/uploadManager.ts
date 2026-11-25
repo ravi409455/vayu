@@ -26,7 +26,7 @@ export type UploadState = {
 const LOCAL = "local-";
 export const isLocalId = (id: unknown): id is string => typeof id === "string" && id.startsWith(LOCAL);
 
-type Entry = { job: PendingUpload; state: UploadState; tries: number; timer?: ReturnType<typeof setTimeout> };
+type Entry = { job: PendingUpload; state: UploadState; tries: number; damaged?: number; timer?: ReturnType<typeof setTimeout> };
 const entries = new Map<string, Entry>(); // by client UUID
 const renamed = new Map<string, string>(); // "local-…" -> the server's id
 const listeners = new Set<() => void>();
@@ -88,6 +88,11 @@ async function run(e: Entry): Promise<void> {
       if (mine === gen) set(e, { progress: f }, true);
     });
     if (mine !== gen) return;
+    if (!entries.has(e.job.clientUuid)) {
+      // removed while it was sending: a file picked offline only now has a server id to take back
+      if (!e.job.assetId) await deleteOnServer(r.id);
+      return;
+    }
     if (!e.job.assetId) giveId(e, r.id);
     e.tries = 0;
     set(e, { status: "done", progress: 1 });
@@ -135,8 +140,14 @@ function watch(e: Entry, n: number): void {
     if (mine !== gen || !entries.has(e.job.clientUuid)) return;
     if (r?.status === "verified" || r?.status === "purged") forget(e);
     else if (r?.status === "failed") {
+      e.damaged = (e.damaged ?? 0) + 1;
+      if (e.damaged >= 3) {
+        // the same bytes keep failing the check: sending them again will not help
+        set(e, { status: "failed", error: "The file keeps arriving damaged. Remove it and pick it again.", permanent: true });
+        return;
+      }
       set(e, { status: "failed", error: "The file arrived damaged. Sending it again." });
-      requeue(e);
+      later(e);
     } else if (n + 1 < VERIFY_WAITS.length) watch(e, n + 1); // still checking; a later visit picks it up again
   }, VERIFY_WAITS[n]);
 }
@@ -244,7 +255,46 @@ async function doDiscard(assetId: string): Promise<void> {
     await allJobs()
       .then((all) => all.filter((j) => j.assetId === serverId).forEach((j) => void deleteJob(j.clientUuid)))
       .catch(() => {});
-  if (serverId && !isLocalId(serverId)) await api(`media/${serverId}`, { method: "DELETE" }).catch(() => {}); // best effort: the server cleans up stragglers
+  if (serverId && !isLocalId(serverId)) await deleteOnServer(serverId);
+}
+
+/** Files removed while there was no connection: their DELETE is sent again later, or the server keeps
+ *  them, they count towards the field's limit and come back into the answers on the next open. */
+const DELETES = "vayu:deletes";
+function pendingDeletes(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(DELETES) ?? "[]") as string[];
+  } catch {
+    return [];
+  }
+}
+function keepDeletes(ids: string[]): void {
+  try {
+    if (ids.length) localStorage.setItem(DELETES, JSON.stringify(ids));
+    else localStorage.removeItem(DELETES);
+  } catch {
+    /* storage off: best effort only */
+  }
+}
+/** Worth asking again: no connection, the server busy or failing. A 4xx is final (gone, not ours). */
+const retryable = (err: unknown) => !(err instanceof ApiError) || err.status >= 500 || err.status === 429;
+async function deleteOnServer(id: string): Promise<void> {
+  try {
+    await api(`media/${id}`, { method: "DELETE" });
+  } catch (err) {
+    if (retryable(err)) keepDeletes([...new Set([...pendingDeletes(), id])]); // later
+  }
+}
+/** Sends the removals that could not reach the server before (the connection is back, a lead opens). */
+export async function retryDeletes(): Promise<void> {
+  for (const id of pendingDeletes()) {
+    try {
+      await api(`media/${id}`, { method: "DELETE" });
+    } catch (err) {
+      if (retryable(err)) continue; // still offline or the server failing: keep it
+    }
+    keepDeletes(pendingDeletes().filter((x) => x !== id)); // gone, or refused for good
+  }
 }
 
 function find(id: string): Entry | undefined {
@@ -256,6 +306,7 @@ function find(id: string): Entry | undefined {
 /** After a refresh, or on the submitted lead's page: carry on with everything for this booking that
  *  has not been checked by the server yet. */
 export async function resumeUploads(bookingId: string): Promise<number> {
+  void retryDeletes();
   const jobs = (await allJobs().catch(() => [] as PendingUpload[])).filter((j) => j.bookingId === bookingId && !entries.has(j.clientUuid));
   jobs.forEach((j) => track(j));
   return jobs.length;
@@ -271,11 +322,12 @@ export function retryFailed(): void {
   });
 }
 if (typeof window !== "undefined") {
-  window.addEventListener("online", () =>
+  window.addEventListener("online", () => {
+    void retryDeletes();
     entries.forEach((e) => {
       if (e.state.status === "failed" && !e.state.permanent) requeue(e);
-    }),
-  );
+    });
+  });
   // files the browser could not store are lost with the tab: ask before it closes
   window.addEventListener("beforeunload", (ev) => {
     if ([...entries.values()].some((e) => e.state.deviceOnly && e.state.status !== "done")) ev.preventDefault();

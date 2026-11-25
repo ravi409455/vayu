@@ -12,21 +12,21 @@ Reference report: `SA37926PDI.pdf` (PDI, 35 pp). Clappia (garuda) was reviewed r
 - **Out of scope:** Service History, Expense Manager, Leave, customer messaging (Ops send reports manually), payout computation, calendar/scheduling, Hindi, data migration.
 - **Users:** ~200 (≈150 experts, 40 ops, 10 admins). Design load is ≈500 inspections/month. Each inspection has 60–150 photos and 3–10 videos.
 - **Timeline:** target was 3 months with full scope; **plan.md estimates ~21 weeks (range 18–22)**. Decide before plan Phase 10 between accepting ~21 weeks, a web-only launch at ~week 16, or cutting scope. Big-bang launch, with Clappia kept as a fallback for 2–4 weeks and any switch-back handled manually by Ops.
-- **v1.1:** form-version diff and rollback, Ops/Admin screens on Android, polished PDF designer UX.
+- **v1.1:** form-version diff and rollback, polished PDF designer UX. (Ops screens on Android were built in v1.)
 
 ## 2. Roles, users, security
 - **Three roles:** Expert, Ops, Admin. No custom roles and no per-user exceptions: one role per user.
 - **Permissions are configurable per role.** The Admin edits what Expert and Ops may do in a role-by-permission matrix (web, Admin only; audited). The **Admin role is locked to full access** (so nobody can lock everyone out), and `roles.manage` can't be granted to another role. **Admin-only, never grantable:** integrations, API keys, and editing forms, PDF templates and master lists.
-  - **One permission per action** (~35), e.g. `bookings.delete`, `submissions.edit`, `forms.publish`, `pdf_templates.edit`, `payments.verify`, `ratings.override`. Permissions on bookings, submissions, payments and reports are **scoped**: `own` (assigned to me) or `all`.
+  - **One permission per action** (~35), e.g. `bookings.delete`, `submissions.edit`, `forms.publish`, `pdf_templates.edit`, `ratings.override`. Permissions on bookings, submissions and reports are **scoped**: `own` (assigned to me) or `all`.
   - Only an Admin can create, change, reset or sign out an Admin user, whatever other permissions someone holds (no privilege escalation).
   - This is separate from **field-level access** (hidden/view/edit per role per stage, set in the form builder).
-  - **Defaults.** Expert: own bookings/submissions, fill own inspections, record own payments. **Ops: daily operations only**: create/edit/assign/reschedule/cancel bookings, view and edit submission data and media, verify payments, override ratings and Key Checks, regenerate/view reports, dashboards, force-release; read-only view of forms and library. **Ops cannot** change any template (forms, library, PDF templates, master lists), cannot delete bookings or submissions, cannot sign users out of their devices (an Admin may grant it), and cannot manage users, integrations, API keys or permissions. Admin: everything.
+  - **Defaults.** Expert: own bookings/submissions, fill own inspections (payment answers are ordinary wrap-up form fields, §5.2). **Ops: daily operations only**: create/edit/assign/reschedule/cancel bookings, view and edit submission data and media, override ratings and Key Checks, regenerate/view reports, dashboards, force-release; read-only view of forms and library. **Ops cannot** change any template (forms, library, PDF templates, master lists), cannot delete bookings or submissions, cannot sign users out of their devices (an Admin may grant it), and cannot manage users, integrations, API keys or permissions. Admin: everything.
 - **Users have:** name, email (stored, not used for sending), username, password, role, user ID, active/inactive (deactivate, never delete).
-- **Surfaces:** Android (v1: expert screens only) and web (all roles). Form builder, PDF designer, master lists, users, integrations and API keys are **web-only**.
+- **Surfaces:** Android (expert and Ops screens) and web (all roles). Form builder, PDF designer, master lists, users, integrations and API keys are **web-only**.
 - **Field access:** per role **per stage** (hidden / view / edit), set in the form builder.
 - **Experts see only bookings assigned to them** (exception: their own unfinished drafts, see §6). They see the customer phone with tap-to-call.
 - **Security:** every failed sign-in gets the same message; five wrong tries lock **that username from that address** for 15 minutes (not the whole account, not the whole address: many phones share one mobile-network IP); a role change signs the app out; a web sign-in posted from another site is refused; forced password change on first login or after an admin reset. Web sessions expire; Android sessions persist for offline work.
-- **One active device per expert.** Logging in on a new phone signs out the old one after the old phone's data syncs. **Ops/Admin can force "sign out all devices"** (with a data-loss warning) for lost or broken phones.
+- **One active device per expert.** Logging in on a new phone signs out the old one after the old phone's data syncs. **An Admin can force "sign out all devices"** (with a data-loss warning) for lost or broken phones; Ops only if an Admin grants it.
 - **Config audit log:** who published, promoted or changed a form version or PDF template, master lists, webhooks, API keys, users or roles.
 - **Privacy/DPDP:** legal review happens outside this project; nothing extra is built in v1.
 
@@ -164,7 +164,7 @@ forms at the end of the day; the app keeps its generic nature").
   - **Verification QR** linking to a verify page on your own subdomain. The page shows a summary only: booking ID, car, type, date, overall rating, current revision.
   - Admin-set filename pattern.
 - **No PDF size limit.** Videos are internal only.
-- **Generation:** automatic **once**, when the booking completes. After that nothing re-renders by itself: Ops edits, files Ops add or replace and booking changes only mark the PDF **"out of date"**; Ops press **"Regenerate PDF"** (one new PDF, one `pdf.ready`). The every-few-minutes sweep only retries failed or killed renders. **Only the latest PDF is kept** (no old revisions). Renders run one at a time, with a memory limit and timeout. A later render that fails keeps the last PDF (the verify page keeps working); the failure is listed for Ops.
+- **Generation:** automatic **once**, when the booking completes. After that nothing re-renders by itself: Ops edits, files Ops add or replace and booking changes only mark the PDF **"out of date"**; Ops press **"Regenerate PDF"** (one new PDF, one `pdf.ready`). Any booking change counts, also one the PDF does not show (an Ops status, a field another system writes): accepted, so nothing is missed; Ops judge whether to regenerate. The every-few-minutes sweep only retries failed or killed renders, and makes a first PDF that never came (lost or skipped, up to two days; after that it is a Needs-you item with a "Make the PDF" button). **Only the latest PDF is kept** (no old revisions). Renders run one at a time, with a memory limit and timeout. A later render that fails keeps the last PDF (the verify page keeps working); the failure is listed for Ops.
 - **Which inspection the report uses:** the one that counts. During a two-expert conflict the customer **keeps the old report** and Regenerate is disabled; when Ops pick the inspection that counts, the PDF renders once automatically. If the first completion is already in conflict, there is no report until Ops resolve it.
 - **Deleting a booking** removes all its files from storage (originals, previews, copies, the PDF, ZIPs). **Retention:** the photo setting also covers documents and signatures; cancelled bookings are purged too (counted from the cancel date); ZIPs go after their 7 days. Once the retention setting has purged a booking's photos, its **last PDF is kept** and Regenerate is disabled with the reason.
 - **Photo / video ZIP links** in the report hold only the files the counted inspection uses, and **expire 30 days after the booking's first PDF**; a PDF regenerated after that leaves those links out. The verify page (QR) keeps working.
@@ -186,11 +186,11 @@ forms at the end of the day; the app keeps its generic nature").
   - Auto-generated **Swagger** docs. No rate limiting.
 
 ## 9. Ops web
-- **Booking:** create, assign, reschedule, cancel, force-release, force sign-out; submission edit; media gallery and video playback; add/replace/delete media; **download-all ZIP**; payment verification; rating/Key Check override; PDF download/regenerate.
+- **Booking:** create, assign, reschedule, cancel, force-release, force sign-out; submission edit; media gallery and video playback; add/replace/delete media; **download-all ZIP**; rating/Key Check override; PDF download/regenerate.
 - **Job board:**
   - Today / date-range views with stage + Ops status.
   - Filters for city, expert, type and stage.
-  - **Problem queue:** stuck uploads (checked every hour; files on finished or cancelled jobs, failed or replaced ones drop out; bell, push and webhook once per booking, the bell at most daily), conflicts, rejected type changes (Ops clear each alert once looked at), unverified payments, pay-later outstanding, edited but not regenerated, unverified times, late starts and too-quick jobs not yet reviewed.
+  - **Problem queue:** stuck uploads (checked every hour; files on finished or cancelled jobs, failed or replaced ones drop out; bell, push and webhook once per booking, the bell at most daily), conflicts, rejected type changes (Ops clear each alert once looked at), failed renders and completed bookings with no PDF, edited but not regenerated, unverified times (listed for the week, not counted in the badge: there is nothing to do), late starts and too-quick jobs not yet reviewed.
   - **Global search:** Booking ID, customer name/phone, chassis no., car.
 - **Dashboards:** volume by day/week/month × type, city, expert, lead owner; **CSV export**.
 - **Inspection timing (Admin and Ops only, never Experts; see `docs/plan-timing.md`):**
@@ -199,7 +199,7 @@ forms at the end of the day; the app keeps its generic nature").
   - Shown as: two **Today** cards, two **Bookings** tabs ("Started late", "Too quick") with the usual filters, **Dashboard** counts and % (vs the previous period, and per expert), a badge on the **job page**, and **Needs you** (jobs from the last 7 days) until someone clicks **Mark reviewed**. The two are separate problems: each has its own tab, card, Needs-you group and Mark reviewed (who and when go in the timeline); reviewing one leaves the other open.
 
 ## 10. Stack & ops
-- **Backend:** Django + DRF, Postgres, Celery + Redis (PDF rendering with headless Chromium, webhooks, ZIPs, media processing, push).
+- **Backend:** Django + DRF, Postgres, Celery + Redis (PDF rendering with WeasyPrint, webhooks, ZIPs, media processing, push).
 - **Web:** React. **Android:** Kotlin/Compose. Push via Firebase Cloud Messaging.
 - **Hosting:** one **DigitalOcean Bangalore** VPS (**4 vCPU / 8 GB**) running Docker, with **Cloudflare R2** for media, PDFs and ZIPs.
 - **Domains:** `app.carcid.in` (web + API at `/api/v1`), `verify.carcid.in` (QR page), `staging.carcid.in`.

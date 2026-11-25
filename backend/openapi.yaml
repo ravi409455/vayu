@@ -10950,16 +10950,39 @@ components:
           type: integer
         username:
           type: string
+        name:
+          type: string
+        email:
+          type: string
         role:
           type: string
+        phone:
+          type: string
+        must_change_password:
+          type: boolean
+        avatar_url:
+          type: string
+          nullable: true
+        theme:
+          type: string
+        notify_prefs:
+          type: object
+          additionalProperties: {}
         permissions:
           type: object
           additionalProperties:
             type: string
       required:
+      - avatar_url
+      - email
       - id
+      - must_change_password
+      - name
+      - notify_prefs
       - permissions
+      - phone
       - role
+      - theme
       - username
     Notifications:
       type: object

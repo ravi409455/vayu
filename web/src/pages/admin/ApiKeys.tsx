@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
-import type { ApiKeyRow, FormSummary } from "../../api/types";
+import type { ApiKeyRow, FormSummary, KeyAction } from "../../api/types";
 import { Confirm, Empty, Field, LoadError, Modal, PageHeader, Pill, useToast, when } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
 import { keys } from "../../api/keys";
@@ -18,13 +18,22 @@ export function parseFields(s: string): string[] {
     .filter((x) => x && x !== "*");
 }
 
+export const KEY_ACTIONS: { key: KeyAction; label: string }[] = [
+  { key: "assign", label: "Assign and reassign experts" },
+  { key: "cancel", label: "Cancel bookings" },
+  { key: "reschedule", label: "Reschedule bookings" },
+  { key: "change_type", label: "Change the inspection type" },
+];
+type Edit = { id?: string; name: string; allow_delete: boolean; allowed_actions: KeyAction[]; scope: Record<string, string> };
+const NEW_KEY: Edit = { name: "", allow_delete: false, allowed_actions: [], scope: {} };
+
 export function ApiKeys() {
   const { say, fail } = useToast();
   const refresh = useRefresh();
   const apiKeys = useList<ApiKeyRow>(keys.apiKeys(), "api-keys");
   const forms = useList<FormSummary>(keys.forms(), "forms");
   const eligible = (forms.data ?? []).filter((f) => f.type === "booking" || f.type === "custom");
-  const [edit, setEdit] = useState<{ id?: string; name: string; allow_delete: boolean; scope: Record<string, string> } | null>(null);
+  const [edit, setEdit] = useState<Edit | null>(null);
   const [shown, setShown] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<ApiKeyRow | null>(null);
   const save = useMutation({
@@ -34,7 +43,7 @@ export function ApiKeys() {
         const fields = parseFields(v);
         if (fields.length > 0) forms[k] = fields; // no fields listed = the form is left out
       }
-      const body = { name: e.name, allow_delete: e.allow_delete, scope: { forms } };
+      const body = { name: e.name, allow_delete: e.allow_delete, allowed_actions: e.allowed_actions, scope: { forms } };
       return e.id ? api<ApiKeyRow>(`api-keys/${e.id}`, { method: "PATCH", body }) : api<ApiKeyRow>("api-keys", { body });
     },
     onSuccess: (r) => {
@@ -66,7 +75,7 @@ export function ApiKeys() {
           </>
         }
       >
-        <button className="primary" onClick={() => setEdit({ name: "", allow_delete: false, scope: {} })}>
+        <button className="primary" onClick={() => setEdit(NEW_KEY)}>
           New key
         </button>
       </PageHeader>
@@ -75,7 +84,7 @@ export function ApiKeys() {
         <Empty
           title="No API keys yet"
           action={
-            <button className="primary" onClick={() => setEdit({ name: "", allow_delete: false, scope: {} })}>
+            <button className="primary" onClick={() => setEdit(NEW_KEY)}>
               New key
             </button>
           }
@@ -99,7 +108,10 @@ export function ApiKeys() {
             {(apiKeys.data ?? []).map((k) => (
               <tr key={k.id}>
                 <td>
-                  {k.name} {k.revoked_at && <Pill tone="bad">Revoked</Pill>} {k.allow_delete && <Pill tone="warn">Can delete</Pill>}
+                  {k.name} {k.revoked_at && <Pill tone="bad">Revoked</Pill>} {k.allow_delete && <Pill tone="warn">Can delete</Pill>}{" "}
+                  {(k.allowed_actions ?? []).map((a) => (
+                    <Pill key={a}>{KEY_ACTIONS.find((x) => x.key === a)?.label ?? a}</Pill>
+                  ))}
                 </td>
                 <td className="mono">vk_{k.prefix}_…</td>
                 <td className="small">
@@ -120,6 +132,7 @@ export function ApiKeys() {
                               id: k.id,
                               name: k.name,
                               allow_delete: k.allow_delete,
+                              allowed_actions: k.allowed_actions ?? [],
                               scope: Object.fromEntries(Object.entries(k.scope.forms).map(([f, v]) => [f, v.join(", ")])),
                             }),
                         },
@@ -183,6 +196,23 @@ export function ApiKeys() {
             <input type="checkbox" checked={edit.allow_delete} onChange={(e) => setEdit({ ...edit, allow_delete: e.target.checked })} />{" "}
             Allow deleting bookings (audited)
           </label>
+          <h3>Booking actions</h3>
+          <p className="muted small">Off unless turned on here. Give each key only what its system needs.</p>
+          {KEY_ACTIONS.map((a) => (
+            <label key={a.key} className="check">
+              <input
+                type="checkbox"
+                checked={edit.allowed_actions.includes(a.key)}
+                onChange={(e) =>
+                  setEdit({
+                    ...edit,
+                    allowed_actions: e.target.checked ? [...edit.allowed_actions, a.key] : edit.allowed_actions.filter((x) => x !== a.key),
+                  })
+                }
+              />{" "}
+              {a.label}
+            </label>
+          ))}
         </Modal>
       )}
       {shown && (

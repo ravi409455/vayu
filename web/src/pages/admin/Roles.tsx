@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useRefresh } from "../../api/hooks";
 import type { PermissionRow } from "../../api/types";
-import { useToast, PageHeader } from "../../ui/kit";
+import { useToast, LoadError, PageHeader } from "../../ui/kit";
 import { keys } from "../../api/keys";
 
 type Grants = Record<string, "all" | "own">;
@@ -55,63 +55,69 @@ export function Roles() {
     setDraft({ ...draft, [r]: copy });
   };
   const groups = [...new Set((perms.data ?? []).map((p) => p.group))];
+  // a failed load is never shown as an empty matrix: saving that would replace the role's whole set
+  const failed = perms.isError ? perms : roles.isError ? roles : null;
+  const loaded = !!perms.data && !!roles.data;
   return (
     <>
       <PageHeader
         title="Roles &amp; permissions"
         subtitle="What Ops and Experts may do. “Own” means only bookings assigned to that person; “All” means every booking. Admin always has everything."
       />
-      <div className="table-card">
-        <table className="rows perm-matrix">
-          <thead>
-            <tr>
-              <th>Permission</th>
-              <th>Ops</th>
-              <th>Expert</th>
-            </tr>
-          </thead>
-          {groups.map((g) => (
-            <tbody key={g}>
-              <tr className="group-row">
-                <th colSpan={3}>{g}</th>
+      {failed && <LoadError error={failed.error} what="permissions" onRetry={() => void Promise.all([perms.refetch(), roles.refetch()])} />}
+      {loaded && (
+        <div className="table-card">
+          <table className="rows perm-matrix">
+            <thead>
+              <tr>
+                <th>Permission</th>
+                <th>Ops</th>
+                <th>Expert</th>
               </tr>
-              {(perms.data ?? [])
-                .filter((p) => p.group === g)
-                .map((p) => (
-                  <tr key={p.key}>
-                    <td>{p.label}</td>
-                    {ROLES.map((r) => (
-                      <td key={r}>
-                        {r === "ops" && OPS_NOT_ON_WEB.has(p.key) && !draft.ops[p.key] ? (
-                          <span className="muted small">Not for Ops</span>
-                        ) : p.grantable ? (
-                          <div className="seg" role="radiogroup" aria-label={`${p.label} (${r === "ops" ? "Ops" : "Expert"})`}>
-                            {(["off", ...(p.scoped ? ["own"] : []), "all"] as ("off" | "own" | "all")[]).map((o) => {
-                              const v = draft[r][p.key] ?? "off";
-                              return (
-                                <button
-                                  key={o}
-                                  role="radio"
-                                  aria-checked={v === o}
-                                  onClick={() => set(r, p.key, o === "off" ? undefined : o)}
-                                >
-                                  {o[0]!.toUpperCase() + o.slice(1)}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <span className="muted small">Admin only</span>
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-            </tbody>
-          ))}
-        </table>
-      </div>
-      {dirty.length > 0 && (
+            </thead>
+            {groups.map((g) => (
+              <tbody key={g}>
+                <tr className="group-row">
+                  <th colSpan={3}>{g}</th>
+                </tr>
+                {(perms.data ?? [])
+                  .filter((p) => p.group === g)
+                  .map((p) => (
+                    <tr key={p.key}>
+                      <td>{p.label}</td>
+                      {ROLES.map((r) => (
+                        <td key={r}>
+                          {r === "ops" && OPS_NOT_ON_WEB.has(p.key) && !draft.ops[p.key] ? (
+                            <span className="muted small">Not for Ops</span>
+                          ) : p.grantable ? (
+                            <div className="seg" role="radiogroup" aria-label={`${p.label} (${r === "ops" ? "Ops" : "Expert"})`}>
+                              {(["off", ...(p.scoped ? ["own"] : []), "all"] as ("off" | "own" | "all")[]).map((o) => {
+                                const v = draft[r][p.key] ?? "off";
+                                return (
+                                  <button
+                                    key={o}
+                                    role="radio"
+                                    aria-checked={v === o}
+                                    onClick={() => set(r, p.key, o === "off" ? undefined : o)}
+                                  >
+                                    {o[0]!.toUpperCase() + o.slice(1)}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <span className="muted small">Admin only</span>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+              </tbody>
+            ))}
+          </table>
+        </div>
+      )}
+      {loaded && dirty.length > 0 && (
         <div className="save-bar" role="region" aria-label="Unsaved changes">
           <span className="grow">
             Unsaved changes for {dirty.map((r) => (r === "ops" ? "Ops" : "Expert")).join(" and ")}. They apply to everyone in that role.

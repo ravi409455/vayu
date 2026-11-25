@@ -25,6 +25,25 @@ function wipe(qc: QueryClient): void {
   uploads.reset(); // nothing keeps sending (or retrying) under the next person
 }
 
+const LAST_PERSON = "vayu:last-person";
+const SIGNED_OUT = "vayu:signed-out"; // written on Sign out: every other tab signs out too
+
+/** Wipe the unsent work in this browser when it belongs to someone else than [id]. */
+export async function forgetOthersWork(id: number): Promise<void> {
+  let last: string | null = null;
+  try {
+    last = localStorage.getItem(LAST_PERSON);
+  } catch {
+    /* storage off: nothing was kept either */
+  }
+  if (last !== null && last !== String(id)) await wipeWork();
+  try {
+    localStorage.setItem(LAST_PERSON, String(id));
+  } catch {
+    /* private window */
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const q = useQuery({
@@ -51,9 +70,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       },
     });
+    // Sign out in another tab: this one stops at once, so it never saves a draft again after the wipe
+    const other = (e: StorageEvent) => {
+      if (e.key !== SIGNED_OUT || !qc.getQueryData(["me"])) return;
+      wipe(qc);
+      qc.setQueryData(["me"], null);
+    };
+    window.addEventListener("storage", other);
+    return () => window.removeEventListener("storage", other);
   }, [qc]);
   const me = q.data ?? null;
   useEffect(() => setPerson(me?.id ?? null), [me?.id]);
+  // a session that ended by itself (idle time-out) skips Sign out: the next person to sign in on this
+  // browser must not find the last one's drafts and queued photos (the same person keeps theirs)
+  useEffect(() => {
+    if (me) void forgetOthersWork(me.id);
+  }, [me]);
   const scope = useCallback((p: string) => (me ? (me.permissions[p] ?? null) : null), [me]);
   const value = useMemo<Auth>(
     () => ({
@@ -65,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         wipe(qc);
         await api("auth/login", { body: { username, password, client: "web" } });
         const next = await api<Me>("auth/me");
+        await forgetOthersWork(next.id);
         qc.setQueryData(["me"], next);
         return next;
       },
@@ -75,6 +108,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // even if the call fails, this browser forgets the person and their work
           wipe(qc);
           await wipeWork();
+          try {
+            localStorage.setItem(SIGNED_OUT, String(Date.now()));
+          } catch {
+            /* storage off: other tabs find out at their next request */
+          }
           qc.setQueryData(["me"], null);
         }
       },

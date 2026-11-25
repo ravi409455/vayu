@@ -258,7 +258,7 @@ class Problems(APIView):
         # §9: Needs you only, no bell or push)
         qs = (Report.objects.exclude(error="") | Report.objects.filter(
             render_started_at__lt=killed) | Report.objects.filter(
-            stale=True, status="ready", booking__stage="completed"))
+            stale=True, status="ready", booking__stage="completed", booking__conflict=""))
         if scope_for(request.user, "reports.view", request) == "own":
             qs = qs.filter(booking__in=Booking.objects.filter(own_filter(request.user)))
 
@@ -268,10 +268,17 @@ class Problems(APIView):
             return "stuck" if r.render_started_at and r.render_started_at < killed \
                 else "out_of_date"
 
+        missing = tasks.missing_reports()
+        if scope_for(request.user, "reports.view", request) == "own":
+            missing = missing.filter(own_filter(request.user))
         return Response([{"booking": str(r.booking_id), "booking_id": r.booking.booking_id,
                           "status": r.status, "error": r.error, "problem": problem(r),
                           "out_of_date_since": r.stale_since if r.stale else None}
-                         for r in qs.select_related("booking").distinct()])
+                         for r in qs.select_related("booking").distinct()]
+                        # completed with no report at all: Ops open it and press Regenerate
+                        + [{"booking": str(b.id), "booking_id": b.booking_id, "status": "missing",
+                            "error": "", "problem": "missing", "out_of_date_since": None}
+                           for b in missing])
 
 
 class Verify(APIView):

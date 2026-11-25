@@ -19,7 +19,7 @@ describe("lists read every page (H-14)", () => {
         : page([{ id: 1 }, { id: 2 }], "http://x/api/v1/users?role=expert&page=2");
     });
     expect(await fetchAll<{ id: number }>("users", { role: "expert" })).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
-    expect(seen).toEqual(["/api/v1/users?role=expert", "/api/v1/users?role=expert&page=2"]);
+    expect(seen).toEqual(["/api/v1/users?role=expert&page_size=200", "/api/v1/users?role=expert&page_size=200&page=2"]);
   });
   it("a plain array is the whole list", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(

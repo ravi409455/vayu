@@ -3,8 +3,11 @@ uploads, delete files and purge old ones."""
 import hashlib
 import io
 import logging
+from datetime import timedelta
 
 from celery import shared_task
+from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
 from PIL import Image, ImageOps
 from pillow_heif import register_heif_opener
@@ -19,6 +22,15 @@ MAX_EDGE = 2048
 PREVIEW_EDGE = 480
 # the first box of an MP4 / MOV file (QuickTime files may begin with any of these)
 VIDEO_BOXES = {b"ftyp", b"moov", b"mdat", b"wide", b"free", b"skip"}
+WAITING = timedelta(minutes=15)       # an arrived file not checked by now lost its check
+
+
+def _killed_claim() -> Q:
+    """A check claimed longer ago than the task's hard time limit (or before claims were
+    stamped) belongs to a run that was killed."""
+    before = timezone.now() - timedelta(seconds=settings.CELERY_TASK_TIME_LIMIT + 60)
+    return Q(status="verifying") & (Q(verify_started_at__lt=before)
+                                    | Q(verify_started_at__isnull=True))
 
 
 def _shrink(image: Image.Image, edge: int) -> Image.Image:
@@ -40,8 +52,9 @@ def verify_asset(asset_id: str) -> str:
     the original is never rewritten (a picture too big or in HEIC gets a separate JPEG copy)."""
     from .services import check_completion, expected_media, report_out_of_date
 
-    claimed = MediaAsset.objects.filter(pk=asset_id, status="uploaded").update(
-        status="verifying")
+    claimed = MediaAsset.objects.filter(pk=asset_id).filter(
+        Q(status="uploaded") | _killed_claim()).update(status="verifying",
+                                                        verify_started_at=timezone.now())
     asset = MediaAsset.objects.filter(pk=asset_id).first()
     if asset is None:                     # its booking was deleted
         return "gone"
@@ -113,6 +126,20 @@ def _failed(asset: MediaAsset, reason: str) -> None:
     """Why a file failed, findable by booking in the logs (F-212)."""
     log.event("upload.failed", level=logging.WARNING, booking=str(asset.booking_id),
               media=str(asset.id), field=asset.field_key, reason=reason)
+
+
+@shared_task
+def recheck_uploads() -> int:
+    """Every 15 minutes: check again the files whose check was lost (the queue was down), stopped
+    by a storage error, or killed mid-way (a deploy). Running a check twice is safe (one claims)."""
+    lost = MediaAsset.objects.filter(
+        Q(status="uploaded", created_at__lt=timezone.now() - WAITING)
+        & (Q(verify_started_at__isnull=True) | Q(verify_started_at__lt=timezone.now() - WAITING))
+        | _killed_claim())
+    ids = [str(i) for i in lost.values_list("id", flat=True)]
+    for i in ids:
+        verify_asset.delay(i)
+    return len(ids)
 
 
 @shared_task

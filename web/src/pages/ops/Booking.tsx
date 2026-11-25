@@ -2,7 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { PanelLeftClose, PanelLeftOpen, Phone } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, ApiError, explain } from "../../api/client";
+import { answerErrors, api, ApiError, explain } from "../../api/client";
 import { fetchAll, useList, useRefresh } from "../../api/hooks";
 import { keys } from "../../api/keys";
 import { STAGE_LABEL, STAGE_TONE, useLabels, useTypeLabels } from "../../api/labels";
@@ -45,7 +45,7 @@ function NewBooking() {
     mutationFn: () => api<Booking>("bookings", { body: { answers: values } }),
     onSuccess: (b) => nav(`/booking/${b.id}`),
     onError: (e) => {
-      if (e instanceof ApiError && e.body.errors) setErrors(e.body.errors as Record<string, string>);
+      if (answerErrors(e)) setErrors(answerErrors(e)!);
       else if (e instanceof ApiError && e.code === "DUPLICATE_BOOKING_ID") setErrors({ booking_id: explain(e) });
       else fail(e);
     },
@@ -313,6 +313,7 @@ function Detail({ id }: { id: string }) {
                 ) : null}
               </dl>
             </section>
+            {activity.isError && <LoadError error={activity.error} what="activity" onRetry={activity.refetch} />}
             <ActivityCard
               rows={activity.data ?? []}
               experts={experts.data ?? []}
@@ -327,11 +328,17 @@ function Detail({ id }: { id: string }) {
         )}
         <div className="record-main">
           {current === "booking" && trees.booking && <BookingTab booking={booking} tree={trees.booking} onSaved={reload} />}
-          {current === "inspection" && (
-            <InspectionTab booking={booking} insp={insp} trees={pinned} activity={activity.data ?? []} onSaved={reload} />
+          {/* a failed load is never "No inspection yet" on a submitted booking */}
+          {current !== "booking" && current !== "report" && insps.isError && (
+            <LoadError error={insps.error} what="inspection" onRetry={insps.refetch} />
           )}
-          {current === "media" && <MediaTab booking={booking} insp={insp} trees={pinned} onChanged={reload} />}
-          {current === "review" && <ReviewTab booking={booking} insp={insp} trees={pinned} onSaved={reload} />}
+          {insps.isError
+            ? null
+            : current === "inspection" && (
+                <InspectionTab booking={booking} insp={insp} trees={pinned} activity={activity.data ?? []} onSaved={reload} />
+              )}
+          {!insps.isError && current === "media" && <MediaTab booking={booking} insp={insp} trees={pinned} onChanged={reload} />}
+          {!insps.isError && current === "review" && <ReviewTab booking={booking} insp={insp} trees={pinned} onSaved={reload} />}
           {current === "report" && <ReportTab booking={booking} activity={activity.data ?? []} />}
         </div>
       </div>

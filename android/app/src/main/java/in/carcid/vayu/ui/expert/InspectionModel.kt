@@ -50,14 +50,18 @@ class InspectionModel(
 
     companion object {
         /** Open the job's draft, creating it (pinning today's forms) on first Start. */
-        fun begin(drafts: DraftStore, job: Job, verified: Boolean): Draft = drafts.get(job.id) ?: drafts.save(Draft(
+        fun begin(drafts: DraftStore, job: Job, verified: Boolean, bookingAnswers: Map<String, Any?> = emptyMap()): Draft =
+            drafts.also { it.setAsideDamaged(job.id) }.get(job.id)
+                ?.let { d -> if (bookingAnswers.isEmpty() || d.bookingAnswers == bookingAnswers) d
+                    else drafts.update(job.id) { it.copy(bookingAnswers = bookingAnswers) }!! }
+                ?: drafts.save(Draft(
             bookingId = job.id, code = job.bookingId, customer = job.customer, versions = job.versions,
-            inspectionType = job.typeKey, unverifiedTime = !verified,
+            inspectionType = job.typeKey, unverifiedTime = !verified, bookingAnswers = bookingAnswers,
             // started before (another phone, cleared storage): pick up the files the server holds
             reconcile = job.stage != "assigned"))
     }
 
-    fun filled(d: Draft = draft): Filled? = jobs.filled(bookingId, d.versions, d.answers, now().atZone(ZoneId.systemDefault()).toLocalDate().toString())
+    fun filled(d: Draft = draft): Filled? = jobs.filled(bookingId, d.versions, d.answers, now().atZone(ZoneId.systemDefault()).toLocalDate().toString(), d.bookingAnswers)
 
     fun steps(f: Filled): List<Step> = PARTS.flatMap { part ->
         f.visiblePages(part).map { Step("${part[0]}${it.id}", it.title, part, it) }
