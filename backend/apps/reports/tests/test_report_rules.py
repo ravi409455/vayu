@@ -315,7 +315,7 @@ def test_not_able_to_check_counts_the_key_the_real_forms_use(renv, settings):
 
 
 def test_the_frozen_forms_name_not_able_to_check_with_keys_the_report_reads():
-    frozen = Path(__file__).resolve().parents[2] / "core" / "setup" / "frozen"
+    frozen = Path(__file__).resolve().parents[2] / "platform" / "setup" / "frozen"
     found = 0
     for name in ("pdi", "used_car", "ev"):
         text = (frozen / f"{name}.json").read_text()

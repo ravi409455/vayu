@@ -14,19 +14,19 @@ pytestmark = pytest.mark.django_db
 @pytest.fixture(autouse=True)
 def _up():
     with mock.patch("apps.media.storage.client"), \
-            mock.patch("apps.core.views.workers_alive", return_value=True):
+            mock.patch("apps.platform.views.workers_alive", return_value=True):
         yield
 
 
 def test_a_healthy_probe_logs_nothing_and_a_failed_one_warns(client, caplog):
-    with caplog.at_level(logging.INFO, logger="apps.core.views"):
+    with caplog.at_level(logging.INFO, logger="apps.platform.views"):
         client.get("/api/v1/health")
-    assert not [r for r in caplog.records if r.name == "apps.core.views"]
-    with caplog.at_level(logging.INFO, logger="apps.core.views"), \
-            mock.patch("apps.core.views.redis_client") as rc:
+    assert not [r for r in caplog.records if r.name == "apps.platform.views"]
+    with caplog.at_level(logging.INFO, logger="apps.platform.views"), \
+            mock.patch("apps.platform.views.redis_client") as rc:
         rc.return_value.ping.side_effect = ConnectionError("down")
         client.get("/api/v1/health")
-    [rec] = [r for r in caplog.records if r.name == "apps.core.views"]
+    [rec] = [r for r in caplog.records if r.name == "apps.platform.views"]
     assert rec.levelno == logging.WARNING and rec.redis == "down"
 
 

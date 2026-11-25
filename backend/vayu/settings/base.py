@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "apps.reports",
     "apps.integrations",
     "apps.notify",
+    "apps.platform",          # setup, demo and test data: on top of every other app (F-003)
     "drf_spectacular",
 ]
 

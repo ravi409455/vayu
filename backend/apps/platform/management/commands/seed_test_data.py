@@ -1,7 +1,7 @@
 """Wipes a TEST server and fills it for outside testers: the real setup (setup_platform), three
 tester logins (admin, ops, expert) with the password you give, a small team, and bookings for
 the last 3 days and today covering every flow, and the short Field tour form (every field
-type once) with one job for the tester expert. See apps/core/setup/testdata.py.
+type once) with one job for the tester expert. See apps/platform/setup/testdata.py.
 
     VAYU_SERVER_KIND=test VAYU_SERVER_NAME=<name> python manage.py seed_test_data \\
         --confirm <name> --password '<tester password>'
@@ -12,7 +12,7 @@ from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from apps.core.setup import testdata
+from apps.platform.setup import testdata
 
 
 class Command(BaseCommand):

@@ -1,6 +1,6 @@
 """The PDI report layout (the Car C.I.D. sample report, AV66022PDI.pdf): pages, tables and photo
 grids over the PDI form's sections. Production setup builds every inspection's report from it
-(apps/core/setup/reports.py); the demo seed uses it too. Moved out of the demo module (F-004) so
+(apps/platform/setup/reports.py); the demo seed uses it too. Moved out of the demo module (F-004) so
 production code never imports demo code."""
 
 CNG = {"==": [{"var": "inspection.fuel"}, "cng"]}

@@ -10,7 +10,7 @@ keep theirs); it stops if the Admin has a draft open.
 
     python manage.py setup_platform --users staff.csv
 
-staff.csv (see apps/core/setup/users.example.csv): username,name,role,phone,password
+staff.csv (see apps/platform/setup/users.example.csv): username,name,role,phone,password
 (role: admin | ops | expert; an empty password gets a random one, printed once, to be changed at
 first sign-in)."""
 import csv
@@ -22,7 +22,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.accounts.models import Role, User
-from apps.core.setup import build, forms, lists, reports
+from apps.platform.setup import build, forms, lists, reports
 
 ROLES = {r.value for r in Role}
 
@@ -74,7 +74,7 @@ class Command(BaseCommand):
             raise CommandError("--force replaces the setup's forms and templates: type this "
                                "server's name back with --confirm. Nothing was changed.")
         rows = read_users(users) if users else []
-        from apps.core.setup.testdata import remember_kind
+        from apps.platform.setup.testdata import remember_kind
 
         with transaction.atomic():
             remember_kind()                  # the database says what server it is (F-213)

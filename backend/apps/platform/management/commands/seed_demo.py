@@ -137,8 +137,8 @@ class Command(BaseCommand):
         _publish(form)
 
     def _inspection_forms(self, admin):
-        from apps.core import demo_forms as d
-        from apps.core import demo_pdi
+        from apps.platform import demo_forms as d
+        from apps.platform import demo_pdi
         from apps.reports import service as reports
 
         d.library_items(admin)
@@ -279,7 +279,7 @@ class Command(BaseCommand):
 
     def _pdi_answers(self, booking, expert, chassis, odometer, **overrides):
         """Every check answered like the sample report, with a picture for every photo needed."""
-        from apps.core.demo_pdi import sample_answers
+        from apps.platform.demo_pdi import sample_answers
 
         version = Form.objects.get(key="pdi").versions.get(status="published")
         answers, photos = sample_answers(version, chassis, odometer=odometer, **overrides)

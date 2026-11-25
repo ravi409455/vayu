@@ -1,5 +1,5 @@
-"""One time (local only): converts the Clappia read-out (apps/core/setup/data) into our six form
-files (apps/core/setup/frozen/*.json), with the agreed clean-ups and photo rules. After that the
+"""One time (local only): converts the Clappia read-out (apps/platform/setup/data) into our six form
+files (apps/platform/setup/frozen/*.json), with the agreed clean-ups and photo rules. After that the
 files are ours: edit them (or the forms in the builder), never re-run this over hand edits
 without reviewing the diff."""
 import json
@@ -7,7 +7,7 @@ import json
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.core.setup import convert, forms
+from apps.platform.setup import convert, forms
 
 
 class Command(BaseCommand):

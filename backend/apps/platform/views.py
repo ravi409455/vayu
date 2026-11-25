@@ -1,3 +1,5 @@
+"""Health (database, Redis, storage, workers) and the Settings page's API: they need media and
+accounts, so they live above core (F-003)."""
 import json
 import logging
 
@@ -11,8 +13,30 @@ from rest_framework.views import APIView
 
 from apps.accounts import audit
 from apps.accounts.permissions import perm
+from apps.core import app_settings
 
-from . import app_settings
+
+class SettingView(APIView):
+    """GET / PUT one settings group ("timing", "media"). Ops may read, only Admin may change."""
+
+    permission_classes = [perm("settings.view", "settings.edit")]
+    declared_permissions = ("settings.view", "settings.edit")
+
+    def get(self, request, key):
+        return Response(app_settings.get(self._key(key)))
+
+    def put(self, request, key):
+        old, new = app_settings.put(self._key(key), request.data)
+        audit.record(request.user, f"settings.{key}", "setting", key,
+                     f"Changed {key} settings: {json.dumps(old)} -> {json.dumps(new)}")
+        return Response(new)
+
+    @staticmethod
+    def _key(key: str) -> str:
+        if key not in app_settings.DEFAULTS:
+            raise NotFound()
+        return key
+
 
 logger = logging.getLogger(__name__)
 
@@ -63,25 +87,3 @@ class HealthView(APIView):
             logger.warning("health check failed", extra={"healthy": healthy, **status})
         return Response({"status": "ok" if healthy else "degraded"},
                         status=200 if healthy else 503)
-
-
-class SettingView(APIView):
-    """GET / PUT one settings group ("timing", "media"). Ops may read, only Admin may change."""
-
-    permission_classes = [perm("settings.view", "settings.edit")]
-    declared_permissions = ("settings.view", "settings.edit")
-
-    def get(self, request, key):
-        return Response(app_settings.get(self._key(key)))
-
-    def put(self, request, key):
-        old, new = app_settings.put(self._key(key), request.data)
-        audit.record(request.user, f"settings.{key}", "setting", key,
-                     f"Changed {key} settings: {json.dumps(old)} -> {json.dumps(new)}")
-        return Response(new)
-
-    @staticmethod
-    def _key(key: str) -> str:
-        if key not in app_settings.DEFAULTS:
-            raise NotFound()
-        return key

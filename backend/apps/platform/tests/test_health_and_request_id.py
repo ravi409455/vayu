@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 from django.db import OperationalError
 
-from apps.core.views import workers_alive as REAL_WORKERS_ALIVE
+from apps.platform.views import workers_alive as REAL_WORKERS_ALIVE
 
 pytestmark = pytest.mark.django_db
 
@@ -13,7 +13,7 @@ pytestmark = pytest.mark.django_db
 def _up():
     """The file store and a worker answer, unless a test says otherwise."""
     with mock.patch("apps.media.storage.client"), \
-            mock.patch("apps.core.views.workers_alive", return_value=True):
+            mock.patch("apps.platform.views.workers_alive", return_value=True):
         yield
 
 
@@ -24,7 +24,7 @@ def test_health_ok(client):
 
 
 def test_health_503_when_db_down(client):
-    with mock.patch("apps.core.views.connection") as conn:
+    with mock.patch("apps.platform.views.connection") as conn:
         conn.cursor.side_effect = OperationalError("down")
         r = client.get("/api/v1/health")
     assert r.status_code == 503
@@ -32,7 +32,7 @@ def test_health_503_when_db_down(client):
 
 
 def test_health_503_when_redis_down(client):
-    with mock.patch("apps.core.views.redis_client") as rc:
+    with mock.patch("apps.platform.views.redis_client") as rc:
         rc.return_value.ping.side_effect = ConnectionError("down")
         r = client.get("/api/v1/health")
     assert r.status_code == 503
@@ -50,8 +50,8 @@ def test_request_id_from_client_is_kept(client):
 
 
 def test_request_id_in_log_records(client, caplog):
-    with caplog.at_level(logging.INFO, logger="apps.core.views"), \
-            mock.patch("apps.core.views.redis_client") as rc:      # only a failed probe logs
+    with caplog.at_level(logging.INFO, logger="apps.platform.views"), \
+            mock.patch("apps.platform.views.redis_client") as rc:      # only a failed probe logs
         rc.return_value.ping.side_effect = ConnectionError("down")
         client.get("/api/v1/health", headers={"X-Request-ID": "rid-9"})
     assert any(getattr(rec, "request_id", None) == "rid-9" for rec in caplog.records)
@@ -67,7 +67,7 @@ def test_health_503_when_the_file_store_or_the_workers_are_down(client):
     with mock.patch("apps.media.storage.client") as c:
         c.return_value.head_bucket.side_effect = OSError("R2 down")
         assert client.get("/api/v1/health").status_code == 503
-    with mock.patch("apps.core.views.workers_alive", return_value=False):
+    with mock.patch("apps.platform.views.workers_alive", return_value=False):
         assert client.get("/api/v1/health").status_code == 503
 
 
