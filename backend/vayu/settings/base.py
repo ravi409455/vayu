@@ -109,7 +109,6 @@ S3_REGION = env("S3_REGION", "auto")
 MEDIA_PART_SIZE = 8 * 1024 * 1024
 MEDIA_URL_TTL = 3600           # pre-signed URL lifetime, seconds
 ZIP_LINK_DAYS = 7
-PDF_RETRY_DELAY = 15           # seconds between render attempts
 VERIFY_BASE_URL = env("VERIFY_BASE_URL", "https://verify.carcid.in")
 # one queue per kind of work (F-084): a pile of ZIPs never holds up upload checks or webhooks
 CELERY_TASK_ROUTES = {

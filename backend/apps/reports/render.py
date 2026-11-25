@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import qrcode
+from botocore.exceptions import ClientError
 from markupsafe import Markup
 
 from apps.forms.models import FormAsset
@@ -63,8 +64,10 @@ def print_image(media_id: str, edge: int = PRINT_EDGE) -> str | None:
     if edge <= 480 and asset.preview_key:
         return _jpeg_uri(storage.read(asset.preview_key))
     key = f"print/{asset.id}-{edge}.jpg"
-    if storage.exists(key):
+    try:                       # the copy made by an earlier render: one call, not two (F-093)
         return _jpeg_uri(storage.read(key))
+    except ClientError:
+        pass
     try:
         image = ImageOps.exif_transpose(Image.open(io.BytesIO(storage.read(
             asset.jpeg_key or asset.key))))
