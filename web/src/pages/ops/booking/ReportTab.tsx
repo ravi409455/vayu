@@ -48,26 +48,73 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
   return (
     <>
       <div className="bar">
-        {r && <><Pill tone={r.updating ? "warn" : r.status === "ready" ? "ok" : r.status === "failed" ? "bad" : "warn"}>{r.updating ? "Updating…" : r.status === "ready" ? "Ready" : r.status}</Pill>
-          {r.out_of_date && !r.updating && <Pill tone="warn">Out of date</Pill>}
-          <span className="muted small">Revision {r.revision} · {fmtStamp(r.generated_at)}</span></>}
+        {r && (
+          <>
+            <Pill tone={r.updating ? "warn" : r.status === "ready" ? "ok" : r.status === "failed" ? "bad" : "warn"}>
+              {r.updating ? "Updating…" : r.status === "ready" ? "Ready" : r.status}
+            </Pill>
+            {r.out_of_date && !r.updating && <Pill tone="warn">Out of date</Pill>}
+            <span className="muted small">
+              Revision {r.revision} · {fmtStamp(r.generated_at)}
+            </span>
+          </>
+        )}
         <span className="grow" />
-        {r && can("submissions.edit") && <button disabled={regen.isPending || !!why || r.updating} title={why || undefined} onClick={() => { if (!regen.isPending) regen.mutate(); }}>
-          <RefreshCw size={15} aria-hidden /> {regen.isPending || r.updating ? "Making…" : "Regenerate"}</button>}
+        {r && can("submissions.edit") && (
+          <button
+            disabled={regen.isPending || !!why || r.updating}
+            title={why || undefined}
+            onClick={() => {
+              if (!regen.isPending) regen.mutate();
+            }}
+          >
+            <RefreshCw size={15} aria-hidden /> {regen.isPending || r.updating ? "Making…" : "Regenerate"}
+          </button>
+        )}
         {r?.verify_url && r.status === "ready" && <button onClick={() => void copyCheckLink()}>Copy check link</button>}
-        {r?.url && <a className="btn primary" href={r.url} download={r.filename} onClick={() => setTimeout(() => void refresh(keys.bookingPart(booking.id, "activity")), 1500)}><Download size={15} aria-hidden /> Download PDF</a>}
+        {r?.url && (
+          <a
+            className="btn primary"
+            href={r.url}
+            download={r.filename}
+            onClick={() => setTimeout(() => void refresh(keys.bookingPart(booking.id, "activity")), 1500)}
+          >
+            <Download size={15} aria-hidden /> Download PDF
+          </a>
+        )}
       </div>
       {r?.updating && <p className="muted small">The new PDF is being made. This page shows it by itself.</p>}
-      {r?.out_of_date && !r.updating && <div className="banner warn">Out of date: changes since this PDF. Press Regenerate when you are done to make a new one.</div>}
+      {r?.out_of_date && !r.updating && (
+        <div className="banner warn">Out of date: changes since this PDF. Press Regenerate when you are done to make a new one.</div>
+      )}
       {r && why && can("submissions.edit") && <p className="muted small">Regenerate is off: {why}</p>}
       {r?.error && !r.updating && <div className="banner bad">Problem: {r.error}. It is tried again by itself.</div>}
       {!r && <Empty title="No report yet">It is made automatically when the booking is Completed.</Empty>}
       {r?.preview_url && <PdfPreview url={r.preview_url} />}
-      {r && <section className="card" aria-label="Downloads and shares" style={{ marginTop: 14 }}>
-        <h3 style={{ marginTop: 0 }}>Downloads and shares</h3>
-        {passedOn.length === 0 ? <p className="muted small">Nobody has downloaded or shared it yet.</p> : (
-          <ul className="plain-list">{passedOn.map((a, i) => <li key={i}><strong>{a.by?.name ?? "Someone"}</strong> {a.kind === "report_downloaded" ? "downloaded the PDF" : (a.changes as Record<string, unknown>).how === "pdf" ? "shared the PDF" : "copied the check link"} <span className="muted small">· revision {String((a.changes as Record<string, unknown>).revision ?? "")} · {fmtStamp(a.at)}</span></li>)}</ul>)}
-      </section>}
+      {r && (
+        <section className="card" aria-label="Downloads and shares" style={{ marginTop: 14 }}>
+          <h3 style={{ marginTop: 0 }}>Downloads and shares</h3>
+          {passedOn.length === 0 ? (
+            <p className="muted small">Nobody has downloaded or shared it yet.</p>
+          ) : (
+            <ul className="plain-list">
+              {passedOn.map((a, i) => (
+                <li key={i}>
+                  <strong>{a.by?.name ?? "Someone"}</strong>{" "}
+                  {a.kind === "report_downloaded"
+                    ? "downloaded the PDF"
+                    : (a.changes as Record<string, unknown>).how === "pdf"
+                      ? "shared the PDF"
+                      : "copied the check link"}{" "}
+                  <span className="muted small">
+                    · revision {String((a.changes as Record<string, unknown>).revision ?? "")} · {fmtStamp(a.at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </>
   );
 }

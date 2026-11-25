@@ -14,7 +14,24 @@ import { keys } from "../../../api/keys";
 
 /** `bodyText` is what is in the JSON editor; `body` is the last text that parsed. */
 type Draft = Omit<Integration, "id" | "form_key" | "broken_refs"> & { id?: string; bodyText: string };
-const blank = (form: number, event: string): Draft => ({ form, name: "", event, method: "POST", url: "", query: [], headers: [], body_mode: "standard", body: {}, bodyText: "", include_data: true, include_pdf: event === "pdf.ready", include_image_zip: false, include_video_zip: false, fields: [], is_active: true });
+const blank = (form: number, event: string): Draft => ({
+  form,
+  name: "",
+  event,
+  method: "POST",
+  url: "",
+  query: [],
+  headers: [],
+  body_mode: "standard",
+  body: {},
+  bodyText: "",
+  include_data: true,
+  include_pdf: event === "pdf.ready",
+  include_image_zip: false,
+  include_video_zip: false,
+  fields: [],
+  is_active: true,
+});
 
 /** What goes to the server (and to the preview): half-built rows are left out. */
 export const configOf = (d: Draft) => ({

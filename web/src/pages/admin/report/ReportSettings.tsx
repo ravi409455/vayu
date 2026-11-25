@@ -23,7 +23,9 @@ export function ReportSettings({ def: own, onChange, onClose, readOnly, themes, 
   const theme = def.theme ?? {};
   return (
     <Modal title={title} wide onClose={onClose} actions={<button className="primary" onClick={onClose}>Done</button>}>
-      <Tabs value={tab} onChange={setTab} tabs={([{ id: "theme", label: "Theme" }, { id: "bands", label: "Header and footer" }, { id: "look", label: "Colours and fonts" }, { id: "images", label: "Watermark" }, { id: "pictures", label: "Pictures" }, { id: "paper", label: "Paper" }, { id: "file", label: "File name" }] as { id: Tab; label: string }[]).filter((x) => !only || only.includes(x.id))} />
+      <Tabs value={tab} onChange={setTab} tabs={([{ id: "theme", label: "Theme" }, { id: "bands", label: "Header and footer" }, { id: "look", label: "Colours and fonts" },
+        { id: "images", label: "Watermark" }, { id: "pictures", label: "Pictures" }, { id: "paper", label: "Paper" }, { id: "file", label: "File name" }] as { id: Tab; label: string }[])
+        .filter((x) => !only || only.includes(x.id))} />
       {themed && <p className="rd-note">These come from the shared theme “{linked?.name ?? ref!.key}”. To change them, stop sharing it in the Theme tab, or change the theme and save a new version of it.</p>}
       {tab === "theme" && <ThemeTab def={own} onChange={onChange} themes={themes} readOnly={readOnly} content={content.data} />}
       {tab === "pictures" && <PictureLibrary readOnly={readOnly} />}

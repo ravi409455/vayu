@@ -128,7 +128,10 @@ function Detail({ id }: { id: string }) {
           <span className="grow">{f.words}.{" "}
             {f.reviewedAt ? <span className="muted small">Reviewed by {f.reviewedBy} · {fmtStamp(f.reviewedAt)}</span>
               : <span className="muted small">{f.flag === "late" ? `Limit: start within ${booking.timing?.grace_minutes} min of the booked time.` : `Limit: take at least ${booking.timing?.min_minutes} min.`}</span>}</span>
-          {!f.reviewedAt && can("bookings.review_timing") && <button className="sm" disabled={reviewing === f.flag} onClick={async () => { setReviewing(f.flag); try { await api(`bookings/${booking.id}/timing-review`, { body: { flag: f.flag } }); say("Marked reviewed."); void reload(); } catch (e) { fail(e); } finally { setReviewing(""); } }}>Mark reviewed</button>}
+          {!f.reviewedAt && can("bookings.review_timing") && <button className="sm" disabled={reviewing === f.flag} onClick={async () => {
+            setReviewing(f.flag);
+            try { await api(`bookings/${booking.id}/timing-review`, { body: { flag: f.flag } }); say("Marked reviewed."); void reload();
+            } catch (e) { fail(e); } finally { setReviewing(""); } }}>Mark reviewed</button>}
         </div>))}
       {booking.conflict && <ConflictBanner booking={booking} insps={insps.data ?? []} experts={experts.data ?? []} onResolved={reload} />}
       {booking.stage === "submitted" && can("media.manage") && <WaitingFiles booking={booking} onFinished={reload} onMedia={() => setTab("media")} />}
@@ -153,7 +156,10 @@ function Detail({ id }: { id: string }) {
               {insp?.answers.inspection?.odometer !== undefined && insp?.answers.inspection?.odometer !== null ? <><dt>Odometer</dt><dd>{Number(insp.answers.inspection.odometer).toLocaleString("en-IN")} km</dd></> : null}
             </dl>
           </section>
-          <ActivityCard rows={activity.data ?? []} experts={experts.data ?? []} labels={(k) => { const [p, f] = k.split("."); if (p === "check") return pinned.inspection?.key_checks?.find((x) => x.key === f)?.label ?? f!; return f ? labelOf(pinned[p as Part], f) : labelOf(trees.booking, k); }} typeLabel={typeLabel} />
+          <ActivityCard rows={activity.data ?? []} experts={experts.data ?? []} labels={(k) => {
+            const [p, f] = k.split(".");
+            if (p === "check") return pinned.inspection?.key_checks?.find((x) => x.key === f)?.label ?? f!;
+            return f ? labelOf(pinned[p as Part], f) : labelOf(trees.booking, k); }} typeLabel={typeLabel} />
         </aside>}
         <div className="record-main">
           {current === "booking" && trees.booking && <BookingTab booking={booking} tree={trees.booking} onSaved={reload} />}

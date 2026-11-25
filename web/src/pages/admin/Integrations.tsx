@@ -87,7 +87,9 @@ function DeliveryLog({ integration, onClose }: { integration: Integration; onClo
           <tbody>{q.data.results.map((d) => (
             <tr key={d.id}><td className="nowrap">{when(d.created_at)}</td><td>{eventWord(d.event)}</td><td>{d.booking_id || "—"}</td>
               <td><Pill tone={tone(d.status)}>{STATUS_WORD[d.status] ?? d.status}</Pill>
-                <div className="cell-sub">{[d.response_status && !/^http_/.test(d.error) ? `HTTP ${d.response_status}` : "", d.error ? errorWord(d.error) : "", d.attempts > 1 ? `${d.attempts} tries` : "", d.status === "retrying" && d.next_retry_at ? `next try ${when(d.next_retry_at)}` : ""].filter(Boolean).join(" · ")}</div></td>
+                <div className="cell-sub">{[d.response_status && !/^http_/.test(d.error) ? `HTTP ${d.response_status}` : "", d.error ? errorWord(d.error) : "",
+                  d.attempts > 1 ? `${d.attempts} tries` : "", d.status === "retrying" && d.next_retry_at ? `next try ${when(d.next_retry_at)}` : ""].filter(Boolean).join(" · ")}</div>
+                  </td>
               <td style={{ textAlign: "right" }}><button className="sm" onClick={() => resend.mutate(d)}>Re-send</button></td></tr>))}</tbody></table></div>)}
       {q.data && q.data.results.length === 0 && <Empty>{status ? "No deliveries with this result." : "No deliveries yet. Use Test to send one."}</Empty>}
     </Modal>

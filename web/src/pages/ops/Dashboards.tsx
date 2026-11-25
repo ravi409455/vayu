@@ -235,7 +235,9 @@ export function Dashboards() {
         {rows.length === 0 ? <Empty title="No bookings in this range" /> : asTable ? (
           <div className="dash-table-wrap">
             <table className="rows dash-table" aria-label="Bookings volume"><thead><tr><th>{group === "day" ? "Day" : group === "week" ? "Week" : "Month"}</th>{series.map((k) => <th key={k} className="num">{name(k)}</th>)}<th className="num">Total</th></tr></thead>
-              <tbody>{[...periods].reverse().filter((p) => series.some((k) => cell(p, k) > 0)).map((p) => <tr key={p}><td>{periodLabel(p)}</td>{series.map((k) => <td key={k} className="num">{cell(p, k) || <Dash />}</td>)}<td className="num"><strong>{series.reduce((n, k) => n + cell(p, k), 0)}</strong></td></tr>)}</tbody></table>
+              <tbody>{[...periods].reverse().filter((p) => series.some((k) => cell(p, k) > 0)).map((p) => <tr key={p}>
+                <td>{periodLabel(p)}</td>{series.map((k) => <td key={k} className="num">{cell(p, k) || <Dash />}</td>)}<td className="num">
+                <strong>{series.reduce((n, k) => n + cell(p, k), 0)}</strong></td></tr>)}</tbody></table>
           </div>
         ) : (
           <StackedBars series={series.map((k) => ({ key: k, name: name(k) }))}

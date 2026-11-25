@@ -245,7 +245,10 @@ function MediaField({ f, value, readOnly, onChange, p }: { f: FormField; value: 
               {u && u.status !== "done" && <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(u.progress * 100)} aria-label={`Upload ${u.status}`}><div style={{ width: `${Math.round(u.progress * 100)}%` }} /></div>}
               {u?.status === "failed" && <span className="error small">{u.permanent ? `Not accepted: ${u.error}. Remove it and try another.` : isLocalId(u.assetId) ? "No connection: kept on this device, sent when you are back online" : "Not sent yet: will retry"}</span>}
               {u?.deviceOnly && u.status !== "done" && <span className="error small">This browser could not store it: kept only while this tab is open</span>}
-              {!readOnly && <button type="button" className="link" aria-label="Remove" onClick={() => { const rest = ids.filter((x) => x !== id); onChange(single ? null : rest); p.onMediaRemove?.(f, id); if (!p.preview && p.bookingId && !id.startsWith("preview-")) void discardFile(id); }}>Remove</button>}
+              {!readOnly && <button type="button" className="link" aria-label="Remove" onClick={() => {
+                const rest = ids.filter((x) => x !== id);
+                onChange(single ? null : rest); p.onMediaRemove?.(f, id);
+                if (!p.preview && p.bookingId && !id.startsWith("preview-")) void discardFile(id); }}>Remove</button>}
             </div>
           );
         })}

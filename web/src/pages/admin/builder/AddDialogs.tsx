@@ -23,7 +23,9 @@ export function AddFieldDialog({ sectionTitle, onClose, onAdd, onLibrary }: {
   const match = (s: string) => s.toLowerCase().includes(q.trim().toLowerCase());
   return (
     <Modal title={`Add a field to “${sectionTitle}”`} onClose={onClose}
-      actions={type ? <><button onClick={() => setType(null)}>Back</button><button className="primary" disabled={!label || !key || (type === "image" && !file)} onClick={() => onAdd({ key, label, type, config: defaultConfig(type), ...(file ? { __file: file } : {}) })}>Add field</button></> : <button onClick={onClose}>Cancel</button>}>
+      actions={type ? <><button onClick={() => setType(null)}>Back</button>
+        <button className="primary" disabled={!label || !key || (type === "image" && !file)} onClick={() => onAdd({ key, label, type, config: defaultConfig(type), ...(file ? { __file: file } : {}) })}>Add field</button>
+        </> : <button onClick={onClose}>Cancel</button>}>
       {!type && (
         <>
           <Tabs value={tab} onChange={setTab} tabs={[{ id: "new", label: "New question" }, { id: "library", label: "From the library" }]} />

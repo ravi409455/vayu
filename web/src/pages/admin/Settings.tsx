@@ -86,11 +86,25 @@ function MediaRetention({ edit }: { edit: boolean }) {
   const bad = (n: number) => n !== 0 && (n < 30 || n > 3650);
   return (
     <section className="card stack" aria-label="Photo and video storage">
-      <div className="bar"><h2 className="sub grow">Photo and video storage</h2>
-        {edit && <button className="primary" disabled={save.isPending || bad(v.photo_days) || bad(v.video_days) || JSON.stringify(v) === JSON.stringify(q.data)} onClick={() => save.mutate()}>Save</button>}</div>
+      <div className="bar">
+        <h2 className="sub grow">Photo and video storage</h2>
+        {edit && (
+          <button
+            className="primary"
+            disabled={save.isPending || bad(v.photo_days) || bad(v.video_days) || JSON.stringify(v) === JSON.stringify(q.data)}
+            onClick={() => save.mutate()}
+          >
+            Save
+          </button>
+        )}
+      </div>
       {row("photo_days", "Keep photos for (days)")}
       {row("video_days", "Keep videos for (days)")}
-      <p className="muted small">After that, the original photos and videos of completed bookings are deleted from the server for good. Reports already made keep their pictures, but the report's Download photos and Download videos buttons then tell the customer the files are no longer available. Bookings not yet completed are never touched.</p>
+      <p className="muted small">
+        After that, the original photos and videos of completed bookings are deleted from the server for good. Reports already made keep
+        their pictures, but the report's Download photos and Download videos buttons then tell the customer the files are no longer
+        available. Bookings not yet completed are never touched.
+      </p>
     </section>
   );
 }

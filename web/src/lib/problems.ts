@@ -61,7 +61,9 @@ export function useNeeds(): { needs: Need[]; total: number; loading: boolean; er
     queryKey: keys.bookings("unassigned-today", day), queryFn: ({ signal }) => api<Page<Booking>>("bookings", { query: { stage: "draft", date_from: day, date_to: day, order: "schedule" }, signal }) });
   const needs: Need[] = [
     ...p.conflicts.map((b) => ({ key: `c${b.id}`, kind: "conflict" as const, tone: "bad" as const, title: `${b.booking_id}: two experts submitted`, meta: "Choose which inspection counts", to: `/booking/${b.id}`, action: "Resolve" })),
-    ...(open.data?.results ?? []).map((b) => ({ key: `a${b.id}`, kind: "unassigned" as const, tone: "warn" as const, title: `${b.booking_id} has no expert`, meta: `Today at ${String(b.answers.inspection_time ?? "")} · ${String(b.answers.customer_name ?? "")}`, to: `/booking/${b.id}`, action: "Assign" })),
+    ...(open.data?.results ?? []).map((b) => ({ key: `a${b.id}`, kind: "unassigned" as const, tone: "warn" as const,
+      title: `${b.booking_id} has no expert`,
+      meta: `Today at ${String(b.answers.inspection_time ?? "")} · ${String(b.answers.customer_name ?? "")}`, to: `/booking/${b.id}`, action: "Assign" })),
     ...p.stuck.map((s) => ({ key: `s${s.id}`, kind: "upload" as const, tone: "bad" as const, title: `Upload stuck: ${s.booking_id}`, meta: `${s.expert} · ${s.field_key} · ${s.status}`, to: `/booking/${s.booking}`, action: "Open", at: s.created_at })),
     // a failed render is tried again by itself; an out-of-date one waits for Ops to press Regenerate (F-219)
     ...p.out_of_date.map((r) => ({ key: `o${r.booking}`, kind: "report" as const, tone: "warn" as const, title: `Report out of date: ${r.booking_id}`,

@@ -51,11 +51,39 @@ describe("problem queue", () => {
   it("groups what needs a person, with a count per group and in total", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
       const u = String(url);
-      const body = u.includes("auth/me") ? { id: 1, username: "o", name: "O", role: "ops", permissions: { "bookings.view": "all" } }
-        : u.includes("stuck-uploads") ? [{ id: "a", booking: "b1", booking_id: "B1", field_key: "p", status: "pending", expert: "ravi", created_at: "2026-11-23T01:00:00Z" }, { id: "b", booking: "b2", booking_id: "B2", field_key: "p", status: "uploaded", expert: "ravi", created_at: "2026-11-23T01:00:00Z" }]
-        : u.includes("problems/reports") ? [{ booking: "b3", booking_id: "B3", status: "failed", error: "render_failed" }]
-        : u.includes("problem=conflict") ? { count: 1, next: null, previous: null, results: [{ id: "b4", booking_id: "B4", conflict: "TWO_EXPERTS", stage: "submitted", alerts: [], answers: {} }] }
-        : { count: 0, next: null, previous: null, results: [] };
+      const body = u.includes("auth/me")
+        ? { id: 1, username: "o", name: "O", role: "ops", permissions: { "bookings.view": "all" } }
+        : u.includes("stuck-uploads")
+          ? [
+              {
+                id: "a",
+                booking: "b1",
+                booking_id: "B1",
+                field_key: "p",
+                status: "pending",
+                expert: "ravi",
+                created_at: "2026-11-23T01:00:00Z",
+              },
+              {
+                id: "b",
+                booking: "b2",
+                booking_id: "B2",
+                field_key: "p",
+                status: "uploaded",
+                expert: "ravi",
+                created_at: "2026-11-23T01:00:00Z",
+              },
+            ]
+          : u.includes("problems/reports")
+            ? [{ booking: "b3", booking_id: "B3", status: "failed", error: "render_failed" }]
+            : u.includes("problem=conflict")
+              ? {
+                  count: 1,
+                  next: null,
+                  previous: null,
+                  results: [{ id: "b4", booking_id: "B4", conflict: "TWO_EXPERTS", stage: "submitted", alerts: [], answers: {} }],
+                }
+              : { count: 0, next: null, previous: null, results: [] };
       return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
     });
     render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><AuthProvider><Problems /></AuthProvider></MemoryRouter></QueryClientProvider>);

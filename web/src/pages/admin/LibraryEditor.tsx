@@ -126,7 +126,8 @@ export function LibraryEditor() {
             <tbody>{(history.data ?? []).map((h) => (
               <tr key={h.revision}><td>r{h.revision}{h.revision === it.revision && <> <Pill tone="ok">current</Pill></>}</td><td title={h.by_login}>{h.by || "—"}</td><td>{when(h.at)}</td>
                 <td>{h.changed_keys.length ? h.changed_keys.join(", ") : "created"}</td>
-                <td>{edit && h.revision !== it.revision && <button aria-label={`Restore revision ${h.revision}`} onClick={() => { setDef(h.definition); setName(h.name); setTab("settings"); say(`Revision ${h.revision} is loaded. Save to make it the newest.`); }}>Restore</button>}</td></tr>))}</tbody></table>
+                <td>{edit && h.revision !== it.revision && <button aria-label={`Restore revision ${h.revision}`} onClick={() => { setDef(h.definition); setName(h.name); setTab("settings"); say(`Revision ${h.revision} is loaded. Save to make it the newest.`); }}>Restore</button>}</td>
+                  </tr>))}</tbody></table>
         </div>
       )}
       {error && <p className="error" role="alert">{error}</p>}

@@ -50,7 +50,9 @@ export function Audit() {
       <div className="table-card">
         <table className="rows"><thead><tr><th>When</th><th>Who</th><th>What happened</th><th>Action</th></tr></thead>
           <tbody>{rows.map((r) => (
-            <tr key={r.id}><td className="nowrap">{fmtStamp(r.created_at)}</td><td>{r.actor_name ?? "system"}{r.actor_username && r.actor_username !== r.actor_name && <div className="muted small mono">{r.actor_username}</div>}</td><td>{targetLink(r) ? <Link to={targetLink(r)!}>{r.summary}</Link> : r.summary}</td><td className="mono small muted">{r.action}</td></tr>))}</tbody></table>
+            <tr key={r.id}><td className="nowrap">{fmtStamp(r.created_at)}</td>
+              <td>{r.actor_name ?? "system"}{r.actor_username && r.actor_username !== r.actor_name && <div className="muted small mono">{r.actor_username}</div>}</td>
+              <td>{targetLink(r) ? <Link to={targetLink(r)!}>{r.summary}</Link> : r.summary}</td><td className="mono small muted">{r.action}</td></tr>))}</tbody></table>
         {q.data && rows.length === 0 && <Empty>Nothing matches these filters.</Empty>}
         {q.data && (q.data.next || q.data.previous) && <div className="table-foot"><span className="grow muted">{q.data.count} entries</span>
           <button className="sm" disabled={!q.data.previous} onClick={() => setPage(page - 1)}>Newer</button>

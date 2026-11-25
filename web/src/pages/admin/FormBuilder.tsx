@@ -227,7 +227,8 @@ export function FormBuilder() {
       {renaming !== null && (
         <Modal title="Rename this form" onClose={() => setRenaming(null)}
           actions={<><button onClick={() => setRenaming(null)}>Cancel</button>
-            <button className="primary" disabled={!renaming.trim() || renaming.trim() === f.name} onClick={async () => { try { await api(`forms/${id}`, { method: "PATCH", body: { name: renaming.trim() } }); say("Renamed."); setRenaming(null); await reload(); } catch (e) { fail(e); } }}>Save</button></>}>
+            <button className="primary" disabled={!renaming.trim() || renaming.trim() === f.name} onClick={async () => { try { await api(`forms/${id}`, { method: "PATCH", body: { name: renaming.trim() } }); say("Renamed."); setRenaming(null); await reload(); } catch (e) { fail(e); } }}>Save</button>
+              </>}>
           <Field label="Name" help={f.type === "custom" ? "This is what Ops pick from when they create a booking." : "Only the name changes. This form stays the form of its kind."}>
             <input aria-label="Name" value={renaming} onChange={(e) => setRenaming(e.target.value)} /></Field>
         </Modal>)}
