@@ -398,3 +398,10 @@ def test_a_key_action_also_needs_the_fields_it_writes_in_scope(env, booking):
     r = client(key).post(f"/api/v1/ext/bookings/{booking['id']}/change-type",
                          {"inspection_type": "pdi"}, format="json")
     assert r.status_code == 403 and r.json()["keys"] == ["inspection_type"]
+
+
+def test_a_plain_edit_cannot_move_the_booking_without_the_reschedule_flag(env, booking):
+    c = client(new_key(env))
+    r = c.patch(f"/api/v1/ext/bookings/{booking['id']}", {"answers": {"inspection_time": "09:00"}},
+                format="json")
+    assert r.status_code == 403 and r.json()["code"] == "ACTION_NOT_ALLOWED"

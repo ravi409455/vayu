@@ -122,6 +122,8 @@ def update_booking(request, ref: str, answers, row_version=None) -> Booking:
     if not isinstance(answers, dict):
         raise ValidationError({"answers": "An object of field keys and values is required."})
     need_keys(allowed, answers)
+    if {"inspection_date", "inspection_time"} & set(answers):   # moving it is a reschedule
+        need_action(request, "reschedule")
     b = find(ref)
     # an API write is last-write-wins unless the caller sends the row_version it read
     b = services.edit(request.user, b, answers, b.row_version if row_version is None
