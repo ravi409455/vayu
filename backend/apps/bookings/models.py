@@ -57,6 +57,12 @@ class Booking(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(Lower("booking_id"), name="booking_id_ci_unique")]
         ordering = ["-created_at"]
+        # the list filters (Today, Bookings) (R-17); search by trigram index when it slows
+        indexes = [models.Index(fields=["stage", "inspection_date"], name="booking_stage_date"),
+                   models.Index(fields=["city"], name="booking_city"),
+                   models.Index(fields=["inspection_type"], name="booking_type"),
+                   models.Index(fields=["assigned_expert", "inspection_date"],
+                                name="booking_expert_date")]
 
     def counted_inspection(self) -> "Inspection | None":
         """The inspection that counts: what the report, its ZIPs, webhooks and the external API
