@@ -175,3 +175,19 @@ def test_a_forced_setup_needs_the_server_name_and_keeps_the_admins_disclaimer(tm
     call_command("setup_platform", force=True, confirm="prod-1")
     item.refresh_from_db()
     assert "ADMIN LEGAL" not in str(item.revisions.get(revision=item.revision).content)
+
+
+def test_the_production_setup_never_imports_demo_code():
+    """F-004: setup_platform runs on production; the demo modules are for test servers."""
+    import ast
+    from pathlib import Path
+
+    setup = Path(__file__).resolve().parents[1] / "setup"
+    for path in [*setup.glob("*.py"), setup.parent / "management/commands/setup_platform.py"]:
+        if path.name == "testdata.py":                     # test servers only
+            continue
+        for node in ast.walk(ast.parse(path.read_text())):
+            names = ([a.name for a in node.names] if isinstance(node, ast.Import | ast.ImportFrom)
+                     else [])
+            module = getattr(node, "module", "") or ""
+            assert not any("demo" in n for n in [module, *names]), path.name

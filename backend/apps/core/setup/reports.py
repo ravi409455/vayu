@@ -69,7 +69,7 @@ def _grid(columns: list, cells: list, **look) -> dict:
 
 def definition(version, form_key: str, logo: str, watermark: str) -> dict:
     """The report of one published inspection version."""
-    from apps.core import demo_pdi
+    from . import pdi_report
 
     code = TITLES[form_key]
     sections = [(s, s.page) for s in Section.objects.filter(version=version)
@@ -159,7 +159,7 @@ def definition(version, form_key: str, logo: str, watermark: str) -> dict:
              "source": {"kind": "section", "section": f"inspection.{pics.key}"}}]})
 
     # the approved PDI report gives the look, the verify page and the disclaimer
-    base = demo_pdi.pdf_definition(logo, watermark, "")
+    base = pdi_report.pdf_definition(logo, watermark, "")
     verify = next(p for p in base["pages"] if p["title"] == "Verify this report")
     for k, part in enumerate(verify["parts"]):           # the link is a button, as the downloads
         if part["type"] == "text" and "open the link" in part.get("html", ""):
