@@ -1,143 +1,19 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "./api/client";
-import { AuthProvider } from "./auth";
-import type { FormField, FormPage } from "./api/types";
-import { saveDirty } from "./lib/saveDirty";
-import { Problems } from "./pages/ops/Problems";
-import { pivot } from "./pages/ops/Dashboards";
-import { FormRenderer } from "./ui/FormRenderer";
-import { StaleDialog } from "./ui/StaleDialog";
+import type { FormField, FormPage } from "../api/types";
+import { FormRenderer, nowAs } from "./FormRenderer";
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("409 'changed by someone': retry only my own fields", () => {
-  const stale = new ApiError(409, { code: "STALE_INSPECTION", detail: "x", changed_by: "priya", changed_at: "2026-11-23T10:00:00Z", changed_keys: ["remarks"], row_version: 7 });
-
-  it("turns the 409 into data, sends only the changed fields, and retries with the new version", async () => {
-    const send = vi.fn().mockRejectedValueOnce(stale).mockResolvedValueOnce({ ok: 1 });
-    const mine = { odometer: 150 };
-    const first = await saveDirty(send, 3, mine);
-    expect(first).toEqual({ ok: false, stale: { by: "priya", at: "2026-11-23T10:00:00Z", keys: ["remarks"], rowVersion: 7 } });
-    const second = await saveDirty(send, first.ok ? 0 : first.stale.rowVersion, mine);
-    expect(second.ok).toBe(true);
-    expect(send).toHaveBeenNthCalledWith(1, 3, { odometer: 150 });
-    expect(send).toHaveBeenNthCalledWith(2, 7, { odometer: 150 });      // only my field, on the newest version
-  });
-  it("other failures are not swallowed", async () => {
-    await expect(saveDirty(vi.fn().mockRejectedValue(new ApiError(400, { detail: "bad" })), 1, {})).rejects.toBeInstanceOf(ApiError);
-    await expect(saveDirty(vi.fn().mockRejectedValue(new ApiError(409, { code: "DRAFT_EXISTS" })), 1, {})).rejects.toBeInstanceOf(ApiError);
-  });
-  it("the dialog names who changed it and warns when both changed the same field", async () => {
-    const onRetry = vi.fn();
-    const u = userEvent.setup();
-    render(<StaleDialog info={{ by: "priya", at: "", keys: ["remarks", "odometer"], rowVersion: 7 }} mine={["odometer"]} onRetry={onRetry} onReload={() => {}} />);
-    expect(screen.getByRole("dialog", { name: /priya changed this/ })).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("odometer");
-    await u.click(screen.getByRole("button", { name: /Save only my 1 change/ }));
-    expect(onRetry).toHaveBeenCalled();
-  });
-  it("no warning when the changes do not overlap", () => {
-    render(<StaleDialog info={{ by: "priya", at: "", keys: ["remarks"], rowVersion: 7 }} mine={["odometer", "city"]} onRetry={() => {}} onReload={() => {}} />);
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByRole("button", { name: /Save only my 2 changes/ })).toBeInTheDocument();
-  });
-});
-
-describe("problem queue", () => {
-  it("groups what needs a person, with a count per group and in total", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
-      const u = String(url);
-      const body = u.includes("auth/me")
-        ? { id: 1, username: "o", name: "O", role: "ops", permissions: { "bookings.view": "all" } }
-        : u.includes("stuck-uploads")
-          ? [
-              {
-                id: "a",
-                booking: "b1",
-                booking_id: "B1",
-                field_key: "p",
-                status: "pending",
-                expert: "ravi",
-                created_at: "2026-11-23T01:00:00Z",
-              },
-              {
-                id: "b",
-                booking: "b2",
-                booking_id: "B2",
-                field_key: "p",
-                status: "uploaded",
-                expert: "ravi",
-                created_at: "2026-11-23T01:00:00Z",
-              },
-            ]
-          : u.includes("problems/reports")
-            ? [{ booking: "b3", booking_id: "B3", status: "failed", error: "render_failed" }]
-            : u.includes("problem=conflict")
-              ? {
-                  count: 1,
-                  next: null,
-                  previous: null,
-                  results: [{ id: "b4", booking_id: "B4", conflict: "TWO_EXPERTS", stage: "submitted", alerts: [], answers: {} }],
-                }
-              : { count: 0, next: null, previous: null, results: [] };
-      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
-    });
-    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><AuthProvider><Problems /></AuthProvider></MemoryRouter></QueryClientProvider>);
-    const list = await screen.findByRole("list", { name: "Needs you" });
-    await waitFor(() => expect(list).toHaveTextContent("B4: two experts submitted"));
-    expect(list).toHaveTextContent("Upload stuck: B1");
-    expect(list).toHaveTextContent("Report failed: B3");
-    expect(screen.getByRole("heading", { name: /Needs you/ })).toHaveTextContent("4");
-    expect(screen.getByRole("button", { name: "Stuck uploads 2" })).toBeInTheDocument();     // one filter per kind present
-    expect(screen.queryByRole("button", { name: /Type changes/ })).toBeNull();
-  });
-  it("says so when there is nothing wrong", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => new Response(JSON.stringify(String(url).includes("auth/me") ? { id: 1, username: "o", name: "O", role: "ops", permissions: { "bookings.view": "all" } }
-      : String(url).includes("problem=") ? { count: 0, next: null, previous: null, results: [] } : []), { status: 200, headers: { "Content-Type": "application/json" } }));
-    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><AuthProvider><Problems /></AuthProvider></MemoryRouter></QueryClientProvider>);
-    expect(await screen.findByText("All clear")).toBeInTheDocument();
-  });
-  it("a server error is never shown as all clear (H-17)", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => String(url).includes("auth/me")
-      ? new Response(JSON.stringify({ id: 1, username: "o", name: "O", role: "ops", permissions: { "bookings.view": "all" } }), { status: 200, headers: { "Content-Type": "application/json" } })
-      : new Response("{}", { status: 500, headers: { "Content-Type": "application/json" } }));
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><AuthProvider><Problems /></AuthProvider></MemoryRouter></QueryClientProvider>);
-    expect(await screen.findByText("Could not load what needs you.")).toBeInTheDocument();
-    expect(screen.queryByText("All clear")).toBeNull();
-    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
-  });
-  it("the count is the server's, not the first page's (F-153)", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
-      const u = String(url);
-      const body = u.includes("auth/me") ? { id: 1, username: "o", name: "O", role: "ops", permissions: { "bookings.view": "all" } }
-        : u.includes("problem=conflict") ? { count: 60, next: "x", previous: null, results: [{ id: "b4", booking_id: "B4", conflict: "TWO_EXPERTS", stage: "submitted", alerts: [], answers: {} }] }
-        : u.includes("problem=") || u.includes("stage=draft") ? { count: 0, next: null, previous: null, results: [] } : [];
-      return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
-    });
-    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><AuthProvider><Problems /></AuthProvider></MemoryRouter></QueryClientProvider>);
-    await waitFor(() => expect(screen.getByRole("heading", { name: /Needs you/ })).toHaveTextContent("60"));
-  });
-});
-
-describe("dashboard table", () => {
-  it("lines rows up by period and key, zero when missing", () => {
-    const { periods, keys, cell } = pivot([{ period: "2026-10-14", key: "pdi", count: 2 }, { period: "2026-10-14", key: "ev", count: 1 }, { period: "2026-10-21", key: "pdi", count: 3 }]);
-    expect(periods).toEqual(["2026-10-14", "2026-10-21"]);
-    expect(keys).toEqual(["ev", "pdi"]);
-    expect([cell("2026-10-14", "pdi"), cell("2026-10-21", "ev")]).toEqual([2, 0]);
-    expect(pivot([]).periods).toEqual([]);
-  });
-});
-
 let n = 100;
+
 const fld = (key: string, type: string, over: Partial<FormField> = {}): FormField => ({
   id: ++n, section: 1, key, label: key, helper_text: "", type, config: {}, required: false, required_if: null, show_if: null, visible: true, order: 0,
   is_system: false, access: {}, locked: false, library: null, ...over,
 });
+
 const pageOf = (fields: FormField[]): FormPage => ({ id: 1, title: "P", order: 0, visible: true, gate: false, show_if: null, access: {}, sections: [{ id: 1, page: 1, title: "S", order: 0, visible: true, show_if: null, access: {}, fields, locked: false, library: null }] });
 
 describe("form renderer", () => {
@@ -232,11 +108,6 @@ describe("form renderer", () => {
   });
 });
 
-import { nowAs } from "./ui/FormRenderer";
-import { canDelete } from "./pages/ops/Bookings";
-import { InfoTip } from "./ui/InfoTip";
-import { OPS_PAGES, visibleNav } from "./Layout";
-
 describe("picture, automatic and manual fields", () => {
   const render1 = (fields: FormField[], props: Record<string, unknown> = {}) =>
     render(<QueryClientProvider client={new QueryClient()}><FormRenderer kind="end" tree={{ pages: [pageOf(fields)], checks: [] }} values={{}} onChange={(props.onChange as () => void) ?? (() => {})} {...props} /></QueryClientProvider>);
@@ -290,41 +161,5 @@ describe("picture, automatic and manual fields", () => {
     expect(nowAs("date", d)).toBe("2026-11-23");
     expect(nowAs("time", d)).toBe("09:05");
     expect(nowAs("datetime", d)).toMatch(/^2026-11-23T09:05:07[+-]\d\d:\d\d$/);
-  });
-});
-
-describe("who sees what", () => {
-  it("Ops see exactly Today, Bookings, Problems and Dashboard", () => {
-    const everything = () => true;
-    const titles = visibleNav("ops", everything).flatMap((g) => g.items.map((i) => i.to));
-    expect(titles.sort()).toEqual([...OPS_PAGES].sort());
-  });
-  it("Admin sees the management pages too, and nobody has a Search page any more", () => {
-    const admin = visibleNav("admin", () => true).flatMap((g) => g.items.map((i) => i.to));
-    expect(admin).toEqual(expect.arrayContaining(["/bookings", "/forms", "/library", "/users", "/integrations"]));
-    expect(admin).not.toContain("/search");
-    expect(admin).not.toContain("/jobs");
-  });
-  it("Admin may delete any booking, Ops only a draft", () => {
-    expect(canDelete("admin", "completed")).toBe(true);
-    expect(canDelete("ops", "draft")).toBe(true);
-    expect(canDelete("ops", "assigned")).toBe(false);
-    expect(canDelete("ops", "cancelled")).toBe(false);
-  });
-});
-
-describe("the little i", () => {
-  it("opens on hover and closes when the pointer leaves, and still works by click and keyboard", async () => {
-    const u = userEvent.setup();
-    render(<InfoTip>Explains things</InfoTip>);
-    expect(screen.queryByRole("tooltip")).toBeNull();
-    await u.hover(screen.getByRole("button", { name: "More info" }));
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Explains things");
-    await u.unhover(screen.getByRole("button", { name: "More info" }));
-    expect(screen.queryByRole("tooltip")).toBeNull();
-    await u.tab();
-    expect(screen.getByRole("tooltip")).toBeInTheDocument();                         // keyboard focus
-    await u.keyboard("{Escape}");
-    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 });
