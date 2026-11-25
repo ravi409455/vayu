@@ -46,6 +46,15 @@ class AlertsTest {
         assertEquals("Farhan Ali · MG Road", got[0].body)
     }
 
+    @Test fun remindersUseIndiaTimeWhateverZoneThePhoneIsIn() {
+        val was = java.util.TimeZone.getDefault()
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Europe/London"))
+        try {
+            val got = reminders(listOf(j("8", "11:00")), Instant.parse("2026-11-24T04:00:00Z"))
+            assertEquals(Instant.parse("2026-11-24T04:30:00Z"), got.single().at)       // 10:00 in India, not in London
+        } finally { java.util.TimeZone.setDefault(was) }
+    }
+
     @Test fun photosStuckForTwoHoursAreFound() {
         val now = Instant.parse("2026-11-24T10:00:00Z")
         fun f(path: String, sent: Boolean = false) = LocalFile(path, "inspection", "door", "photo", path, "image/jpeg", "camera", 1, "x", "Door", sent = sent)

@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -115,6 +116,16 @@ class InspectionFlowTest {
         com.github.takahirom.roborazzi.captureScreenRoboImage("src/test/screenshots/page_list.png", roborazziOptions = options)
     }
 
+    @Test fun lockedPagesSayWhyAtTheTopAndShowALock() {
+        show()
+        model.set("start", "travel", "car")
+        compose.onNodeWithContentDescription("Page 1 of 5, open the page list").performClick()
+        val why = compose.onNodeWithText("Finish Vehicle to open the other pages.").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val exterior = compose.onNodeWithText("Exterior").fetchSemanticsNode().boundsInRoot
+        assertTrue("the reason comes before the locked pages", why.top < exterior.top)
+        assertTrue(compose.onAllNodesWithContentDescription("locked").fetchSemanticsNodes().isNotEmpty())
+    }
+
     @Test fun reviewListsWhatIsMissingThenSubmitLocksTheAnswers() {
         show()
         model.set("start", "travel", "car")
@@ -142,5 +153,20 @@ class InspectionFlowTest {
         show(ThemeMode.DARK)
         model.set("start", "travel", "car")
         shot("check_in_dark")
+    }
+
+    @Test fun aDraftPrunedWhileItsScreenIsOpenClosesTheScreen() {
+        InspectionModel.begin(drafts, jobs.jobs().single(), verified = true)
+        drafts.update(BOOKING) { it.copy(submittedAt = "2026-11-24T16:00:00+05:30") }
+        var closed = false
+        compose.setContent {
+            VayuTheme(ThemeMode.LIGHT) {
+                InspectionScreen(InspectionEnv(model, drafts, "Ravi Expert", true, { now }, jobs::list, jobs.types(), { null }), onClose = { closed = true })
+            }
+        }
+        compose.waitForIdle()
+        drafts.discard(BOOKING)                                    // the finished work left the phone after a sync
+        compose.waitForIdle()
+        assertTrue(closed)
     }
 }

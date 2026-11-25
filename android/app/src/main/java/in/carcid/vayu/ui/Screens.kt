@@ -102,12 +102,15 @@ fun SignInScreen(state: Screen.SignIn, onSignIn: (String, String) -> Unit) = She
     Brand()
     Illustration(300) { SignInDrawing() }
     Text("Sign in", fontSize = 30.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink)
-    Text("Welcome back. Your jobs are waiting.", color = Vayu.colors.muted)
+    Text("Welcome back. Your work is waiting.", color = Vayu.colors.muted)
     Spacer(Modifier.height(16.dp))
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        SoftField(user, { user = it }, "Username", icon = Icons.Outlined.Person)
+        val focus = androidx.compose.ui.platform.LocalFocusManager.current
+        SoftField(user, { user = it }, "Username", icon = Icons.Outlined.Person,
+            imeAction = androidx.compose.ui.text.input.ImeAction.Next, onIme = { focus.moveFocus(androidx.compose.ui.focus.FocusDirection.Down) })
         SoftField(pass, { pass = it }, "Password", icon = Icons.Outlined.Lock,
             visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(), password = true,
+            imeAction = androidx.compose.ui.text.input.ImeAction.Done, onIme = { if (!state.busy) onSignIn(user, pass) },
             trailing = {
                 IconButton(onClick = { show = !show }) {
                     Icon(if (show) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
@@ -150,20 +153,6 @@ fun ChangePasswordScreen(state: Screen.ChangePassword, onSave: (String, String) 
     }
 }
 
-/** Home by role. The real My jobs (Phase 14) and Today (Phase 16) replace these bodies. */
-@Composable
-fun HomeScreen(me: Me, onProfile: () -> Unit) {
-    val ops = me.role == "ops"
-    Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
-        VayuTopBar(if (ops) "Today" else "My jobs", me.initials, bellCount = 0, onBell = {}, onProfile = onProfile)
-        Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-            Text(if (ops) "Today's jobs arrive with Phase 16." else "Your jobs arrive with Phase 14.",
-                color = Vayu.colors.muted)
-        }
-        if (ops) OpsBottomBar(OpsTab.TODAY, {}, {}) else ExpertBottomBar(ExpertTab.JOBS, uploads = 0, {}, {})
-    }
-}
-
 @Composable
 fun ProfileScreen(state: Screen.Profile, onBack: () -> Unit, onTheme: (String) -> Unit, onSignOut: () -> Unit,
                   /** Ops: switch a kind of notification on or off. */
@@ -199,6 +188,15 @@ fun ProfileScreen(state: Screen.Profile, onBack: () -> Unit, onTheme: (String) -
             SectionLabel("Look")
             Segmented(listOf("Light", "Dark", "Match phone"), themes.indexOf(me.theme).coerceAtLeast(0), { onTheme(themes[it]) })
             if (state.error != null) Text(state.error, color = Vayu.colors.bad, modifier = Modifier.padding(top = 8.dp))
+            // blocked notices drop new work, reminders and photo alerts without a word: say so (checked again on coming back)
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            var noticesOff by remember { mutableStateOf(false) }
+            androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+                noticesOff = !androidx.core.app.NotificationManagerCompat.from(ctx).areNotificationsEnabled(); onPauseOrDispose {}
+            }
+            if (noticesOff) `in`.carcid.vayu.ui.components.SettingsNudge(
+                "Notifications are off: new ${if (me.role == "ops") "bookings" else "leads"}, reminders and alerts won't show.",
+                "Turn on", `in`.carcid.vayu.ui.components.noticeSettings(ctx), Modifier.padding(top = 16.dp))
             if (me.role == "ops") {
                 SectionLabel("Notifications")
                 NotifyRow("Problems", null) {}

@@ -37,6 +37,13 @@ class JobStoreTest {
         assertTrue(JobStore(file).readyOffline(j))
     }
 
+    @Test fun aCancelledJobKeepsOpsReasonAsItsLabel() {
+        val p = Json.parseToJsonElement(payload(job("2", stage = "cancelled").replace("\"my_draft\":null", "\"my_draft\":null,\"cancel_reason\":\"customer\"")).toString()
+            .replace("\"lists\":{", "\"lists\":{\"cancel_reason\":[{\"key\":\"customer\",\"label\":\"Customer cancelled\"}],")).jsonObject
+        JobStore(file).apply(p, phoneNow = 0)
+        assertEquals("Customer cancelled", JobStore(file).jobs().single().cancelReason)
+    }
+
     @Test fun formsAreKeptAcrossSyncsAndDroppedWhenNoJobUsesThem() {
         val s = JobStore(file)
         s.apply(payload(job("1"), forms = """{"7":{"pages":[]}}"""), 0)
@@ -44,6 +51,18 @@ class JobStoreTest {
         assertEquals(setOf(7), s.haveVersions())
         s.apply(payload(job("1", version = 8), forms = """{"8":{"pages":[]}}"""), 0)
         assertEquals(setOf(8), s.haveVersions())
+    }
+
+    @Test fun formsADraftIsPinnedToAreKeptWhenTheJobMovesOn() {
+        val s = JobStore(file)
+        s.apply(payload(job("1"), forms = """{"7":{"pages":[]}}"""), 0)
+        s.apply(payload(job("1", version = 8), forms = """{"8":{"pages":[]}}"""), 0, keep = setOf(7))   // Admin published v8
+        assertEquals(setOf(7, 8), s.haveVersions())
+        s.apply(payload(""), 0, keep = setOf(7))                                // the job left the list
+        assertEquals(setOf(7), s.haveVersions())
+        s.clear(keep = setOf(7))                                                 // signed out by the server
+        assertEquals(setOf(7), JobStore(file).haveVersions())
+        assertTrue(JobStore(file).jobs().isEmpty())
     }
 
     @Test fun aJobWithoutItsFormIsNotReadyOffline() {

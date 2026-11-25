@@ -32,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.AlertDialog
@@ -107,13 +108,15 @@ class InspectionEnv(
 @Composable
 fun InspectionScreen(env: InspectionEnv, onClose: () -> Unit) {
     val tick by env.drafts.changes.collectAsState()
-    val draft = remember(tick) { env.model.draft }
+    // the draft can leave the phone while this is open (finished work pruned after a sync)
+    val draft = remember(tick) { env.drafts.get(env.model.bookingId) }
+    if (draft == null) { LaunchedEffect(Unit) { onClose() }; return }
     val filled = remember(tick) { env.model.filled(draft) }
     LaunchedEffect(Unit) { env.model.open() }
     if (filled == null) {
         Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding().padding(20.dp)) {
             CloseButton("Close", onClose)
-            Text("This job's form isn't on the phone yet. Connect to the internet once and tap Refresh.", color = Vayu.colors.ink)
+            Text("This lead's form isn't on the phone yet. Connect to the internet once and tap Refresh.", color = Vayu.colors.ink)
         }
         return
     }
@@ -151,7 +154,10 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
     }
 
     // pickers for the gallery and files (the system's own, no permission needed)
-    var picking by remember { mutableStateOf<Pair<String, Field>?>(null) }
+    // the field being filled is saved: Android may re-create the screen while its picker is open
+    var pickingKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val picking: Pair<String, Field>? = pickingKey?.split("|", limit = 2)?.let { (part, key) ->
+        filled.trees[part]?.fields?.firstOrNull { it.key == key }?.let { part to it } }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         val (part, f) = picking ?: return@rememberLauncherForActivityResult
         if (uri == null) return@rememberLauncherForActivityResult
@@ -182,13 +188,13 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
         is Tool.Camera -> {
             CameraScreen(t.field, (draft.answer(t.part, t.field.key) as? List<*>)?.size ?: 0, draft.code, env.expertName, env.now,
                 env.verified, dir, onTaken = { file, type ->
-                    model.addFile(t.part, t.field.key, t.field.type, file, type, "camera", label(t.field, model.draft, t.part), single = false, max = t.field.maxCount)
+                    scope.launch { model.addFile(t.part, t.field.key, t.field.type, file, type, "camera", label(t.field, model.draft, t.part), single = false, max = t.field.maxCount) }
                 }, onDone = { tool = null })
             return
         }
         is Tool.Sign -> {
             SignatureScreen(t.field, dir, onSigned = { file ->
-                model.addFile(t.part, t.field.key, "signature", file, "image/png", "camera", t.field.label, single = true); tool = null
+                scope.launch { model.addFile(t.part, t.field.key, "signature", file, "image/png", "camera", t.field.label, single = true) }; tool = null
             }, onClose = { tool = null })
             return
         }
@@ -230,6 +236,9 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
         Box(Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(Vayu.colors.line)) {
             Box(Modifier.fillMaxWidth(index.toFloat() / steps.lastIndex.coerceAtLeast(1)).height(3.dp).background(Vayu.colors.ink))
         }
+        val full by env.drafts.writeFailed.collectAsState()
+        if (full) Text("The phone is full, so the last answers are not saved yet. Free up space (Uploads → Phone storage).",
+            color = Vayu.colors.bad, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
         if (step.isReview) ReviewPage(draft, filled, steps, missingOn, { go(it) }, Modifier.weight(1f), onSubmit = {
             val notOpened = steps.filter { !it.isReview && it.id !in draft.visited }
             if (notOpened.isNotEmpty()) confirm = "submit" else model.submit()
@@ -265,9 +274,9 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
                                 nested = f.showIf != null, env = FieldEnv(
                                     locked = draft.locked, list = env.list, types = env.types, files = files, now = env.now,
                                     onCamera = { tool = Tool.Camera(part, it) },
-                                    onGallery = { picking = part to it; gallery.launch(PickVisualMediaRequest(
+                                    onGallery = { pickingKey = "$part|${it.key}"; gallery.launch(PickVisualMediaRequest(
                                         if (it.type == "video") ActivityResultContracts.PickVisualMedia.VideoOnly else ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                                    onPickFile = { picking = part to it; document.launch(arrayOf("image/jpeg", "image/png", "application/pdf")) },
+                                    onPickFile = { pickingKey = "$part|${it.key}"; document.launch(arrayOf("image/jpeg", "image/png", "application/pdf")) },
                                     onSign = { tool = Tool.Sign(part, it) }, onScan = { tool = Tool.Scan(part, it) },
                                     onOpenFile = { fld, file -> tool = Tool.Review(part, fld, file) },
                                     onLocate = { _, done -> scope.launch { done(Locator.fix(ctx)?.let(Locator::answer)) } },
@@ -316,6 +325,9 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
             Text("Pages", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Vayu.colors.ink, modifier = Modifier.weight(1f))
             if (needed > 0) Text("$needed still needed", color = Vayu.colors.bad, fontSize = 14.sp)
         }
+        // why the pages below can't be opened, before them (not at the end of a long list)
+        if (gate != -1) Text("Finish ${steps[gate].title} to open the other pages.", color = Vayu.colors.ink2, fontSize = 13.sp,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
         LazyColumn(Modifier.heightIn(max = 560.dp)) {
             itemsIndexed(steps) { i, s ->
                 val miss = missingOn(s)
@@ -325,7 +337,8 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
                     .background(if (i == index) Vayu.colors.soft else Vayu.colors.bg).padding(horizontal = 20.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(Modifier.size(28.dp).clip(CircleShape).background(if (done) Vayu.colors.ok else Vayu.colors.soft), contentAlignment = Alignment.Center) {
-                        Text(if (done) "✓" else "${i + 1}", fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                        if (i >= lockedFrom) Icon(Icons.Outlined.Lock, contentDescription = "locked", tint = Vayu.colors.muted, modifier = Modifier.size(16.dp))
+                        else Text(if (done) "✓" else "${i + 1}", fontSize = 13.sp, fontWeight = FontWeight.Bold,
                             color = if (done) androidx.compose.ui.graphics.Color.White else Vayu.colors.ink2)
                     }
                     Text(if (s.isReview) "Review and submit" else s.title, modifier = Modifier.weight(1f),
@@ -338,8 +351,6 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
                 }
             }
             item {
-                if (gate != -1) Text("Finish ${steps[gate].title} to open the other pages.", color = Vayu.colors.muted, fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                 Text("Discard draft…", color = Vayu.colors.bad, fontWeight = FontWeight.SemiBold, modifier = Modifier
                     .clickable(role = Role.Button) { pages = false; confirm = "discard" }.padding(horizontal = 20.dp, vertical = 16.dp))
                 Spacer(Modifier.height(16.dp))
@@ -365,9 +376,9 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
 }
 
 private fun problemText(d: Draft) = when (d.problemCode) {
-    "NOT_ASSIGNED" -> "This job was given to another expert. You can still submit what you did, or discard it."
-    "INVALID_STAGE" -> "This job was cancelled. Your draft is still sent to Ops if you submit."
-    "APP_TOO_OLD" -> "Update the app to start new jobs."
+    "NOT_ASSIGNED" -> "This lead was given to another expert. You can still submit what you did, or discard it."
+    "INVALID_STAGE" -> "This lead was cancelled. Your draft is still sent to Ops if you submit."
+    "APP_TOO_OLD" -> "Update the app to start new leads."
     else -> d.problem ?: ""
 }
 
@@ -454,7 +465,7 @@ fun SubmittedScreen(draft: Draft, onClose: () -> Unit) {
                 Box(Modifier.padding(top = 8.dp).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(Vayu.colors.line)) {
                     Box(Modifier.fillMaxWidth(sent.toFloat() / total).height(6.dp).background(Vayu.colors.ok))
                 }
-                Text("They keep sending in the background, even with the app closed.", color = Vayu.colors.muted, fontSize = 13.sp,
+                if (sent < total) Text("They keep sending in the background, even with the app closed.", color = Vayu.colors.muted, fontSize = 13.sp,
                     modifier = Modifier.padding(top = 8.dp).fillMaxWidth())
             }
             Column(Modifier.fillMaxWidth().padding(top = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -481,7 +492,7 @@ private fun StepLine(n: Int, text: String, done: Boolean) {
 @Composable
 private fun IconButtonBack(onClick: () -> Unit) =
     androidx.compose.material3.IconButton(onClick = onClick, modifier = Modifier.padding(6.dp)) {
-        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back to My jobs", tint = Vayu.colors.ink)
+        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back to My leads", tint = Vayu.colors.ink)
     }
 
 /** A form picture, fetched once and kept on the phone. */

@@ -115,7 +115,45 @@ class OpsFlowTest {
         waitFor("Meera Expert")
         compose.onNode(hasText("Ravi Expert", substring = true)).performClick()          // expand: their jobs
         compose.onNodeWithText("Arjun Mehta").assertIsDisplayed()
+        compose.onNodeWithText("3:30\u00A0pm").assertIsDisplayed()                       // the same 12-hour times as "Next at"
         shot("ops_today")
+    }
+
+    @Test fun backOnBookingsOrDashboardGoesToTodayFirst() {
+        show()
+        waitFor("of 5 completed")
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Manoj Pillai")
+        androidx.test.espresso.Espresso.pressBack()
+        waitFor("of 5 completed")
+        compose.onNodeWithText("UNASSIGNED · 1").assertIsDisplayed()
+    }
+
+    @Test fun theOpenBookingComesBackAfterAndroidClosedTheApp() {
+        val restore = androidx.compose.ui.test.junit4.StateRestorationTester(compose)
+        restore.setContent { VayuTheme(ThemeMode.LIGHT) { OpsHome(me, data, { LocalDate.parse(TODAY) }, onProfile = {}) } }
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("2 Key Checks")
+        restore.emulateSavedInstanceStateRestore()
+        waitFor("2 Key Checks")                          // still on DEMO-14, not back on Today
+    }
+
+    /** F-223: signing an expert's phone out is offered only to someone whose role has the permission (off for Ops by default). */
+    @Test fun signingAPhoneOutFollowsThePermission() {
+        val allowed = androidx.compose.runtime.mutableStateOf(false)
+        compose.setContent { VayuTheme(ThemeMode.LIGHT) {
+            OpsHome(if (allowed.value) me.copy(permissions = me.permissions + "users.sign_out_devices") else me, data, { LocalDate.parse(TODAY) }, onProfile = {})
+        } }
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("2 Key Checks")
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.onNodeWithText("Sign out the expert's phone").assertDoesNotExist()
+        androidx.test.espresso.Espresso.pressBack()
+        allowed.value = true
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.onNodeWithText("Sign out the expert's phone").assertExists()
     }
 
     @Test fun todayStatusChipsNarrowTheDay() {
@@ -309,6 +347,24 @@ class OpsFlowTest {
         // a tile opens the bookings behind its number
         compose.onNodeWithText("Started late").performClick()
         waitFor("Showing")
+    }
+
+    /** F-202: photo tiles share the full width (no empty quarter on the right). */
+    @Test fun photoTilesFillTheWidth() {
+        server.on("GET form-versions/7", """{"id":7,"checks":[],"pages":[{"id":1,"title":"Photos","visible":true,"gate":false,"sections":[{"id":1,"title":"Outside","visible":true,
+            "fields":[{"key":"front","label":"Front","type":"photo","visible":true,"config":{"max_count":8}}]}]}]}""")
+        server.on("GET bookings/$B14/media", (1..8).joinToString(",", "[", "]") {
+            """{"id":"bbbbbbbb-0000-0000-0000-00000000000$it","field_key":"front","kind":"photo","status":"verified"}""" })
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("Photos and videos"); compose.onNodeWithText("Photos and videos").performScrollTo().performClick()
+        waitFor("8 photos")
+        compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("photo front")).fetchSemanticsNodes().size == 8 }
+        val tiles = compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("photo front")).fetchSemanticsNodes().map { it.boundsInRoot }
+        val width = compose.onNode(isRoot()).fetchSemanticsNode().boundsInRoot.width
+        val gap = width - tiles.maxOf { it.right } - tiles.minOf { it.left }       // right margin minus left margin
+        assertTrue("tiles leave ${gap}px empty on the right: $tiles in $width", kotlin.math.abs(gap) < 4f)
     }
 
     @Test fun aSubmittedPhotoCanBeReplacedOrAddedToButNotDeleted() {

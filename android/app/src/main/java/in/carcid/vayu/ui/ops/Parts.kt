@@ -271,7 +271,7 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
                             // photos of this answer, small, right here
                             val keys = setOf(f.key) + photosOf[f.key].orEmpty()
                             val mine = media.filter { it.s("field_key") in keys }
-                            mine.take(2).forEach { m -> MediaTile(env, m, size = 56) { viewing = m } }
+                            mine.take(2).forEach { m -> MediaTile(env, m, size = 56.dp) { viewing = m } }
                         }
                         HorizontalDivider(color = Vayu.colors.line)
                     }
@@ -375,6 +375,9 @@ suspend fun mediaBytes(env: OpsEnv, dir: File, id: String, preview: Boolean = fa
     } catch (e: kotlin.coroutines.cancellation.CancellationException) { throw e } catch (e: Exception) { null }
 }
 
+/** [thumb] off the main thread (a 2000-px decode stutters the list on a low-end phone). */
+private suspend fun decoded(f: File, size: Int): ImageBitmap? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { thumb(f, size) }
+
 private fun thumb(f: File, size: Int): ImageBitmap? = runCatching {
     val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeFile(f.path, o)
@@ -400,7 +403,8 @@ fun rememberOpsUploader(env: OpsEnv, id: String, data: Loaded3?, online: Boolean
     suspend fun upload(f: Field, file: File, type: String, replaces: String?) {
         var loose: String? = null
         try {
-            val init = env.data.api.mediaInitiate(id, UUID.randomUUID().toString(), f.key, f.type, type, file.length(), sha256(file), "gallery", replaces)
+            val hash = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { sha256(file) }
+            val init = env.data.api.mediaInitiate(id, UUID.randomUUID().toString(), f.key, f.type, type, file.length(), hash, "gallery", replaces)
             loose = init.s("id")
             if (!transfer(env.data.api, init, file, type)) { env.say("The file arrived damaged. Try again."); return }
             env.data.act("POST", "media/$loose/attach", buildJsonObject { if (replaces != null) put("replaces", replaces) })
@@ -482,16 +486,22 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
                 // a section with nothing to show or add is left out
                 if (here.isEmpty() && !canAdd) return@forEach
                 Section(section)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    here.forEach { m -> MediaTile(env, m) { open = m } }
+                // as many ~76 dp columns as fit, stretched to share the whole width (a wide phone gets more, no empty strip)
+                androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val cols = ((maxWidth + 8.dp) / 84.dp).toInt().coerceAtLeast(3)
+                // whole pixels: a tile a fraction too wide would push the last one to the next row
+                val tile = with(androidx.compose.ui.platform.LocalDensity.current) { ((constraints.maxWidth - 8.dp.roundToPx() * (cols - 1)) / cols).toDp() }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), maxItemsInEachRow = cols) {
+                    here.forEach { m -> MediaTile(env, m, size = tile) { open = m } }
                     // an add tile only where Ops may add, the field shows in this inspection, and it has room
                     addable.forEach { (p, _, f) ->
-                        Box(Modifier.size(76.dp).clip(RoundedCornerShape(12.dp)).background(Vayu.colors.soft)
+                        Box(Modifier.size(tile).clip(RoundedCornerShape(12.dp)).background(Vayu.colors.soft)
                             .clickable(role = Role.Button) { up.pick(p, f, null) }
                             .semantics { contentDescription = "Add to ${f.label}" }, contentAlignment = Alignment.Center) {
                             Text("+ ${f.label}", fontSize = 11.sp, color = Vayu.colors.ink2, modifier = Modifier.padding(4.dp), maxLines = 3)
                         }
                     }
+                }
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -500,12 +510,12 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun MediaTile(env: OpsEnv, m: JsonObject, size: Int = 76, onClick: () -> Unit) {
+private fun MediaTile(env: OpsEnv, m: JsonObject, size: androidx.compose.ui.unit.Dp = 76.dp, onClick: () -> Unit) {
     val ctx = LocalContext.current
     val img by produceState<ImageBitmap?>(null, m.s("id")) {
-        if (m.s("kind") in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.s("id"), preview = true)?.let { thumb(it, 160) }
+        if (m.s("kind") in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.s("id"), preview = true)?.let { decoded(it, 160) }
     }
-    Box(Modifier.size(size.dp).clip(RoundedCornerShape(if (size < 76) 10.dp else 12.dp)).background(Vayu.colors.illo).clickable(role = Role.Button, onClick = onClick)
+    Box(Modifier.size(size).clip(RoundedCornerShape(if (size < 76.dp) 10.dp else 12.dp)).background(Vayu.colors.illo).clickable(role = Role.Button, onClick = onClick)
         .semantics { contentDescription = "${m.s("kind")} ${m.s("field_key")}" }, contentAlignment = Alignment.Center) {
         img?.let { Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
         if (m.s("kind") == "video") Icon(Icons.Outlined.PlayCircle, null, tint = Color.White, modifier = Modifier.size(30.dp))
@@ -519,7 +529,7 @@ private fun MediaViewer(env: OpsEnv, m: JsonObject, fieldLabel: String, onClose:
     val scope = rememberCoroutineScope()
     // null while loading; false when it couldn't be loaded
     val img by produceState<Any?>(null, m.s("id")) {
-        if (m.s("kind") in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.s("id"))?.let { thumb(it, 2000) } ?: false
+        if (m.s("kind") in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.s("id"))?.let { decoded(it, 2000) } ?: false
     }
     var videoUrl by remember { mutableStateOf<String?>(null) }
     var scale by remember { mutableStateOf(1f) }
@@ -759,7 +769,7 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
         val failed = rep?.s("status") == "failed"
         Text(when {
             b.conflict.isNotEmpty() -> "Waits for your choice above"
-            rep == null -> if (b.stage == "completed") "Being made" else "Made when the job is done"
+            rep == null -> if (b.stage == "completed") "Being made" else "Made when the booking is completed"
             updating -> "Updating…"
             failed -> "Couldn't be made · tried again by itself"
             rep!!.s("status") == "ready" -> "Ready" + (rep!!.s("generated_at").takeIf { it.isNotBlank() }?.let { " · made ${whenStamp(it, env.today()).replaceFirstChar { c -> c.lowercase() }}" } ?: "")

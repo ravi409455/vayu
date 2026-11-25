@@ -27,4 +27,29 @@ class ThemeTest {
 
     @Test fun lightThemeIsReadable() = check(LightColors, "light")
     @Test fun darkThemeIsReadable() = check(DarkColors, "dark")
+
+    /**
+     * F-191 / F-199: the shared colours are the web's (web/src/styles.css is the source). Left out on
+     * purpose: bg and soft, the phone's own surfaces (a full-screen page, not the web's page-and-panel).
+     */
+    private fun web(theme: String): Map<String, String> {
+        val css = java.io.File("../../web/src/styles.css").readText()
+        val start = if (theme == "dark") css.indexOf(":root[data-theme=\"dark\"] {") else css.indexOf(":root {")
+        val block = css.substring(start, css.indexOf('}', start))
+        return Regex("--([a-z0-9-]+):\\s*(#[0-9a-fA-F]{3,6})").findAll(block).associate { it.groupValues[1] to it.groupValues[2].lowercase() }
+    }
+    private fun hex(c: Color) = "#%06x".format(c.value.toLong().ushr(32).toInt() and 0xFFFFFF)
+    private fun same(c: VayuColors, theme: String) {
+        val w = web(theme)
+        fun long(h: String) = if (h.length == 4) "#" + h.drop(1).map { "$it$it" }.joinToString("") else h
+        val pairs = mapOf("ink" to c.ink, "ink-2" to c.ink2, "muted" to c.muted, "line" to c.line, "line-strong" to c.line2,
+            "brand" to c.brand, "brand-tint" to c.brandTint, "ok" to c.ok, "ok-tint" to c.okTint, "warn" to c.warn, "warn-tint" to c.warnTint,
+            "bad" to c.bad, "bad-tint" to c.badTint, "info" to c.info, "info-tint" to c.infoTint, "primary" to c.primary,
+            "primary-ink" to c.onPrimary, "raised" to c.raised)
+        val wrong = pairs.filter { (k, v) -> w[k]?.let(::long) != hex(v) }.map { (k, v) -> "--$k web ${w[k]} app ${hex(v)}" }
+        assertTrue("$theme: ${wrong.joinToString("; ")}", wrong.isEmpty())
+    }
+
+    @Test fun lightColoursAreTheWebs() = same(LightColors, "light")
+    @Test fun darkColoursAreTheWebs() = same(DarkColors, "dark")
 }

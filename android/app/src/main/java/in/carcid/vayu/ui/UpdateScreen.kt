@@ -59,7 +59,7 @@ fun UpdateScreen(u: AppUpdate, onLater: () -> Unit) {
         Text("A new version of Vayu is ready", fontSize = 26.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink,
             modifier = Modifier.padding(top = 6.dp))
         Text("Version ${u.name}" + (if (u.size > 0) " · ${mb(u.size)}." else ".") +
-            (if (u.required) " You need it to start new jobs. A job you already started can be finished on this version." else ""),
+            (if (u.required) " You need it for new work. Work you already started can be finished on this version." else ""),
             color = Vayu.colors.muted, modifier = Modifier.padding(top = 10.dp))
         if (u.notes.isNotEmpty()) {
             Text("What's new", fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, modifier = Modifier.padding(top = 24.dp, bottom = 6.dp))

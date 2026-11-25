@@ -48,7 +48,7 @@ class OutboxTest {
             startedAt = "2026-11-24T15:28:00+05:30", submittedAt = "2026-11-24T16:10:00+05:30", files = listOf(f)))
         server.on("POST media/initiate", """{"id":"0000bbbb-0000-0000-0000-000000000001","status":"pending","part_size":5,
             "parts":[{"part_number":1,"url":"${server.raw("/s3/p1")}"},{"part_number":2,"url":"${server.raw("/s3/p2")}"}]}""")
-        server.on("GET media/0000bbbb-0000-0000-0000-000000000001", """{"uploaded_parts":[]}""")
+        server.on("GET media/0000bbbb-0000-0000-0000-000000000001", """{"status":"verified","uploaded_parts":[]}""")
         server.on("PUT /s3/p1", "", headers = mapOf("ETag" to "e1"))
         server.on("PUT /s3/p2", "", headers = mapOf("ETag" to "e2"))
         server.on("POST media/0000bbbb-0000-0000-0000-000000000001/complete", """{"status":"uploaded"}""")
@@ -185,5 +185,79 @@ class OutboxTest {
         assertTrue(old.sent)                                                               // the finished one is back in the answers
         assertTrue((d.answer("inspection", "door_photos") as List<*>).contains(old.id))
         assertEquals(1, server.bodiesOf("DELETE media/0000aaaa-0000-0000-0000-000000000002").size)                         // the half-sent one stops counting
+    }
+
+    @Test fun aFileTheServerRefusesIsExplainedAndTheRestIsSent() = runBlocking {
+        val f = ready()
+        server.on("POST media/initiate", """{"code":"TOO_LARGE","detail":"A photo may be at most 25 MB."}""", 400)
+        assertTrue(outbox.run())
+        val d = drafts.get(BOOKING)!!
+        assertTrue(d.submitSent)                                                // the answers went on without the refused file
+        val insp = Json.parseToJsonElement(server.bodiesOf("POST bookings/$BOOKING/submit").single()).jsonObject["answers"]!!.jsonObject["inspection"]!!.jsonObject
+        assertEquals(0, insp["door_photos"]!!.jsonArray.size)
+        val refused = d.files.single()
+        assertTrue(refused.refused)
+        assertEquals("A photo may be at most 25 MB.", refused.error)             // the server's reason is shown
+        val tries = server.bodiesOf("POST media/initiate").size
+        outbox.run()
+        assertEquals(tries, server.bodiesOf("POST media/initiate").size)        // not asked again and again
+        // locked after Submit, yet the refused file can be removed, and then nothing is left to send
+        `in`.carcid.vayu.ui.expert.InspectionModel(drafts, jobs, BOOKING, { java.time.Instant.now() }, {})
+            .removeFile("inspection", "door_photos", f.id)
+        assertTrue(drafts.get(BOOKING)!!.files.isEmpty())
+        assertFalse(drafts.get(BOOKING)!!.unsent)
+    }
+
+    @Test fun aFileThatFailsTheServersCheckLaterIsSentAgainAndKeptUntilChecked() = runBlocking {
+        ready()
+        server.on("GET media/0000bbbb-0000-0000-0000-000000000001", """{"status":"uploaded","uploaded_parts":[]}""")
+        assertFalse(outbox.run())                                               // waits for the server's check
+        assertTrue(drafts.get(BOOKING)!!.files.single().sent)
+        assertEquals(0L, drafts.clearSentCopies())                             // "Free up" never drops an unchecked copy
+        server.on("GET media/0000bbbb-0000-0000-0000-000000000001", """{"status":"failed","uploaded_parts":[]}""")
+        outbox.run()
+        val before = server.bodiesOf("PUT /s3/p1").size
+        server.on("GET media/0000bbbb-0000-0000-0000-000000000001", """{"status":"verified","uploaded_parts":[]}""")
+        assertTrue(outbox.run())
+        assertTrue(server.bodiesOf("PUT /s3/p1").size > before)                // sent again
+        val f = drafts.get(BOOKING)!!.files.single()
+        assertTrue(f.sent && f.verified)
+        assertFalse(drafts.get(BOOKING)!!.unsent)
+        assertEquals(10L, drafts.clearSentCopies())
+    }
+
+    @Test fun oneBadDraftDoesNotStopTheOthers() = runBlocking {
+        ready()
+        val other = "00000000-0000-0000-0000-000000000003"
+        drafts.save(Draft(other, "DEMO-3", "Meera", mapOf("inspection" to 7), "pdi", startedAt = "2026-11-24T15:28:00+05:30",
+            startSent = true, submittedAt = "2026-11-24T16:10:00+05:30"))
+        val shaky = Outbox(Api(server.url, MemoryTokenStore().apply { save("A", "R") }), drafts, 5) { d ->
+            check(d.bookingId != other) { "a form rule that never settles" }
+            jobs.filled(d.bookingId, d.versions, d.answers, "2026-11-24")
+        }
+        assertFalse(shaky.run())                                                // tried again later
+        assertTrue(drafts.get(BOOKING)!!.submitSent)                           // the good one went
+        assertNotNull(drafts.get(other)!!.problem)                              // the bad one says so
+    }
+
+    @Test fun theStartSendsTheFormVersionsThePhonePinned() = runBlocking {
+        ready()
+        outbox.run()
+        val start = Json.parseToJsonElement(server.bodiesOf("POST bookings/$BOOKING/start").single()).jsonObject
+        assertEquals(7, start["form_version"]!!.jsonPrimitive.content.toInt())
+        assertEquals(1, start["start_version"]!!.jsonPrimitive.content.toInt())
+        assertEquals(9, start["end_version"]!!.jsonPrimitive.content.toInt())
+    }
+
+    @Test fun aVersionTooOldIsExplainedAndNotRetried() = runBlocking {
+        ready()
+        server.on("POST bookings/$BOOKING/start", """{"code":"FORM_VERSION_OLD","detail":"This form was replaced before the job started. Ops have been told."}""", 409)
+        outbox.run()
+        val d = drafts.get(BOOKING)!!
+        assertEquals(JOB_CLOSED, d.problemCode)
+        assertEquals("This form was replaced before the job started. Ops have been told.", d.problem)
+        val tries = server.bodiesOf("POST bookings/$BOOKING/start").size
+        outbox.run()
+        assertEquals(tries, server.bodiesOf("POST bookings/$BOOKING/start").size)
     }
 }

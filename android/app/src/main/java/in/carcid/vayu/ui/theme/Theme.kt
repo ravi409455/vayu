@@ -10,7 +10,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-/** The web app's colour tokens (web/src/styles.css), so the app and the web look like one product. */
+/** The web app's colour tokens (web/src/styles.css, the source; ThemeTest checks them). bg and soft are the phone's own surfaces. */
 @Immutable
 data class VayuColors(
     val bg: Color, val soft: Color, val ink: Color, val ink2: Color, val muted: Color,
@@ -24,7 +24,7 @@ data class VayuColors(
 
 val LightColors = VayuColors(
     bg = Color(0xFFFFFFFF), soft = Color(0xFFF2F4F7), ink = Color(0xFF1C2330), ink2 = Color(0xFF344054),
-    muted = Color(0xFF5D6679), line = Color(0xFFECEEF2), line2 = Color(0xFFD0D5DD),
+    muted = Color(0xFF5D6679), line = Color(0xFFE3E6EC), line2 = Color(0xFFD0D5DD),
     brand = Color(0xFFA62830), brandTint = Color(0xFFFBEAEC),
     ok = Color(0xFF15703F), okTint = Color(0xFFE6F4EC), warn = Color(0xFFB54708), warnTint = Color(0xFFFDF0E1),
     bad = Color(0xFFB3261E), badTint = Color(0xFFFBE9E7), info = Color(0xFF1D5FD1), infoTint = Color(0xFFE7EFFC),
@@ -33,8 +33,8 @@ val LightColors = VayuColors(
 )
 
 val DarkColors = VayuColors(
-    bg = Color(0xFF0A0F1A), soft = Color(0xFF161F31), ink = Color(0xFFE6EAF2), ink2 = Color(0xFFC3CAD6),
-    muted = Color(0xFF9AA4B5), line = Color(0xFF1F2A40), line2 = Color(0xFF364562),
+    bg = Color(0xFF0A0F1A), soft = Color(0xFF162034), ink = Color(0xFFE6EAF2), ink2 = Color(0xFFC3CAD6),
+    muted = Color(0xFF9AA4B5), line = Color(0xFF26324A), line2 = Color(0xFF364562),
     brand = Color(0xFFC83A45), brandTint = Color(0xFF3A1B22),
     ok = Color(0xFF4CC283), okTint = Color(0xFF123524), warn = Color(0xFFF0994A), warnTint = Color(0xFF3B2A12),
     bad = Color(0xFFF2776F), badTint = Color(0xFF3D1D1A), info = Color(0xFF7AAAFF), infoTint = Color(0xFF16264A),

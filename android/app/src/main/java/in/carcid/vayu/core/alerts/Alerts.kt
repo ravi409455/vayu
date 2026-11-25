@@ -21,7 +21,7 @@ val STUCK_AFTER: Duration = Duration.ofHours(2)
  * "In 1 hour: DEMO-8 at 11:00" for each job of mine not started yet whose reminder time is still
  * ahead. Jobs without a time, done or started, or already past, get none.
  */
-fun reminders(jobs: List<Job>, now: Instant, zone: ZoneId = ZoneId.systemDefault()): List<Reminder> =
+fun reminders(jobs: List<Job>, now: Instant, zone: ZoneId = `in`.carcid.vayu.core.sync.IST): List<Reminder> =
     jobs.filter { it.assignedToMe && it.stage == "assigned" && it.myDraft == null }.mapNotNull { j ->
         val slot = runCatching { LocalDate.parse(j.date).atTime(LocalTime.parse(j.time)).atZone(zone).toInstant() }.getOrNull()
             ?: return@mapNotNull null

@@ -147,6 +147,12 @@ class ExpertExtras(
     val inspection: ((Job) -> InspectionEnv)? = null,
     val onDiscard: (String) -> Unit = {},
     val onClearSent: () -> Unit = {},
+    /** Leads on this person's list (a draft of any other lead has left it). */
+    val listed: Set<String> = emptySet(),
+    /** Lock a draft as it is and send it (a lead no longer on the list). */
+    val onSend: (String) -> Unit = {},
+    /** Remove a file the server refused (also after Submit). */
+    val onRemoveFile: (Draft, `in`.carcid.vayu.core.draft.LocalFile) -> Unit = { _, _ -> },
     /** Customer phones by booking id (Uploads search). */
     val phones: Map<String, String> = emptyMap(),
     /** The bell: notifications from the server; [onRead] marks some (null: all) read. */
@@ -158,7 +164,7 @@ class ExpertExtras(
     val onOpened: () -> Unit = {},
 ) {
     /** Phone storage, as Uploads and App settings show it. */
-    val storage: StorageInfo get() = StorageInfo(freeBytes, sentBytes, drafts.values.sumOf { d -> d.files.count { !it.sent } }) {
+    val storage: StorageInfo get() = StorageInfo(freeBytes, sentBytes, drafts.values.sumOf { d -> d.files.count { !it.verified } }) {
         sentBytes.also { onClearSent() }
     }
 }
@@ -168,9 +174,9 @@ private const val GB = 1024L * 1024 * 1024
 /** Why a job can't be started on this phone now (null: it can). A started draft can always go on. */
 fun cannotStart(j: Job, d: Draft?, ready: Boolean, extras: ExpertExtras): String? = when {
     d != null -> null
-    extras.updateNeeded -> "Update the app to start new jobs."
+    extras.updateNeeded -> "Update the app to start new leads."
     extras.freeBytes < GB / 2 -> "The phone is almost full. Clear sent photos on the Uploads tab first."
-    !ready -> "This job's form isn't on the phone yet. Connect once and tap Refresh."
+    !ready -> "This lead's form isn't on the phone yet. Connect once and tap Refresh."
     else -> null
 }
 
@@ -196,12 +202,13 @@ fun ExpertHome(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit
     androidx.compose.runtime.LaunchedEffect(state.syncing) {
         if (!state.syncing && asked) {
             asked = false
-            say(when { state.offline -> "No signal. Showing the jobs saved" + (state.syncedAt?.let { " at $it" } ?: "") + "."
-                state.error != null -> state.error; else -> "Jobs up to date." })
+            say(when { state.offline -> "No signal. Showing the leads saved" + (state.syncedAt?.let { " at $it" } ?: "") + "."
+                state.error != null -> state.error; else -> "Leads up to date." })
         }
     }
     val inspecting = state.jobs.firstOrNull { it.id == inspectId }
     val open = state.jobs.firstOrNull { it.id == openId }
+    var discarding by remember { mutableStateOf<Job?>(null) }
     Box(Modifier.fillMaxSize()) {
         when {
             inspecting != null && extras.inspection != null -> InspectionScreen(remember(inspecting.id) { extras.inspection.invoke(inspecting) },
@@ -211,7 +218,7 @@ fun ExpertHome(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit
                 NotificationsScreen(extras.bell, today, onBack = { bell = false }, onReadAll = { extras.onRead(null) }, onOpen = { n ->
                     extras.onRead(listOf(n.id))
                     if (n.booking != null && state.jobs.any { it.id == n.booking }) { openId = n.booking; bell = false }
-                    else say("That job is no longer on your list.")
+                    else say("That lead is no longer on your list.")
                 })
             }
             open != null -> {
@@ -220,18 +227,27 @@ fun ExpertHome(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Unit
                 JobDetailScreen(open, ready = open.id in state.ready, today = today, onBack = { openId = null },
                     draft = d, blocked = cannotStart(open, d, open.id in state.ready, extras),
                     notices = extras.notices.filter { it.first == open.id }.map { it.second },
-                    onStart = { inspectId = open.id }, onDiscard = { extras.onDiscard(open.id); say("Draft discarded.") })
+                    onStart = { inspectId = open.id }, onDiscard = { discarding = open })
             }
             uploads -> {
                 BackHandler { uploads = false }
                 UploadsScreen(me, extras, onProfile, onJobs = { uploads = false }, onRefresh = refresh,
-                    onBell = { bell = true }, refreshing = state.syncing, say = say)
+                    onBell = { bell = true }, refreshing = state.syncing, say = say, onOpenLead = { uploads = false; openId = it })
             }
             else -> MyJobsScreen(me, state, today, onProfile, refresh, extras, onOpen = { j ->
                 val d = extras.drafts[j.id]
                 if (d != null && d.locked) inspectId = j.id else openId = j.id
-            }, onUploads = { uploads = true }, onDiscard = { extras.onDiscard(it); say("Draft discarded.") },
+            }, onUploads = { uploads = true }, onDiscard = { id -> discarding = state.jobs.firstOrNull { it.id == id } },
                 onSubmitAnyway = { inspectId = it.id }, onBell = { bell = true })
+        }
+        // a mis-tap beside "Submit anyway" must not destroy work: same question as Uploads
+        discarding?.let { j ->
+            androidx.compose.material3.AlertDialog(onDismissRequest = { discarding = null },
+                title = { Text("Discard ${j.bookingId}?") },
+                text = { Text("Its answers and photos on this phone are cleared. This cannot be undone.") },
+                confirmButton = { androidx.compose.material3.TextButton({ discarding = null; extras.onDiscard(j.id); say("Draft discarded.") }) {
+                    Text("Discard draft", color = Vayu.colors.bad) } },
+                dismissButton = { androidx.compose.material3.TextButton({ discarding = null }) { Text("Keep it") } })
         }
         androidx.compose.material3.SnackbarHost(snack, Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp))
     }
@@ -250,7 +266,7 @@ fun NotificationsScreen(bell: `in`.carcid.vayu.ui.BellState, today: LocalDate, o
         Text("Notifications", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink, modifier = Modifier.padding(horizontal = 20.dp))
         LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp)) {
             if (bell.notes.isEmpty()) item {
-                Text(if (bell.loaded) "Nothing yet. New jobs, changed times and cancellations show here." else "Loading…",
+                Text(if (bell.loaded) "Nothing yet. New leads, changed times and cancellations show here." else "Loading…",
                     color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 16.dp))
             }
             noteRows(bell.notes, today, onOpen)
@@ -273,10 +289,10 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
         .let { if (tab == JobTab.DONE) it.reversed() else it }
     val todayCount = mine.count { tabOf(it, today) == JobTab.TODAY }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
-        VayuTopBar("My jobs", me.initials, bellCount = extras.bell.unread, onBell = onBell, onProfile = onProfile)
+        VayuTopBar("My leads", me.initials, bellCount = extras.bell.unread, onBell = onBell, onProfile = onProfile)
         // a thin bar while jobs download (Refresh, reopening); fixed height so nothing jumps
         Box(Modifier.fillMaxWidth().height(3.dp).padding(horizontal = 20.dp)) {
-            if (state.syncing) LinearProgressIndicator(Modifier.fillMaxSize().semantics { contentDescription = "Updating jobs" },
+            if (state.syncing) LinearProgressIndicator(Modifier.fillMaxSize().semantics { contentDescription = "Updating leads" },
                 color = Vayu.colors.brand, trackColor = Vayu.colors.soft)
         }
         LazyColumn(Modifier.weight(1f).padding(horizontal = 20.dp)) {
@@ -292,7 +308,7 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
                 val banners = buildList {
                     extras.notices.forEach { (id, text) -> add("ops:$id:$text" to (text to Tone.WARN)) }
                     if (extras.freeBytes < 2 * GB) add("space" to ("%.1f GB free. Clear sent photos on the Uploads tab before it runs out.".format(extras.freeBytes.toDouble() / GB) to Tone.WARN))
-                    if (extras.updateNeeded) add("update" to ("Update needed to start new jobs. Started jobs can still be finished." to Tone.BAD))
+                    if (extras.updateNeeded) add("update" to ("Update needed to start new leads. Started leads can still be finished." to Tone.BAD))
                 }.filter { it.first !in closed }
                 banners.forEach { (key, b) ->
                     Banner(b.first, b.second, { closed = closed + key })
@@ -316,15 +332,15 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
             }
             if (shown.isEmpty()) item {
                 Text(when {
-                    state.syncing && state.jobs.isEmpty() -> "Getting your jobs…"
-                    needle.isNotEmpty() -> "No job matches \"$query\"."
+                    state.syncing && state.jobs.isEmpty() -> "Getting your leads…"
+                    needle.isNotEmpty() -> "No lead matches \"$query\"."
                     tab == JobTab.TODAY -> "Nothing for today."
                     tab == JobTab.UPCOMING -> "Nothing coming up."
                     else -> "Nothing finished in the last 7 days."
                 }, color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp))
             }
         }
-        ExpertBottomBar(ExpertTab.JOBS, uploads = extras.drafts.values.sumOf { d -> d.files.count { !it.sent } },
+        ExpertBottomBar(ExpertTab.JOBS, uploads = extras.drafts.values.sumOf { d -> d.files.count { !it.verified } },
             onTab = { if (it == ExpertTab.UPLOADS) onUploads() }, onRefresh = onRefresh, refreshing = state.syncing)
     }
 }
@@ -340,7 +356,8 @@ private fun JobRow(j: Job, today: LocalDate, d: Draft?, onOpen: (Job) -> Unit) {
     val (label, tone) = statusOf(j, d)
     Column(Modifier.fillMaxWidth().clickable(role = Role.Button) { onOpen(j) }) {
         Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(lead, modifier = Modifier.width(52.dp), fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, softWrap = false,
+            // the column grows with the phone's text size, so "22 Nov" never reads "22 No"
+            Text(lead, modifier = Modifier.width((52 * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtLeast(1f)).dp), fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, softWrap = false,
                 color = when { overdue -> Vayu.colors.warn; j.open -> Vayu.colors.ink; else -> Vayu.colors.muted })
             Column(Modifier.weight(1f)) {
                 // name "…" and status; the booking ID in full; car · type; then a note if there is one
@@ -372,12 +389,15 @@ fun JobDetailScreen(j: Job, ready: Boolean, today: LocalDate, onBack: () -> Unit
     val place = listOf(j.address, j.city).filter { it.isNotBlank() }.joinToString(", ")
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
         IconButton(onClick = onBack, modifier = Modifier.padding(start = 6.dp, top = 10.dp)) {
-            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back to My jobs", tint = Vayu.colors.ink)
+            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back to My leads", tint = Vayu.colors.ink)
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-            Text(j.customer, fontSize = 26.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink,
+            Text(j.customer.ifBlank { j.bookingId }, fontSize = 26.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink,
                 modifier = Modifier.padding(top = 4.dp))
-            Text(j.bookingId, color = Vayu.colors.ink2, fontWeight = FontWeight.Medium)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(j.bookingId, color = Vayu.colors.ink2, fontWeight = FontWeight.Medium)
+                if (j.stage == "cancelled") StatusDot("Cancelled", Tone.BAD)
+            }
             Text(listOf(dayLabel(j.date, today), time12(j.time)).filter { it.isNotEmpty() }.joinToString(", "), color = Vayu.colors.muted)
             Row(Modifier.padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 // digits only: a stored "*#06#"-style code must never reach the dialer
@@ -392,13 +412,15 @@ fun JobDetailScreen(j: Job, ready: Boolean, today: LocalDate, onBack: () -> Unit
                     uri.openUri("https://www.google.com/maps/search/?api=1&query=" + URLEncoder.encode(place, "UTF-8"))
                 }
             }
+            if (j.stage == "cancelled") { Spacer(Modifier.height(12.dp))
+                Banner("Ops cancelled this lead" + (if (j.cancelReason.isNotBlank()) ": ${j.cancelReason}." else "."), Tone.BAD, null) }
             notices.forEach { Spacer(Modifier.height(12.dp)); Banner(it, Tone.WARN, {}) }
             Spacer(Modifier.height(14.dp))
             Info("Car", j.car)
             Info("Inspection", j.type)
             Info("Address", place)
             Info("Phone", phoneLabel(j.phone))
-            if (ready) Row(Modifier.padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically,
+            if (ready && j.open) Row(Modifier.padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = Vayu.colors.ok, modifier = Modifier.size(18.dp))
                 Text("Ready to work without signal", color = Vayu.colors.ok, style = MaterialTheme.typography.bodyMedium)

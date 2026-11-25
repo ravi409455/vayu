@@ -1,6 +1,8 @@
 package `in`.carcid.vayu.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -39,8 +41,16 @@ class SignInFlowTest {
     private fun me(role: String, mustChange: Boolean = false) =
         """{"id":3,"username":"ravi","name":"Ravi Expert","role":"$role","must_change_password":$mustChange,"theme":"light"}"""
 
+    private var pushTokens = 0
+    private val tokens = MemoryTokenStore()
+
+    private val root = java.nio.file.Files.createTempDirectory("vayu").toFile()
+    private lateinit var graph: `in`.carcid.vayu.Graph
+
     private fun launch() {
-        val vm = AppViewModel(`in`.carcid.vayu.core.api.testGraph(server), "Test phone")
+        graph = `in`.carcid.vayu.Graph(Api(server.url, tokens), tokens, root, {},
+            sendPushToken = { pushTokens++ })
+        val vm = AppViewModel(graph, "Test phone")
         compose.setContent { AppRoot(vm) }
     }
 
@@ -56,13 +66,67 @@ class SignInFlowTest {
 
     @Test fun theSignInScreenMatchesTheDesign() {
         launch()
-        compose.onNodeWithText("Welcome back. Your jobs are waiting.").assertIsDisplayed()
+        compose.onNodeWithText("Welcome back. Your work is waiting.").assertIsDisplayed()
         compose.onRoot().captureRoboImage("src/test/screenshots/sign_in.png", roborazziOptions = options)
+    }
+
+    @Test fun theKeyboardGoesFromUsernameToPasswordAndSignsIn() {
+        signedIn("expert")
+        launch()
+        compose.onNodeWithContentDescription("Username").performTextInput("ravi")
+        compose.onNodeWithContentDescription("Username").performImeAction()               // Next, not Done
+        compose.onNodeWithContentDescription("Password").assertIsFocused().performTextInput("Vayu-local-1")
+        compose.onNodeWithContentDescription("Password").performImeAction()               // Done signs in
+        waitFor("My leads")
+    }
+
+    /** F-073: everything is sent (sign-out checks), so this person's drafts, answers and photos leave the phone. */
+    @Test fun signingOutTakesThePersonsDraftsOffThePhone() {
+        signedIn("expert")
+        server.on("POST auth/logout", "", 204)
+        launch(); signIn(); waitFor("My leads")
+        val sent = `in`.carcid.vayu.core.draft.Draft("00000000-0000-0000-0000-000000000001", "DEMO-1", "Farhan Ali", emptyMap(), "pdi", submitSent = true)
+        graph.drafts(3).save(sent)
+        java.io.File(root, "drafts-3/files").apply { mkdirs() }.resolve("old.jpg").writeText("stamped photo")
+        compose.onNodeWithContentDescription("Profile").performClick()
+        compose.onNodeWithText("Sign out").performClick()
+        waitFor("Sign in")
+        compose.waitUntil(5_000) { !java.io.File(root, "drafts-3").exists() }
+    }
+
+    /** F-077: signed out without signal, the server's sign-in for this phone is ended at the next sign-in. */
+    @Test fun aSignOutWithoutSignalIsFinishedAtTheNextSignIn() {
+        signedIn("expert")
+        server.on("POST auth/logout", "", 503)                    // the server can't be reached
+        launch(); signIn(); waitFor("My leads")
+        compose.onNodeWithContentDescription("Profile").performClick()
+        compose.onNodeWithText("Sign out").performClick()
+        waitFor("Sign in")
+        server.on("POST auth/logout", "", 204)
+        server.on("POST auth/refresh", """{"access":"OLD-A","refresh":"R2"}""")
+        signIn(); waitFor("My leads")
+        compose.waitUntil(5_000) { server.bodiesOf("POST auth/refresh").any { "\"R\"" in it } }
+        compose.waitUntil(5_000) { server.bodiesOf("POST auth/logout").size == 2 }
     }
 
     @Test fun anExpertLandsOnMyJobs() {
         signedIn("expert")
-        launch(); signIn(); waitFor("My jobs")
+        launch(); signIn(); waitFor("My leads")
+    }
+
+    @Test fun theSignInQueuesThePushTokenToBeSentUntilItArrives() {
+        signedIn("expert")
+        launch(); signIn(); waitFor("My leads")
+        org.junit.Assert.assertEquals(1, pushTokens)                       // WorkManager retries it (offline at sign-in)
+    }
+
+    @Test fun aSignInThatEndsWhileTheAppRunsAsksToSignInAgain() {
+        signedIn("expert")
+        launch(); signIn(); waitFor("My leads")
+        server.on("GET sync/jobs", """{"code":"token_not_valid","detail":"Token is invalid or expired"}""", 401)
+        server.on("POST auth/refresh", """{"code":"token_not_valid","detail":"Token is invalid or expired"}""", 401)
+        compose.onNode(androidx.compose.ui.test.hasContentDescription("Refresh", substring = true)).performClick()
+        waitFor("Your sign-in has ended. Sign in again; your unsent work stays on this phone.")
     }
 
     @Test fun opsLandOnToday() {

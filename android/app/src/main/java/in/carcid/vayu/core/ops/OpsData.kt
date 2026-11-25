@@ -22,7 +22,9 @@ data class Loaded(val data: JsonElement, val offline: Boolean, val savedAt: Long
  * Ops read what the server has; every answer is also kept (one file per address) so the screens
  * still open without signal, read-only, with "Offline · as of 10:42". Actions always need signal.
  */
-class OpsData(val api: Api, private val dir: File, private val clock: () -> Long = System::currentTimeMillis) {
+class OpsData(val api: Api, private val dir: File, private val clock: () -> Long = System::currentTimeMillis,
+              /** Saved copies kept at most (each search or filter is one); the least recently saved go first. */
+              private val keep: Int = 300) {
     private fun fileOf(path: String): File {
         val h = MessageDigest.getInstance("SHA-256").digest(path.toByteArray()).take(12).joinToString("") { "%02x".format(it) }
         return File(dir, "$h.json")
@@ -32,6 +34,7 @@ class OpsData(val api: Api, private val dir: File, private val clock: () -> Long
     suspend fun load(path: String): Loaded = try {
         val data = api.get(path)
         writeAtomically(fileOf(path), buildJsonObject { put("at", JsonPrimitive(clock())); put("data", data) }.toString().toByteArray())
+        trim()
         Loaded(data, false, clock())
     } catch (e: ApiError) {
         if (e.code != ApiError.NETWORK && e.status < 500) throw e
@@ -48,6 +51,11 @@ class OpsData(val api: Api, private val dir: File, private val clock: () -> Long
     suspend fun act(method: String, path: String, body: JsonObject? = null): JsonElement = api.act(method, path, body)
 
     fun clear() { dir.listFiles()?.forEach { it.delete() } }
+
+    private fun trim() {
+        val files = dir.listFiles { f -> f.name.endsWith(".json") }.orEmpty()
+        if (files.size > keep) files.sortedBy { it.lastModified() }.take(files.size - keep).forEach { it.delete() }
+    }
 }
 
 /** A list the API returns bare, as a page ({count, results}) or as {rows} (dashboards). */

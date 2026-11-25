@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -65,13 +66,13 @@ fun VayuTopBar(title: String, initials: String, bellCount: Int, onBell: () -> Un
         Text(title, style = MaterialTheme.typography.headlineMedium, color = Vayu.colors.ink,
             modifier = Modifier.weight(1f))
         actions()
-        IconButton(onClick = onBell, modifier = Modifier.semantics {
-            contentDescription = if (bellCount > 0) "Notifications, $bellCount" else "Notifications"
-        }) {
-            Box {
-                Icon(Icons.Outlined.Notifications, contentDescription = null, tint = Vayu.colors.ink)
-                if (bellCount > 0) CountBadge(bellCount, Modifier.align(Alignment.TopEnd).offset(6.dp, (-6).dp))
-            }
+        // the count sits beside the button, not inside it (the button's round clip cut it off)
+        Box {
+            IconButton(onClick = onBell, modifier = Modifier.semantics {
+                contentDescription = if (bellCount > 0) "Notifications, $bellCount" else "Notifications"
+            }) { Icon(Icons.Outlined.Notifications, contentDescription = null, tint = Vayu.colors.ink) }
+            if (bellCount > 0) CountBadge(bellCount, Modifier.align(Alignment.TopEnd).offset((-2).dp, 4.dp)
+                .clearAndSetSemantics { })
         }
         IconButton(onClick = onProfile, modifier = Modifier.semantics { contentDescription = "Profile" }) {
             Avatar(initials)
@@ -83,7 +84,9 @@ fun VayuTopBar(title: String, initials: String, bellCount: Int, onBell: () -> Un
 fun CountBadge(count: Int, modifier: Modifier = Modifier) {
     Box(modifier.heightIn(min = 17.dp).clip(RoundedCornerShape(9.dp)).background(Vayu.colors.bad)
         .padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
-        Text(if (count > 99) "99+" else count.toString(), color = Color.White, fontSize = 10.sp,
+        // a fixed size whatever the phone's text size (the count is also in the bell's description), so it never hides the bell
+        val k = androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceAtLeast(1f)
+        Text(if (count > 99) "99+" else count.toString(), color = Color.White, fontSize = (10 / k).sp, lineHeight = (12 / k).sp,
             fontWeight = FontWeight.Bold)
     }
 }
@@ -214,19 +217,20 @@ fun ToggleChip(label: String, on: Boolean, onToggle: (Boolean) -> Unit) {
     }
 }
 
-/** Info / warning / problem message; every banner can be closed (the offline strip cannot). */
+/** Info / warning / problem message; closable when [onClose] is given (the offline strip never is). */
 @Composable
-fun Banner(text: String, tone: Tone, onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun Banner(text: String, tone: Tone, onClose: (() -> Unit)?, modifier: Modifier = Modifier) {
     val (bg, fg) = when (tone) {
         Tone.WARN -> Vayu.colors.warnTint to Vayu.colors.warn
         Tone.BAD -> Vayu.colors.badTint to Vayu.colors.bad
         Tone.OK -> Vayu.colors.okTint to Vayu.colors.ok
         else -> Vayu.colors.infoTint to Vayu.colors.info
     }
-    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(bg).padding(start = 14.dp, top = 4.dp, bottom = 4.dp),
+    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(bg)
+        .padding(start = 14.dp, top = 4.dp, bottom = 4.dp, end = if (onClose == null) 14.dp else 0.dp).heightIn(min = 40.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Text(text, style = MaterialTheme.typography.bodyLarge, fontSize = 14.sp, color = fg, modifier = Modifier.weight(1f))
-        IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, contentDescription = "Close", tint = fg) }
+        if (onClose != null) IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, contentDescription = "Close", tint = fg) }
     }
 }
 
@@ -266,7 +270,10 @@ fun SoftField(value: String, onValueChange: (String) -> Unit, placeholder: Strin
               icon: ImageVector? = null, trailing: (@Composable () -> Unit)? = null,
               visualTransformation: androidx.compose.ui.text.input.VisualTransformation =
                   androidx.compose.ui.text.input.VisualTransformation.None,
-              error: Boolean = false, password: Boolean = false, enabled: Boolean = true) {
+              error: Boolean = false, password: Boolean = false, enabled: Boolean = true,
+              /** The keyboard's action key (Next, Done…) and what it does; Next moves to the following field. */
+              imeAction: androidx.compose.ui.text.input.ImeAction = androidx.compose.ui.text.input.ImeAction.Default,
+              onIme: (() -> Unit)? = null) {
     Row(modifier.fillMaxWidth().heightIn(min = 54.dp).clip(RoundedCornerShape(14.dp)).background(Vayu.colors.soft)
         .let { if (error) it.border(2.dp, Vayu.colors.bad, RoundedCornerShape(14.dp)) else it }
         .padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically,
@@ -277,8 +284,10 @@ fun SoftField(value: String, onValueChange: (String) -> Unit, placeholder: Strin
             BasicTextField(value, onValueChange, enabled = enabled, singleLine = true, visualTransformation = visualTransformation,
                 // passwords: no suggestions, no keyboard learning
                 keyboardOptions = if (password) androidx.compose.foundation.text.KeyboardOptions(
-                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Password, autoCorrectEnabled = false)
-                else androidx.compose.foundation.text.KeyboardOptions.Default,
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Password, autoCorrectEnabled = false, imeAction = imeAction)
+                else androidx.compose.foundation.text.KeyboardOptions(imeAction = imeAction),
+                keyboardActions = if (onIme == null) androidx.compose.foundation.text.KeyboardActions.Default
+                    else androidx.compose.foundation.text.KeyboardActions(onAny = { onIme() }),
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = if (enabled) Vayu.colors.ink else Vayu.colors.muted),
                 cursorBrush = SolidColor(Vayu.colors.ink),
                 modifier = Modifier.fillMaxWidth().semantics { contentDescription = placeholder })
@@ -375,3 +384,27 @@ fun TimePick(initial: java.time.LocalTime, onPick: (java.time.LocalTime) -> Unit
         dismissButton = { androidx.compose.material3.TextButton(onDismiss) { Text("Cancel") } },
         text = { androidx.compose.material3.TimePicker(state) })
 }
+
+/**
+ * Something Android blocks (camera, microphone, notices) that only its Settings can turn back on:
+ * says what is lost and opens the app's page there with [button].
+ */
+@Composable
+fun SettingsNudge(text: String, button: String, settings: android.content.Intent, modifier: Modifier = Modifier, dark: Boolean = false) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (dark) Color(0xCC000000) else Vayu.colors.warnTint)
+        .padding(start = 14.dp, top = 6.dp, bottom = 6.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(text, fontSize = 14.sp, color = if (dark) Color.White else Vayu.colors.warn, modifier = Modifier.weight(1f))
+        androidx.compose.material3.TextButton({ runCatching { ctx.startActivity(settings.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } }) {
+            Text(button, fontWeight = FontWeight.SemiBold, color = if (dark) Color.White else Vayu.colors.warn)
+        }
+    }
+}
+
+/** This app's page in Android Settings (permissions live there). */
+fun appSettings(ctx: android.content.Context) = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+    android.net.Uri.fromParts("package", ctx.packageName, null))
+
+/** This app's notification settings. */
+fun noticeSettings(ctx: android.content.Context) = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName)

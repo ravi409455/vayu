@@ -115,7 +115,17 @@ fun stampLines(code: String, expert: String, at: Instant, verified: Boolean, pla
     listOf("$code · $expert · ${at.atZone(ZoneId.systemDefault()).format(STAMP_TIME)}" + if (verified) "" else " (phone time)",
         Locator.stampLine(place))
 
-/** Ask for [permissions] once when the screen opens; [granted] says whether the first one was given. */
+/** Whether [permission] is given, checked again each time the screen comes back (from Settings, say). */
+@Composable
+fun rememberGranted(permission: String): Boolean {
+    val ctx = LocalContext.current
+    fun now() = ContextCompat.checkSelfPermission(ctx, permission) == PackageManager.PERMISSION_GRANTED
+    var ok by remember { mutableStateOf(now()) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { ok = now(); onPauseOrDispose {} }
+    return ok
+}
+
+/** Ask for [permissions] once when the screen opens; returns whether the first one is given (re-checked on coming back). */
 @Composable
 fun rememberPermissions(vararg permissions: String, onResult: (Boolean) -> Unit = {}): Boolean {
     val ctx = LocalContext.current
@@ -124,6 +134,9 @@ fun rememberPermissions(vararg permissions: String, onResult: (Boolean) -> Unit 
         ok = it[permissions[0]] == true; onResult(ok)
     }
     LaunchedEffect(Unit) { if (!ok || permissions.drop(1).any { p -> ContextCompat.checkSelfPermission(ctx, p) != PackageManager.PERMISSION_GRANTED }) ask.launch(arrayOf(*permissions)) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        ok = ContextCompat.checkSelfPermission(ctx, permissions[0]) == PackageManager.PERMISSION_GRANTED; onPauseOrDispose {}
+    }
     return ok
 }
 
@@ -144,6 +157,10 @@ fun firstCameraIsBack(field: Field): Boolean = when (field.config["camera"]) {
     else -> true
 }
 
+/** 720p at about 2.5 Mbps (the agreed size: ~19 MB a minute, the same on every phone). */
+fun videoRecorder(): Recorder = Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.HD))
+    .setTargetVideoEncodingBitRate(2_500_000).build()
+
 @Composable
 fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () -> Instant, verified: Boolean,
                  dir: File, onTaken: (File, String) -> Unit, onDone: () -> Unit) {
@@ -154,6 +171,7 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
     val camOk = if (video) rememberPermissions(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO,
         Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
         else rememberPermissions(Manifest.permission.CAMERA, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+    val micOk = rememberGranted(Manifest.permission.RECORD_AUDIO)
     val taken = have
     var busy by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf<Recording?>(null) }
@@ -169,7 +187,7 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
     LaunchedEffect(Unit) { while (true) { clock = now(); kotlinx.coroutines.delay(1000) } }
     val preview = remember { Preview.Builder().build() }
     val capture = remember { ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build() }
-    val recorder = remember { Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.HD)).build() }
+    val recorder = remember { videoRecorder() }
     val videoCapture = remember { VideoCapture.withOutput(recorder) }
     val canFlip = provider?.let { runCatching { it.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) }.getOrDefault(false) } == true
     LaunchedEffect(provider, back) {
@@ -197,7 +215,15 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
                 future.addListener({ provider = future.get() }, ContextCompat.getMainExecutor(c))
             }
         }, modifier = Modifier.fillMaxSize())
-        else Text("Allow the camera to take photos here.", color = Color.White, modifier = Modifier.align(Alignment.Center).padding(24.dp))
+        // after one "Don't allow" Android may never ask again: Settings is the way back
+        else Column(Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("The camera isn't allowed for Vayu, so ${if (video) "videos" else "photos"} can't be taken here.", color = Color.White,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            androidx.compose.material3.TextButton({ runCatching { ctx.startActivity(`in`.carcid.vayu.ui.components.appSettings(ctx)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } }, Modifier.padding(top = 12.dp)) {
+                Text("Allow camera in Settings", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
 
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
             Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -211,6 +237,8 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
                 else Text("Done", color = Color.White, fontWeight = FontWeight.Bold,
                     modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable(role = Role.Button, onClick = onDone).padding(12.dp))
             }
+            if (video && camOk && !micOk) `in`.carcid.vayu.ui.components.SettingsNudge("No sound: the microphone isn't allowed.", "Allow",
+                `in`.carcid.vayu.ui.components.appSettings(ctx), Modifier.padding(horizontal = 12.dp), dark = true)
             Spacer(Modifier.weight(1f))
             Text(stampLines(code, expert, clock, verified, place).joinToString("\n"), color = Color.White, fontFamily = FontFamily.Monospace,
                 fontSize = 12.sp, modifier = Modifier.padding(12.dp).background(Color.Black.copy(alpha = .45f)).padding(8.dp))
@@ -218,7 +246,7 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
                 Spacer(Modifier.size(56.dp))
                 Spacer(Modifier.weight(1f))
                 Box(Modifier.size(76.dp).clip(CircleShape).border(4.dp, Color.White, CircleShape).padding(8.dp).clip(CircleShape)
-                    .background(when { busy || (full && recording == null) -> Color.Gray; video -> Color(0xFFE5484D); else -> Color.White })
+                    .background(when { !camOk || busy || (full && recording == null) -> Color.Gray; video -> Color(0xFFE5484D); else -> Color.White })
                     .clickable(enabled = camOk && !busy && pending == null && (!full || recording != null), role = Role.Button) {
                         if (video) {
                             val r = recording

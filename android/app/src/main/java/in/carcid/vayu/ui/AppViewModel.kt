@@ -23,16 +23,16 @@ sealed interface Screen {
 /** Sign-in, the forced password change, routing by role, and the profile. */
 class AppViewModel(val graph: Graph, private val deviceName: String,
                    private val clock: () -> Long = System::currentTimeMillis,
-                   /** This phone's push token (Firebase in the app; none in tests). */
-                   private val pushToken: suspend () -> String? = { null },
                    /** This build's version code (newer builds are offered as updates). */
-                   val appVersion: Int = 0) : ViewModel() {
+                   val appVersion: Int = 0,
+                   /** Time since the phone booted (ms), to notice a clock changed after a sync. */
+                   private val elapsed: () -> Long? = { null }) : ViewModel() {
     private val api = graph.api
     private val tokens = graph.tokens
     private val _screen = MutableStateFlow<Screen>(Screen.Loading)
     val screen: StateFlow<Screen> = _screen
     val jobs = JobsModel(api, graph::jobs, viewModelScope, clock, onRevoked = ::revoked, drop = graph::forgetJobs,
-        afterSync = { graph.prune(it); heartbeat(it); graph.onJobs(it) })
+        afterSync = { graph.prune(it); heartbeat(it); graph.onJobs(it) }, pinned = graph::pinned, elapsed = elapsed)
     /** A newer build on offer (null: this is the newest), and whether its screen is up. */
     val update = MutableStateFlow<`in`.carcid.vayu.core.update.AppUpdate?>(null)
     val showUpdate = MutableStateFlow(false)
@@ -48,6 +48,14 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
     init {
         viewModelScope.launch { resume() }
         viewModelScope.launch { graph.pushes.collect { onPush() } }
+        viewModelScope.launch { api.expired.collect { if (it) expired() } }
+    }
+
+    /** The sign-in ended while the app ran: sign in again; drafts, jobs and forms stay on the phone. */
+    private fun expired() {
+        if (screen.value !is Screen.Home && screen.value !is Screen.Profile) return
+        bell.clear()
+        _screen.value = Screen.SignIn(error = "Your sign-in has ended. Sign in again; your unsent work stays on this phone.")
     }
 
     private suspend fun resume() {
@@ -68,7 +76,8 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         } catch (e: ApiError) {
             when {
                 e.code == "DEVICE_REVOKED" -> {
-                    tokens.clear(); jobs.forget(savedId); savedId?.let { graph.forgetCopies(it) }; graph.clearNotices(); bell.clear(); _screen.value = Screen.SignIn()
+                    tokens.clear(); jobs.forget(savedId); savedId?.let { graph.forgetCopies(it); graph.forgetDrafts(it, all = false) }
+                    graph.clearNotices(); bell.clear(); _screen.value = Screen.SignIn()
                 }
                 // no signal or the server is down: still signed in, already open on the saved copy
                 JobsModel.unreachable(e) && cached != null -> {}
@@ -115,11 +124,13 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
             "role" to me.role, "theme" to me.theme, "must_change" to me.mustChangePassword.toString(),
             "perms" to me.permissions.joinToString(",")))
         if (me.mustChangePassword) { _screen.value = Screen.ChangePassword(); return }
+        lastPassword = ""                             // only kept for a required password change
         _screen.value = Screen.Home(me)
+        tokens.pendingLogout()?.let { old -> viewModelScope.launch { if (api.endOld(old)) tokens.setPendingLogout(null) } }
         if (me.role == "expert") jobs.open(me.id, offline = false)
         heartbeat(me.id)
         bell.refresh()
-        viewModelScope.launch { pushToken()?.let { runCatching { api.pushToken(it) } } }
+        graph.sendPushToken()                         // retried by WorkManager until it reaches the server
         checkUpdate()
         if (local != null) pushTheme()
         graph.kick()                                  // anything left from before goes out now
@@ -153,7 +164,7 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
 
     /** Signed out from the server (another phone, or an Admin): nothing of theirs stays on this phone. */
     private fun revoked() {
-        signedIn()?.let { graph.forgetCopies(it) }
+        signedIn()?.let { graph.forgetCopies(it); graph.forgetDrafts(it, all = false) }
         graph.clearNotices()                         // even when nobody could be told apart
         tokens.clear(); jobs.forget(); bell.clear(); _screen.value = Screen.SignIn()
     }
@@ -210,16 +221,20 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
     fun signOut() {
         val p = screen.value as? Screen.Profile
         if (p != null) {
-            val (drafts, files) = graph.drafts(p.me.id).unsentCounts()
-            if (drafts + files > 0) {
-                _screen.value = p.copy(error = "This phone still has $drafts job${if (drafts == 1) "" else "s"} and $files file${if (files == 1) "" else "s"} " +
-                    "not sent. Connect to the internet and wait until Uploads is empty, then sign out.")
+            // the same drafts Uploads lists, by name
+            val waiting = graph.drafts(p.me.id).all().filter { it.unsent }.map { it.code }.sorted()
+            if (waiting.isNotEmpty()) {
+                _screen.value = p.copy(error = "Not sent yet: ${waiting.joinToString(", ")}. Open Uploads to send, finish or discard " +
+                    "${if (waiting.size == 1) "it" else "them"}, then sign out.")
                 return
             }
         }
         viewModelScope.launch {
-            runCatching { api.logout() }
-            signedIn()?.let { graph.forgetCopies(it) }
+            // no signal: the server still thinks this phone is signed in; end it at the next sign-in
+            val refresh = tokens.refresh()
+            if (runCatching { api.logout() }.isFailure && refresh != null) tokens.setPendingLogout(refresh)
+            // nothing is unsent (checked above), so nothing of theirs needs to stay
+            signedIn()?.let { graph.forgetCopies(it); graph.forgetDrafts(it, all = true) }
             graph.clearNotices()
             tokens.clear()
             jobs.forget()

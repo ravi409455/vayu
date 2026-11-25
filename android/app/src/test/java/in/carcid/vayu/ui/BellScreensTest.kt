@@ -66,13 +66,24 @@ class BellScreensTest {
         compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/profile_ops_notifications.png", roborazziOptions = options)
     }
 
+    @Test fun blockedNoticesAreSaidOnProfileWithAWayToTurnThemOn() {
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>()
+        org.robolectric.Shadows.shadowOf(app.getSystemService(android.app.NotificationManager::class.java)).setNotificationsEnabled(false)
+        val me = Me(3, "ravi", "Ravi Expert", "expert", false, "light")
+        compose.setContent { VayuTheme(ThemeMode.LIGHT) { ProfileScreen(Screen.Profile(me), {}, {}, {}, version = "0.1.0") } }
+        compose.onNodeWithText("Notifications are off", substring = true).assertExists()
+        compose.onNodeWithText("Turn on").performClick()
+        val opened = org.robolectric.Shadows.shadowOf(app).nextStartedActivity
+        assertEquals(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS, opened.action)
+    }
+
     @Test fun updateScreenSaysWhatsNew() {
         var later = false
         compose.setContent { VayuTheme(ThemeMode.LIGHT) {
             UpdateScreen(AppUpdate(5, "1.1.0", 24 * 1_048_576L, "ab", listOf("Faster photo uploads on slow networks", "Scan registration numbers too"),
                 "http://x", required = true)) { later = true }
         } }
-        compose.onNodeWithText("Version 1.1.0 · 24 MB. You need it to start new jobs. A job you already started can be finished on this version.").assertExists()
+        compose.onNodeWithText("Version 1.1.0 · 24 MB. You need it for new work. Work you already started can be finished on this version.").assertExists()
         compose.onNodeWithText("Download update").assertExists()
         compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/update_available.png", roborazziOptions = options)
         compose.onNodeWithText("Later").performClick()
