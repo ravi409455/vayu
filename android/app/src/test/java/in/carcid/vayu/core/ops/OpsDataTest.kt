@@ -41,4 +41,19 @@ class OpsDataTest {
         assertEquals("", r.error); assertEquals("https://v/x", r.verifyUrl); assertNotNull(r.url)
         assertNull(Report.from(kotlinx.serialization.json.Json.parseToJsonElement("""{"code":"NO_REPORT"}""")).takeIf { it?.status?.isNotEmpty() == true })
     }
+
+    /** R-11: a booking is decoded once; numbers, flags and the Admin's own form answers keep their types. */
+    @Test fun aBookingIsReadIntoATypedModel() {
+        val b = Booking.from(kotlinx.serialization.json.Json.parseToJsonElement("""{"id":"b1","booking_id":"DEMO-6","stage":"completed",
+            "inspection_type":"pdi","assigned_expert":4,"row_version":3,"conflict":null,"cancel_reason":"","unverified_time":true,
+            "alerts":[{"code":"TYPE_CHANGE_REJECTED","detail":"The expert started EV"}],
+            "answers":{"customer_name":"Vikram Singh","inspection_date":"2026-11-24"},
+            "timing":{"late_minutes":40,"duration_minutes":null,"late":true,"quick":false,"min_minutes":30,"grace_minutes":15,
+                      "late_reviewed_by":"Priya Ops","late_reviewed_at":null,"quick_reviewed_by":null,"quick_reviewed_at":null},
+            "something_new":[1,2]}"""))!!
+        assertEquals("DEMO-6", b.bookingId); assertEquals(4, b.assignedExpert); assertEquals(3, b.rowVersion); assertEquals("", b.conflict)
+        assertEquals(true, b.unverifiedTime); assertEquals("TYPE_CHANGE_REJECTED", b.alerts.single().code)
+        assertEquals(40, b.timing!!.lateMinutes); assertEquals("Priya Ops", b.timing!!.lateReviewedBy)
+        assertEquals("Vikram Singh", (b.answers["customer_name"] as kotlinx.serialization.json.JsonPrimitive).content)
+    }
 }

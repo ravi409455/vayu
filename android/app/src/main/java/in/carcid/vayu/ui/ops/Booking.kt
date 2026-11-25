@@ -162,7 +162,7 @@ fun BookingScreen(env: OpsEnv, id: String, onBack: () -> Unit, onPart: (Part) ->
             Text(b.customer.ifBlank { b.code }, fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink,
                 maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
             val why = if (b.stage == "cancelled") rememberLoad(env, "master-lists/cancel_reason/items").value?.data?.rows().orEmpty()
-                .firstOrNull { it.s("key") == b.o.s("cancel_reason") }?.s("label") ?: b.o.s("cancel_reason").replace('_', ' ') else ""
+                .firstOrNull { it.s("key") == b.t.cancelReason }?.s("label") ?: b.t.cancelReason.replace('_', ' ') else ""
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 val (st, tone) = opsStatus(b)
                 Chip(listOf(st, why).filter { it.isNotBlank() }.joinToString(" · "), tone)

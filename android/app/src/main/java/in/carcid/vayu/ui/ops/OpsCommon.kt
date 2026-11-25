@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.Booking
 import kotlinx.coroutines.async
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -57,34 +58,34 @@ import java.time.ZoneId
 /** A booking as the Ops screens read it (BookingSerializer). */
 @androidx.compose.runtime.Immutable
 class Bk(val o: JsonObject) {
-    val id = o.s("id")
-    val code = o.s("booking_id")
-    val stage = o.s("stage")
-    val type = o.s("inspection_type")
-    val expert: Int? = (o["assigned_expert"] as? JsonPrimitive)?.intOrNull
-    val answers = o.o("answers")
-    val rowVersion: Int = (o["row_version"] as? JsonPrimitive)?.intOrNull ?: 0
-    val conflict = o.s("conflict")
+    /** The reply, decoded once (R-11); a reply that isn't a booking reads as empty. */
+    val t: Booking = Booking.from(o) ?: Booking()
+    val id get() = t.id
+    val code get() = t.bookingId
+    val stage get() = t.stage
+    val type get() = t.inspectionType
+    val expert: Int? get() = t.assignedExpert
+    val answers get() = t.answers
+    val rowVersion: Int get() = t.rowVersion
+    val conflict get() = t.conflict
     /** The phone's clock wasn't checked against the server that day: the times it stamped may be off (F-222). */
-    val unverifiedTime = o.s("unverified_time") == "true"
+    val unverifiedTime get() = t.unverifiedTime
     fun a(k: String) = answers.s(k)
     val customer get() = a("customer_name")
     val phone get() = a("customer_phone")
     val date get() = a("inspection_date").take(10)
     val time get() = a("inspection_time").take(5)
-    val typeRejected: String? get() = (o["alerts"] as? kotlinx.serialization.json.JsonArray)?.map { it as JsonObject }
-        ?.firstOrNull { it.s("code") == "TYPE_CHANGE_REJECTED" }?.s("detail")
+    val typeRejected: String? get() = t.alerts.firstOrNull { it.code == "TYPE_CHANGE_REJECTED" }?.detail
     val live get() = stage !in setOf("completed", "cancelled")
     /** Started late / too quick; only Admin and Ops get "timing" (web: timingFlags). */
     val flags: List<TimingFlag> get() {
-        val t = o["timing"] as? JsonObject ?: return emptyList()
-        fun on(k: String) = t.s(k) == "true"
-        fun mins(k: String) = t.s(k).toIntOrNull()
+        val m = t.timing ?: return emptyList()
+        fun n(v: Int?) = v?.toString().orEmpty()
         return listOfNotNull(
-            TimingFlag("late", "Started ${fmtMinutes(mins("late_minutes"))} late", "Limit: start within ${t.s("grace_minutes")} min of the booked time.",
-                t.s("late_reviewed_by"), t.s("late_reviewed_at")).takeIf { on("late") },
-            TimingFlag("quick", "Took ${fmtMinutes(mins("duration_minutes"))} (min ${t.s("min_minutes")})", "Limit: take at least ${t.s("min_minutes")} min.",
-                t.s("quick_reviewed_by"), t.s("quick_reviewed_at")).takeIf { on("quick") })
+            TimingFlag("late", "Started ${fmtMinutes(m.lateMinutes)} late", "Limit: start within ${n(m.graceMinutes)} min of the booked time.",
+                m.lateReviewedBy.orEmpty(), m.lateReviewedAt.orEmpty()).takeIf { m.late },
+            TimingFlag("quick", "Took ${fmtMinutes(m.durationMinutes)} (min ${n(m.minMinutes)})", "Limit: take at least ${n(m.minMinutes)} min.",
+                m.quickReviewedBy.orEmpty(), m.quickReviewedAt.orEmpty()).takeIf { m.quick })
     }
 }
 

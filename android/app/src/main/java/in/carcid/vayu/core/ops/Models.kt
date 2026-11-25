@@ -39,3 +39,42 @@ data class Report(
         fun from(e: JsonElement?): Report? = (e as? JsonObject)?.let { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
     }
 }
+
+/** A note the server keeps on a booking (TYPE_CHANGE_REJECTED, LATE_WORK, …). */
+@Serializable
+data class Alert(val code: String = "", val detail: String = "")
+
+/** Started late / too quick (Admin and Ops only); names and times of who marked them reviewed. */
+@Serializable
+data class Timing(
+    val late: Boolean = false, val quick: Boolean = false,
+    @SerialName("late_minutes") val lateMinutes: Int? = null,
+    @SerialName("duration_minutes") val durationMinutes: Int? = null,
+    @SerialName("min_minutes") val minMinutes: Int? = null,
+    @SerialName("grace_minutes") val graceMinutes: Int? = null,
+    @SerialName("late_reviewed_by") val lateReviewedBy: String? = null,
+    @SerialName("late_reviewed_at") val lateReviewedAt: String? = null,
+    @SerialName("quick_reviewed_by") val quickReviewedBy: String? = null,
+    @SerialName("quick_reviewed_at") val quickReviewedAt: String? = null,
+)
+
+/** A booking (GET bookings, GET bookings/{id}); [answers] is the booking form, whose fields the Admin defines. */
+@Serializable
+data class Booking(
+    val id: String = "",
+    @SerialName("booking_id") val bookingId: String = "",
+    val stage: String = "",
+    @SerialName("inspection_type") val inspectionType: String = "",
+    @SerialName("assigned_expert") val assignedExpert: Int? = null,
+    val answers: JsonObject = JsonObject(emptyMap()),
+    @SerialName("row_version") val rowVersion: Int = 0,
+    val conflict: String = "",
+    @SerialName("cancel_reason") val cancelReason: String = "",
+    @SerialName("unverified_time") val unverifiedTime: Boolean = false,
+    val alerts: List<Alert> = emptyList(),
+    val timing: Timing? = null,
+) {
+    companion object {
+        fun from(e: JsonElement?): Booking? = (e as? JsonObject)?.let { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
+    }
+}
