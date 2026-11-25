@@ -1,3 +1,4 @@
+"""URLs of the reports API."""
 from django.urls import path
 
 from . import media_links, views

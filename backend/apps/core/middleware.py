@@ -1,3 +1,5 @@
+"""Gives every request an id (the client's X-Request-ID if it is safe, else a new one), puts it in
+the log lines and returns it in the response."""
 import re
 import uuid
 from typing import Any

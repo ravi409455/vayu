@@ -1,3 +1,4 @@
+"""The integrations app: webhooks subscribe to domain events on start."""
 from django.apps import AppConfig
 
 

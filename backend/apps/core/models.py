@@ -1,3 +1,4 @@
+"""Settings Admin can change at run time, one row per group (see app_settings.py)."""
 from django.db import models
 
 

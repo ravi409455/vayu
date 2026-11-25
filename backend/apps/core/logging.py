@@ -1,3 +1,4 @@
+"""Request and task ids for log lines (set by the middleware and the Celery signals)."""
 import logging
 from contextvars import ContextVar
 

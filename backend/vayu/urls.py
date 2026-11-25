@@ -1,3 +1,4 @@
+"""The project's URLs: every app's API under /api/v1."""
 from django.urls import include, path
 
 urlpatterns = [

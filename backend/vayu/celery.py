@@ -1,3 +1,4 @@
+"""The Celery app, and the signals that carry a request's id into the jobs it queues."""
 import os
 
 from celery import Celery

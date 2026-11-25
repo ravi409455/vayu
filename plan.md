@@ -626,7 +626,7 @@ Replaces "three fixed roles" with an Admin-editable role x permission matrix (RE
 - Not changed on purpose: template Preview still renders inside the web request (admin-only); lockout stays per username (a locked message is part of the sign-in UX).
 
 ### 2026-11-23 — Phase 9 built (webhooks, API keys, docs)
-- `apps/integrations`: Integration/Delivery/ApiKey; `webhooks.py` (routing, body, sandbox templates, HMAC, SSRF checks, retries), `ext_views.py` (REST API for keys), 100% gate in CI. See `docs/integrations.md`.
+- `apps/integrations`: Integration/Delivery/ApiKey; `webhooks.py` (routing, body, sandbox templates, HMAC, SSRF checks, retries), `ext_views.py` (REST API for keys), 100% gate in CI. See `docs/integrations/`.
 - Retries are driven by the database (`next_retry_at`) and a once-a-minute Celery beat task (new `beat` service in the prod compose), not by Celery countdowns.
 - Push-mode promotion (staging pushes to prod with an API key) is **still deferred**: bundles stay file-based. Not needed for launch.
 - The integration signing secret is stored as plain text (it must be readable to sign). Database access = secret access; acceptable for a single-tenant internal system, revisit with envelope encryption if that changes.

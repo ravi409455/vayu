@@ -1,3 +1,4 @@
+"""The core app: on start it turns domain events into log events (apps.core.log)."""
 from django.apps import AppConfig
 
 

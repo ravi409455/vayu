@@ -1,3 +1,4 @@
+"""URLs of the media API."""
 from django.urls import path
 
 from . import views

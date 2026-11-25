@@ -1,3 +1,4 @@
+"""Bell notifications and Android app releases."""
 from django.conf import settings
 from django.db import models
 from django.utils import timezone

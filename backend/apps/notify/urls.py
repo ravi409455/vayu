@@ -1,3 +1,4 @@
+"""URLs of the notify API (notifications, push token, app download)."""
 from django.urls import path
 
 from .views import AppDownloadView, AppLatestView, NotificationsView, PushTokenView, ReadView

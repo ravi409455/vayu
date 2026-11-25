@@ -1,3 +1,4 @@
+"""Settings for the test suite (local database and Redis defaults, fast hashing)."""
 import os
 
 os.environ.setdefault("DJANGO_SECRET_KEY", "test-secret-key-not-for-prod-0123456789")

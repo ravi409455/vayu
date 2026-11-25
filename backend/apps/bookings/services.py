@@ -1,3 +1,5 @@
+"""Booking rules: create, edit (with the stale-edit guard), assign, reschedule, cancel,
+force-release, change type and delete. Each change is stamped, audited and emitted as an event."""
 from datetime import date
 from typing import Any
 

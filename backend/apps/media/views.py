@@ -1,3 +1,5 @@
+"""Media API: the direct-to-storage upload flow (initiate, complete), file links, Ops file actions,
+missing files, stuck uploads and ZIPs."""
 from django.http import HttpResponseRedirect
 from rest_framework import status
 from rest_framework.exceptions import ValidationError

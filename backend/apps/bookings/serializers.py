@@ -1,3 +1,5 @@
+"""Booking and inspection bodies; answers are filtered to what the caller's role may see at the
+booking's stage."""
 from rest_framework import serializers
 
 from apps.accounts.permissions import scope_for

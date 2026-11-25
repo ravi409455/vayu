@@ -1,3 +1,4 @@
+"""Celery jobs that render a booking's PDF report (with retries) and sweep failed renders."""
 import contextlib
 import logging
 import re

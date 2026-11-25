@@ -1,3 +1,4 @@
+"""Settings shared by every environment, read from environment variables."""
 import os
 from datetime import timedelta
 from pathlib import Path

@@ -1,3 +1,4 @@
+"""The coded API error (CodedError) and fail(), the one way to raise one."""
 from typing import Any
 
 from rest_framework.exceptions import APIException

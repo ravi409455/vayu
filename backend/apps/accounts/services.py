@@ -1,3 +1,5 @@
+"""Sign-in rules: password checks, the lockout after five wrong tries, and one signed-in phone per
+person."""
 
 import logging
 from typing import Any

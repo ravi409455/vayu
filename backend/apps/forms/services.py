@@ -1,3 +1,5 @@
+"""Form rules: create a form, drafts, publish, reorder, draft settings (switches, ratings, Key
+Checks) and duplicate."""
 from typing import Any
 
 from django.db import transaction

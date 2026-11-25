@@ -1,6 +1,7 @@
-# Integrations: webhooks and the REST API
+# Webhooks
 
-## Webhooks (Admin → Integrations)
+Part of the [integration guide](README.md). Set up in Admin → Integrations.
+
 Each integration belongs to one form and sends **one event** as **one request** you design: method,
 URL, query parameters, headers and body. It fires on every occurrence of that event. To react to
 several events, make several integrations (the **Duplicate** button copies one).
@@ -58,19 +59,109 @@ publishing the form (and a library push) warns you; the value is then sent as `n
 
 **Safety.** HTTPS only; addresses that are private, loopback or link-local are refused (checked when saving and again when sending); redirects are not followed. The delivery log keeps metadata only (event, booking, status, HTTP code, a reason code): never customer data. Re-send and the Test button build the body again from today's data.
 
-## REST API (API keys)
-Admin → API keys. A key is shown once, stored only as a hash, and can be revoked instantly. Send it as `Authorization: Api-Key <key>` or `X-API-Key: <key>`.
+## What arrives at your server
 
-* **Scope** = forms and fields: `{"forms": {"booking": ["*"], "pdi": ["door", "odometer"]}}`. Reads only return in-scope fields; a write with any out-of-scope field is refused with 403 `OUT_OF_SCOPE` and `keys: [...]`.
-* **DELETE** is off per key until an Admin turns it on (403 `DELETE_NOT_ALLOWED`); deletes are audited.
-* Bookings are found by internal ID (preferred) or Booking ID.
+Example: an integration on the booking form, event `booking.updated`, method `POST`, Standard body
+with "Include data" ticked, plus one header row `Authorization: Bearer s3cr3t`:
 
-| Call | |
+```http
+POST /hooks/vayu HTTP/1.1
+Host: crm.example.com
+Content-Type: application/json
+User-Agent: Vayu-Webhooks/1
+X-Vayu-Event: booking.updated
+X-Vayu-Delivery: 2b7f4c1e-0a5d-4d8e-9a43-6f1d2c3b4a59
+Authorization: Bearer s3cr3t
+
+{"event":"booking.updated","delivery":"2b7f4c1e-0a5d-4d8e-9a43-6f1d2c3b4a59",
+ "occurred_at":"2026-11-25T10:42:07.512000+00:00",
+ "booking":{"id":"9c0e6a52-3f0b-4c1d-8f53-1e2a7b9d4c10","booking_id":"SA37926"},
+ "changed_keys":["inspection_date","inspection_time"],
+ "data":{"booking":{"booking_id":"SA37926","city":"delhi","inspection_date":"2026-11-27", "...": "..."},
+         "inspection":{},"start":{},"end":{}}}
+```
+
+Extra top-level keys appear only for some events: `changed_keys` (`booking.updated`),
+`booking_id_change: {from, to}` (an edited Booking ID), `inspection` (inspection events),
+`revision` (`pdf.ready`), `alert` and `reason` (alerts). `pdf_url`, `image_zip_url` and
+`video_zip_url` appear when their toggles are on. A `booking.deleted` body carries only `event`,
+`delivery`, `occurred_at` and `booking`.
+
+### Headers we always set
+
+| Header | Value |
 |---|---|
-| `GET /api/v1/ext/bookings?stage=&type=&city=&search=` | list (paged) |
-| `POST /api/v1/ext/bookings` `{answers}` | create |
-| `GET/PATCH/DELETE /api/v1/ext/bookings/<id or Booking ID>` | PATCH `{answers, row_version?}`; without `row_version` the last write wins |
-| `POST /api/v1/ext/bookings/bulk` `{items: [{ref, answers}]}` | up to 100; each item succeeds or fails alone |
-| `GET/PATCH /api/v1/ext/bookings/<ref>/inspection` | the latest inspection's answers |
+| `X-Vayu-Event` | the event name, e.g. `booking.updated` (`test.ping` for the Test button) |
+| `X-Vayu-Delivery` | the delivery's id (UUID); the same on every retry of that delivery |
+| `X-Vayu-Test` | `1`, only on the Test button's request |
+| `User-Agent` | `Vayu-Webhooks/1` |
+| `Content-Type` | `application/json` (only when there is a body) |
 
-API writes fire the same webhooks as the web app (each bulk item fires its own). No rate limiting on keys. Swagger: `/api/v1/docs` (Admin only), schema at `/api/v1/schema`.
+### Answering
+
+Answer with any 2xx within **10 seconds**. The body of your answer is ignored.
+
+### Proving the request is ours
+
+Requests are **not signed** (the signature was removed on 2026-11-24 in favour of a token you
+choose). Add a header row with a long random token, check it on every request, and use HTTPS. For
+example, in Python (Flask):
+
+```python
+import hmac, os
+from flask import Flask, abort, request
+
+app = Flask(__name__)
+TOKEN = os.environ["VAYU_WEBHOOK_TOKEN"]            # the same value as the integration's header
+seen = set()                                        # use your database in real life
+
+@app.post("/hooks/vayu")
+def vayu():
+    sent = request.headers.get("Authorization", "")
+    if not hmac.compare_digest(sent, f"Bearer {TOKEN}"):
+        abort(401)
+    delivery = request.headers["X-Vayu-Delivery"]
+    if delivery in seen:                            # a retry of one we already handled
+        return "", 200
+    seen.add(delivery)
+    body = request.get_json()
+    print(body["event"], body["booking"]["booking_id"])
+    return "", 200
+```
+
+and in Node (Express):
+
+```js
+const crypto = require("crypto");
+const express = require("express");
+const app = express();
+app.use(express.json());
+const token = Buffer.from(`Bearer ${process.env.VAYU_WEBHOOK_TOKEN}`);
+const seen = new Set();                              // use your database in real life
+
+app.post("/hooks/vayu", (req, res) => {
+  const sent = Buffer.from(req.get("Authorization") || "");
+  if (sent.length !== token.length || !crypto.timingSafeEqual(sent, token)) return res.sendStatus(401);
+  const delivery = req.get("X-Vayu-Delivery");
+  if (seen.has(delivery)) return res.sendStatus(200);   // a retry
+  seen.add(delivery);
+  console.log(req.body.event, req.body.booking.booking_id);
+  res.sendStatus(200);
+});
+app.listen(8080);
+```
+
+### Retries and duplicates
+
+A delivery is tried once, then again after 1 min, 5 min, 30 min, 2 h, 6 h and 12 h when the answer
+was a 5xx, a 429, a timeout or a network error; after that it is marked failed. Every other answer
+(400, 401, 404, a redirect…) is final. Each try of one delivery carries the same `X-Vayu-Delivery`,
+so treat it as the idempotency key: if you have seen it, answer 200 and do nothing.
+**Re-send** in the delivery log makes a *new* delivery (a new id) with today's data.
+
+### The Test button
+
+Sends a `test.ping` right away (with `X-Vayu-Test: 1`) for a real booking: the one you pick, else
+the newest booking of the form (for inspection events, the newest with a submitted inspection).
+With no booking at all, the body has only `event`, `delivery`, `occurred_at` and an empty
+`booking`. A test is never retried; the result shows in the delivery log.

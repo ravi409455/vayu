@@ -1,3 +1,5 @@
+"""Accounts API: sign-in and sign-out, profile and picture, phone heartbeat, password change, users,
+roles and their permissions, and the audit log."""
 from django.conf import settings
 from django.contrib.auth import login as django_login
 from django.contrib.auth import logout as django_logout

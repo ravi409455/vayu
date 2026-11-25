@@ -1,3 +1,5 @@
+"""Celery jobs for files: verify an upload (checksum, real picture or video, preview), flag stuck
+uploads, delete files and purge old ones."""
 import hashlib
 import io
 import logging

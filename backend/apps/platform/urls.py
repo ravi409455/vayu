@@ -1,3 +1,4 @@
+"""URLs of the platform API (health, settings)."""
 from django.urls import path
 
 from .views import HealthView, SettingView
