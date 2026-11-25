@@ -22,10 +22,22 @@ test("J4: Ops review a completed inspection", async ({ page }) => {
   await page.getByRole("tab", { name: "Review" }).click();
   await expect(page.getByRole("radiogroup", { name: "Exterior rating" }).getByRole("radio", { name: "2", exact: true })).toHaveAttribute("aria-checked", "true");
 
-  // the PDF is made again by itself after each change (nobody regenerates it): the rating, then the answer
-  await expect.poll(async () => (await json(await (await apiAs("ops")).get(`bookings/${id}/report`))).revision, { timeout: 30_000 }).toBe(3);
+  // changes do not touch the PDF (F-219): it says it is out of date and keeps revision 1
+  const ops = await apiAs("ops");
+  const stale = await json(await ops.get(`bookings/${id}/report`));
+  expect(stale.revision).toBe(1);
+  expect(stale.out_of_date).toBe(true);
+  await expect(page.getByText("PDF out of date")).toBeVisible();
   await page.getByRole("tab", { name: "Report" }).click();
-  await expect(page.getByText(/Revision 3/)).toBeVisible();
+  await expect(page.getByText(/Out of date: changes since this PDF/)).toBeVisible();
+  await expect(page.getByText(/Revision 1/)).toBeVisible();
+
+  // Regenerate (one press, one request) makes revision 2, and it is no longer out of date
+  await page.getByRole("button", { name: "Regenerate" }).click();
+  await expect.poll(async () => (await json(await ops.get(`bookings/${id}/report`))).revision, { timeout: 30_000 }).toBe(2);
+  await expect(page.getByText(/Revision 2/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/Out of date: changes since this PDF/)).toBeHidden();
+  expect((await json(await ops.get(`bookings/${id}/report`))).out_of_date).toBe(false);
   await expect(page.getByRole("link", { name: /Download PDF/ })).toBeVisible();
   const pdf = await page.request.get((await waitForReport(id)).url);
   expect((await pdf.body()).subarray(0, 4).toString()).toBe("%PDF");

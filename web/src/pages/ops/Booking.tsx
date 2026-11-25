@@ -85,6 +85,7 @@ function Detail({ id }: { id: string }) {
   const reload = () => Promise.all([refresh("booking"), refresh("inspections"), refresh("board"), refresh("report"), refresh("activity"), refresh("bookings-page")]);
   const insp = (insps.data ?? []).filter((i) => i.status === "submitted").sort((a, c) => (c.submitted_at ?? "").localeCompare(a.submitted_at ?? ""))[0] ?? (insps.data ?? [])[0];
   const pinned = usePinnedTrees(insp);                   // the exact versions this inspection was started on
+  const report = useReport(id, booking?.stage === "completed" && can("reports.view"));     // for the "PDF out of date" label
   if (b.isError) return <LoadError error={b.error} what="booking" onRetry={b.refetch} />;
   if (!booking) return <p className="muted pad">Loading…</p>;
   const current: Tab = tab ?? (insp?.status === "submitted" ? "inspection" : "booking");
@@ -101,6 +102,7 @@ function Detail({ id }: { id: string }) {
           <div className="chips">
             <Pill tone={STAGE_TONE[booking.stage]}>{STAGE_LABEL[booking.stage] ?? booking.stage}</Pill>
             {booking.conflict && <Pill tone="bad">Conflict: two experts</Pill>}
+            {report.data?.out_of_date && <Pill tone="warn">PDF out of date</Pill>}
             {timingFlags(booking.timing).map((f) => <Pill key={f.flag} tone="warn">{f.words}</Pill>)}
             {fmtSlot(a.inspection_date, a.inspection_time) && <span className="chip">{fmtSlot(a.inspection_date, a.inspection_time)}</span>}
             {a.city ? <span className="chip">{city(a.city)}</span> : null}
@@ -775,18 +777,32 @@ function PdfPreview({ url }: { url: string }) {
   );
 }
 
-type ReportInfo = { verify_url?: string; revision: number; status: string; updating: boolean; generated_at: string | null; filename: string; error: string; url: string | null; preview_url?: string | null };
+type ReportInfo = { verify_url?: string; revision: number; status: string; updating: boolean; generated_at: string | null; filename: string; error: string; url: string | null; preview_url?: string | null;
+  /** something it shows changed since this PDF was made; Ops press Regenerate (F-219) */
+  out_of_date?: boolean; regenerate?: { allowed: boolean; reason: string | null } };
 
-/** The PDF: made when the booking completes and made again by itself after every change (nobody
- *  regenerates it). Downloads and shares are logged; the list below shows who and when. */
-function ReportTab({ booking, activity }: { booking: Booking; activity: Activity[] }) {
+/** The booking's report (null: none yet). While it is being made, look every few seconds. */
+function useReport(bookingId: string, enabled = true) {
+  return useQuery({ queryKey: ["report", bookingId], retry: false, enabled,
+    refetchInterval: (x) => (x.state.data?.updating ? 3000 : false),
+    queryFn: async () => { try { return await api<ReportInfo>(`bookings/${bookingId}/report`); } catch (e) { if (e instanceof ApiError && e.status === 404) return null; throw e; } } });
+}
+
+/** The PDF: made when the booking completes. Later changes do not touch it: it shows "Out of date"
+ *  and Ops press Regenerate when they are done (F-219). Downloads and shares are logged; the list
+ *  below shows who and when. */
+export function ReportTab({ booking, activity }: { booking: Booking; activity: Activity[] }) {
   const { say, fail } = useToast();
   const refresh = useRefresh();
-  const q = useQuery({ queryKey: ["report", booking.id], retry: false,
-    // while it is being made again, look every few seconds so the new one shows by itself
-    refetchInterval: (x) => (x.state.data?.updating ? 3000 : false),
-    queryFn: async () => { try { return await api<ReportInfo>(`bookings/${booking.id}/report`); } catch (e) { if (e instanceof ApiError && e.status === 404) return null; throw e; } } });
+  const { can } = useAuth();
+  const q = useReport(booking.id);
   const r = q.data;
+  const regen = useMutation({            // one press, one request: the button is off while it runs
+    mutationFn: () => api(`bookings/${booking.id}/report/regenerate`, { body: {} }),
+    onSuccess: () => { say("Making the new PDF. It shows here by itself."); void q.refetch(); void refresh("problems"); },
+    onError: (e) => { fail(e); void q.refetch(); },
+  });
+  const why = r?.regenerate && !r.regenerate.allowed ? r.regenerate.reason ?? "" : "";
   const passedOn = activity.filter((a) => a.kind === "report_downloaded" || a.kind === "report_shared");
   async function copyCheckLink() {
     try { if (!navigator.clipboard) throw new Error("no clipboard"); await navigator.clipboard.writeText(r!.verify_url!); }
@@ -800,12 +816,17 @@ function ReportTab({ booking, activity }: { booking: Booking; activity: Activity
     <>
       <div className="bar">
         {r && <><Pill tone={r.updating ? "warn" : r.status === "ready" ? "ok" : r.status === "failed" ? "bad" : "warn"}>{r.updating ? "Updating…" : r.status === "ready" ? "Ready" : r.status}</Pill>
+          {r.out_of_date && !r.updating && <Pill tone="warn">Out of date</Pill>}
           <span className="muted small">Revision {r.revision} · {fmtStamp(r.generated_at)}</span></>}
         <span className="grow" />
+        {r && can("submissions.edit") && <button disabled={regen.isPending || !!why || r.updating} title={why || undefined} onClick={() => { if (!regen.isPending) regen.mutate(); }}>
+          <RefreshCw size={15} aria-hidden /> {regen.isPending || r.updating ? "Making…" : "Regenerate"}</button>}
         {r?.verify_url && r.status === "ready" && <button onClick={() => void copyCheckLink()}>Copy check link</button>}
         {r?.url && <a className="btn primary" href={r.url} download={r.filename} onClick={() => setTimeout(() => void refresh("activity"), 1500)}><Download size={15} aria-hidden /> Download PDF</a>}
       </div>
-      {r?.updating && <p className="muted small">Something changed: the report is being made again with it. This page shows the new one by itself.</p>}
+      {r?.updating && <p className="muted small">The new PDF is being made. This page shows it by itself.</p>}
+      {r?.out_of_date && !r.updating && <div className="banner warn">Out of date: changes since this PDF. Press Regenerate when you are done to make a new one.</div>}
+      {r && why && can("submissions.edit") && <p className="muted small">Regenerate is off: {why}</p>}
       {r?.error && !r.updating && <div className="banner bad">Problem: {r.error}. It is tried again by itself.</div>}
       {!r && <Empty title="No report yet">It is made automatically when the booking is Completed.</Empty>}
       {r?.preview_url && <PdfPreview url={r.preview_url} />}

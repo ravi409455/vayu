@@ -2,11 +2,23 @@ import { useQuery } from "@tanstack/react-query";
 import { api, type Page } from "../api/client";
 import type { Booking } from "../api/types";
 import { useAuth } from "../auth";
-import { addDays, fmtSlot, today } from "./format";
+import { addDays, fmtSlot, fmtStamp, today } from "./format";
 import { FLAG_NAME, timingFlags, type Flag } from "./timing";
 
 export type Stuck = { id: string; booking: string; booking_id: string; field_key: string; status: string; expert: string; created_at: string };
 export type PdfProblem = { booking: string; booking_id: string; status: string; error: string };
+/** A report something changed under since it was made (Ops press Regenerate, F-219). */
+export type StaleReport = { booking: string; booking_id: string; since: string };
+type ReportProblems = (PdfProblem & { out_of_date?: boolean; since?: string })[] | { failed?: PdfProblem[]; out_of_date?: StaleReport[] };
+
+/** problems/reports, failed and out of date apart. ponytail: reads both shapes the server may send
+ *  (a list with out_of_date rows, or { failed, out_of_date }) until the backend field is final. */
+export function reportProblems(raw: ReportProblems | undefined): { failed: PdfProblem[]; outOfDate: StaleReport[] } {
+  if (!raw) return { failed: [], outOfDate: [] };
+  if (!Array.isArray(raw)) return { failed: raw.failed ?? [], outOfDate: raw.out_of_date ?? [] };
+  return { failed: raw.filter((r) => !r.out_of_date || r.error),
+    outOfDate: raw.filter((r) => r.out_of_date).map((r) => ({ booking: r.booking, booking_id: r.booking_id, since: r.since ?? "" })) };
+}
 
 /** Everything that needs a person, from the four problem queues. Shared by the Problems page,
  *  the Today page, the sidebar badge and the top-bar bell (one cache, polled every minute). */
@@ -15,7 +27,7 @@ export function useProblems() {
   const on = !!me && me.role !== "expert" && can("bookings.view");
   const opts = { enabled: on, staleTime: 30_000, refetchInterval: 60_000 } as const;
   const stuck = useQuery({ ...opts, queryKey: ["problems", "stuck"], queryFn: () => api<Stuck[]>("problems/stuck-uploads") });
-  const pdf = useQuery({ ...opts, queryKey: ["problems", "pdf"], queryFn: () => api<PdfProblem[]>("problems/reports") });
+  const pdf = useQuery({ ...opts, queryKey: ["problems", "pdf"], queryFn: () => api<ReportProblems>("problems/reports") });
   const conflicts = useQuery({ ...opts, queryKey: ["problems", "conflict"], queryFn: () => api<Page<Booking>>("bookings", { query: { problem: "conflict" } }) });
   const types = useQuery({ ...opts, queryKey: ["problems", "type"], queryFn: () => api<Page<Booking>>("bookings", { query: { problem: "type_change" } }) });
   // started late, and finished too quickly: two separate lists (last 7 days), each until someone marks it reviewed
@@ -24,11 +36,12 @@ export function useProblems() {
     queryFn: () => api<Page<Booking>>("bookings", { query: { timing: flag, reviewed: "0", date_from: addDays(t, -6), date_to: t, order: "schedule" } }) });
   const late = useQuery(flagged("late"));
   const quick = useQuery(flagged("quick"));
-  const lists = { stuck: stuck.data ?? [], pdf: pdf.data ?? [], conflicts: conflicts.data?.results ?? [], types: types.data?.results ?? [],
+  const reports = reportProblems(pdf.data);
+  const lists = { stuck: stuck.data ?? [], pdf: reports.failed, out_of_date: reports.outOfDate, conflicts: conflicts.data?.results ?? [], types: types.data?.results ?? [],
     late: late.data?.results ?? [], quick: quick.data?.results ?? [] };
   // a page shows the first 50; the number is the server's count
   const beyond = [conflicts, types, late, quick].reduce((n, q) => n + Math.max(0, (q.data?.count ?? 0) - (q.data?.results.length ?? 0)), 0);
-  return { ...lists, beyond, total: lists.stuck.length + lists.pdf.length + lists.conflicts.length + lists.types.length + lists.late.length + lists.quick.length + beyond,
+  return { ...lists, beyond, total: lists.stuck.length + lists.pdf.length + lists.out_of_date.length + lists.conflicts.length + lists.types.length + lists.late.length + lists.quick.length + beyond,
     loading: stuck.isLoading || pdf.isLoading || conflicts.isLoading || types.isLoading,
     error: [stuck, pdf, conflicts, types, late, quick].find((q) => q.isError)?.error ?? null,
     refetch: () => Promise.all([stuck, pdf, conflicts, types, late, quick].map((q) => q.refetch())) };
@@ -49,7 +62,9 @@ export function useNeeds(): { needs: Need[]; total: number; loading: boolean; er
     ...p.conflicts.map((b) => ({ key: `c${b.id}`, kind: "conflict" as const, tone: "bad" as const, title: `${b.booking_id}: two experts submitted`, meta: "Choose which inspection counts", to: `/booking/${b.id}`, action: "Resolve" })),
     ...(open.data?.results ?? []).map((b) => ({ key: `a${b.id}`, kind: "unassigned" as const, tone: "warn" as const, title: `${b.booking_id} has no expert`, meta: `Today at ${String(b.answers.inspection_time ?? "")} · ${String(b.answers.customer_name ?? "")}`, to: `/booking/${b.id}`, action: "Assign" })),
     ...p.stuck.map((s) => ({ key: `s${s.id}`, kind: "upload" as const, tone: "bad" as const, title: `Upload stuck: ${s.booking_id}`, meta: `${s.expert} · ${s.field_key} · ${s.status}`, to: `/booking/${s.booking}`, action: "Open", at: s.created_at })),
-    // a report is made again by itself after every change: only a failed one is a problem (tried again by itself too)
+    // a failed render is tried again by itself; an out-of-date one waits for Ops to press Regenerate (F-219)
+    ...p.out_of_date.map((r) => ({ key: `o${r.booking}`, kind: "report" as const, tone: "warn" as const, title: `Report out of date: ${r.booking_id}`,
+      meta: r.since ? `Changes since ${fmtStamp(r.since)}` : "Changes since the PDF was made", to: `/booking/${r.booking}`, action: "Regenerate", at: r.since || undefined })),
     ...p.pdf.map((r) => ({ key: `p${r.booking}`, kind: "report" as const, tone: "bad" as const, title: `Report failed: ${r.booking_id}`, meta: r.error ? `${r.error}; it is tried again by itself` : "It is tried again by itself", to: `/booking/${r.booking}`, action: "Open" })),
     ...(["late", "quick"] as const).flatMap((flag) => p[flag].map((b) => ({ key: `${flag}${b.id}`, kind: flag, tone: "warn" as const,
       title: `${b.booking_id}: ${(timingFlags(b.timing).find((f) => f.flag === flag)?.words ?? FLAG_NAME[flag]).toLowerCase()}`,
