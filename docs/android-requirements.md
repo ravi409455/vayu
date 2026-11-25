@@ -68,7 +68,7 @@ prototype of every screen below is approved.**
   8. An app below the minimum version can't start new leads but can finish the current one.
   9. Times are corrected by the server clock; with no sync that day, or the phone restarted or its
      clock changed since the last sync, the time is marked "unverified" (stamp "(phone time)"), and the
-     start and submit tell the server (`unverified_time`) so Ops see it.
+     start and every submit tell the server (`unverified_time`; once true it stays true) so Ops see it.
   10. Under 2 GB free → warning; under 500 MB → Start is blocked.
 
 ## Camera and media (confirmed)

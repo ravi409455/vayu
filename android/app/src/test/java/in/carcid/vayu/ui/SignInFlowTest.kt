@@ -123,6 +123,9 @@ class SignInFlowTest {
     @Test fun aSignInThatEndsWhileTheAppRunsAsksToSignInAgain() {
         signedIn("expert")
         launch(); signIn(); waitFor("My leads")
+        // the first sync must be over, or the Refresh tap below is ignored while it runs (seen under load)
+        compose.waitUntil(10_000) { server.requests.any { it.first == "GET sync/jobs" } &&
+            compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Updating leads")).fetchSemanticsNodes().isEmpty() }
         server.on("GET sync/jobs", """{"code":"token_not_valid","detail":"Token is invalid or expired"}""", 401)
         server.on("POST auth/refresh", """{"code":"token_not_valid","detail":"Token is invalid or expired"}""", 401)
         compose.onNode(androidx.compose.ui.test.hasContentDescription("Refresh", substring = true)).performClick()
