@@ -360,6 +360,31 @@ class OpsFlowTest {
         assertEquals(12400, body["answers"]!!.jsonObject["inspection"]!!.jsonObject["odometer"]!!.jsonPrimitive.int)
     }
 
+    /** The page list names every page of Check-in, Inspection and Wrap-up, numbered across all three; a page in another tab opens that tab. */
+    @Test fun thePageListCoversCheckInInspectionAndWrapUp() {
+        server.on("GET bookings/$B14/inspections", """[{"id":"aaaaaaaa-0000-0000-0000-000000000001","expert":4,"status":"submitted",
+            "submitted_at":"2026-11-24T10:40:00Z","created_at":"2026-11-24T09:00:00Z","row_version":2,"form_version":7,"start_version":1,"end_version":9,
+            "overrides":{},"scores":{},"answers":{"start":{"travel":"bike"},"inspection":{"chassis_no":"MA3","odometer":12400,"bonnet":"ok","door":"minor"},"end":{}}}]""")
+        server.on("GET form-versions/1", Fixtures.START)
+        server.on("GET form-versions/9", Fixtures.END)
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("Inspection Data"); compose.onNodeWithText("Inspection Data").performScrollTo().performClick()
+        waitFor("Chassis number")
+        compose.onNodeWithText("page 2 of 4").assertExists()          // Vehicle: the second page of the whole inspection
+        compose.onNodeWithText("Only problems · 1").assertExists()
+        compose.onNodeWithContentDescription("Jump to a page").performClick()
+        waitFor("Pages")
+        listOf("1. Check-in", "2. Vehicle", "3. Exterior", "4. Wrap-up").forEach { compose.onNodeWithText(it).assertExists() }
+        compose.onNodeWithText("Not filled yet").assertExists()      // only Wrap-up has no answers
+        compose.onNodeWithText("4. Wrap-up").performClick()
+        waitFor("Taking payment?")
+        compose.onNodeWithText("page 4 of 4").assertExists()
+        // "Only problems" is one switch for the whole inspection: the count stays on a tab with no problems
+        compose.onNodeWithText("Only problems · 1").assertExists()
+    }
+
     @Test fun keyChecksAreTypedOverAndResetOnReview() {
         server.on("PATCH inspections/aaaaaaaa-0000-0000-0000-000000000001/overrides", "{}")
         show()

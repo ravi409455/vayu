@@ -42,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,6 +57,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import `in`.carcid.vayu.core.api.ApiError
 import `in`.carcid.vayu.core.forms.Field
+import `in`.carcid.vayu.core.forms.Filled
+import `in`.carcid.vayu.core.forms.Page
 import `in`.carcid.vayu.core.forms.answerProblem
 import `in`.carcid.vayu.core.forms.refusalText
 import `in`.carcid.vayu.core.forms.PARTS
@@ -73,9 +76,36 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
+/** One page in the page list: its part, its place in that part's scroll, its number across all three parts. */
+data class NavPage(val part: String, val indexInPart: Int, val number: Int, val title: String, val isFilled: Boolean)
+
+/** Every page of Check-in, Inspection and Wrap-up in order, numbered 1..N across all three. */
+fun navPages(data: Loaded3, filled: Filled): List<NavPage> {
+    var number = 0
+    return PARTS.flatMap { part ->
+        val answers = data.answers[part].orEmpty()
+        filled.visiblePages(part).mapIndexed { i, pg ->
+            NavPage(part, i, ++number, pg.title, pg.fields.any { it.answerable && filled.visible(part, it.key) && answered(answers[it.key]) })
+        }
+    }
+}
+
+/** One part's pages with the answers each shows (a check's own photo rides on the check's row); with onlyProblems, the problems alone. */
+private fun partRows(data: Loaded3, filled: Filled, part: String, onlyProblems: Boolean): List<Pair<Page, List<Field>>> {
+    val answers = data.answers[part].orEmpty()
+    return filled.visiblePages(part).map { pg -> pg to pg.fields.filter { f -> f.answerable && filled.visible(part, f.key)
+        && (f.config["photo_of"] as? String) !in pg.fields.map { it.key } && (!onlyProblems || problemOf(f, answers[f.key]) != null) } }
+}
+
+/** Where a page's header sits in the scroll (each shown page is one header and its rows); null when the page shows nothing. */
+private fun headerIndex(rows: List<Pair<Page, List<Field>>>, page: Int): Int? =
+    if (rows.getOrNull(page)?.second.isNullOrEmpty()) null else rows.take(page).filter { it.second.isNotEmpty() }.sumOf { 1 + it.second.size }
+
 /**
- * The inspection's answers: Check-in · Inspection · Wrap-up, each part's pages in one scroll with a
- * jump list, "Only problems", photos inline. Tap an answer to change it (Ops).
+ * The inspection's answers: Check-in · Inspection · Wrap-up tabs, each part's pages in one scroll.
+ * The page list names every page of all three parts (numbered across them) and opens the page's
+ * tab; "Only problems" counts and filters the whole inspection. Photos inline. Tap an answer to
+ * change it (Ops).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,6 +115,8 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
     var part by rememberSaveable { mutableStateOf(startPart) }
     var onlyProblems by rememberSaveable { mutableStateOf(false) }
     var jump by remember { mutableStateOf(false) }
+    // a page picked in the page list: scrolled to once its tab is on screen
+    var scrollTo by remember { mutableStateOf<Int?>(null) }
     var editing by remember { mutableStateOf<Pair<String, Field>?>(null) }
     var viewing by remember { mutableStateOf<MediaItem?>(null) }
     val list = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -133,9 +165,10 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
         val answers = data.answers[part].orEmpty()
         // a check's own photos (photo_of) show on the check's row, not as a row of their own
         val photosOf = pages.flatMap { it.fields }.filter { it.isMedia && (it.config["photo_of"] as? String) != null }.groupBy({ it.config["photo_of"] as String }, { it.key })
-        val rows = pages.map { pg -> pg to pg.fields.filter { f -> f.answerable && filled.visible(part, f.key) && (f.config["photo_of"] as? String) !in pg.fields.map { it.key }
-            && (!onlyProblems || problemOf(f, answers[f.key]) != null) } }
-        val problems = pages.sumOf { pg -> pg.fields.count { filled.visible(part, it.key) && problemOf(it, answers[it.key]) != null } }
+        val rows = partRows(data, filled, part, onlyProblems)
+        val nav = navPages(data, filled)
+        val before = nav.first { it.part == part }.number - 1     // pages in the tabs before this one
+        val problems = parts.sumOf { partCounts(data, filled, it).second }
         val pageOf = pages.flatMap { pg -> pg.fields.map { it.key to pg.title } }.toMap()
         if (problems > 0 || onlyProblems) Row(Modifier.padding(horizontal = 20.dp)) {
             Row(Modifier.heightIn(min = 40.dp).clip(RoundedCornerShape(20.dp)).background(if (onlyProblems) Vayu.colors.warnTint else Vayu.colors.bg)
@@ -147,20 +180,16 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
             }
         }
         OfflineNote(rememberLoad(env, "bookings/$id").value)
-        // header index of each page, for the jump list
-        val headerAt = mutableMapOf<Int, Int>()
+        LaunchedEffect(scrollTo, part) { scrollTo?.let { list.scrollToItem(it); scrollTo = null } }
         androidx.compose.foundation.lazy.LazyColumn(Modifier.weight(1f), state = list) {
-            var i = 0
             rows.forEachIndexed { pi, (pg, fs) ->
                 if (fs.isEmpty()) return@forEachIndexed
-                headerAt[pi] = i
                 item(key = "p${pg.id}") {
                     Row(Modifier.padding(top = 12.dp).fillMaxWidth().background(Vayu.colors.soft).padding(horizontal = 20.dp, vertical = 8.dp)) {
                         Text(pg.title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink2, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("page ${pi + 1} of ${pages.size}", fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1, softWrap = false)
+                        Text("page ${before + pi + 1} of ${nav.size}", fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1, softWrap = false)
                     }
                 }
-                i++
                 items(fs, key = { "f${it.key}" }) { f ->
                     val v = answers[f.key]
                     val editable = env.can("submissions.edit") && !data.offline && !f.isMedia
@@ -188,7 +217,6 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
                         HorizontalDivider(color = Vayu.colors.line)
                     }
                 }
-                i += fs.size
             }
             if (rows.all { it.second.isEmpty() }) item {
                 Text(if (onlyProblems) "No problems here." else "Nothing answered here.", color = Vayu.colors.muted, modifier = Modifier.padding(20.dp))
@@ -197,11 +225,18 @@ fun AnswersScreen(env: OpsEnv, id: String, startPart: String, onBack: () -> Unit
         }
         if (jump) VayuSheet({ jump = false }) {
             Text("Pages", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Vayu.colors.ink, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-            pages.forEachIndexed { pi, p ->
-                val at = headerAt[pi]
-                Text("${pi + 1}. ${p.title}", color = if (at == null) Vayu.colors.muted else Vayu.colors.ink,
-                    modifier = Modifier.fillMaxWidth().clickable(enabled = at != null, role = Role.Button) { jump = false; scope.launch { list.scrollToItem(at ?: 0) } }
-                        .padding(horizontal = 20.dp, vertical = 14.dp))
+            parts.forEach { p ->
+                Text(names[p] ?: p, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.muted,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 2.dp))
+                val shown = if (p == part) rows else partRows(data, filled, p, onlyProblems)
+                nav.filter { it.part == p }.forEach { pg ->
+                    val at = headerIndex(shown, pg.indexInPart)
+                    Row(Modifier.fillMaxWidth().clickable(enabled = at != null, role = Role.Button) { jump = false; part = p; scrollTo = at }
+                        .padding(horizontal = 20.dp, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("${pg.number}. ${pg.title}", color = if (at == null) Vayu.colors.muted else Vayu.colors.ink, modifier = Modifier.weight(1f))
+                        if (!pg.isFilled) Text("Not filled yet", fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1)
+                    }
+                }
             }
             Spacer(Modifier.height(24.dp))
         }
