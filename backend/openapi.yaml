@@ -3579,6 +3579,8 @@ components:
         withdrawn_expert:
           type: integer
           nullable: true
+        unverified_time:
+          type: boolean
       required:
       - booking_id
       - finished_at
@@ -3804,6 +3806,8 @@ components:
         created_at:
           type: string
           format: date-time
+        unverified_time:
+          type: boolean
       required:
       - booking
       - end_version
@@ -4152,6 +4156,8 @@ components:
         withdrawn_expert:
           type: integer
           nullable: true
+        unverified_time:
+          type: boolean
     PatchedCheck:
       type: object
       properties:
@@ -4281,6 +4287,8 @@ components:
         created_at:
           type: string
           format: date-time
+        unverified_time:
+          type: boolean
     PatchedLibraryItem:
       type: object
       properties:

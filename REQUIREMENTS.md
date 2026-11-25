@@ -144,7 +144,7 @@ forms at the end of the day; the app keeps its generic nature").
 - **Force-release** closes the expert's draft (released): a new start opens a new draft (one open draft per expert per booking); the released one is still accepted if it arrives, as a conflict.
 - **A second submit** by the same expert on a lead they already submitted is **refused** ("Already submitted; Ops can edit it"); the same request id still returns the first result.
 - **Logout is blocked while data is unsynced.** If Admin disables an account with unsynced data, the Admin sees a data-loss warning.
-- **Time:** server-corrected using the offset from the last sync. If there's been no sync that day, the last known offset is used and the time is **flagged "unverified"**.
+- **Time:** server-corrected using the offset from the last sync. If there's been no sync that day, the last known offset is used and the time is **flagged "unverified"**. The phone sends `unverified_time` with the start and every submit; the server keeps it (once true, it stays true) on the inspection and its booking, the booking API shows it and the Ops problem queue lists it (`problem=unverified_time`).
 
 ## 7. PDF reports
 - **v1 includes a basic block designer** (web), with one template per inspection form and its own draft → preview → publish (built on staging, promoted with the form).
