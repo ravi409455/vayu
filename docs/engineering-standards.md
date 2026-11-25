@@ -37,6 +37,94 @@ copy the old pattern.
 10. **Docs move with the code:** `REQUIREMENTS.md` when behaviour changes, the plan's status line
     when work is done, `openapi.yaml` when the API changes.
 
+## 2a. Design principles (SOLID, in plain words)
+- **One job per unit.** A function, class, component or file does one thing and has one reason to
+  change. Signs it does too much: "and" in its name, over ~60 lines for a function or ~300 for a
+  file, flags that switch its behaviour. Split it.
+- **Add a case without editing five places.** Things that come in kinds (field types, events,
+  stages, problem kinds, media kinds) are handled by one registry or table, never by `if type ==`
+  chains repeated across modules. A new kind = one new entry plus its tests.
+- **Keep promises.** Anything that stands in for another (a subclass, a fake in tests, a second
+  implementation) behaves the same for the caller: same results, same errors. A test fake that is
+  more forgiving than the real thing hides bugs.
+- **Small, exact interfaces.** A function takes what it needs, not a whole request or a whole
+  object "in case". A component gets the few props it uses.
+- **Depend on the layer below, never sideways or up.** Backend: views → services → models;
+  `core` imports no other app; no import cycles. Web: pages → ui / lib → api. Android: ui → view
+  model → core. Outside services (storage, push, time, network) are passed in or wrapped in one
+  place, so tests can replace them.
+- **No speculative design.** No interface with one implementation, no option nobody sets, no
+  layer that only forwards. Build the second case when it exists.
+
+## 2b. Clean code
+- **Names say what it is in the product's words** (booking, lead, inspection, counted inspection),
+  not how it is built. No abbreviations a new person must look up. Booleans read as facts
+  (`is_active`, `canFinish`).
+- **Short, flat functions.** Return early instead of nesting. One level of abstraction per
+  function. More than four arguments: pass a small object.
+- **No magic values.** A number or string with a meaning gets a name in one place (limits, days,
+  status words, error codes).
+- **No dead code**: unused functions, parameters, exports, permissions, screens and commented-out
+  blocks are deleted, not kept "for later". Git remembers.
+- **Make wrong states impossible** where cheap: enums over free strings, a DB constraint over a
+  check in code, a required parameter over a default that hides a mistake.
+- **Same thing, same way.** Follow the pattern the file and layer already use (how errors are
+  raised, how a list is loaded, how a dialog is built). A better pattern replaces the old one
+  everywhere in that change, or not at all.
+- **Tests are code too:** one behaviour per test, a name that reads as the rule, no copy-pasted
+  setup (use the fixtures), no sleeping.
+
+## 2c. Performance
+- **Measure before and after** anything claimed as faster (query count, time, size). Put the
+  number in the commit message.
+- **Backend:** a fixed number of queries per request (`select_related` / `prefetch_related`,
+  aggregates in the database, never a query inside a loop); a query-count test on every list
+  endpoint; an index for every filter and ordering a list uses; pages, never unbounded lists; heavy
+  work (PDF, ZIP, image copies, webhooks, push) in a Celery task with a time limit, on its queue;
+  timeouts on every outside call; stream large files, never hold them in memory. Targets: API
+  reads under 500 ms, phone sync under 500 ms at 250 leads, PDF render within its limit.
+- **Web:** pages are lazy-loaded; no request per keystroke (debounce, ask for counts instead of
+  lists); long lists are paged; frequent updates (upload progress) don't re-render the whole page;
+  nothing heavy imported into the first bundle.
+- **Android:** nothing slow on the main thread; parse and build each form once; stable parameters
+  so screens don't redraw for nothing; photos resized before upload (2048 px, ~500 KB), video
+  720p ~2.5 Mbps; caches have a size limit; no work in the background without WorkManager.
+- **Cost is performance too:** don't store a second copy of a file without deleting the first;
+  generated files (ZIPs, print copies) have an expiry and a clean-up.
+
+## 2d. Logging and observability
+- **You must be able to tell the story of one booking from the logs.** Log each step that
+  matters with the booking id (the internal uuid, never the customer's name): started, submitted,
+  upload verified or failed, report made or failed, webhook sent or failed, push sent or failed.
+- **Levels:** `info` for a step that happened, `warning` for something refused or retried,
+  `error` / `exception` for something that needs a person. No log line inside a loop per item at
+  `info`. No `print`.
+- **Structure:** JSON logs with the request id; a Celery task carries the request id of the
+  request that started it. Message = fixed text; values go in fields, so lines can be searched.
+- **Never log:** customer names, phone numbers, addresses, answers, photos' links, tokens,
+  passwords, API keys, request bodies, typed usernames on a failed sign-in (log the user's
+  internal id or "unknown user", the address and the reason).
+- **Every failure is visible to someone:** a failed background job raises an alert Ops can see
+  (problem queue, bell) or an error report (Sentry) — not only a log line. Crash and error reports
+  carry no customer text and no request bodies.
+- **Audit log** for every configuration change and privileged action (who, what, when), written in
+  the same transaction as the change; it says what changed, never the secret values.
+- **Metrics come from stored facts:** keep the timestamps and counts a question will need
+  (when it started, failed, was retried, by whom) instead of overwriting them.
+
+## 2e. Security (always, not only in "security" changes)
+- Check permission **and** ownership on the server for every object touched; a list is filtered
+  by what the caller may see. Fields hidden from a role are neither returned nor writable.
+- Validate every input at the edge: type, size, shape, allowed values; files by size, type and
+  real content. Reject, don't repair.
+- Anything fetched from an address a person typed goes through the address guard (no private
+  networks, no redirects). HTML from people is cleaned with the allow-list on the server.
+- Secrets come from the environment, never from code, logs, error messages, the APK or git.
+- Rate-limit anything open to the internet or to guessing (sign-in, public links).
+- A link that works without sign-in carries an unguessable token, shows the minimum, and expires.
+- New permission, new public endpoint, new outgoing data or a change in who can see what: stop
+  and ask (see §8).
+
 ## 3. Backend (Django)
 - Business rules live in services (`apps/<app>/services.py` and friends); views only parse,
   call and answer. No rule in a serializer or view.
