@@ -78,6 +78,7 @@ class Device(models.Model):
     # what the phone last said it still holds: {"drafts": n, "files": n}; null = never reported
     unsynced = models.JSONField(null=True, blank=True)
     last_seen_at = models.DateTimeField(null=True, blank=True)
+    app_version = models.CharField(max_length=32, blank=True)   # from the heartbeat (F-247)
     push_token = models.CharField(max_length=4096, blank=True)   # Firebase token; "" = none
     push_token_at = models.DateTimeField(null=True, blank=True)  # when this device last sent it
 

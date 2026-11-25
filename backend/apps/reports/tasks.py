@@ -13,7 +13,7 @@ from apps.core import events
 from apps.media import storage
 
 from . import context, definition, render, shared
-from .models import PdfTemplateVersion, Report, mark_out_of_date
+from .models import PdfTemplateVersion, Report, ReportRender, mark_out_of_date
 
 MAX_RETRIES = 2
 SOFT_LIMIT, HARD_LIMIT = 300, 330        # seconds: 150 photos must fit with room to spare
@@ -123,6 +123,8 @@ def render_report(booking_id: str) -> str:
                                                    retry_at=timezone.now() + RETRY_FAILED)
         if report.key:
             mark_out_of_date(Report.objects.filter(pk=report.pk))
+        ReportRender.objects.create(report_id=report.pk, revision=revision, started_at=now,
+                                    ok=False, error=reason, template_version=tv)
         if not report.error:                         # alert once, not on every retry
             events.emit("alert.pdf_failed", booking=str(booking.id), reason=reason)
         return "failed"
@@ -137,6 +139,8 @@ def render_report(booking_id: str) -> str:
         report.save(update_fields=["revision", "key", "filename", "status", "error",
                                    "render_started_at", "template_version", "generated_at",
                                    "retry_at", "first_generated_at"])
+        ReportRender.objects.create(report=report, revision=revision, started_at=now, ok=True,
+                                    template_version=tv)
     if old:
         storage.delete(old)
     events.emit("pdf.ready", booking=str(booking.id), booking_id=booking.booking_id,

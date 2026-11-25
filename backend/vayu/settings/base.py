@@ -183,6 +183,8 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "json",
                              "filters": ["request_id"]}},
     "root": {"handlers": ["console"], "level": "INFO"},
+    # about 8 INFO lines per PDF otherwise (F-231)
+    "loggers": {"weasyprint": {"level": "WARNING"}, "weasyprint.progress": {"level": "WARNING"}},
 }
 
 SENTRY_DSN = env("SENTRY_DSN", "")
@@ -192,6 +194,10 @@ if SENTRY_DSN:
     from vayu.sentry_scrub import OPTIONS
 
     sentry_sdk.init(dsn=SENTRY_DSN, **OPTIONS)
+
+# ~200 "could not derive the type" warnings on every check and migrate until the schema gets
+# real types (R-10); they hide the warnings that matter (F-231)
+SILENCED_SYSTEM_CHECKS = ["drf_spectacular.W002"]
 
 SPECTACULAR_SETTINGS = {"TITLE": "Vayu API", "VERSION": "1.0.0", "SERVE_INCLUDE_SCHEMA": False,
                         "SCHEMA_PATH_PREFIX": "/api/v1"}

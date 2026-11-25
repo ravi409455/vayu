@@ -57,8 +57,10 @@ class HealthView(APIView):
             status["storage"] = "down"
         status["workers"] = "ok" if workers_alive() else "down"
         healthy = all(v == "ok" for v in status.values())
-        # Dependency detail goes to the logs only; the public body stays bare.
-        logger.info("health check", extra={"healthy": healthy, **status})
+        # Dependency detail goes to the logs only, and only when something is down (a probe every
+        # few seconds would otherwise fill the logs, F-231); the public body stays bare.
+        if not healthy:
+            logger.warning("health check failed", extra={"healthy": healthy, **status})
         return Response({"status": "ok" if healthy else "degraded"},
                         status=200 if healthy else 503)
 

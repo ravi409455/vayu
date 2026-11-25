@@ -3331,6 +3331,30 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/users/{id}/phone:
+    get:
+      operationId: users_phone_retrieve
+      description: |-
+        What the person's signed-in phones last said they still hold (F-243), so the deactivate
+        and sign-out warnings say what would be lost. unknown: a phone never reported.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - users
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhoneState'
+          description: ''
   /api/v1/users/{id}/picture:
     get:
       operationId: users_picture_retrieve
@@ -3799,8 +3823,7 @@ components:
         expert:
           type: integer
         status:
-          type: string
-          maxLength: 10
+          $ref: '#/components/schemas/InspectionStatusEnum'
         answers: {}
         scores: {}
         overrides: {}
@@ -3838,6 +3861,18 @@ components:
       - form_version
       - id
       - start_version
+    InspectionStatusEnum:
+      enum:
+      - draft
+      - submitted
+      - superseded
+      - released
+      type: string
+      description: |-
+        * `draft` - Draft
+        * `submitted` - Submitted
+        * `superseded` - Superseded
+        * `released` - Released
     KindEnum:
       enum:
       - field
@@ -4280,8 +4315,7 @@ components:
         expert:
           type: integer
         status:
-          type: string
-          maxLength: 10
+          $ref: '#/components/schemas/InspectionStatusEnum'
         answers: {}
         scores: {}
         overrides: {}
@@ -4469,6 +4503,27 @@ components:
           format: date-time
           readOnly: true
           nullable: true
+    PhoneState:
+      type: object
+      properties:
+        devices:
+          type: integer
+        drafts:
+          type: integer
+        files:
+          type: integer
+        unknown:
+          type: boolean
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - devices
+      - drafts
+      - files
+      - last_seen_at
+      - unknown
     Reschedule:
       type: object
       properties:
@@ -4566,14 +4621,6 @@ components:
         * `submitted` - submitted
         * `completed` - completed
         * `cancelled` - cancelled
-    StatusEnum:
-      enum:
-      - draft
-      - published
-      type: string
-      description: |-
-        * `draft` - Draft
-        * `published` - Published
     User:
       type: object
       properties:
@@ -4640,7 +4687,7 @@ components:
           minimum: 0
         status:
           allOf:
-          - $ref: '#/components/schemas/StatusEnum'
+          - $ref: '#/components/schemas/VersionTreeStatusEnum'
           default: draft
         published_at:
           type: string
@@ -4668,6 +4715,14 @@ components:
       - id
       - number
       - pages
+    VersionTreeStatusEnum:
+      enum:
+      - draft
+      - published
+      type: string
+      description: |-
+        * `draft` - Draft
+        * `published` - Published
     _FromLibraryBody:
       type: object
       properties:

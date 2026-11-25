@@ -50,7 +50,9 @@ def test_request_id_from_client_is_kept(client):
 
 
 def test_request_id_in_log_records(client, caplog):
-    with caplog.at_level(logging.INFO, logger="apps.core.views"):
+    with caplog.at_level(logging.INFO, logger="apps.core.views"), \
+            mock.patch("apps.core.views.redis_client") as rc:      # only a failed probe logs
+        rc.return_value.ping.side_effect = ConnectionError("down")
         client.get("/api/v1/health", headers={"X-Request-ID": "rid-9"})
     assert any(getattr(rec, "request_id", None) == "rid-9" for rec in caplog.records)
 
