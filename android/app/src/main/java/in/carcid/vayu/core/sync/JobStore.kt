@@ -152,9 +152,13 @@ class JobStore(private val file: File) {
         ((data()["jobs"] as? JsonArray)?.map { it.jsonObject }?.firstOrNull { it.s("id") == bookingId }
             ?.get("answers")?.let { JsonLogic.fromJson(it) } as? Map<String, Any?>).orEmpty()
 
+    /** Parsed form versions: a published version never changes, so each is parsed once (F-052). */
+    private val trees = java.util.concurrent.ConcurrentHashMap<Int, FormTree>()
+
     /** A form version as a tree (null when the phone doesn't hold it). */
-    fun tree(version: Int?): FormTree? =
-        version?.let { form(it) }?.let { FormTree.parse(it) }
+    fun tree(version: Int?): FormTree? = version?.let { v ->
+        trees[v] ?: form(v)?.let { FormTree.parse(it) }?.also { trees[v] = it }
+    }
 
     /** The forms and answers of an inspection, ready for the rules; null if a form is missing. */
     fun filled(bookingId: String, versions: Map<String, Int?>, answers: Map<String, Map<String, Any?>>,

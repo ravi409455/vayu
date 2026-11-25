@@ -57,7 +57,10 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     var assigning by remember { mutableStateOf<Bk?>(null) }
     var labels by remember { mutableStateOf(Labels()) }
     var namesFresh by remember { mutableStateOf(false) }
-    val env = OpsEnv(me, data, labels, today, tick, refresh = { tick++ }, say = { scope.launch { snack.showSnackbar(it) } })
+    // the same lambdas every time, so an unchanged env compares equal and screens can skip recomposing (F-052)
+    val refresh = remember { { tick++; Unit } }
+    val say = remember(scope) { { m: String -> scope.launch { snack.showSnackbar(m) }; Unit } }
+    val env = OpsEnv(me, data, labels, today, tick, refresh = refresh, say = say)
     // null until the first load is back (so the bell never says "All clear" too early)
     var needs by remember { mutableStateOf<List<Need>?>(null) }
     var refreshing by remember { mutableStateOf(false) }

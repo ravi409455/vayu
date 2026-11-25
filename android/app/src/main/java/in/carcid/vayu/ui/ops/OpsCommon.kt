@@ -55,6 +55,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /** A booking as the Ops screens read it (BookingSerializer). */
+@androidx.compose.runtime.Immutable
 class Bk(val o: JsonObject) {
     val id = o.s("id")
     val code = o.s("booking_id")
@@ -111,6 +112,7 @@ fun opsStatus(b: Bk): Pair<String, Tone> = when {
 }
 
 /** Names for keys: cities, car models, types, people. Loaded once, kept for offline. */
+@androidx.compose.runtime.Immutable
 class Labels(val cities: Map<String, String> = emptyMap(), val cars: Map<String, String> = emptyMap(),
              val types: List<Triple<String, String, Boolean>> = emptyList(), val people: List<JsonObject> = emptyList()) {
     fun city(k: String) = cities[k] ?: k

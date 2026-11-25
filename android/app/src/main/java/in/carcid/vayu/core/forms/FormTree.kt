@@ -25,10 +25,10 @@ data class Field(
     val config: Map<String, Any?>,
 ) {
     @Suppress("UNCHECKED_CAST")
-    val options: List<Option> get() = (config["options"] as? List<Map<String, Any?>>).orEmpty().mapNotNull {
+    val options: List<Option> by lazy { (config["options"] as? List<Map<String, Any?>>).orEmpty().mapNotNull {
         val key = it["key"] as? String ?: return@mapNotNull null          // a broken option is left out, not a crash
         Option(key, (it["label"] as? String) ?: key, it["is_defect"] == true, it["severity"] as? String)
-    }
+    } }
     val editable: Boolean get() = level == "edit" && type !in SYSTEM_MADE
     /** Never typed by the expert: computed, or only shown. */
     val answerable: Boolean get() = type !in SYSTEM_MADE && type != "image"
