@@ -50,7 +50,8 @@ fun initials(name: String): String = name.split(" ").filter { it.isNotBlank() }.
 class Api(private val baseUrl: String, private val tokens: TokenStore,
           // a dead connection gives up after 5 s (screens then show the saved copy); a slow but
           // working one keeps the usual time to send and receive
-          private val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS).build()) {
+          /** The one HTTP client (API calls and the app update download). */
+          val http: OkHttpClient = OkHttpClient.Builder().connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS).build()) {
 
     private val json = "application/json".toMediaType()
 

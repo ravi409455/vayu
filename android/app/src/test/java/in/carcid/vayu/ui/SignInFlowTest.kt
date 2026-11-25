@@ -122,6 +122,20 @@ class SignInFlowTest {
         compose.waitUntil(5_000) { server.bodiesOf("POST auth/logout").size == 2 }
     }
 
+    /** F-018: the update downloads in the view model (it carries on if its screen closes) and is checked. */
+    @Test fun theUpdateDownloadsInTheViewModel() {
+        val bytes = "PK fake apk"
+        val sha = java.security.MessageDigest.getInstance("SHA-256").digest(bytes.toByteArray()).joinToString("") { "%02x".format(it) }
+        server.on("GET apk", bytes)
+        val vm = AppViewModel(`in`.carcid.vayu.Graph(Api(server.url, tokens), tokens, root, {}), "Test phone")
+        val file = java.io.File(root, "update/vayu-5.apk").apply { parentFile!!.mkdirs() }
+        vm.downloadUpdate(`in`.carcid.vayu.core.update.AppUpdate(5, "1.1.0", 11, sha, emptyList(), server.raw("/api/v1/apk"), false), file)
+        // no screen is shown here, so the main looper (where the view model resumes) is run by hand
+        compose.waitUntil(10_000) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); vm.updateDownload.value.ready }
+        org.junit.Assert.assertEquals(bytes, file.readText())
+        org.junit.Assert.assertEquals(11L, vm.updateDownload.value.got)
+    }
+
     @Test fun anExpertLandsOnMyJobs() {
         signedIn("expert")
         launch(); signIn(); waitFor("My leads")

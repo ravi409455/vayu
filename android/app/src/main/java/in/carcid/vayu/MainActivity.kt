@@ -91,7 +91,8 @@ fun AppRoot(vm: AppViewModel) {
         val u = update
         if (u != null && showUpdate && (screen is Screen.Home || screen is Screen.Profile)) {
             BackHandler { vm.showUpdate.value = false }
-            `in`.carcid.vayu.ui.UpdateScreen(u, onLater = { vm.showUpdate.value = false })
+            val dl by vm.updateDownload.collectAsState()
+            `in`.carcid.vayu.ui.UpdateScreen(u, onLater = { vm.showUpdate.value = false }, state = dl, onDownload = { f -> vm.downloadUpdate(u, f) })
             return@VayuTheme
         }
         when (val s = screen) {

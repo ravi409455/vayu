@@ -44,7 +44,8 @@ class OpsModel(private val data: OpsData, me: Me, private val today: () -> Local
     fun reload(asked: Boolean = false) {
         _tick.value++
         job?.cancel()
-        job = viewModelScope.launch {
+        // on IO: it only writes StateFlows, so it never waits for the main thread
+        job = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _refreshing.value = true
             try {
                 if (_labels.value.people.isEmpty()) Labels.saved(data).takeIf { it.people.isNotEmpty() }?.let { _labels.value = it }

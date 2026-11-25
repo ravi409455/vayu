@@ -31,27 +31,28 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
-import `in`.carcid.vayu.core.api.ApiError
 import `in`.carcid.vayu.core.update.AppUpdate
-import `in`.carcid.vayu.core.update.download
 import `in`.carcid.vayu.ui.components.PrimaryButton
 import `in`.carcid.vayu.ui.theme.Vayu
-import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
 import java.io.File
 
 fun mb(bytes: Long): String = "%.0f MB".format(bytes / 1_048_576.0).let { if (bytes in 1 until 1_048_576) "1 MB" else it }
 
 /** "Update available": what's new, download (with progress, checked), then Android's install prompt. */
 @Composable
-fun UpdateScreen(u: AppUpdate, onLater: () -> Unit) {
+fun UpdateScreen(u: AppUpdate,
+                 /** The download as the view model runs it; [onDownload] starts it (into the given file). */
+                 state: AppViewModel.UpdateDownload = AppViewModel.UpdateDownload(), onDownload: (File) -> Unit = {},
+                 onLater: () -> Unit) {
     val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
     val file = remember(u.code) { File(ctx.cacheDir, "update/vayu-${u.code}.apk") }
-    var got by remember { mutableLongStateOf(0L) }
-    var busy by remember { mutableStateOf(false) }
-    var ready by remember { mutableStateOf(file.exists()) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val got = state.got
+    val busy = state.busy
+    val ready = state.ready || (!busy && file.exists())
+    val error = state.error
+    // once a download asked for here is done, Android's installer opens
+    var asked by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(state.ready) { if (state.ready && asked) { asked = false; install(ctx, file) } }
     Column(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding().padding(horizontal = 24.dp)
         .verticalScroll(rememberScrollState())) {
         Spacer(Modifier.height(48.dp))
@@ -73,19 +74,7 @@ fun UpdateScreen(u: AppUpdate, onLater: () -> Unit) {
         }
         error?.let { Text(it, color = Vayu.colors.bad, modifier = Modifier.padding(bottom = 10.dp)) }
         PrimaryButton(if (ready) "Install update" else if (busy) "Downloading…" else "Download update", enabled = !busy, onClick = {
-            if (ready) install(ctx, file) else {
-            busy = true; error = null
-            scope.launch {
-                try {
-                    file.parentFile?.listFiles()?.forEach { it.delete() }        // older downloads
-                    download(OkHttpClient(), u, file) { got = it }
-                    ready = true
-                    install(ctx, file)
-                } catch (e: ApiError) {
-                    error = e.message
-                } finally { busy = false }
-            }
-            }
+            if (ready) install(ctx, file) else { asked = true; onDownload(file) }
         })
         Text("Android will ask you to confirm the install.", fontSize = 13.sp, color = Vayu.colors.muted,
             modifier = Modifier.padding(top = 8.dp).align(Alignment.CenterHorizontally))
