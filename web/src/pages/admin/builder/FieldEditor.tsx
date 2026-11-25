@@ -82,7 +82,7 @@ export function FieldEditor({ field, choices, lists, categories, onSave, onDelet
             )}
             {field.type === "image" && (
               <Field label="Picture" tip="A picture shown to the expert in the form, for example a QR code to scan. PNG or JPEG, up to 2 MB. It is not an answer and not part of the report.">
-                {typeof cfg.asset === "string" && <img src={`/api/v1/form-assets/${cfg.asset}`} alt="The uploaded picture" style={{ maxWidth: 220, maxHeight: 220, display: "block", marginBottom: 8, border: "1px solid var(--line)", borderRadius: 8 }} />}
+                {typeof cfg.asset === "string" && <img src={`/api/v1/form-assets/${cfg.asset}`} alt="Uploaded for this field" style={{ maxWidth: 220, maxHeight: 220, display: "block", marginBottom: 8, border: "1px solid var(--line)", borderRadius: 8 }} />}
                 <input type="file" accept="image/png,image/jpeg" aria-label="Upload the picture" onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;

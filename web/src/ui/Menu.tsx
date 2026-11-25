@@ -44,9 +44,11 @@ export function MoreMenu({ label, items, children }: { label: string; items: Men
   const plain = shown.filter((i) => !i.danger), risky = shown.filter((i) => i.danger);
   const pick = (i: MenuItem) => { setOpen(false); i.onClick(); };
   return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- only stops the click reaching a clickable row behind
     <span className="menu-wrap" onClick={(e) => e.stopPropagation()}>
       <button ref={btn} className="icon-only" aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>{children ?? <MoreHorizontal size={16} aria-hidden />}</button>
       {open && createPortal(
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- only stops the click reaching a clickable row behind; the items are buttons
         <div ref={menu} className="menu floating" role="menu" aria-label={label} onClick={(e) => e.stopPropagation()}
           style={{ top: pos?.top ?? -9999, left: pos?.left ?? -9999 }}>
           {plain.map((i) => <button key={i.label} role="menuitem" onClick={() => pick(i)}>{i.label}</button>)}

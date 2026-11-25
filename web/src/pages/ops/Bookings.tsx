@@ -170,6 +170,7 @@ export function Bookings() {
               <section key={s} className="board-col" aria-label={STAGE_LABEL[s]}>
                 <h3><Pill tone={STAGE_TONE[s]}>{STAGE_LABEL[s]}</Pill> <span className="muted small">{col.length}</span></h3>
                 {col.map((b) => (
+                  // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- a bigger mouse target; the booking link inside is the keyboard path
                   <div key={b.id} className="board-card" onClick={() => nav(`/booking/${b.id}`)}>
                     <div className="bar" style={{ margin: 0 }}><Link to={`/booking/${b.id}`} className="cell-main grow" onClick={(e) => e.stopPropagation()}>{b.booking_id}</Link><MoreMenu label={`Actions for ${b.booking_id}`} items={menu(b)} /></div>
                     <div className="small">{String(b.answers.customer_name ?? "")}</div>

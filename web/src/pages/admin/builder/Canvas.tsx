@@ -8,7 +8,7 @@ import { useState } from "react";
 import type { FormField, FormPage, FormSection } from "../../../api/types";
 import type { Ref } from "../../../lib/tree";
 import { iconFor, typeSummary } from "../../../lib/fieldTypes";
-import { Pill } from "../../../ui/kit";
+import { Pill, pressable } from "../../../ui/kit";
 
 export type Sel = Ref | null;
 const sid = (r: Ref) => `${r.kind}:${r.id}`;
@@ -23,7 +23,7 @@ function PageTab({ page, active, onSelect, readOnly }: { page: FormPage; active:
   const fields = page.sections.reduce((n, x) => n + x.fields.length, 0);
   return (
     <div ref={s.setNodeRef} style={{ transform: CSS.Transform.toString(s.transform), transition: s.transition, opacity: s.isDragging ? 0.5 : 1 }}
-      className={`rail-item${active ? " on" : ""}`} onClick={onSelect}>
+      className={`rail-item${active ? " on" : ""}`} {...pressable(onSelect)}>
       {!readOnly && <Handle listeners={s.listeners} attributes={s.attributes} label={`Move page ${page.title}`} />}
       <FileText size={15} aria-hidden />
       <span className="grow ellipsis">{page.title}</span>
@@ -62,7 +62,7 @@ function SectionCard({ section, selected, selectedField, onSelect, onSelectField
   return (
     <section ref={s.setNodeRef} aria-label={section.title} style={{ transform: CSS.Transform.toString(s.transform), transition: s.transition, opacity: s.isDragging ? 0.5 : 1 }}
       className={`sec-card${selected ? " on" : ""}`}>
-      <header className="sec-head" onClick={onSelect}>
+      <header className="sec-head" {...pressable(onSelect)}>
         {!readOnly && <Handle listeners={s.listeners} attributes={s.attributes} label={`Move section ${section.title}`} />}
         <strong className="grow">{section.title}</strong>
         {section.library && <Pill tone={section.library.update_available ? "warn" : "info"}><Link2 size={11} aria-hidden /> Library{section.library.update_available ? ": update" : ""}</Pill>}
@@ -115,6 +115,7 @@ export function Canvas({ pages, pageId, sel, onSelect, onPage, onDrag, onAddPage
         <div className="canvas" aria-label="Questions">
           {page && (
             <>
+              {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the same as the page's tab in the rail, which takes the keyboard */}
               <div className="canvas-head" onClick={() => onSelect({ kind: "page", id: page.id })}>
                 <h2>{page.title}</h2>
                 {page.gate && <Pill tone="warn"><Lock size={11} aria-hidden /> Must be finished to continue</Pill>}
