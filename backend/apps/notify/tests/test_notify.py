@@ -228,8 +228,7 @@ def test_app_latest_and_download(env, settings, tmp_path):
     from rest_framework.test import APIClient
     settings.MIN_APP_VERSION = 3
     assert env.expert.get("/api/v1/app/latest").json() == {"version_code": None, "min_version": 3}
-    assert APIClient().get("/api/v1/app/download").status_code == 401     # sign-in needed
-    assert env.ops.get("/api/v1/app/download").status_code == 404
+    assert APIClient().get("/api/v1/app/download").status_code == 404     # public; nothing published yet
     apk = tmp_path / "app-release.apk"
     apk.write_bytes(b"PK fake apk")
     with mock.patch("apps.media.storage.upload_file") as up, \
@@ -239,10 +238,12 @@ def test_app_latest_and_download(env, settings, tmp_path):
         assert up.call_args.args[1:] == ("app/vayu-5.apk", "application/vnd.android.package-archive")
         got = env.expert.get("/api/v1/app/latest").json()
         r = env.expert.get("/api/v1/app/download")
+        public = APIClient().get("/api/v1/app/download")        # the /welcome pages' button
     assert got == {"version_code": 5, "version_name": "1.1.0", "size": 11, "min_version": 3,
                    "sha256": hashlib.sha256(b"PK fake apk").hexdigest(),
                    "notes": ["Faster uploads", "Scan plates"], "url": "https://r2/x"}
     assert r.status_code == 302 and r["Location"] == "https://r2/x"
+    assert public.status_code == 302 and public["Location"] == "https://r2/x"
     with pytest.raises(CommandError):
         call_command("publish_apk", str(apk), "--version-code", "5", "--version-name", "x")
     with pytest.raises(CommandError):

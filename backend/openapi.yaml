@@ -297,13 +297,14 @@ paths:
   /api/v1/app/download:
     get:
       operationId: app_download_retrieve
-      description: 'The web download link (signed in): sends the browser to the newest
-        APK.'
+      description: |-
+        The download link (public: the /welcome pages' button): sends the browser to the newest APK.
+        Nothing in the APK is secret (the code is public) and the app still needs a sign-in; the link
+        it sends to expires in an hour. Rate-limited like the other public pages.
       tags:
       - app
       security:
-      - deviceToken: []
-      - cookieAuth: []
+      - {}
       responses:
         '200':
           content:

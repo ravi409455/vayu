@@ -134,6 +134,15 @@ rm vayu.apk
 ```
 Raise `MIN_APP_VERSION` only after the build that meets it is published.
 
+**Welcome pages** (public, no sign-in; part of the web image, so every deploy ships them):
+- `https://<address>/welcome/engineers`: for experts, with the **Download the app** button.
+- `https://<address>/welcome/ops`: for Ops and Admins, with **Open Vayu** and the download.
+
+Their button goes to `/api/v1/app/download`, which sends the newest published APK (no sign-in,
+rate-limited). Until a build is published it answers "No app build has been published yet" (404).
+The pages are `web/public/welcome/*/index.html`; Caddy gives them their own content rules (they
+carry inline style and script and use Google fonts), the web app keeps the strict ones.
+
 ## 4. Deploying
 - Normal: merge to `main`. CI → images built once → staging deploys → production waits for Approve.
 - Deploy outside 9 am to 8 pm unless urgent: services restart (10 to 20 seconds of errors that
