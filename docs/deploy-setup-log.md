@@ -213,7 +213,7 @@ CORS policy (each bucket → Settings → CORS Policy), staging shown:
 Why: without it, uploads from the web portal fail; `ETag` must be readable for multipart uploads.
 `http://localhost:5173` was left out: the local stack uses a fake local bucket, not R2.
 
-### 2.4b · R2 clean-up rules and the backup lock 🔄
+### 2.4b · R2 clean-up rules and the backup lock ✅
 Each bucket → Settings:
 
 | Bucket | Rule | Setting |
@@ -226,7 +226,26 @@ Why: unfinished uploads (a phone losing signal mid-video) cost money until remov
 an expert offline for a week still finish. The lock means nobody, not even someone who breaks into
 a server, can delete a backup younger than 30 days; at day 35 it expires by itself.
 
-### 2.4c · R2 access keys ⏳
+### 2.4c · R2 access keys 🔄
+One key per job, each limited to one bucket: a leaked key reaches only that bucket, and each can be
+replaced alone. dash.cloudflare.com → R2 Object Storage → **Manage API tokens** → **Create
+Account API token**, four times:
+
+| Token name | Permission | Bucket | Saved in Phase (app → environment) |
+|---|---|---|---|
+| `vayu-staging-app` | Object Read & Write | `vayu-staging` | `vayu` → Staging: `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` |
+| `vayu-prod-app` | Object Read & Write | `vayu-prod` | `vayu` → Production: `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` |
+| `vayu-backups-staging` | Object Read & Write | `vayu-backups` | `vayu` → Staging: `BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY` |
+| `vayu-backups-prod` | Object Read & Write | `vayu-backups` | `vayu` → Production: `BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY` |
+
+TTL: forever. Client IP filtering: none (servers get new IPs). Each token page shows the
+Access Key ID and Secret Access Key **once**: copy straight into Phase.
+Also in Phase (not secret), `vayu` → Staging and Production: `S3_ENDPOINT_URL` =
+`https://<ACCOUNT_ID>.r2.cloudflarestorage.com` (shown on the same page as "S3 API" endpoint).
+Two backup keys rather than one: no secret is shared between staging and production. The backup
+lock (2.4b) still stops either from deleting a backup younger than 30 days.
+Then the **old test token** (the one in `backend/.env.local`, `R2_*` lines) is deleted in the same
+list; nothing uses it.
 ### 2.5 · Firebase: staging app, production key, API key restriction ⏳
 ### 2.6 · Sentry: projects check, auth token, Slack alerts ⏳
 ### 2.7 · GitHub: branch rules, environments, fork approval ⏳
