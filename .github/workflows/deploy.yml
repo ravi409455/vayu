@@ -5,7 +5,8 @@ name: deploy
 #   "production" has a required reviewer) and deploys the SAME images.
 # Rollback: Actions → deploy → Run workflow → the full commit id to go back to (must be on main;
 # its images are reused, never rebuilt).
-# Every merge to main builds and deploys (docs-only too: a shortcut once skipped a code release).
+# The newest merge always deploys, whatever files it changed. When merges come close together,
+# CI cancels the older run and only the newest deploys; it contains every earlier change.
 # Never runs for pull requests: only after CI on a push to main, or by hand.
 on:
   workflow_run:
@@ -44,7 +45,7 @@ jobs:
           INPUT_COMMIT: ${{ inputs.commit }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-        # Every merge deploys, docs-only ones too. A "docs only, skip" shortcut once skipped a code
+        # The newest merge always deploys, docs-only too. A "docs only, skip" shortcut once skipped a code
         # release: CI on main cancels an older run when a newer merge arrives, so the code merge
         # never deployed and the docs merge after it deployed nothing.
         # A hand-started run (rollback) only takes a full commit id that is already on main,

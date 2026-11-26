@@ -562,9 +562,12 @@ After PR 42 (code) and PR 37 (docs) merged a few minutes apart, staging still ra
    itself), so `cc40087` never finished CI and never deployed.
 3. The deploy for PR 37 compared it only with the commit before it, saw "docs only", and skipped
    building and deploying.
-Fix (PR "deploy every merge"): no docs-only shortcut. Every merge to `main` builds and deploys
-(docs-only: a cached build and a 10-20 s restart of staging). A hand-started run (Actions →
-deploy → Run workflow) builds the images if they are missing, so it works for any commit on `main`.
+Fix (PR 45): no docs-only shortcut. **The newest merge always deploys, whatever files it changed.**
+Merges close together (A, B, C a few minutes apart): CI cancels A's and B's runs, and only C
+deploys; it contains A's and B's changes, so nothing is lost and staging restarts once. If C's CI
+fails, nothing deploys and staging stays on the last good version until a green merge.
+A docs-only merge costs a cached build and a 10-20 s restart of staging.
+A hand-started run (Actions → deploy → Run workflow) builds the images if they are missing, so it works for any commit on `main`.
 After the security review of that change:
 - a hand-started run takes only a full commit id that is already on `main` (checked with GitHub
   before anything is built or pushed);
