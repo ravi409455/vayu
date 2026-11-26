@@ -105,7 +105,7 @@ fun AppRoot(vm: AppViewModel) {
             is Screen.ChangePassword -> ChangePasswordScreen(s, vm::changePassword)
             is Screen.Home -> {
               AskForNotices()
-              if (s.me.role == "expert" && !fileAccessGiven(vm.graph.backup != null)) {
+              if (s.me.role == "expert" && !fileAccessGiven(vm.graph.backup != null, vm.graph::cleanBackups)) {
                 `in`.carcid.vayu.ui.expert.BackupAccessScreen()
             } else if (s.me.role == "expert") {
                 val jobs by vm.jobs.state.collectAsState()
@@ -187,16 +187,21 @@ private fun expertExtras(vm: AppViewModel, me: `in`.carcid.vayu.core.api.Me): Ex
 /**
  * Experts turn on "All files access" once per install, for the backup copies (docs/plan-media-backup.md);
  * until then the app shows only that screen. Turned off later, it only warns (the camera keeps
- * working). [needed]: false where there are no backup copies (tests).
+ * working). [needed]: false where there are no backup copies (tests). [onAccess] runs (off the main
+ * thread) each time the app comes to the front with access, so copies left by an earlier install
+ * are found as soon as access is turned on, not only at the next app start.
  */
 @Composable
-private fun fileAccessGiven(needed: Boolean): Boolean {
+private fun fileAccessGiven(needed: Boolean, onAccess: () -> Unit): Boolean {
     if (!needed) return true
     val ctx = LocalContext.current
     val prefs = remember { ctx.getSharedPreferences("vayu.install", android.content.Context.MODE_PRIVATE) }
     var given by remember { mutableStateOf(prefs.getBoolean("files_ok", false)) }
     androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
-        if (!given && hasFileAccess()) { prefs.edit { putBoolean("files_ok", true) }; given = true }
+        if (hasFileAccess()) {
+            if (!given) { prefs.edit { putBoolean("files_ok", true) }; given = true }
+            Thread { runCatching(onAccess) }.apply { priority = Thread.MIN_PRIORITY }.start()
+        }
         onPauseOrDispose {}
     }
     return given
