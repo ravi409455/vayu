@@ -59,6 +59,23 @@ def test_the_access_log_drops_query_strings_and_token_paths():
         "/api/v1/verify/<token>/photos"
     assert conf.TOKEN.sub(r"/\1/<token>", "/api/v1/zips/x.y:z") == "/api/v1/zips/<token>"
     assert conf.TOKEN.sub(r"/\1/<token>", "/api/v1/bookings") == "/api/v1/bookings"
+    # a template preview draws the whole PDF in the request: 2 minutes, not gunicorn's 30 s
+    assert conf.timeout == 120
+
+
+def test_the_access_log_survives_a_request_without_a_path(monkeypatch):
+    """A request cut off before its path was read has no "U": the log line must not crash (it
+    hid the real error, a worker timeout, behind a TypeError)."""
+    import importlib.util
+
+    from gunicorn.glogging import Logger
+
+    spec = importlib.util.spec_from_file_location("gconf", BACKEND / "gunicorn.conf.py")
+    assert spec and spec.loader
+    conf = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(conf)
+    monkeypatch.setattr(Logger, "atoms", lambda *a: {"U": None})
+    assert conf.SafeLogger.atoms(conf.SafeLogger.__new__(conf.SafeLogger), None, None, {}, None)["U"] == ""
 
 
 def test_coded_error_payload_keeps_json_types():
