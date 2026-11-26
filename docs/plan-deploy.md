@@ -11,7 +11,7 @@ anything that shows a secret). Steps marked **[CODE]** are changes Claude makes 
 Steps marked **[SERVER]** are commands on a server; Claude runs the ones that need no secret.
 
 **The one rule for secrets:** a secret (password, key, token, the Firebase JSON) is never typed
-into chat and never put in git. You copy it from the dashboard straight into Bitwarden, then into
+into chat and never put in git. You copy it from the dashboard straight into Phase, then into
 the place this plan names (the server's env file or a GitHub secret).
 
 ---
@@ -30,7 +30,7 @@ the place this plan names (the server's env file or a GitHub secret).
 | Staging phone app | A separate app, "Vayu Staging" (`in.carcid.vayu.staging`), installs next to the real one. |
 | Repo | Stays public until after launch, then goes private (step in §12). |
 | Access | Owner only for now. A second owner on every account is an after-launch task (§12). |
-| Secrets | Today they sit in files on the owner's Mac. They move to Bitwarden in Phase 0. **Production is not created until this is done.** |
+| Secrets | Today they sit in files on the owner's Mac. They move to Phase (console.phase.dev) in Phase 0. **Production is not created until this is done.** |
 | Working mode | The owner clicks, this plan guides. Claude writes all code and config. |
 | Order | Staging end to end first. Production is then a copy of what worked. |
 
@@ -96,22 +96,36 @@ an uptime checker pings the health page every minute; Firebase sends pushes.
 
 ## Phase 0 · Safety first (owner, about 1 hour)
 
-**0.1 [YOU] Bitwarden.** Go to bitwarden.com → create a free account with the company email →
-turn on two-step login (Settings → Security → Two-step login → Authenticator app) → install the
-browser extension and the phone app. Make a folder called `Vayu`.
+**0.1 [YOU] Phase (console.phase.dev).** The one home for every Vayu secret (end-to-end
+encrypted; free plan: 3 apps, 3 environments each, 5 members).
+- Sign up with the company email (or "Sign in with GitHub"), verify the email.
+- Create the **sudo password** (16+ characters, letters and numbers). It unlocks the secrets.
+- **Download the account recovery kit.** Print it and keep the paper somewhere safe at the office,
+  and save it in the Mac's Passwords app too. Without the sudo password AND the recovery kit, every
+  secret in Phase is gone for good: Phase can't recover it.
+- Turn on two-step login (authenticator app) for the console.
+- Create the organisation, then two apps:
+  - `vayu`: its environments **Staging** and **Production** hold the server settings (one key per
+    line of the env file); **Development** is unused for now.
+  - `vayu-owner`: things that are not server settings (signing key, recovery codes, robot keys).
 
-**0.2 [YOU] Move the secrets you already have** into that folder, one item each:
-- Android keystore: attach the file `vayu-release.jks`, and save the store password, key alias
-  (`vayu`) and key password. *If this file is lost, the app on every phone can never be updated.*
-- The Firebase service-account JSON (as a secure note or attachment).
-- The R2 access key id and secret.
-- The Sentry DSNs and any Sentry auth token.
+Two things can't live inside Phase: the Phase sudo password and its recovery kit (they unlock it).
+They go on paper and in the Mac's Passwords app, which also keeps the account passwords and the
+2-step recovery codes of the other services.
+
+**0.2 [YOU] Move the secrets you already have** into Phase (Mac files and notes are then deleted):
+- `vayu-owner` → Production: the Android keystore as text (`base64 -i ~/vayu-keys/vayu-release.jks | pbcopy`,
+  paste as `ANDROID_KEYSTORE_B64`), `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`vayu`),
+  `ANDROID_KEY_PASSWORD`. *If the keystore is lost, the app on every phone can never be updated.*
+- `vayu` → Staging / Production: the Firebase service-account JSON (paste the whole file as
+  `FIREBASE_SERVICE_ACCOUNT_JSON`), the R2 key pair, the Sentry DSN.
+- `vayu-owner`: the Sentry auth token and the web/Android DSNs.
 
 **0.3 [YOU] Two more copies of the keystore**: one on a USB stick kept at the office, one in a
 second place you trust (for example a private Google Drive of the company account).
 
 **0.4 [YOU] Turn on two-step login everywhere**: GitHub, Cloudflare, Firebase/Google, Sentry,
-the domain registrar. Save each account's recovery codes in Bitwarden.
+the domain registrar, and Phase. Save each account's recovery codes in the Mac's Passwords app.
 
 **0.5 [YOU] Mac check**: System Settings → Privacy & Security → FileVault is **On**.
 
@@ -119,13 +133,13 @@ the domain registrar. Save each account's recovery codes in Bitwarden.
 ```bash
 ssh-keygen -t ed25519 -C "vayu-owner"
 ```
-Press Enter for the default file, and type a passphrase (save it in Bitwarden). Then show the
+Press Enter for the default file, and type a passphrase (save it in the Mac's Passwords app). Then show the
 public half, which is safe to share:
 ```bash
 cat ~/.ssh/id_ed25519.pub
 ```
 
-Done when: every secret you own is in Bitwarden, and the loose copies in notes are deleted.
+Done when: every secret you own is in Phase, the recovery kit is printed, and the loose copies on the Mac are deleted.
 
 ---
 
@@ -143,7 +157,7 @@ All **[CODE]**. One PR, CI must be green. Nothing here needs a server.
 | 1.6 | **Compose file** takes the env file as a setting (`.env.staging` or `.env.prod`), pulls ready-made images by tag instead of building on the server, mounts the Firebase JSON read-only, keeps the schedule file and Redis data on a disk, limits log size. Postgres becomes optional (on for staging, off for production). **Worker counts and memory limits come from the env file** (staging: PDF worker 1.5 GB, 2 web workers; production: 6 GB, 4). Workers get 60 seconds to finish their job when stopped. | Gaps 3, 4 and 6. |
 | 1.7 | **Database settings**: `DB_SSLMODE` (set to `require` on production) and a kept-open connection, so we stay well under the managed database's connection limit. | Gap 5. |
 | 1.8 | **Health checks in compose** for api and workers, and a one-off "migrate" step that runs before the new API starts. | A bad release stops before it takes traffic. |
-| 1.9 | **Backup script** `infra/backup.sh`: dump the database, compress, **encrypt** (tool: `age`; the server holds only the locking key, the unlocking key lives in Bitwarden), upload to the backups bucket, delete local copy, then ping the uptime checker ("backup ran"). **Restore script** `infra/restore.sh`: download a dump, unlock it, load it into a **throwaway Postgres container** and print row counts. | §Phase 5. Dumps hold customer names and phone numbers. |
+| 1.9 | **Backup script** `infra/backup.sh`: dump the database, compress, **encrypt** (tool: `age`; the server holds only the locking key, the unlocking key lives in Phase), upload to the backups bucket, delete local copy, then ping the uptime checker ("backup ran"). **Restore script** `infra/restore.sh`: download a dump, unlock it, load it into a **throwaway Postgres container** and print row counts. | §Phase 5. Dumps hold customer names and phone numbers. |
 | 1.10 | **Deploy workflow** `.github/workflows/deploy.yml` (details in Phase 4). | Gap 7. |
 | 1.11 | **Android "Vayu Staging"**: a `staging` build type: id `in.carcid.vayu.staging`, name "Vayu Staging", a different icon colour, talks to `vayu-staging.carcid.in`, signed with the same key. | Owner's decision. |
 | 1.12 | **Runbook rewrite** (`docs/runbook-new-server.md`) to match all of the above, and `docs/accounts-setup.md` corrected. | One true set of instructions. |
@@ -219,7 +233,7 @@ You already have the buckets. Check and add:
    younger than 30 days. (The 35-day delete rule above then clears old ones.)
 5. **Manage API tokens → Create API token**, three times, each **Object Read & Write** and each
    limited to **one bucket**: `vayu-staging-app`, `vayu-prod-app`, `vayu-backups-writer`.
-   Each shows an Access Key ID and Secret **once**: save each straight into Bitwarden.
+   Each shows an Access Key ID and Secret **once**: save each straight into Phase.
    (One token per server means a leak on staging can never touch production photos.)
 6. If an older token covers both buckets, delete it after both servers run on the new ones.
 
@@ -229,7 +243,7 @@ You already have the buckets. Check and add:
    `google-services.json`** (it now lists both apps) → give that file to Claude (it is not a
    secret; it goes in the Android project).
 2. **Project settings → Service accounts → Generate new private key** twice: one file for
-   staging, one for production. Save both in Bitwarden. These **are** secrets.
+   staging, one for production. Save both in Phase. These **are** secrets.
 3. **Restrict the API key (R-32).** console.cloud.google.com → pick project `vayu` → **APIs &
    Services → Credentials** → click the key named "Android key (auto created by Firebase)":
    - Application restrictions: **Android apps** → Add: package `in.carcid.vayu` with the SHA-1 of
@@ -244,10 +258,10 @@ You already have the buckets. Check and add:
 ### 2.6 [YOU] Sentry
 1. sentry.io → confirm three projects exist: `vayu-server` (Django), `vayu-web` (React),
    `vayu-android` (Android). Create any that are missing (Projects → Create Project).
-2. For each: **Settings → Projects → (project) → Client Keys (DSN)** → copy the DSN into Bitwarden.
+2. For each: **Settings → Projects → (project) → Client Keys (DSN)** → copy the DSN into Phase.
    The same DSN is used on staging and production; the "environment" label keeps them apart.
 3. **Settings → Auth Tokens → Create New Token** with scope `project:releases` (and `org:read`)
-   → Bitwarden. Note the **organization slug** (the short name in the URL; not a secret).
+   → Phase. Note the **organization slug** (the short name in the URL; not a secret).
 4. **Settings → Integrations → Slack → Add Workspace** → allow → then for each project:
    **Alerts → Create Alert → Issues** → "A new issue is created" and "issue seen more than 20
    times in 1 hour" → environment `production` → action "Send a Slack notification to
@@ -263,7 +277,7 @@ You already have the buckets. Check and add:
    our workflows without you looking first.
 4. Secrets come in Phase 4, once the server exists.
 
-Done when: Claude can `dig` the staging name and you have, in Bitwarden: 3 R2 key pairs,
+Done when: Claude can `dig` the staging name and you have, in Phase: 3 R2 key pairs,
 2 Firebase JSON files, 3 DSNs, 1 Sentry token.
 
 ---
@@ -283,7 +297,7 @@ Check: `ssh root@…` is refused; `ssh deploy@vayu-staging.carcid.in` works.
 
 ### 3.2 [YOU] Put the secrets on the server
 Claude prepares `/srv/vayu/.env.staging` with every non-secret value filled in and each secret
-line left as `NAME=`. Then you open it and paste the secrets from Bitwarden:
+line left as `NAME=`. Then you open it and paste the secrets from Phase:
 ```bash
 ssh deploy@vayu-staging.carcid.in
 nano /srv/vayu/.env.staging
@@ -293,7 +307,7 @@ server), `DB_PASSWORD` (same), `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `SENT
 and the backups bucket key pair. Save with Ctrl+O, Enter, Ctrl+X.
 
 For backup encryption Claude gives one command that makes a key pair on your Mac: the
-**unlocking** half goes into Bitwarden only (never on a server); the **locking** half is not a
+**unlocking** half goes into Phase only (never on a server); the **locking** half is not a
 secret and goes in the env file as `BACKUP_PUBLIC_KEY`.
 
 Then the Firebase file, from your Mac:
@@ -317,10 +331,10 @@ curl -fsS https://vayu-staging.carcid.in/api/v1/health
 ### 3.4 [SERVER] Forms, staff and test data
 ```bash
 docker compose ... exec api python manage.py setup_platform --users /tmp/staff.csv
-docker compose ... exec api python manage.py seed_test_data --confirm staging-1 --password '<from Bitwarden>'
+docker compose ... exec api python manage.py seed_test_data --confirm staging-1 --password '<from Phase>'
 ```
-Staging is on the open internet and the code is public, so the testers' password is a **random
-one made in Bitwarden** (20+ characters), never a guessable one.
+Staging is on the open internet and the code is public, so the testers' password is **random**
+(`openssl rand -base64 24`), saved in Phase, never a guessable one.
 The first adds forms, reports, lists and the test staff. The second adds test bookings; it only
 works because this server's kind is `test`.
 
@@ -358,7 +372,7 @@ then:
 - Claude adds the public half to the server, **locked to one command**: this key can only run
   `infra/deploy.sh <commit>`. It cannot open a shell or read the env file. So if the key ever
   leaks, the worst someone can do is redeploy a version we already built.
-- Delete the private file from the Mac once it is in GitHub and Bitwarden.
+- Delete the private file from the Mac once it is in GitHub and Phase.
 - The deploy workflow runs only for `main` and by hand; never for pull requests.
 
 ### 4.2 Prove it
@@ -376,9 +390,9 @@ rollback to the previous commit and forward again.
 | Production database | Managed Postgres | DigitalOcean: restore to any minute, last 7 days. Plus our nightly dump in `vayu-backups` (encrypted, locked against deletion for 30 days, kept 35). Plus a dump before every deploy. | Minutes |
 | Staging database | Docker on staging | Nightly dump to `vayu-backups/staging/` | 1 day (test data only) |
 | Photos, videos, PDFs | R2 | R2 keeps several copies itself. There is **no undo**: a file the app deletes is gone. Only the clean-up job deletes, and the key lives only on the server. Accepted risk. | None expected |
-| Server settings (`.env`, Firebase file) | The server | Bitwarden holds every value; the server can be rebuilt from the runbook in about an hour. | None |
+| Server settings (`.env`, Firebase file) | The server | Phase holds every value; the server can be rebuilt from the runbook in about an hour. | None |
 | Whole server | Droplet | Staging: DigitalOcean weekly backup. Production: none needed (it holds no data); rebuild with `bootstrap.sh` + one deploy, about 30 minutes. | Nothing |
-| Android keystore | Mac | Bitwarden + 2 offline copies (Phase 0) | None |
+| Android keystore | Mac | Phase + 2 offline copies (Phase 0) | None |
 | Redis (job queue) | Docker | Not backed up. If lost, jobs in flight are redone by the hourly checks. | A few delayed jobs |
 
 ### 5.2 [SERVER] Nightly dump
@@ -472,7 +486,7 @@ Create → **Databases** → PostgreSQL **16** → region **BLR1** → Basic, **
 later with two clicks, no downtime worth noting) → name `vayu-prod-db` → Create. Then:
 - **Settings → Trusted sources** → add droplet `vayu-prod` only. Now nothing else on the internet
   can even reach it.
-- **Users & Databases** → add database `vayu` and user `vayu`. Copy the password to Bitwarden.
+- **Users & Databases** → add database `vayu` and user `vayu`. Copy the password to Phase.
 - **Connection details** → choose **VPC network** (the private address) → note host and port
   (not secret; tell Claude).
 - **Settings → Maintenance window** → Sunday, 21:30 UTC (3 am Monday IST).
@@ -508,14 +522,14 @@ Production is now ready and empty of real work. Opening it to the team is the la
 
 ## 8. Secrets: what exists and where each one lives
 
-| Secret | Made at | Lives in (besides Bitwarden) |
+| Secret | Made at | Lives in (besides Phase) |
 |---|---|---|
 | `DJANGO_SECRET_KEY` (one per server) | made on the server | server env file |
 | Database password (one per server) | server / DigitalOcean | server env file |
 | R2 key pairs: staging app, prod app, backups | Cloudflare | server env file |
 | Firebase service-account JSON (one per server) | Firebase | `/srv/vayu/secrets/` on the server |
 | Sentry DSNs (server, web, Android) | Sentry | server env file; GitHub repo variable (web; not really secret); build machine (Android) |
-| Backup unlocking key | your Mac | **Bitwarden only**, never on a server |
+| Backup unlocking key | your Mac | **Phase only** (`vayu-owner`), never on a server |
 | Sentry auth token | Sentry | GitHub secret; build machine (Android) |
 | Robot SSH keys (one per server) | your Mac | GitHub environment secret |
 | Backup and workers heartbeat URLs | Better Stack | server env file |
@@ -547,7 +561,7 @@ waits usually add a day or two.
 - Both health pages say ok and are watched every minute; a test outage reaches `#vayu-alerts`.
 - A restore from backup has been done and timed, on staging and on production.
 - All ten staging checks (Phase 6) pass, and the production checks (7.7) pass.
-- Every secret is in Bitwarden, none is in git, chat or a loose file.
+- Every secret is in Phase, none is in git, chat or a loose file.
 - `docs/runbook-new-server.md` describes exactly what was done.
 
 ## 11. Not in this plan
@@ -568,6 +582,6 @@ waits usually add a day or two.
 - Make the GitHub repo private (check CI minutes: free private repos get 2,000 a month), ideally
   under a company organization.
 - Add a second owner to DigitalOcean, Cloudflare, Firebase, Sentry, GitHub, the registrar and
-  Bitwarden, and a second SSH key on both servers.
+  Phase, and a second SSH key on both servers.
 - Monthly: restore drill, apply server updates that need a reboot, look at disk and database size.
 - Remove the `http://localhost:5173` origin from the staging bucket's CORS if it is no longer used.
