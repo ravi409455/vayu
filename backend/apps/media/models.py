@@ -47,6 +47,8 @@ class MediaAsset(models.Model):
     failed_attempts = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(default=timezone.now)
     verified_at = models.DateTimeField(null=True, blank=True)
+    # when a check claimed it: a claim older than the task time limit was killed (a deploy)
+    verify_started_at = models.DateTimeField(null=True, blank=True)
     # Ops swapped this file for another: kept as history, out of the answers, ZIPs and limits
     replaced_by = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL,
                                     related_name="+")

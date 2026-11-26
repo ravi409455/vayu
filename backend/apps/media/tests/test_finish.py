@@ -138,3 +138,21 @@ def test_a_missing_file_that_arrives_after_the_finish_marks_the_report_out_of_da
     Booking.objects.filter(pk=b["id"]).update(stage="cancelled")
     verify_asset(str(a.pk))
     assert Report.objects.get(pk=report.pk).stale is False
+
+
+def test_after_the_finish_the_phone_can_still_send_a_file_it_registered_but_no_new_one(job, settings):
+    """N-1: the real phone asks media/initiate again before it sends the bytes; a file named in the
+    submitted answers is still taken (the Finish dialog promises it), a new one is refused."""
+    env, b = job
+    data = jpeg(color=(4, 1, 1))
+    body = initiate_body(b["id"], data)
+    first = env.expert.post("/api/v1/media/initiate", body, format="json").json()
+    assert submit_with(env, b, photo_a=[first["id"]]).status_code == 200
+    assert env.ops.post(f"/api/v1/bookings/{b['id']}/finish").status_code == 200
+    again = env.expert.post("/api/v1/media/initiate", body, format="json")
+    assert again.status_code == 200 and again.json()["id"] == first["id"] and again.json()["parts"]
+    new = env.expert.post("/api/v1/media/initiate", initiate_body(b["id"], data), format="json")
+    assert new.status_code == 409 and new.json()["code"] == "BOOKING_CLOSED"
+    Booking.objects.filter(pk=b["id"]).update(stage="cancelled")      # cancelled: nothing at all
+    gone = env.expert.post("/api/v1/media/initiate", body, format="json")
+    assert gone.status_code == 409 and gone.json()["code"] == "BOOKING_CLOSED"

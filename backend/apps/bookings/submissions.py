@@ -144,11 +144,11 @@ def _replaced_by(version: FormVersion):
 
 
 def _was_latest(version: FormVersion, at) -> bool:
-    """Was [version] the newest published version of its form at [at], give or take the clock
-    allowance?"""
+    """Was [version] still the newest published version of its form at [at], give or take the
+    clock allowance? Only "replaced before the start" counts: a phone can't hold a version that
+    was not out yet, so a clock running behind never refuses it."""
     newer = _replaced_by(version)
-    return ((version.published_at or at) <= at + CLOCK_ALLOWANCE
-            and (newer is None or newer > at - CLOCK_ALLOWANCE))
+    return newer is None or newer > at - CLOCK_ALLOWANCE
 
 
 def _kept_notes(version: FormVersion) -> list[str]:
@@ -256,7 +256,8 @@ def _start(actor, b: Booking, client_uuid, client_started_at, inspection_type, a
             raise fail("ALREADY_STARTED", "This lead is already started.", 409)
         return b, mine
     if b.stage != "assigned":
-        raise fail("INVALID_STAGE", f"A {b.stage} lead cannot be started.", 409)
+        word = {"draft": "not assigned yet", "in_progress": "already started"}.get(b.stage, b.stage)
+        raise fail("INVALID_STAGE", f"This lead is {word}, so it can't be started.", 409)
     changes = {"stage": ["assigned", "in_progress"]}
     if inspection_type is not None and inspection_type != b.inspection_type:
         # the expert physically started this type offline: it wins over Ops' later change
@@ -384,14 +385,16 @@ def _submit(actor, b: Booking, submission_uuid, answers: dict, form_version_id):
         if done.booking_id != b.id or done.expert_id != actor.pk:
             raise fail("UUID_CONFLICT", "That request ID belongs to another request.", 409)
         return b, done
-    # their open draft; else the one Ops force-released while they worked (it still counts)
-    insp = (b.inspections.filter(expert=actor, status="draft").first()
-            or b.inspections.filter(expert=actor, status="released").order_by("-created_at")
-            .first())
+    # their open draft; else the one Ops force-released while they worked (it still counts),
+    # but never once they sent work here: a new request id for work already sent (a reinstalled
+    # app, or a released draft after a restart that counted) is never a second inspection (H-05)
+    insp = b.inspections.filter(expert=actor, status="draft").first()
     if insp is None and b.inspections.filter(expert=actor,
                                              status__in=("submitted", "superseded")).exists():
-        # a new request id for work already sent (a reinstalled app): never a second inspection
         raise fail("ALREADY_SUBMITTED", "Already submitted; Ops can edit it.", 409)
+    if insp is None:
+        insp = (b.inspections.filter(expert=actor, status="released")
+                .order_by("-created_at").first())
     if insp is None:
         # an offline start that never reached us: the phone names its pinned version, but it must
         # belong to a form that handles this booking's type (no shopping for another type's form)
@@ -519,6 +522,7 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
     _check_files(actor, b, pinned, insp.answers, new, changed)
     keys = sorted(k for _, k in changed)
     if keys:
+        before = insp.answers
         insp.answers = new
         stamp(insp, actor, keys)
         insp.save()
@@ -526,8 +530,9 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
         chassis = new["inspection"].get("chassis_no")
         if chassis is not None and b.chassis_no != chassis:
             Booking.objects.filter(pk=b.pk).update(chassis_no=chassis)
-        activity.log(b, actor, "inspection_edited", keys=[f"{p}.{k}" for p, k in changed],
-                     inspection=insp)
+        activity.log(b, actor, "inspection_edited",
+                     {f"{p}.{k}": [(before.get(p) or {}).get(k), new[p].get(k)]
+                      for p, k in changed}, inspection=insp)
         events.emit("inspection.updated", booking=str(b.id), inspection=str(insp.id), keys=keys)
     return insp
 
@@ -592,7 +597,7 @@ def set_overrides(actor, insp: Inspection, body: dict, row_version: int) -> Insp
     if moved:
         activity.log(insp.booking, actor, "key_checks_changed", moved, inspection=insp)
     events.emit("inspection.updated", booking=str(insp.booking_id), inspection=str(insp.id),
-                keys=["overrides"])                       # the report is made again (handlers)
+                keys=["overrides"])                       # the report: out of date (handlers)
     return insp
 
 

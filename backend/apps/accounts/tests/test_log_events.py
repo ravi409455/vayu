@@ -28,6 +28,18 @@ def test_sign_in_success_failure_and_lockout_never_log_the_typed_username(make_u
     assert "nobody-typo" not in text and "wrong-pass-1" not in text
 
 
+def test_many_wrong_tries_on_one_account_from_many_addresses_raise_one_alert(make_user, logged):
+    from apps.accounts import services
+
+    asha = make_user(username="asha")
+    for n in range(services.ACCOUNT_ALERT_AFTER + 3):
+        with pytest.raises(Exception):  # noqa: B017 - the coded 401
+            services.authenticate("asha", "wrong-pass-1", ip=f"10.0.{n // 250}.{n % 250}")
+    (alert,) = logged("auth.many_failures")
+    assert alert["user_id"] == asha.pk
+    assert services.authenticate("asha", PASSWORD, ip="10.9.9.9") == asha     # never a lock
+
+
 def test_device_registered_revoked_and_password_changed(make_user, login, logged):
     user = make_user(Role.EXPERT)
     tokens = login(APIClient(), user.username).json()

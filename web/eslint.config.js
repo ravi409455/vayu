@@ -9,7 +9,7 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   { ignores: ["dist/**", "node_modules/**", "test-results/**", "playwright-report/**"] },
   {
-    files: ["src/**/*.{ts,tsx}", "e2e/**/*.ts"],
+    files: ["src/**/*.{ts,tsx}", "e2e/**/*.ts", "e2e-local/**/*.ts"],
     languageOptions: { parser: tseslint.parser },
     plugins: { "react-hooks": reactHooks, "jsx-a11y": jsxA11y },
     linterOptions: { reportUnusedDisableDirectives: "error" },

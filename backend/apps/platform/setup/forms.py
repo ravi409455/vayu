@@ -20,24 +20,45 @@ def booking() -> dict:
     return load("booking")[0]
 
 
-def start() -> dict:
-    return load("start")[0]
+PICTURES = (("@pay_qr", "Payment QR", "pay-qr.jpg"), ("@review_qr", "Google review QR",
+                                                      "review-qr.png"))
 
 
-def end(admin) -> dict:
-    """The wrap-up, its two pictures (Clappia's CarCID payment QR, the Google review QR) uploaded
-    once and found by name after; the Admin can replace them in the form builder."""
+def _with_pictures(admin, data: dict) -> dict:
+    """Form data whose "image" fields point at the QR pictures: Clappia's CarCID payment QR and
+    the Google review QR, uploaded once and found by name after (the Admin can replace them in
+    the form builder)."""
     from apps.forms import assets
     from apps.forms.models import FormAsset
 
-    text = json.dumps(load("end")[0])
-    for marker, label, file in (("@pay_qr", "Payment QR", "pay-qr.jpg"),
-                                ("@review_qr", "Google review QR", "review-qr.png")):
+    text = json.dumps(data)
+    for marker, label, file in PICTURES:
+        if json.dumps(marker) not in text:
+            continue
         pic = FormAsset.objects.filter(name=label).first() or assets.create_asset(
             admin, (Path(__file__).parent / "data" / file).read_bytes(), label)
         text = text.replace(json.dumps(marker), json.dumps(str(pic.id)))
     return json.loads(text)
 
 
-def inspection(form_key: str) -> tuple[dict, dict]:
-    return load(form_key)
+def start() -> dict:
+    return load("start")[0]
+
+
+def end(admin) -> dict:
+    """The wrap-up, with its payment and Google review QR pictures."""
+    return _with_pictures(admin, load("end")[0])
+
+
+def inspection(form_key: str, admin=None) -> tuple[dict, dict]:
+    """With an Admin, the pictures are put in place (the Inspection Delay payment QR)."""
+    spec, extra = load(form_key)
+    return (_with_pictures(admin, spec) if admin else spec), extra
+
+
+def library(admin=None) -> dict:
+    """The library sections and fields the inspection forms are built on (setup/common.py).
+    With an Admin, the pictures are put in place (the Inspection Delay payment QR)."""
+    data = json.loads((FROZEN / "library.json").read_text())
+    lib = {"sections": data["sections"], "fields": data["fields"]}
+    return _with_pictures(admin, lib) if admin else lib

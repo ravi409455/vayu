@@ -83,6 +83,20 @@ def test_ops_cannot_upload_before_the_expert_submits(job):
     assert r.status_code == 409 and r.json()["code"] == "NOT_SUBMITTED"
 
 
+def test_ops_cannot_add_files_while_a_conflict_is_open(job, settings):
+    """The late inspection does not count: a file Ops add would land in the wrong one."""
+    from apps.bookings.models import Booking
+
+    env, b = job
+    submitted(env, b, settings)
+    new = ops_upload(env, b, settings).json()["id"]
+    Booking.objects.filter(pk=b["id"]).update(conflict="TWO_EXPERTS")
+    r = env.ops.post("/api/v1/media/initiate", initiate_body(b["id"], jpeg()), format="json")
+    assert r.status_code == 409 and r.json()["code"] == "CONFLICT_OPEN"
+    r = env.ops.post(f"/api/v1/media/{new}/attach", {}, format="json")
+    assert r.status_code == 409 and r.json()["code"] == "CONFLICT_OPEN"
+
+
 def test_admin_can_block_ops_uploads_on_a_field_admin_too(job, settings):
     env, b = job
     [a] = submitted(env, b, settings)

@@ -342,6 +342,21 @@ def test_an_inspection_patch_writes_only_to_the_inspection_that_counts(ienv, boo
                 {"answers": {"odometer": 99}}, format="json")
     assert r.status_code == 200 and r.json()["id"] == str(kept.id)
     assert Inspection.objects.get(pk=kept.pk).answers["inspection"]["odometer"] == 99
+    got = c.get(f"/api/v1/ext/bookings/{booking['id']}/inspection").json()
+    assert got["id"] == str(kept.id)                     # GET reads what PATCH writes
+
+
+def test_inspection_get_reads_the_running_draft_and_nothing_during_a_conflict(ienv, booking):
+    from apps.bookings.models import Booking
+
+    assign(ienv, booking)
+    s = start(ienv.expert, booking).json()
+    c = client(new_key(ienv, {"forms": {"booking": ["*"], "pdi": ["odometer"]}}))
+    got = c.get(f"/api/v1/ext/bookings/{booking['id']}/inspection").json()
+    assert got["id"] == s["inspection"]["id"] and got["status"] == "draft"
+    Booking.objects.filter(pk=booking["id"]).update(conflict="TWO_EXPERTS")
+    r = c.get(f"/api/v1/ext/bookings/{booking['id']}/inspection")
+    assert r.status_code == 404 and r.json()["code"] == "NO_INSPECTION"
 
 
 # ---------------------------------------------------------------- F-228 booking actions by key

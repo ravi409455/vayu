@@ -16,6 +16,15 @@ CSRF_COOKIE_SECURE = True
 CSRF_TRUSTED_ORIGINS = [o for o in env("CSRF_TRUSTED_ORIGINS", "").split(",") if o]
 if not SENTRY_DSN:
     raise ImproperlyConfigured("SENTRY_DSN is required in production")
+# Any database but staging's own container (DB_HOST=postgres, same machine) is reached over a
+# network: an unencrypted connection there must never happen by accident.
+_db = DATABASES["default"]  # noqa: F405
+# gunicorn reuses its worker processes: keep a connection for a minute instead of one per request
+# (fewer connections to the managed database, about 22 on the smallest size; no TLS handshake each)
+_db["CONN_MAX_AGE"] = int(env("DB_CONN_MAX_AGE", "60"))
+_db["CONN_HEALTH_CHECKS"] = True
+if _db["HOST"] != "postgres" and _db["OPTIONS"]["sslmode"] not in ("require", "verify-full"):
+    raise ImproperlyConfigured("DB_SSLMODE must be require or verify-full here")
 # webhook payloads carry absolute links: a localhost default would send dead ones (F-216)
 PUBLIC_BASE_URL = env("PUBLIC_BASE_URL")
 

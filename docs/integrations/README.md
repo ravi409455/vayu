@@ -43,6 +43,7 @@ a reason code (`http_500`, `timeout`, `connection_error`, `missing_path_value`, 
 
 | Date | Change |
 |---|---|
+| 2026-11-26 | `GET ext/bookings/{ref}/inspection` reads the same inspection `PATCH` writes (the counted one; before any submission the running draft; nothing during a conflict). **Keys made before 2026-11-25 have no booking actions** (`allowed_actions` is empty): an Admin ticks assign / cancel / reschedule / change type on the key, or a PATCH that moves the date or the expert is refused with `ACTION_NOT_ALLOWED`. |
 | 2026-11-25 | OpenAPI: list operations renamed `*_list` (`api_keys_list`, `integrations_list`, `ext_bookings_list`, `pdf_shared_list`), `ext_bookings_action`, `verify_media_retrieve`; field types filled in where they showed as `string` (for example `locked` is a boolean). No request or response changes. |
 | 2026-11-25 | One error body for every refusal (`code`, `detail`); one pagination (`page_size` up to 200); stage and status fields documented as enums; API-key action flags (`allowed_actions`). |
 | 2026-11-24 | Webhooks: one event per integration and a request designer (method, URL, query, headers, Standard or Custom body). The signature header `X-Vayu-Signature` and per-integration secrets were removed: use a token header. |

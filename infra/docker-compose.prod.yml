@@ -1,83 +1,111 @@
-# Used for production AND staging; the difference is the env file (--env-file).
-# Usage: docker compose -f infra/docker-compose.prod.yml --env-file .env.prod up -d
+# Staging AND production. The images are built once by GitHub Actions and labelled with the commit
+# id (VAYU_TAG); the env file says which server this is. infra/deploy.sh runs it, for example:
+#   VAYU_ENV_FILE=.env.staging VAYU_TAG=abc1234 docker compose -f infra/docker-compose.prod.yml \
+#     --env-file .env.staging --profile local-db up -d --no-build
+# Staging runs Postgres here (--profile local-db); production uses the managed database
+# (DB_HOST in .env.prod) and leaves the profile off.
+# Rehearsal on a laptop: add --build (the `build:` lines are only for that) and any VAYU_TAG.
+name: vayu   # fixed, so the network is vayu_default whatever the folder (backup.sh uses it)
+
+x-app: &app
+  image: ${VAYU_REGISTRY:-ghcr.io/ravi409455}/vayu-api:${VAYU_TAG:?set VAYU_TAG to the commit id to run}
+  build: ../backend
+  restart: always
+  env_file: ../${VAYU_ENV_FILE:-.env.prod}
+  environment:
+    DJANGO_SETTINGS_MODULE: vayu.settings.prod
+    REDIS_URL: redis://redis:6379/0
+    SENTRY_RELEASE: ${VAYU_TAG}   # errors are labelled with the commit that runs
+  depends_on: &deps
+    redis: {condition: service_healthy}
+    postgres: {condition: service_healthy, required: false}
+  volumes:   # the Firebase JSON for pushes, read-only (FIREBASE_JSON: its path on the server)
+    - ${FIREBASE_JSON:?set FIREBASE_JSON to the Firebase service-account file on the server}:/run/secrets/firebase-service-account.json:ro
+  stop_grace_period: 60s   # a running job gets a minute to finish; if cut, acks_late puts it back
+  logging: &logs
+    driver: json-file
+    options: {max-size: "20m", max-file: "5"}
+
 services:
+  migrate:                    # runs once per deploy, before the API and workers start
+    <<: *app
+    restart: "no"
+    command: python manage.py migrate --noinput
   api:
-    build: ../backend
-    restart: always
-    env_file: ../.env.prod
-    environment:
-      DJANGO_SETTINGS_MODULE: vayu.settings.prod
-      DB_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-    depends_on: [postgres, redis]
-    command: >
-      sh -c "python manage.py migrate --noinput &&
-             gunicorn vayu.wsgi -c gunicorn.conf.py"
-  worker:
-    build: ../backend
-    restart: always
-    env_file: ../.env.prod
-    environment:
-      DJANGO_SETTINGS_MODULE: vayu.settings.prod
-      DB_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-    depends_on: [postgres, redis]
-    command: celery -A vayu worker -Q default,uploads,notify -c 4
+    <<: *app
+    command: gunicorn vayu.wsgi -c gunicorn.conf.py   # WEB_CONCURRENCY workers (4 GB box: 2)
+    depends_on:
+      <<: *deps
+      migrate: {condition: service_completed_successfully}
+    stop_grace_period: 30s
+    healthcheck:   # the API answers at all (not /health: a dead worker must not restart the API)
+      test: ["CMD", "python", "-c", "import http.client, os; c = http.client.HTTPConnection('localhost', 8000, timeout=5); c.request('GET', '/api/v1/auth/me', headers={'Host': os.environ['APP_HOST']}); c.getresponse()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+  worker:                     # upload checks, pushes, webhooks, the heartbeat
+    <<: *app
+    depends_on: {<<: *deps, migrate: {condition: service_completed_successfully}}
+    command: sh -c 'exec celery -A vayu worker -Q default,uploads,notify -c "$${WORKER_CONCURRENCY:-2}"'
   zip-worker:                 # ZIPs and storage clean-up, apart so they never hold up uploads
-    build: ../backend
-    restart: always
-    env_file: ../.env.prod
-    environment:
-      DJANGO_SETTINGS_MODULE: vayu.settings.prod
-      DB_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-    depends_on: [postgres, redis]
-    command: celery -A vayu worker -Q zips,purge -c 2
-  beat:                       # schedules the webhook retry check, once a minute
-    build: ../backend
-    restart: always
-    env_file: ../.env.prod
-    environment:
-      DJANGO_SETTINGS_MODULE: vayu.settings.prod
-      DB_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-    depends_on: [postgres, redis]
-    command: celery -A vayu beat --schedule /tmp/celerybeat-schedule
+    <<: *app
+    depends_on: {<<: *deps, migrate: {condition: service_completed_successfully}}
+    command: sh -c 'exec celery -A vayu worker -Q zips,purge -c "$${ZIP_CONCURRENCY:-1}"'
   pdf-worker:
-    build: ../backend
-    restart: always
-    env_file: ../.env.prod
-    environment:
-      DJANGO_SETTINGS_MODULE: vayu.settings.prod
-      DB_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-    depends_on: [postgres, redis]
+    <<: *app
+    depends_on: {<<: *deps, migrate: {condition: service_completed_successfully}}
     command: celery -A vayu worker -Q pdf -c 1   # one PDF render at a time
-    mem_limit: 6g
-  postgres:
+    mem_limit: ${PDF_MEM_LIMIT:-1500m}   # a 4 GB box; on 8 GB: 4g
+  beat:                       # the schedules: webhook retries, report and upload sweeps, purge, heartbeat
+    <<: *app
+    depends_on: {<<: *deps, migrate: {condition: service_completed_successfully}}
+    # ponytail: schedule file in /tmp, so a restart restarts the intervals (all 1 hour or less)
+    command: celery -A vayu beat --schedule /tmp/celerybeat-schedule
+  postgres:                   # staging only (--profile local-db); production: managed database
     image: postgres:16-alpine
+    profiles: [local-db]
     restart: always
-    env_file: ../.env.prod
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${DB_USER}"]
+      interval: 10s
+      retries: 10
+    logging: *logs
   redis:
     image: redis:7-alpine
     restart: always
+    # queued renders, checks and webhooks survive a Redis restart
+    command: redis-server --appendonly yes
     volumes: ["redisdata:/data"]
-  caddy:
-    image: caddy:2-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 10
+    logging: *logs
+  caddy:                      # TLS, security headers, the web app and /api to the API
+    image: ${VAYU_REGISTRY:-ghcr.io/ravi409455}/vayu-web:${VAYU_TAG}
+    build:
+      context: ..
+      dockerfile: infra/web.Dockerfile
+      args:
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
     restart: always
     ports: ["80:80", "443:443"]
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddydata:/data
+      - caddydata:/data       # the https certificates: keep, or Let's Encrypt limits may bite
+      - caddyconfig:/config
     environment:
       APP_HOST: ${APP_HOST}
+      CSP_HEADER: ${CSP_HEADER:-Content-Security-Policy}
     depends_on: [api]
+    logging: *logs
 volumes:
   pgdata:
   redisdata:
   caddydata:
+  caddyconfig:

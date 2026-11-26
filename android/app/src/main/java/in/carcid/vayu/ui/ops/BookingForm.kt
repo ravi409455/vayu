@@ -30,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import `in`.carcid.vayu.core.api.ApiError
+import `in`.carcid.vayu.core.api.answerErrors
 import `in`.carcid.vayu.core.forms.answerProblem
 import `in`.carcid.vayu.core.forms.refusalText
 import `in`.carcid.vayu.core.forms.Filled
@@ -73,7 +74,7 @@ fun BookingFormScreen(env: OpsEnv, id: String?, onBack: () -> Unit, onSaved: (St
         val body = if (id == null) buildJsonObject { put("answers", JsonLogic.toJson(values)) }
             else buildJsonObject { put("row_version", existing!!.rowVersion); put("answers", JsonLogic.toJson(values.filterKeys { it in changed })) }
         env.actions.send(if (id == null) "POST" else "PATCH", if (id == null) "bookings" else "bookings/$id", body, "Saved.", refused = { e ->
-            errors = (e.extra["errors"] as? JsonObject)?.mapValues { (it.value as? JsonPrimitive)?.content ?: "Check this." } ?: emptyMap()
+            errors = e.answerErrors().mapValues { it.value.ifBlank { "Check this." } }
             if (e.code == "DUPLICATE_BOOKING_ID") errors = errors + ("booking_id" to e.message)
             refused++
             if (e.code.startsWith("STALE")) { env.refresh(); env.say("Someone else saved this booking meanwhile; their version is loaded.") }

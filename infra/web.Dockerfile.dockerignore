@@ -1,0 +1,9 @@
+# only what the web build needs
+*
+!web
+!shared
+!infra/Caddyfile
+web/node_modules
+web/dist
+web/test-results
+web/playwright-report

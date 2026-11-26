@@ -13,7 +13,7 @@
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
-        android:label="Vayu"
+        android:label="${appLabel}"
         android:supportsRtl="true"
         android:usesCleartextTraffic="${cleartext}"
         android:theme="@style/Theme.Vayu">
@@ -34,6 +34,7 @@
         <!-- Sentry starts by hand in VayuApp (only when a DSN is built in), not by itself -->
         <meta-data android:name="io.sentry.auto-init" android:value="false" />
         <!-- pushes from the server (Firebase) -->
+        <receiver android:name=".ReminderReceiver" android:exported="false" />
         <service android:name=".VayuMessaging" android:exported="false">
             <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter>
         </service>

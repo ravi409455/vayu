@@ -90,8 +90,11 @@ class Command(BaseCommand):
                                               force=force)
                 report["end"] = build.apply(admin, build.system_form("end"), forms.end(admin),
                                             force=force)
+                made_lib = build.library(admin, forms.library(admin), force=force)
+                report["library"] = (f"{made_lib['sections']} sections, {made_lib['fields']} "
+                                     "fields made")
                 for key, name, itype, _ in forms.INSPECTIONS:
-                    spec, extra = forms.inspection(key)
+                    spec, extra = forms.inspection(key, admin)
                     form = build.ensure_form(admin, key=key, name=name, itype=itype)
                     report[key] = build.apply(admin, form, spec, extra, force=force)
                     report[f"{key} report"] = reports.apply(admin, key, force=force)

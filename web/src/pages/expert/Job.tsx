@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
-import { api, ApiError, explain } from "../../api/client";
+import { answerErrors, api, ApiError, explain } from "../../api/client";
 import { STAGE_LABEL, STAGE_TONE, useLabels, useTypeLabels } from "../../api/labels";
 import type { Booking } from "../../api/types";
 import { useRefresh } from "../../api/hooks";
@@ -42,6 +42,15 @@ function swapLocal(d: Draft): Draft {
     ...Object.fromEntries(PARTS.map((p) => [p, Object.fromEntries(Object.entries(d[p] ?? {}).map(([k, v]) => [k, fix(v)]))])),
   };
   return changed ? next : d;
+}
+/** The draft without these file ids (stand-ins whose upload this browser no longer knows). */
+function dropIds(d: Draft, ids: string[]): Draft {
+  const out = (v: unknown): unknown =>
+    Array.isArray(v) ? v.filter((x) => !ids.includes(x as string)) : ids.includes(v as string) ? null : v;
+  return {
+    ...d,
+    ...Object.fromEntries(PARTS.map((p) => [p, Object.fromEntries(Object.entries(d[p] ?? {}).map(([k, v]) => [k, out(v)]))])),
+  };
 }
 
 export function Job() {
@@ -91,7 +100,18 @@ export function Job() {
       setError("");
       void refresh(keys.booking(id));
     },
-    onError: (e) => setError(explain(e)),
+    onError: async (e) => {
+      setError(explain(e));
+      // the Admin published a new check-in or inspection form since these were opened: the server
+      // checks the answers against the new one, so "Try again" with the old form would never pass
+      if (!(e instanceof ApiError) || e.code !== "INVALID_ANSWERS" || !session || session.started) return;
+      const f = await api<Forms>(`bookings/${id}/forms`).catch(() => null);
+      if (!f || (f.form.id === session.form.id && f.start_form?.id === session.startForm?.id)) return;
+      const s: Session = { ...session, form: f.form, startForm: f.start_form, endForm: f.end_form, versionId: f.form.id };
+      saveJSON(sKey(id), s);
+      setSession(s);
+      setError("The check-in form was just updated. Check the answers and press Start again.");
+    },
   });
   /** Opens the forms on this phone without starting the job; a form with no check-in starts at once. */
   const open = useMutation({
@@ -203,12 +223,17 @@ function Finished({ booking }: { booking: Booking }) {
   useEffect(() => {
     void resumeUploads(booking.id);
   }, [booking.id]); // after a reload: keep sending what is left
-  const { done, total } = summary(ups);
+  // a file the server refused for good (the lead was closed meanwhile) cannot be retried from here
+  const refused = ups.filter((u) => u.status === "failed" && u.permanent);
+  const { done, total } = summary(ups.filter((u) => !refused.includes(u)));
   return (
     <div className="card" role="status">
       {booking.stage === "submitted" && (
         <p>
-          <strong>Submitted.</strong> Uploading photos{total ? ` (${done}/${total})` : ""}… keep this page open until it says Completed.
+          <strong>Submitted.</strong>{" "}
+          {done < total
+            ? `Uploading photos (${done}/${total})… keep this page open until it says Completed.`
+            : "Waiting for Ops to finish it."}
         </p>
       )}
       {booking.stage === "completed" && (
@@ -217,7 +242,13 @@ function Finished({ booking }: { booking: Booking }) {
         </p>
       )}
       {booking.stage === "cancelled" && <p>This lead was cancelled.</p>}
-      {ups.some((u) => u.status === "failed") && <button onClick={retryFailed}>Retry uploads</button>}
+      {refused.length > 0 && (
+        <p className="error">
+          {refused.length === 1 ? "1 file was" : `${refused.length} files were`} not taken: {refused[0]!.error}. Ops can add it later if it
+          is needed.
+        </p>
+      )}
+      {ups.some((u) => u.status === "failed" && !u.permanent) && <button onClick={retryFailed}>Retry uploads</button>}
     </div>
   );
 }
@@ -287,8 +318,13 @@ function Wizard({
       await resumeUploads(id);
       const server = await api<ServerMedia[]>(`bookings/${id}/media`).catch(() => null);
       if (!server || off) return;
-      const { add } = reconcileMedia(trees, draftRef.current, server, (mid) => !!uploadFor(mid));
-      if (add.length > 0) setDraft((d) => applyMedia(d, add));
+      // a stand-in id whose upload this browser no longer tracks (sent and checked while the lead was
+      // closed): it can never be swapped, so drop it; the file it stood for comes back from the server
+      const orphans = localIds(draftRef.current).filter((l) => !uploadFor(l) && !realId(l));
+      const { add } = reconcileMedia(trees, dropIds(draftRef.current, orphans), server, (mid) => !!uploadFor(mid));
+      if (add.length > 0 || orphans.length > 0) setDraft((d) => applyMedia(dropIds(d, orphans), add));
+      if (orphans.length > add.length)
+        setMsg("A file picked without a connection is no longer on this browser. Check the photos and add any that are missing.");
     })();
     return () => {
       off = true;
@@ -366,7 +402,7 @@ function Wizard({
       onSubmitted();
     } catch (e) {
       if (e instanceof ApiError && e.code === "INVALID_ANSWERS") {
-        const errs = (e.body.errors ?? {}) as Record<string, string>;
+        const errs = answerErrors(e) ?? {};
         // each error goes on the part whose form has that question, not on every part
         const keysOf = (t: Tree | null) =>
           new Set(t?.pages.flatMap((pg) => pg.sections.flatMap((sec) => sec.fields.map((f) => f.key))) ?? []);

@@ -121,6 +121,16 @@ def test_export_is_self_contained_and_has_no_environment_ids(admin, staging):
     assert '"id"' not in blob and '"row_version"' not in blob       # nothing environment-specific
 
 
+def test_the_download_is_json_even_when_the_browser_asks_for_html(admin, staging):
+    """F-11: Safari and Firefox send Accept: text/html for a download link; they saved the
+    browsable API page as the bundle."""
+    v = FormVersion.objects.select_related("form").get(pk=staging["version"])
+    r = admin.get(f"/api/v1/promote/export?version={v.pk}", HTTP_ACCEPT="text/html,*/*;q=0.8")
+    assert r.status_code == 200 and r["Content-Type"].startswith("application/json")
+    assert r["Content-Disposition"] == f'attachment; filename="{v.form.key}-v{v.number}.json"'
+    assert r.json()["form"]["key"] == v.form.key
+
+
 def test_export_of_unknown_version_and_permissions(api_as, admin, staging):
     assert admin.get("/api/v1/promote/export?version=99999").status_code == 404
     assert admin.get("/api/v1/promote/export").status_code == 400

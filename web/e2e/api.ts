@@ -27,6 +27,10 @@ export async function json<T = any>(r: Awaited<ReturnType<APIRequestContext["pos
   return (await r.json()) as T;
 }
 
+/** Playwright's WebKit runs like a Safari private window, where files can't be kept in IndexedDB
+ *  ("Error preparing Blob/File data"); a normal Safari profile keeps them (docs/manual-test-2026-11.md). */
+export const WEBKIT_PRIVATE = "WebKit here is a private session: no files in IndexedDB";
+
 export async function signIn(page: Page, username: string): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Username").fill(username);

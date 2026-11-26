@@ -41,7 +41,18 @@ vi.mock("../api/client", async (orig) => ({
   api: (p: string, o?: unknown) => api(p, o),
 }));
 
-import { addFile, realId, resumeUploads, retryFailed, reset, RETRY_MS, uploadFor, useUploads } from "./uploadManager";
+import {
+  addFile,
+  discardFile,
+  realId,
+  resumeUploads,
+  retryDeletes,
+  retryFailed,
+  reset,
+  RETRY_MS,
+  uploadFor,
+  useUploads,
+} from "./uploadManager";
 import { renderHook } from "@testing-library/react";
 
 const add = (extra: Record<string, unknown> = {}) =>
@@ -141,12 +152,57 @@ describe("keeping the copy (F-151, F-152)", () => {
     expect(db.size).toBe(0);
   });
 
-  it("a file that arrived damaged is sent again", async () => {
-    plans.push(async () => ({ id: "m1", status: "uploaded" }));
-    api.mockResolvedValueOnce({ status: "failed" });
+  it("a file that arrived damaged is sent again, after a pause, and not for ever (N8)", async () => {
+    for (let i = 0; i < 5; i++) plans.push(async () => ({ id: "m1", status: "uploaded" }));
+    api.mockImplementation(async () => ({ status: "failed" }));
     await add();
     await vi.advanceTimersByTimeAsync(3000);
+    expect(transfer).toHaveBeenCalledTimes(1); // not at once: a tight loop of full re-uploads
+    await vi.advanceTimersByTimeAsync(RETRY_MS);
     expect(transfer).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(transfer).toHaveBeenCalledTimes(3);
+    expect(states()[0]).toMatchObject({ status: "failed", permanent: true });
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(transfer).toHaveBeenCalledTimes(3);
+    api.mockImplementation(async () => ({ status: "verified" }));
+  });
+
+  it("a file picked offline and removed while sending is taken back once it has an id (N1)", async () => {
+    initiateFails = new TypeError("offline");
+    let finish: (v: { id: string; status: string }) => void = () => {};
+    plans.push(() => new Promise((r) => (finish = r)));
+    const local = await add({ keepOffline: true });
+    await flush();
+    await discardFile(local);
+    finish({ id: "m9", status: "uploaded" });
+    await flush();
+    expect(api).toHaveBeenCalledWith("media/m9", { method: "DELETE" });
+    expect(db.size).toBe(0); // not written back
+    expect(realId(local)).toBeUndefined();
+  });
+
+  it("a removal that could not reach the server is sent again later (N1)", async () => {
+    const m = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => void m.set(k, v),
+      removeItem: (k: string) => void m.delete(k),
+    });
+    api.mockImplementationOnce(async () => {
+      throw new TypeError("offline");
+    });
+    await discardFile("m7");
+    expect(JSON.parse(localStorage.getItem("vayu:deletes")!)).toEqual(["m7"]);
+    api.mockImplementationOnce(async () => {
+      throw new ApiError(503, { code: "error", detail: "Busy." });
+    });
+    await retryDeletes();
+    expect(JSON.parse(localStorage.getItem("vayu:deletes")!)).toEqual(["m7"]); // a server failure keeps it
+    await retryDeletes();
+    expect(api).toHaveBeenLastCalledWith("media/m7", { method: "DELETE" });
+    expect(localStorage.getItem("vayu:deletes")).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it("says so when the browser would not store the file", async () => {

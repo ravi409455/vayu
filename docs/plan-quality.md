@@ -186,8 +186,13 @@ review numbers above are re-measured and recorded here.
 
 ## Status 2026-11-25
 Done (fix round + quality branch): Q1.1 (Ruff `S` and `C90` max 12 with a per-file allow list of 18
-files; `SIM`/`RET`/`PIE`/`PL`/`T20` not added), Q1.2, Q1.3 (jsx-a11y + Prettier, whole web app reformatted, CI runs format:check), Q1.4, Q2.1
-(`core.errors.fail`), Q2.2 (`core.concurrency.check_row_version`), Q2.3, Q2.4, Q2.5
+files; `SIM`/`RET`/`PIE`/`PL`/`T20` not added), Q1.2 (partly: strict only for `core`,
+`*.services`, `forms.library*` and `integrations`, see the mypy overrides in `pyproject.toml`), Q1.3 (jsx-a11y + Prettier, whole web app reformatted, CI runs format:check), Q1.4, Q2.1
+(`core.errors.fail`; older code still raises `CodedError(...)` directly, the same thing), Q2.2
+(`core.concurrency.check_row_version`), Q2.3 (partly: the dev commands sit in `apps.platform`, which
+production also installs, behind the server-kind guards; `core/testing.py` imports accounts), Q2.4
+(partly: no test pins the function-local imports yet; 142 indented `from apps.` lines outside tests),
+Q2.5
 (`IntegrationSerializer`, form-builder saves in `forms/services.py`), Q2.6 (`useListItems`,
 FormRenderer split; `pages/ops/Booking.tsx` split earlier), Q3, Q4 (`core.log.event`,
 `docs/logging.md`), Q5 (search 90 → 12 queries, pinned by a test), Q6.2 (0 generator warnings,
@@ -196,6 +201,9 @@ FormRenderer split; `pages/ops/Booking.tsx` split earlier), Q3, Q4 (`core.log.ev
 
 Left:
 - Q1.1: `SIM`, `RET`, `PIE`, `PL`, `T20`; the C901 allow list (18 files) to shrink.
+- Q1.2: strict typing for the rest of the backend.
+- Q2.3: a `devtools` app installed only by local / test / e2e settings.
+- Q2.4: a test that lists the function-local imports so they cannot grow.
 - Q2.6: repeated inline `style={{…}}` objects into CSS classes.
 - Q6.1: real request / response schemas and descriptions on every operation (many still say
   "any object"); Q6.3's end-to-end test that follows the guide; Q6.4 Ruff `D` rules and

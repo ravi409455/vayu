@@ -4,15 +4,17 @@ import { api } from "../../api/client";
 import { useRefresh } from "../../api/hooks";
 import { useInspectionTypes } from "../../api/labels";
 import { useAuth } from "../../auth";
-import { useTiming, type TimingSettings } from "../../lib/timing";
-import { Field, PageHeader, useToast } from "../../ui/kit";
+import { DEFAULT_TIMING, useTimingQuery, type TimingSettings } from "../../lib/timing";
+import { Field, LoadError, PageHeader, useToast } from "../../ui/kit";
 import { keys } from "../../api/keys";
 
 /** Settings Admin changes (Ops may look): today the time limits for late starts and too-quick jobs. */
 export function Settings() {
   const { can } = useAuth();
   const edit = can("settings.edit");
-  const saved = useTiming();
+  const timing = useTimingQuery();
+  // a failed load never shows (and saves) the defaults as if they were the Admin's numbers
+  const saved = timing.data ?? DEFAULT_TIMING;
   const types = useInspectionTypes();
   const { say, fail } = useToast();
   const refresh = useRefresh();
@@ -52,71 +54,75 @@ export function Settings() {
         {edit && (
           <button
             className="primary"
-            disabled={save.isPending || JSON.stringify(v) === JSON.stringify(saved)}
+            disabled={!timing.data || save.isPending || JSON.stringify(v) === JSON.stringify(saved)}
             onClick={() => save.mutate()}
           >
             Save
           </button>
         )}
       </PageHeader>
-      <section className="card stack" aria-label="Time limits">
-        <h2 className="sub">Time limits</h2>
-        <Field
-          label="Late-start grace (minutes)"
-          help="A booking that starts more than this after its booked date and time shows as “Started late”. Example: booked 10:00, grace 15 → a start after 10:15 is late."
-        >
-          {num(v.late_grace_minutes, (n) => setV({ ...v, late_grace_minutes: n }), "Late-start grace (minutes)")}
-        </Field>
-        <Field
-          label="Minimum inspection time (minutes)"
-          help="A booking finished faster than this (Start to Submit) shows as “Too quick”. Used for any type without its own number below."
-        >
-          {num(v.min_minutes_default, (n) => setV({ ...v, min_minutes_default: n }), "Minimum inspection time (minutes)")}
-        </Field>
-        <table className="rows">
-          <thead>
-            <tr>
-              <th>Inspection type</th>
-              <th>Minimum minutes</th>
-              <th>
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {types.map((t) => {
-              const own = v.min_minutes_by_type[t.key];
-              return (
-                <tr key={t.key}>
-                  <td>{t.label}</td>
-                  <td>
-                    {own === undefined ? (
-                      <span className="muted">{v.min_minutes_default} (default)</span>
-                    ) : (
-                      num(own, (n) => byType(t.key, n), `Minimum minutes for ${t.label}`)
-                    )}
-                  </td>
-                  <td>
-                    {edit &&
-                      (own === undefined ? (
-                        <button className="link" onClick={() => byType(t.key, v.min_minutes_default)}>
-                          Set own number
-                        </button>
+      {timing.isError && <LoadError error={timing.error} what="settings" onRetry={timing.refetch} />}
+      {timing.data && (
+        <section className="card stack" aria-label="Time limits">
+          <h2 className="sub">Time limits</h2>
+          <Field
+            label="Late-start grace (minutes)"
+            help="A booking that starts more than this after its booked date and time shows as “Started late”. Example: booked 10:00, grace 15 → a start after 10:15 is late."
+          >
+            {num(v.late_grace_minutes, (n) => setV({ ...v, late_grace_minutes: n }), "Late-start grace (minutes)")}
+          </Field>
+          <Field
+            label="Minimum inspection time (minutes)"
+            help="A booking finished faster than this (Start to Submit) shows as “Too quick”. Used for any type without its own number below."
+          >
+            {num(v.min_minutes_default, (n) => setV({ ...v, min_minutes_default: n }), "Minimum inspection time (minutes)")}
+          </Field>
+          <table className="rows">
+            <thead>
+              <tr>
+                <th>Inspection type</th>
+                <th>Minimum minutes</th>
+                <th>
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {types.map((t) => {
+                const own = v.min_minutes_by_type[t.key];
+                return (
+                  <tr key={t.key}>
+                    <td>{t.label}</td>
+                    <td>
+                      {own === undefined ? (
+                        <span className="muted">{v.min_minutes_default} (default)</span>
                       ) : (
-                        <button className="link" onClick={() => byType(t.key, undefined)}>
-                          Use default
-                        </button>
-                      ))}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <p className="muted small">
-          Times are the server's: when it got Start and when it got Submit. A booking whose Start never reached the server is never flagged.
-        </p>
-      </section>
+                        num(own, (n) => byType(t.key, n), `Minimum minutes for ${t.label}`)
+                      )}
+                    </td>
+                    <td>
+                      {edit &&
+                        (own === undefined ? (
+                          <button className="link" onClick={() => byType(t.key, v.min_minutes_default)}>
+                            Set own number
+                          </button>
+                        ) : (
+                          <button className="link" onClick={() => byType(t.key, undefined)}>
+                            Use default
+                          </button>
+                        ))}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="muted small">
+            Times are the server's: when it got Start and when it got Submit. A booking whose Start never reached the server is never
+            flagged.
+          </p>
+        </section>
+      )}
       <MediaRetention edit={edit} />
     </>
   );
@@ -141,6 +147,7 @@ function MediaRetention({ edit }: { edit: boolean }) {
     },
     onError: fail,
   });
+  if (q.isError) return <LoadError error={q.error} what="storage settings" onRetry={q.refetch} />;
   if (!v) return null;
   const row = (key: keyof MediaSettings, label: string) => (
     <Field label={label} help="0 keeps them for ever. Otherwise 30 to 3650 days, counted from when the file was uploaded.">

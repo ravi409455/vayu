@@ -9,7 +9,7 @@ import type { User } from "../../api/types";
 import { useAuth } from "../../auth";
 import { addDays, fmtDay, today } from "../../lib/format";
 import { Avatar } from "../../ui/Avatar";
-import { Empty, PageHeader } from "../../ui/kit";
+import { LoadError, Empty, PageHeader } from "../../ui/kit";
 import { StackedBars } from "../../ui/StackedBars";
 import { keys } from "../../api/keys";
 
@@ -413,7 +413,11 @@ export function Dashboards() {
             </div>
           </div>
         </div>
-        {rows.length === 0 ? (
+        {vol.isError ? (
+          <LoadError error={vol.error} what="the volume" onRetry={vol.refetch} />
+        ) : vol.isPending ? (
+          <p className="muted">Loading…</p>
+        ) : rows.length === 0 ? (
           <Empty title="No bookings in this range" />
         ) : asTable ? (
           <div className="dash-table-wrap">

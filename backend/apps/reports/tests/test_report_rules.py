@@ -22,7 +22,7 @@ from apps.bookings.tests.test_submissions import start
 from apps.core import events
 from apps.media.models import MediaAsset, MediaZip
 from apps.reports import context, tasks
-from apps.reports.models import PdfTemplateVersion, Report
+from apps.reports.models import PdfTemplateVersion, Report, ReportRender
 
 from .test_reports import DEFN, complete_job, one_page, pdf_text, renv, set_template, source  # noqa: F401
 
@@ -215,6 +215,8 @@ def test_a_later_render_that_fails_keeps_the_report_genuine(done, monkeypatch):
     problems = env.ops.get("/api/v1/problems/reports").json()
     assert [{k: p[k] for k in ("booking", "status", "error", "problem")} for p in problems] == [
         {"booking": b["id"], "status": "ready", "error": "render_failed", "problem": "failed"}]
+    last = ReportRender.objects.filter(report=r, ok=False).latest("finished_at").finished_at
+    assert problems[0]["at"] == last.isoformat().replace("+00:00", "Z")  # when it last failed
     monkeypatch.undo()
     assert tasks.render_report(b["id"]) == "ready"
     assert Report.objects.get(pk=r.pk).error == "" and not env.ops.get(
@@ -314,6 +316,19 @@ def test_not_able_to_check_counts_the_key_the_real_forms_use(renv, settings):
                                           source(b).cell("inspection.door"))
 
 
+def test_not_able_to_check_in_a_multi_choice_answer_counts_too(renv, settings):
+    set_template(renv)
+    from apps.forms.models import Field
+
+    f = Field.objects.get(key="door", version__status="published")
+    Field.objects.filter(pk=f.pk).update(type="multi_choice", config={**f.config, "options": [
+        *f.config["options"], {"key": "not_able_to_check", "label": "Not Able to Check"}]})
+    b = complete_job(renv, booking_id="NC2", door=["not_able_to_check"], photos=0,
+                     settings=settings)
+    sv = source(b).values()["sys"]                    # a list answer used to crash the report
+    assert sv["not_checked"] == "1" and sv["not_checked_list"] == "door"
+
+
 def test_the_frozen_forms_name_not_able_to_check_with_keys_the_report_reads():
     frozen = Path(__file__).resolve().parents[2] / "platform" / "setup" / "frozen"
     found = 0
@@ -402,6 +417,7 @@ def test_an_out_of_date_report_is_in_needs_you_with_since_when_and_tells_nobody(
     (row,) = env.ops.get("/api/v1/problems/reports").json()
     assert row["problem"] == "out_of_date" and row["booking_id"] == "SA37926"
     assert row["out_of_date_since"] and row["status"] == "ready"
+    assert row["at"] == row["out_of_date_since"]                        # since it went out of date
     assert not Notification.objects.filter(pk__gt=0, kind="problem").exclude(
         title__startswith="SA37926 completed").count() > before          # no new problem notice
     assert env.ops.post(f"/api/v1/bookings/{b['id']}/report/regenerate").status_code == 202
@@ -413,6 +429,58 @@ def test_problems_name_failed_and_stuck_renders(done):
     env, b, r = done
     Report.objects.filter(pk=r.pk).update(error="render_failed")
     assert env.ops.get("/api/v1/problems/reports").json()[0]["problem"] == "failed"
-    Report.objects.filter(pk=r.pk).update(error="", render_started_at=timezone.now()
-                                          - tasks.STUCK_AFTER - timedelta(seconds=5))
-    assert env.ops.get("/api/v1/problems/reports").json()[0]["problem"] == "stuck"
+    started = timezone.now() - tasks.STUCK_AFTER - timedelta(seconds=5)
+    Report.objects.filter(pk=r.pk).update(error="", render_started_at=started)
+    (row,) = env.ops.get("/api/v1/problems/reports").json()
+    assert row["problem"] == "stuck"
+    assert row["at"] == started.isoformat().replace("+00:00", "Z")       # when its render began
+
+
+# ---------------------------------------------------------------- H-5 a lost first report
+
+def _lose_the_first_report(b, minutes=11):
+    Report.objects.filter(booking_id=b["id"]).delete()             # the first render never ran
+    Inspection.objects.filter(booking_id=b["id"]).update(
+        submitted_at=timezone.now() - timedelta(minutes=minutes))
+
+
+def test_a_first_report_that_never_came_is_made_by_the_sweep(done):
+    env, b, _ = done
+    _lose_the_first_report(b, minutes=1)
+    with mock.patch("apps.reports.tasks.render_report.delay") as render:
+        assert tasks.sweep_reports() == 0                       # its render may still be queued
+    _lose_the_first_report(b)
+    assert tasks.sweep_reports() == 1
+    assert Report.objects.get(booking_id=b["id"]).status == "ready"
+    _lose_the_first_report(b, minutes=60 * 24 * 3)                  # too old: Ops only
+    with mock.patch("apps.reports.tasks.render_report.delay") as render:
+        assert tasks.sweep_reports() == 0
+    render.assert_not_called()
+
+
+def test_the_catch_up_never_makes_a_second_revision(done):
+    env, b, r = done
+    assert tasks.render_report(b["id"], first_only=True) == "skipped"
+    assert Report.objects.get(pk=r.pk).revision == r.revision
+
+
+def test_problems_name_a_completed_booking_with_no_report(done):
+    env, b, _ = done
+    _lose_the_first_report(b)
+    (row,) = env.ops.get("/api/v1/problems/reports").json()
+    assert row["problem"] == "missing" and row["booking"] == b["id"]
+    from apps.bookings.models import Inspection
+    sent = Inspection.objects.filter(booking_id=b["id"], status="submitted").latest("submitted_at")
+    assert sent.submitted_at is not None
+    assert row["at"] == sent.submitted_at.isoformat().replace("+00:00", "Z")   # when it was sent
+    Booking.objects.filter(pk=b["id"]).update(conflict="TWO_EXPERTS")   # Ops choose first
+    assert env.ops.get("/api/v1/problems/reports").json() == []
+
+
+def test_an_out_of_date_report_in_conflict_is_not_offered_for_regenerate(done):
+    """L-5: during a conflict the server refuses Regenerate, so Needs you does not offer it."""
+    env, b, r = done
+    Report.objects.filter(pk=r.pk).update(stale=True)
+    assert env.ops.get("/api/v1/problems/reports").json()[0]["problem"] == "out_of_date"
+    Booking.objects.filter(pk=b["id"]).update(conflict="TWO_EXPERTS")
+    assert env.ops.get("/api/v1/problems/reports").json() == []

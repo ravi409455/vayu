@@ -185,6 +185,8 @@ def fill(version, ns: str, booking: Booking | None, who: User | None, rng: rando
                 "_defects": []}
         if not truthy(f.section.show_if, data) or not truthy(f.show_if, data):
             continue
+        if ((f.section.access or {}).get("expert") or {}).get("in_progress") == "hidden":
+            continue                                   # Ops' own page: never the expert's
         if f.key in overrides:
             answers[f.key] = overrides[f.key]
             continue
@@ -291,6 +293,11 @@ class Builder:
             f = next((f for f in Field.objects.filter(version=version, type="photo")
                       .order_by("order") if insp.get(f.key)
                       and (f.required and not f.required_if) == (want == "required")), None)
+            if f is None and want == "optional":     # none answered by chance: answer one
+                f = next((x for x in Field.objects.filter(version=version, type="photo")
+                          .order_by("order") if not x.required and not x.show_if), None)
+                if f is not None:
+                    insp[f.key] = [self.pics.add(b, expert, f.key, f.label)]
             if f is not None:
                 MediaAsset.objects.filter(id__in=insp[f.key]).update(status="uploading")
         submissions.submit(expert, b, uuid.uuid4(), {"inspection": insp, "start": start,
@@ -452,6 +459,20 @@ def ops_review(bl: Builder, refs: list[str]) -> None:
             body["ratings"] = {cats[0]: 4}
         if body:
             submissions.set_overrides(u["ops"], insp, body, insp.row_version)
+        if n < 2 and Field.objects.filter(version=version, key="key_check_1_label").exists():
+            insp.refresh_from_db()                 # Ops' own page: a comment and named checks
+            mine = {"expert_comments": "Clean car overall. Minor marks noted; see the photos.",
+                    "key_check_1_label": "Service history",
+                    "key_check_1_value": "Verified, 3 services",
+                    "key_check_2_label": "Second key", "key_check_2_value": "Available"}
+            if b.inspection_type == "used_car":       # the price and the service centre's record
+                mine.update(price_estimate="₹ 12,50,000 - ₹ 13,50,000",
+                            last_service_date="12-08-2026", total_services="6",
+                            last_odometer_reading="36,400 km",
+                            service_history_analysis="Serviced on time at the authorised centre.")
+            else:
+                mine["manufacturing_date"] = "March 2026"
+            submissions.edit_inspection(u["ops"], insp, {"inspection": mine}, insp.row_version)
         activity.log(b, u["ops"], "report_downloaded", {"revision": 1})
         if n == 0:
             activity.log(b, u["admin"], "report_shared", {"revision": 1, "how": "check_link"})

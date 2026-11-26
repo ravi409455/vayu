@@ -41,7 +41,10 @@ type Initiated = { id: string; status: string; part_size: number; parts?: Part[]
 
 const live = new Set<XMLHttpRequest>();
 /** Sign-out: stop every part that is being sent. */
+let stops = 0; // bumped by abortTransfers(): a transfer started before it never sends another part
+
 export function abortTransfers(): void {
+  stops++;
   live.forEach((x) => x.abort());
   live.clear();
 }
@@ -103,6 +106,10 @@ export function initiate(s: UploadSpec): Promise<Initiated> {
 /** Sends what is missing and finishes. Returns once the bytes are on the server, with the status the
  *  server gives then: "uploaded" means the checksum is still to be checked (that happens later). */
 export async function transfer(s: UploadSpec, onProgress: (fraction: number) => void): Promise<{ id: string; status: string }> {
+  const run = stops;
+  const stopped = () => {
+    if (run !== stops) throw new Error("stopped"); // signed out: not one more part leaves
+  };
   let init = await initiate(s);
   if (init.status === "verified") {
     onProgress(1);
@@ -130,6 +137,7 @@ export async function transfer(s: UploadSpec, onProgress: (fraction: number) => 
       } catch (e) {
         if (attempt >= 3 || (e as Error).message === "stopped") throw e;
         await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+        stopped(); // a sign-out may have come during the wait
       }
     }
     have.set(p.part_number, etag);
@@ -137,6 +145,7 @@ export async function transfer(s: UploadSpec, onProgress: (fraction: number) => 
     onProgress(done / size);
   }
   if (init.status === "pending") {
+    stopped();
     init = await api<Initiated>(`media/${init.id}/complete`, {
       body: {
         parts: [...have].map(([part_number, etag]) => ({ part_number, etag })),

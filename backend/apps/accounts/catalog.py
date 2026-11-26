@@ -64,7 +64,8 @@ CATALOG: list[Perm] = [
 ]
 KEYS: dict[str, Perm] = {p.key: p for p in CATALOG}
 
-# Defaults for the roles an Admin can edit. Ops: daily operations only, no templates, no deletes.
+# Defaults for the roles an Admin can edit. Ops: daily operations only, no templates; deleting a
+# booking only while it is an unassigned draft (bookings.delete is checked again in the service).
 DEFAULTS: dict[str, dict[str, str]] = {
     "ops": {k: "all" for k in (
         "users.view", "forms.view", "library.view",

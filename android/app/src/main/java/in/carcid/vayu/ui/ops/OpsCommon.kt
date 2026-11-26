@@ -1,6 +1,7 @@
 package `in`.carcid.vayu.ui.ops
 
 import androidx.compose.runtime.collectAsState
+import `in`.carcid.vayu.core.ops.allPages
 import `in`.carcid.vayu.core.ops.ListItem
 import `in`.carcid.vayu.core.ops.Person
 import `in`.carcid.vayu.core.ops.Booking
@@ -152,7 +153,7 @@ class Labels(val cities: Map<String, String> = emptyMap(), val cars: Map<String,
             // all four at once: the wait is the slowest one, not the sum
             return kotlinx.coroutines.coroutineScope {
                 val types = async { soft(emptyList()) { ListItem.list(data.load("inspection-types").data.rows()).map { Triple(it.key, it.label, it.available) } } }
-                val people = async { soft(emptyList()) { Person.list(data.load("users").data.rows()) } }
+                val people = async { soft(emptyList()) { Person.list(data.load(allPages("users")).data.rows()) } }
                 val cities = async { list("city") }; val cars = async { list("car_make_model") }
                 Labels(cities.await(), cars.await(), types.await(), people.await())
             }

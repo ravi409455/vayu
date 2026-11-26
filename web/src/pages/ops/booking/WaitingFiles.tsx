@@ -3,7 +3,7 @@ import { useState } from "react";
 import { api } from "../../../api/client";
 import { keys } from "../../../api/keys";
 import type { Booking } from "../../../api/types";
-import { Confirm, useToast } from "../../../ui/kit";
+import { Confirm, LoadError, useToast } from "../../../ui/kit";
 
 type Missing = { part: string; key: string; label: string; count: number; required: boolean };
 
@@ -17,6 +17,8 @@ export function WaitingFiles({ booking, onFinished, onMedia }: { booking: Bookin
     queryFn: ({ signal }) => api<{ missing: Missing[]; can_finish: boolean }>(`bookings/${booking.id}/missing-files`, { signal }),
   });
   const missing = q.data?.missing ?? [];
+  // a failed load is never "nothing missing"
+  if (q.isError) return <LoadError error={q.error} what="the files this booking waits for" onRetry={q.refetch} />;
   if (!missing.length) return null;
   const total = missing.reduce((n, m) => n + m.count, 0);
   const need = missing.filter((m) => m.required);

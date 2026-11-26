@@ -49,6 +49,19 @@ class DraftStoreTest {
         assertTrue(File(dir, "$BOOKING.json").exists())
     }
 
+    @Test fun startingALeadWhoseDraftCantBeReadKeepsTheDamagedOne() {
+        // N-4: a new draft may be started, but the old file is moved aside, never overwritten or swept
+        dir.mkdirs(); File(dir, "$BOOKING.json").writeText("{not json")
+        val store = DraftStore(dir)
+        store.setAsideDamaged(BOOKING)
+        store.save(draft().copy(step = 1))
+        assertEquals("{not json", File(dir, "$BOOKING.damaged").readText())
+        assertEquals(listOf(BOOKING), store.unreadable())                  // sign-out still stops
+        val shot = file("orphan.jpg")
+        store.sweep()
+        assertTrue(shot.exists())                                         // its photos might be these
+    }
+
     @Test fun filesNoDraftRefersToAreSweptOnceAnHourOld() {
         val kept = file("kept.jpg")
         val store = DraftStore(dir)
@@ -59,5 +72,14 @@ class DraftStoreTest {
         store.sweep()
         assertTrue(kept.exists()); assertTrue(fresh.exists())
         assertFalse(shot.exists()); assertFalse(tmp.exists())
+    }
+
+    /** F-5: sent and only waiting for the server's check is told apart from work still to send. */
+    @Test fun onlyCheckingMeansEverythingIsOnTheServer() {
+        val f = LocalFile("f1", "inspection", "door_photos", "photo", "", "image/jpeg", "camera", 4, "", "Door 1")
+        assertTrue(draft(listOf(f.copy(sent = true))).copy(submitSent = true).onlyChecking)
+        assertFalse(draft(listOf(f)).copy(submitSent = true).onlyChecking)                         // not sent yet
+        assertFalse(draft(listOf(f.copy(sent = true))).onlyChecking)                               // answers not sent
+        assertFalse(draft(listOf(f.copy(sent = true, error = "Arrived damaged"))).copy(submitSent = true).onlyChecking)
     }
 }

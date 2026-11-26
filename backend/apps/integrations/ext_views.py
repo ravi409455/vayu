@@ -228,7 +228,11 @@ class BulkBookings(ExtView):
 
 
 def latest_inspection(b: Booking) -> Inspection:
-    insp = b.inspections.order_by("-created_at").first()
+    """The same inspection a PATCH writes to (the counted one); before any submission, the
+    running draft; never past a conflict, where nothing counts until Ops choose."""
+    insp = b.counted_inspection() or (
+        None if b.conflict else b.inspections.filter(status="draft").order_by("-created_at")
+        .first())
     if insp is None:
         raise CodedError("NO_INSPECTION", "This booking has no inspection yet.", 404)
     return insp

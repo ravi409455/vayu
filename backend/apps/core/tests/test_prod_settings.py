@@ -6,7 +6,8 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parents[3]
 BASE_ENV = {
     "PATH": os.environ["PATH"], "DJANGO_SECRET_KEY": "x" * 50, "DB_NAME": "n", "DB_USER": "u",
-    "DB_PASSWORD": "p", "DB_HOST": "h", "REDIS_URL": "redis://h/0", "S3_BUCKET": "b",
+    "DB_PASSWORD": "p", "DB_HOST": "h", "DB_SSLMODE": "require", "REDIS_URL": "redis://h/0",
+    "S3_BUCKET": "b",
     "S3_ACCESS_KEY_ID": "k", "S3_SECRET_ACCESS_KEY": "s",
     "DJANGO_SETTINGS_MODULE": "vayu.settings.prod",
 }
@@ -33,6 +34,16 @@ def test_prod_refuses_to_start_without_its_public_address():
     """F-216: webhook links would point at localhost."""
     r = load_prod(SENTRY_DSN="https://k@o0.ingest.sentry.io/1")
     assert r.returncode != 0 and "PUBLIC_BASE_URL" in r.stderr
+
+
+def test_prod_refuses_an_unencrypted_database_over_the_network():
+    """A database on another machine (the managed one) must be reached with TLS; only staging's
+    own container (DB_HOST=postgres) may use a plain connection."""
+    ok = {"SENTRY_DSN": "https://k@o0.ingest.sentry.io/1", "PUBLIC_BASE_URL": "https://x.in"}
+    r = load_prod(**ok, DB_SSLMODE="prefer")
+    assert r.returncode != 0 and "DB_SSLMODE" in r.stderr
+    assert load_prod(**ok, DB_SSLMODE="prefer", DB_HOST="postgres").returncode == 0
+    assert load_prod(**ok, DB_SSLMODE="verify-full").returncode == 0
 
 
 def test_the_access_log_drops_query_strings_and_token_paths():

@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { signIn, submittedJob, waitForReport, type Pdi } from "./api";
+import { apiAs, signIn, submittedJob, waitForReport, type Pdi } from "./api";
 
 // Accessibility and layout: no axe violations, and staff pages fit a 768 px tablet with no sideways
 // scroll (customer pages a 375 px phone). Batch 4: F-175, F-178, F-185, F-186, F-187, R-14, H-19.
@@ -56,21 +56,24 @@ for (const [who, paths] of STAFF) {
 }
 
 test("dark mode: no contrast problems (F-178)", async ({ page }) => {
-  await page.route("**/api/v1/auth/me", async (r) => {
-    // the person's saved look, as if they picked Dark
-    const res = await r.fetch();
-    await r.fulfill({ response: res, json: { ...(await res.json()), theme: "dark" } });
-  });
-  await signIn(page, "ops");
-  const found: string[] = [];
-  for (const p of ["/today", "/bookings", "/dashboards", `/booking/${bookingId}`]) {
-    await page.goto(p);
-    await page.locator("main h1").first().waitFor();
-    await page.waitForLoadState("networkidle");
-    expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe("dark");
-    for (const v of await axe(page)) found.push(`${p}: ${v}`);
+  // the person's saved look is Dark (set on the server: Firefox leaves a rewritten request open,
+  // so a page never went quiet)
+  const ops = await apiAs("ops");
+  await ops.patch("auth/me/profile", { data: { theme: "dark" } });
+  try {
+    await signIn(page, "ops");
+    const found: string[] = [];
+    for (const p of ["/today", "/bookings", "/dashboards", `/booking/${bookingId}`]) {
+      await page.goto(p);
+      await page.locator("main h1").first().waitFor();
+      await page.waitForLoadState("networkidle");
+      expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe("dark");
+      for (const v of await axe(page)) found.push(`${p}: ${v}`);
+    }
+    expect(found).toEqual([]);
+  } finally {
+    await ops.patch("auth/me/profile", { data: { theme: "light" } });
   }
-  expect(found).toEqual([]);
 });
 
 test("customer pages: no axe violations, fit 375 px", async ({ page }) => {
@@ -86,7 +89,9 @@ test("a dialog takes focus, keeps it, closes on Escape and gives it back (H-19)"
   await signIn(page, "admin");
   await page.goto("/users");
   const opener = page.getByRole("button", { name: "New user" });
-  await opener.click();
+  // opened from the keyboard: Safari never focuses a clicked button, so a click leaves nothing to give back
+  await opener.focus();
+  await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog", { name: "New user" });
   await expect(dialog).toBeVisible();
   for (let i = 0; i < 25; i++) await page.keyboard.press("Tab");
@@ -96,11 +101,11 @@ test("a dialog takes focus, keeps it, closes on Escape and gives it back (H-19)"
   await expect(opener).toBeFocused();
 });
 
-test("skip link and page titles (F-185, R-24)", async ({ page }) => {
+test("skip link and page titles (F-185, R-24)", async ({ page, browserName }) => {
   await signIn(page, "ops");
   await page.goto("/bookings");
   await expect(page).toHaveTitle("Bookings · Vayu");
-  await page.keyboard.press("Tab");
+  await page.keyboard.press(browserName === "webkit" ? "Alt+Tab" : "Tab"); // Safari: Option+Tab reaches links
   await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.locator("main#main")).toBeFocused();

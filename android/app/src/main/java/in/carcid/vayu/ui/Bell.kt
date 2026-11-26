@@ -107,15 +107,27 @@ class BellModel(private val api: Api, private val scope: CoroutineScope,
     fun clear() { server = BellState(); _state.value = BellState() }
 }
 
+/** "Today", "Yesterday", "24 Nov", or "Earlier" when the day is not known. */
+fun dayWords(day: LocalDate?, today: LocalDate): String = when (day) {
+    null -> "Earlier"; today -> "Today"; today.minusDays(1) -> "Yesterday"
+    else -> "${day.dayOfMonth} ${day.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }}"
+}
+
+/** The date heading of the bell and of Needs you. */
+@androidx.compose.runtime.Composable
+fun DayHeading(day: LocalDate?, today: LocalDate) = Text(dayWords(day, today).uppercase(),
+    fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.7.sp, color = Vayu.colors.muted,
+    modifier = Modifier.padding(top = 22.dp, bottom = 4.dp))
+
+/** A time of day as the bell shows it ("9:15 am"). */
+fun clockOf(t: java.time.ZonedDateTime): String = time12("%02d:%02d".format(t.hour, t.minute))
+
 /** "Today" / "Yesterday" / "2 Dec" groups, newest first; tapping a line opens its job. */
 fun LazyListScope.noteRows(notes: List<Note>, today: LocalDate, onOpen: (Note) -> Unit) {
     val zone = ZoneId.systemDefault()
     notes.groupBy { it.at?.atZoneSameInstant(zone)?.toLocalDate() }.forEach { (day, list) ->
         item(key = "d$day") {
-            Text(when (day) { null -> "Earlier"; today -> "Today"; today.minusDays(1) -> "Yesterday"
-                else -> "${day.dayOfMonth} ${day.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }}" }.uppercase(),
-                fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.7.sp, color = Vayu.colors.muted,
-                modifier = Modifier.padding(top = 22.dp, bottom = 4.dp))
+            DayHeading(day, today)
         }
         items(list, key = { it.id }) { n ->
             Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(role = Role.Button) { onOpen(n) }.padding(vertical = 10.dp),
@@ -128,7 +140,7 @@ fun LazyListScope.noteRows(notes: List<Note>, today: LocalDate, onOpen: (Note) -
                     if (n.body.isNotBlank()) Text(n.body, fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
                 n.at?.atZoneSameInstant(zone)?.let { t ->
-                    Text(time12("%02d:%02d".format(t.hour, t.minute)), fontSize = 12.sp, color = Vayu.colors.muted)
+                    Text(clockOf(t), fontSize = 12.sp, color = Vayu.colors.muted)
                 }
             }
             HorizontalDivider(color = Vayu.colors.line)

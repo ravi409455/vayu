@@ -162,10 +162,11 @@ class JobStore(private val file: File) {
 
     /** The forms and answers of an inspection, ready for the rules; null if a form is missing. */
     fun filled(bookingId: String, versions: Map<String, Int?>, answers: Map<String, Map<String, Any?>>,
-               today: String): Filled? {
+               today: String, kept: Map<String, Any?> = emptyMap()): Filled? {
         val trees = PARTS.associateWith { p -> versions[p]?.let { tree(it) ?: return null } }
         if (trees["inspection"] == null) return null
-        return Filled(trees, answers, bookingAnswers(bookingId), today)
+        // off the list (taken away, closed): the copy the draft kept
+        return Filled(trees, answers, bookingAnswers(bookingId).ifEmpty { kept }, today)
     }
 
     /** Every form this job needs is on the phone, so it can be done without signal. */

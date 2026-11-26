@@ -1,15 +1,42 @@
 name: ci
 # PRs run CI once (on the pull request); main runs on push. A newer push to the same PR cancels the
 # older run, so the runners only work on the latest commit.
+# Docs-only changes (Markdown anywhere, pictures and PDFs under docs/) skip the checks; any script or
+# data file, even under docs/, still runs CI. The skip is decided by the `changes` job, not by a path
+# filter under `on:`: a filtered-out workflow reports nothing, so `ci-result` could never be required.
 on:
-  push: {branches: [main]}
+  push:
+    branches: [main]
   pull_request:
 permissions: {contents: read}
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then base="origin/$BASE_REF"; else base="$BEFORE"; fi
+          # an unknown base (a new branch, a force push): run everything
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          files=$(git diff --name-only "$base"...HEAD)
+          echo "$files"
+          code=$(echo "$files" | grep -vE '\.md$|^docs/.*\.(jpg|png|pdf)$' | grep -v '^$' || true)
+          if [ -n "$code" ]; then echo "code=true" >> "$GITHUB_OUTPUT"
+          else echo "code=false" >> "$GITHUB_OUTPUT"; fi
   backend:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -61,6 +88,8 @@ jobs:
       - name: all tests, 4 at a time (pytest-xdist), 85% coverage; the 25 slowest are listed
         run: uv run pytest -n auto --cov --cov-fail-under=85 --durations=25
   backend-gates:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -88,12 +117,14 @@ jobs:
           uv run pytest -q -n 2 apps/media apps/reports/tests/test_media_links.py --cov=apps.media --cov-branch --cov-fail-under=100 || failed=1
           uv run pytest -q -n 2 apps/reports apps/bookings/tests/test_key_checks.py --cov=apps.reports --cov-branch --cov-fail-under=100 || failed=1
           uv run pytest -q -n 2 apps/forms/tests/test_promote.py apps/forms/tests/test_builder_support.py apps/forms/tests/test_system_forms.py apps/forms/tests/test_form_types.py apps/forms/tests/test_library_push.py --cov=apps.forms.promote --cov=apps.forms.legacy --cov-branch --cov-fail-under=100 || failed=1
-          uv run pytest -q -n 2 apps/forms/tests/test_library.py apps/forms/tests/test_library_push.py apps/forms/tests/test_access_model.py --cov=apps.forms.library --cov=apps.forms.library_push --cov=apps.forms.ratings --cov-branch --cov-fail-under=100 || failed=1
+          uv run pytest -q -n 2 apps/forms/tests/test_library.py apps/forms/tests/test_library_push.py apps/forms/tests/test_access_model.py --cov=apps.forms.library --cov=apps.forms.library_push --cov-branch --cov-fail-under=100 || failed=1
           uv run pytest -q -n 2 apps/scoring apps/bookings/tests/test_scoring.py apps/bookings/tests/test_key_checks.py --cov=apps.scoring --cov-branch --cov-fail-under=100 || failed=1
           uv run pytest -q -n 2 apps/integrations apps/forms/tests/test_library_push.py apps/bookings/tests/test_key_checks.py --cov=apps.integrations --cov-branch --cov-fail-under=100 || failed=1
           uv run pytest -q -n 2 apps/accounts --cov=apps.accounts.permissions --cov=apps.accounts.roles --cov=apps.accounts.avatars --cov=apps.core.phone --cov-branch --cov-fail-under=100 || failed=1
           exit $failed
   web:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     defaults: {run: {working-directory: web}}
     steps:
@@ -109,6 +140,8 @@ jobs:
       - run: npm test
       - run: npm run build
   e2e:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -138,6 +171,8 @@ jobs:
         if: failure()
         with: {name: playwright-report, path: "web/test-results", retention-days: 7}
   docker:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -146,6 +181,8 @@ jobs:
         run: test "$(docker run --rm vayu-api id -u)" != "0"
       - name: image uses its own venv (not one copied from the host)
         run: docker run --rm vayu-api sh -c 'test "$(which python)" = /app/.venv/bin/python'
+      - name: workers can start (Celery's Redis transport imports; it once needed an undeclared library)
+        run: docker run --rm vayu-api python -c "import kombu.transport.redis, celery.bin.celery"
       - name: image can render a PDF (system libraries present)
         run: docker run --rm vayu-api python -c "from weasyprint import HTML; assert HTML(string='<p>x</p>').write_pdf()[:4] == b'%PDF'"
       - name: image can sign push tokens (RS256 needs cryptography in the runtime install)
@@ -157,7 +194,21 @@ jobs:
           assert jwt.decode(jwt.encode({'a': 1}, k, algorithm='RS256'), k.public_key(), algorithms=['RS256']) == {'a': 1}
           print('RS256 signing works')
           "
+      - name: web image (the web app and the verify page behind Caddy) builds and its Caddyfile is valid
+        run: |
+          docker build -f infra/web.Dockerfile -t vayu-web .
+          docker run --rm -e APP_HOST=app.example.com vayu-web caddy validate --config /etc/caddy/Caddyfile
+          docker run --rm vayu-web test -f /srv/index.html
+      - name: the production compose file is valid
+        run: |
+          touch /tmp/env.prod /tmp/fb.json
+          ln -s /tmp/env.prod .env.prod
+          export VAYU_TAG=ci FIREBASE_JSON=/tmp/fb.json
+          docker compose -f infra/docker-compose.prod.yml --env-file /tmp/env.prod config -q
+          docker compose -f infra/docker-compose.prod.yml --env-file /tmp/env.prod --profile local-db config -q
   android:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     defaults: {run: {working-directory: android}}
     steps:
@@ -170,3 +221,20 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure()
         with: {name: android-test-reports, path: "android/app/build/reports", retention-days: 7}
+  # The one check for branch protection to require: it always runs and reports. Green when every
+  # job above passed, or when the change is docs only (the `changes` job skipped them on purpose).
+  ci-result:
+    if: always()
+    needs: [changes, backend, backend-gates, web, e2e, docker, android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: every job passed (or a docs-only change)
+        env:
+          CODE: ${{ needs.changes.outputs.code }}
+          CHANGES: ${{ needs.changes.result }}
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "code changed: $CODE; results: $RESULTS"
+          [ "$CHANGES" = success ] || exit 1
+          if [ "$CODE" != true ]; then exit 0; fi
+          for r in $RESULTS; do [ "$r" = success ] || exit 1; done

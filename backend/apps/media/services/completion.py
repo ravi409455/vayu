@@ -62,7 +62,9 @@ def missing_files(booking: Booking) -> list[dict[str, Any]]:
         if version is None:
             continue
         answers = insp.answers.get(part) or {}
-        required = evaluate_form(spec_from_version(version), insp.answers, today).required
+        # with the booking's answers: a rule may look at them (e.g. the inspection type)
+        required = evaluate_form(spec_from_version(version),
+                                 {"booking": booking.answers, **insp.answers}, today).required
         for f in Field.objects.filter(version=version, type__in=KINDS).order_by("order", "id"):
             value = answers.get(f.key)
             gone = [i for i in ([value] if isinstance(value, str) else value or [])
@@ -76,7 +78,7 @@ def missing_files(booking: Booking) -> list[dict[str, Any]]:
 def finish_without_missing(actor: Any, booking: Booking) -> Booking:
     """Ops finish a job whose expert's files will not come (a lost phone): only once every
     required field has its file. Missing optional files are left out of the report; if they
-    arrive later they are added and the report is made again (verify_asset)."""
+    arrive later they are added and the report is marked out of date (Ops press Regenerate)."""
     with transaction.atomic():
         b = Booking.objects.select_for_update().get(pk=booking.pk)
         if b.stage != "submitted":

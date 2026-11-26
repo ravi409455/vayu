@@ -100,7 +100,7 @@ export function VerifyPage() {
               {v.generated_at ? `, made ${fmtStamp(v.generated_at)}` : ""}
             </dd>
           </dl>
-          {!v.current && <p className="muted small">A newer version of this report is being prepared.</p>}
+          {!v.current && <p className="muted small">Some details were updated after this version was made.</p>}
         </div>
       )}
     </main>
@@ -268,7 +268,7 @@ export function ReportMediaPage() {
       )}
       {validToken(token) && (
         <p className="small">
-          <Link className="text-link" to={`/verify/${encodeURIComponent(token)}`}>
+          <Link className="text-link" to={`/report/verify/${encodeURIComponent(token)}`}>
             Check this report is genuine
           </Link>
         </p>

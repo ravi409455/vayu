@@ -155,6 +155,18 @@ def test_force_release_then_a_restart_fills_the_new_draft(started):
                                                      new: "submitted"}
 
 
+def test_after_force_release_and_a_restart_a_second_submit_is_refused(started):
+    """H-05 leftover: the released draft must not take a second submit once the restart counted."""
+    env, booking, s = started
+    env.ops.post(f"/api/v1/bookings/{booking['id']}/force-release")
+    assert start(env.expert, booking).status_code == 200
+    assert submit(env.expert, booking).status_code == 200
+    again = submit(env.expert, booking, form_version=s["inspection"]["form_version"],
+                   answers={"inspection": {**GOOD["inspection"], "chassis_no": "TAMPERED"}})
+    assert again.status_code == 409 and again.json()["code"] == "ALREADY_SUBMITTED"
+    assert Inspection.objects.get(pk=s["inspection"]["id"]).status == "released"
+
+
 def test_a_released_draft_no_longer_keeps_the_job_in_the_experts_lists(started):
     env, booking, _ = started
     env.ops.post(f"/api/v1/bookings/{booking['id']}/force-release")

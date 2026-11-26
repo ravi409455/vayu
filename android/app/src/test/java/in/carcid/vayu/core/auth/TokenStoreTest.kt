@@ -42,10 +42,12 @@ class TokenStoreTest {
 
     @Test fun aPhoneWhoseKeyFailsKeepsWorkingSignedIn() {
         prefs.edit().putString("access", "A1").putString("refresh", "R1").commit()
-        val s = PrefsTokenStore(app, Fake(broken = true))
+        var told = 0
+        val s = PrefsTokenStore(app, Fake(broken = true), onPlain = { told++ })
         assertEquals("R1", s.refresh())                                            // never signed out by the move
-        s.save("A3", "R3")
-        assertEquals("R3", PrefsTokenStore(app, Fake(broken = true)).refresh())
+        s.save("A3", "R3"); s.save("A4", "R4")
+        assertEquals("R4", PrefsTokenStore(app, Fake(broken = true)).refresh())
+        assertEquals(1, told)                                                      // the plain fallback is reported, once (N-9)
     }
 
     @Test fun clearForgetsBoth() {

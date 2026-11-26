@@ -335,3 +335,15 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         return false
     }
 }
+
+/**
+ * An INVALID_ANSWERS refusal per field: the server's sentence (the Admin's own check message
+ * included) where it sent one, else the code (shown through refusalText). Empty for other errors (M-1).
+ */
+fun ApiError.answerErrors(): Map<String, String> {
+    val said = extra["messages"] as? JsonObject
+    return (extra["errors"] as? JsonObject).orEmpty().mapValues { (k, v) ->
+        (said?.get(k) as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+            ?: (v as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull.orEmpty()
+    }
+}

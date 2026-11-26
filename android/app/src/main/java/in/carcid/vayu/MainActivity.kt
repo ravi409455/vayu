@@ -104,7 +104,7 @@ fun AppRoot(vm: AppViewModel) {
               AskForNotices()
               if (s.me.role == "expert") {
                 val jobs by vm.jobs.state.collectAsState()
-                ExpertHome(s.me, jobs, vm.jobs.today(), vm::openProfile, vm.jobs::sync, expertExtras(vm, s.me))
+                ExpertHome(s.me, jobs, vm.jobs.today(), vm::openProfile, { vm.jobs.sync(); vm.graph.kick() }, expertExtras(vm, s.me))
             } else {
                 val bell by vm.bell.state.collectAsState()
                 `in`.carcid.vayu.ui.ops.OpsHome(s.me, remember(s.me.id) { vm.graph.ops(s.me.id) }, vm.jobs::today, vm::openProfile,
@@ -154,7 +154,10 @@ private fun expertExtras(vm: AppViewModel, me: `in`.carcid.vayu.core.api.Me): Ex
             sentBytes = drafts.sentBytes(),
             inspection = { job ->
                 val verified = vm.jobs.verified()
-                InspectionModel.begin(drafts, job, verified)
+                val d = InspectionModel.begin(drafts, job, verified, store.bookingAnswers(job.id))
+                // started on another phone: fetch the files the server already holds now, so they show
+                // before the expert retakes them (F-10: "0 of 1", then "2 of 1" after a new photo)
+                if (d.reconcile) vm.graph.kick()
                 InspectionEnv(InspectionModel(drafts, store, job.id, vm.jobs::now, vm.graph.kick, vm.jobs::verified), drafts, me.name.ifBlank { me.username },
                     verified, vm.jobs::now, store::list, store.types(),
                     asset = { id -> loadAsset(ctx.cacheDir, id, vm.graph.api::formAsset) },

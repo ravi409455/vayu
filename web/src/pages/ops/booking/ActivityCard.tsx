@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { User } from "../../../api/types";
 import { fmtSlot, fmtStamp } from "../../../lib/format";
+import { InfoTip } from "../../../ui/InfoTip";
 import { mediaUrl } from "../../../ui/MediaThumb";
 import type { Activity } from "./parts";
 
@@ -63,6 +64,43 @@ export function activityText(
   return `${by} changed ${r.keys.map(label).join(", ") || "the booking"}`;
 }
 
+// already said by the line itself, or bookkeeping rather than an answer
+const NOT_DETAIL = new Set(["stage", "conflict", "alert", "revision", "how", "missing", "media"]);
+const NO_DETAIL_KINDS = new Set([
+  "key_checks_changed",
+  "report_downloaded",
+  "report_shared",
+  "alert_cleared",
+  "late_reviewed",
+  "quick_reviewed",
+]);
+
+/** "Customer phone: 98… → 97…", one line per changed value (only values this person may see). */
+export function activityDetails(
+  r: Activity,
+  expertName: (id: unknown) => string,
+  label: (k: string) => string,
+  typeLabel: (k: unknown) => string,
+): string[] {
+  if (NO_DETAIL_KINDS.has(r.kind)) return [];
+  const show = (k: string, v: unknown): string => {
+    if (v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) return "empty";
+    if (k === "assigned_expert") return expertName(v);
+    if (k === "inspection_type") return typeLabel(v);
+    if (typeof v === "boolean") return v ? "Yes" : "No";
+    if (Array.isArray(v)) return v.map((x) => show("", x)).join(", ");
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  };
+  return (
+    Object.entries(r.changes ?? {})
+      .filter(([k, v]) => !NOT_DETAIL.has(k) && Array.isArray(v) && v.length === 2)
+      // "Assigned to Ravi" already says it all; a reassignment still shows who had it before
+      .filter(([k, [a]]) => !(k === "assigned_expert" && (a === null || a === undefined)))
+      .map(([k, [a, b]]) => `${label(k)}: ${show(k, a)} → ${show(k, b)}`)
+  );
+}
+
 export function ActivityCard({
   rows,
   experts,
@@ -87,7 +125,7 @@ export function ActivityCard({
       <ol className="timeline">
         {shown.map((r, i) => (
           <li key={i} className={r.kind === "inspection_edited" || r.kind === "edited" ? "edit" : r.changes.stage ? "stage" : ""}>
-            <div>{activityText(r, name, labels, typeLabel)}</div>
+            <ActivityLine text={activityText(r, name, labels, typeLabel)} details={activityDetails(r, name, labels, typeLabel)} />
             {typeof r.changes.media?.[0] === "string" && (
               <button className="link small" onClick={() => openOld(String(r.changes.media![0]))}>
                 Open the old file
@@ -103,5 +141,27 @@ export function ActivityCard({
         </button>
       )}
     </section>
+  );
+}
+
+/** The line; when it changed values, hovering it (or the "i": focus or tap) shows old → new. */
+function ActivityLine({ text, details }: { text: string; details: string[] }) {
+  if (details.length === 0) return <div>{text}</div>;
+  return (
+    <div>
+      <InfoTip label="What changed" before={<span className="activity-line">{text}</span>}>
+        <span className="activity-details">
+          {details.map((d, i) => {
+            const at = d.indexOf(": ");
+            return (
+              <span key={i}>
+                <strong>{d.slice(0, at)}</strong>
+                {d.slice(at)}
+              </span>
+            );
+          })}
+        </span>
+      </InfoTip>
+    </div>
   );
 }

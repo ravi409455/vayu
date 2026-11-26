@@ -13,7 +13,10 @@ from ..models import KINDS, MediaAsset
 
 
 def submitted_answer(booking: Booking, field: Field, lock: Any=False) -> Any:
-    """(inspection, part, file ids) of a field in the submitted inspection."""
+    """(inspection, part, file ids) of a field in the submitted inspection. Not during a
+    conflict: the late inspection does not count, the customer's can't change until Ops choose."""
+    if booking.conflict:
+        raise fail("CONFLICT_OPEN", "Choose which inspection counts first.", 409)
     qs = booking.inspections.filter(status="submitted").order_by("-submitted_at")
     insp = (qs.select_for_update() if lock else qs).first()
     part = next((p for p, v in (insp.pinned() if insp else {}).items()

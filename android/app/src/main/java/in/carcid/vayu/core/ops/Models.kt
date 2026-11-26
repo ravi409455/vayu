@@ -41,7 +41,7 @@ data class Report(
 
 /** A note the server keeps on a booking (TYPE_CHANGE_REJECTED, LATE_WORK, …). */
 @Serializable
-data class Alert(val code: String = "", val detail: String = "")
+data class Alert(val code: String = "", val detail: String = "", val at: String = "")
 
 /** Started late / too quick (Admin and Ops only); names and times of who marked them reviewed. */
 @Serializable
@@ -155,6 +155,8 @@ data class StuckUpload(
     @SerialName("booking_id") val bookingId: String = "",
     @SerialName("field_key") val fieldKey: String = "",
     val expert: String = "",
+    /** When the upload began (Needs you shows the time). */
+    @SerialName("created_at") val createdAt: String = "",
 ) {
     companion object {
         fun list(rows: List<JsonObject>): List<StuckUpload> = rows.mapNotNull { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }
@@ -169,6 +171,8 @@ data class ReportProblem(
     val error: String = "",
     val problem: String = "",
     @SerialName("out_of_date_since") val outOfDateSince: String? = null,
+    /** When it became a problem: failed, render started, went out of date, or sent (missing). */
+    val at: String? = null,
 ) {
     companion object {
         fun list(rows: List<JsonObject>): List<ReportProblem> = rows.mapNotNull { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }

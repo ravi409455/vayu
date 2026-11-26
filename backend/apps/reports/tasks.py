@@ -24,6 +24,8 @@ MAX_RETRIES = 2
 SOFT_LIMIT, HARD_LIMIT = 300, 330        # seconds: 150 photos must fit with room to spare
 STUCK_AFTER = timedelta(seconds=HARD_LIMIT + 60)   # a render older than this was killed
 RETRY_FAILED = timedelta(minutes=30)               # a failed render is tried again after this
+MISSING_AFTER = timedelta(minutes=10)    # a completed booking with no report by now lost its render
+MISSING_FOR = timedelta(days=2)          # the sweep stops trying; Ops still see it in Problems
 logger = logging.getLogger(__name__)
 STREAM = re.compile(rb"stream\r?\n(.*?)\r?\nendstream", re.S)
 PAGE_COUNT = re.compile(rb"/Type\s*/Pages\b.*?/Count\s+(\d+)", re.S)
@@ -101,15 +103,30 @@ def _finds(booking: Booking):
     return insp, (published_template(booking, insp) if insp else None)
 
 
+def missing_reports(since=None):
+    """Completed, conflict-free bookings that have no report row although the inspection was sent
+    a while ago: the first render was lost (Redis down) or skipped (no PDF layout) (H-5)."""
+    now = timezone.now()
+    done = {"inspections__status": "submitted",
+            "inspections__submitted_at__lt": now - MISSING_AFTER}
+    if since is not None:
+        done["inspections__submitted_at__gt"] = since
+    return Booking.objects.filter(stage="completed", conflict="", report__isnull=True,
+                                  **done).distinct()
+
+
 @shared_task(soft_time_limit=SOFT_LIMIT, time_limit=HARD_LIMIT)
-def render_report(booking_id: str) -> str:
+def render_report(booking_id: str, first_only: bool = False) -> str:
     """Make the PDF of a completed booking: once by itself when it completes, then each time Ops
-    press Regenerate. Latest revision only is kept."""
+    press Regenerate. Latest revision only is kept. `first_only`: the sweep's catch-up of a lost
+    first render, which never makes a second revision if the first one turned up meanwhile."""
     booking = Booking.objects.get(pk=booking_id)
     insp, tv = _finds(booking)
     if insp is None or tv is None:
         return "skipped"                          # nothing to render yet
-    report, _ = Report.objects.get_or_create(booking=booking)
+    report, created = Report.objects.get_or_create(booking=booking)
+    if first_only and not created:
+        return "skipped"
     now = timezone.now()
     # one render at a time per booking: a second request while one runs is dropped. Claimed
     # before the data is read (F-118): a change saved after this point marks the new PDF out
@@ -174,11 +191,15 @@ def render_report(booking_id: str) -> str:
 @shared_task
 def sweep_reports() -> int:
     """Every few minutes: try again the renders that failed a while ago or whose worker was
-    killed. Never a report that is only out of date: Ops regenerate those."""
+    killed, and make a first report that never came. Never a report that is only out of date:
+    Ops regenerate those."""
     now = timezone.now()
     due = Report.objects.filter(booking__stage="completed").filter(
         Q(render_started_at__lt=now - STUCK_AFTER) | Q(retry_at__lte=now))
     ids = [str(b) for b in due.values_list("booking_id", flat=True)]
     for b in ids:
         render_report.delay(b)
-    return len(ids)
+    lost = [str(b) for b in missing_reports(since=now - MISSING_FOR).values_list("id", flat=True)]
+    for b in lost:
+        render_report.delay(b, first_only=True)
+    return len(ids) + len(lost)

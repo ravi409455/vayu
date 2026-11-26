@@ -75,7 +75,7 @@ up() {
     export FIREBASE_CREDENTIALS_FILE
   fi
   start_bg api uv run python manage.py runserver 8000 --noreload
-  start_bg worker uv run celery -A vayu worker -Q default,pdf -c 2 --loglevel=info
+  start_bg worker uv run celery -A vayu worker -Q default,pdf,uploads,notify,zips,purge -c 2 --loglevel=info
   start_bg beat uv run celery -A vayu beat --schedule "$RUN/celerybeat-schedule" --loglevel=info
   cd "$ROOT/web"
   start_bg web npm run dev -- --host localhost

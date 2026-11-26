@@ -120,7 +120,7 @@ export type FormSummary = {
   published_version: { id: number; number: number; use_start?: boolean; use_end?: boolean } | null;
 };
 export type MasterList = { id: number; key: string; name: string; items?: MasterListItem[] };
-export type MasterListItem = { id: number; list: number; key: string; label: string; order: number; archived: boolean };
+export type MasterListItem = { id: number; key: string; label: string; order: number; archived: boolean };
 export type Booking = {
   id: string;
   booking_id: string;
@@ -210,12 +210,15 @@ export type Integration = {
   is_active: boolean;
   broken_refs: string[];
 };
+/** Booking actions a key may take besides reading and editing (each off until the Admin turns it on). */
+export type KeyAction = "assign" | "cancel" | "reschedule" | "change_type";
 export type ApiKeyRow = {
   id: string;
   name: string;
   prefix: string;
   scope: { forms: Record<string, string[]> };
   allow_delete: boolean;
+  allowed_actions: KeyAction[];
   revoked_at: string | null;
   last_used_at: string | null;
   key?: string;

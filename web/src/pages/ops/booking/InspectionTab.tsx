@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, ApiError } from "../../../api/client";
+import { answerErrors, api, ApiError } from "../../../api/client";
 import type { Booking, FormPage, FormSection, Inspection } from "../../../api/types";
 import { useAuth } from "../../../auth";
 import { missingFields } from "../../../lib/formSpec";
@@ -9,7 +9,7 @@ import { isEmpty } from "../../../rules/rules";
 import { AnswerSheet, defectOf, readableFields, type SheetFilter } from "../../../ui/AnswerSheet";
 import { FormRenderer } from "../../../ui/FormRenderer";
 import { type Stale, StaleDialog } from "../../../ui/StaleDialog";
-import { Empty, useToast } from "../../../ui/kit";
+import { Empty, Modal, useToast } from "../../../ui/kit";
 import { OpsMediaEditor } from "./OpsMediaEditor";
 import { SectionEditor } from "./SectionEditor";
 import { type Activity, NO_ANSWERS, onlySection, type Part, PART_ORDER, type Parts, toMediaField, type Trees } from "./parts";
@@ -34,6 +34,7 @@ export function InspectionTab({
   const [stale, setStale] = useState<Stale | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<SheetFilter>("all");
+  const [showChecks, setShowChecks] = useState(false);
   const [editing, setEditing] = useState<{ part: Part; page: FormPage; section: FormSection } | null>(null);
   const [saving, setSaving] = useState(false);
   const rv = insp?.row_version;
@@ -97,7 +98,7 @@ export function InspectionTab({
       say("Saved. Ratings and Key Checks were recalculated.");
       onSaved();
     } catch (e) {
-      if (e instanceof ApiError && e.body.errors) setErrors(e.body.errors as Record<string, string>);
+      if (answerErrors(e)) setErrors(answerErrors(e)!);
       else if (e instanceof ApiError && e.code === "FIELD_ACCESS")
         setErrors(Object.fromEntries(((e.body.keys as string[]) ?? []).map((k) => [k, "You cannot change this now."])));
       else fail(e);
@@ -121,6 +122,9 @@ export function InspectionTab({
     )
     .filter((p) => p.n > 0);
   const major = defects.filter((d) => d === "Major").length;
+  const keyChecks = trees.inspection?.key_checks ?? [];
+  const checkValue = (k: string) => insp.scores?.key_checks?.[k]?.value || "";
+  const filledChecks = keyChecks.filter((k) => checkValue(k.key));
   return (
     <>
       <section className="card summary-strip" aria-label="Inspection summary">
@@ -140,16 +144,15 @@ export function InspectionTab({
             {major} major · {defects.length - major} other
           </div>
         </div>
-        {(trees.inspection?.key_checks ?? []).length > 0 && (
+        {keyChecks.length > 0 && (
           <div>
             <div className="muted small">Key Checks</div>
-            <div className="chips">
-              {trees.inspection!.key_checks!.map((k) => (
-                <span key={k.key} className="chip">
-                  {k.label}: {insp.scores?.key_checks?.[k.key]?.value || "—"}
-                </span>
-              ))}
+            <div className="big">
+              {filledChecks.length} <span className="muted small">of {keyChecks.length} filled</span>
             </div>
+            <button className="link small" onClick={() => setShowChecks(true)}>
+              See all {keyChecks.length}
+            </button>
           </div>
         )}
         <div>
@@ -157,6 +160,34 @@ export function InspectionTab({
           <div className={`big${missing ? " warn-text" : ""}`}>{missing}</div>
         </div>
       </section>
+      {showChecks && (
+        <Modal title="Key Checks" onClose={() => setShowChecks(false)}>
+          <p className="muted small">
+            {filledChecks.length} of {keyChecks.length} filled. Change them on the Review tab.
+          </p>
+          {(
+            [
+              ["Filled", filledChecks],
+              ["Not filled", keyChecks.filter((k) => !checkValue(k.key))],
+            ] as const
+          ).map(
+            ([title, list]) =>
+              list.length > 0 && (
+                <section key={title} aria-label={title}>
+                  <h3 className="muted small">{title}</h3>
+                  <dl className="kc-list">
+                    {list.map((k) => (
+                      <div key={k.key}>
+                        <dt>{k.label}</dt>
+                        <dd className={checkValue(k.key) ? "" : "muted"}>{checkValue(k.key) || "—"}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+              ),
+          )}
+        </Modal>
+      )}
       <div className="bar">
         <div className="seg" role="group" aria-label="Show">
           {(

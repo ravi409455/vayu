@@ -67,10 +67,18 @@ data class Draft(
     val discards: List<String> = emptyList(),
     /** Fetch the files the server already holds for this job (it was started before, elsewhere). */
     val reconcile: Boolean = false,
+    /** The booking's own answers as they were on the lead list: visibility rules on booking.* still
+     *  work once the lead has left the list (N-6). */
+    val bookingAnswers: Map<String, Any?> = emptyMap(),
+    /** When the server said it already had this work (the 7-day keep counts from then, N-10). */
+    val problemAt: String? = null,
 ) {
     val locked: Boolean get() = submittedAt != null
-    /** Something still has to reach the server. */
-    val unsent: Boolean get() = !submitSent || files.any { !it.verified } || discards.isNotEmpty() || reconcile
+    /** Something still has to reach the server (a file it refused for good never will). */
+    val unsent: Boolean get() = !submitSent || files.any { !it.verified && !it.refused } || discards.isNotEmpty() || reconcile
+    /** All of it is on the server; only the server's check of some files is still to come (F-5). */
+    val onlyChecking: Boolean get() = submitSent && discards.isEmpty() && !reconcile &&
+        files.all { it.verified || it.refused || (it.sent && it.error == null) }
 
     fun answer(part: String, key: String): Any? = answers[part]?.get(key)
     fun withAnswer(part: String, key: String, v: Any?): Draft =
@@ -82,7 +90,8 @@ data class Draft(
         "start_uuid" to startUuid, "started_at" to startedAt, "start_sent" to startSent,
         "submit_uuid" to submitUuid, "submitted_at" to submittedAt, "submit_sent" to submitSent,
         "problem" to problem, "problem_code" to problemCode, "unverified_time" to unverifiedTime,
-        "field_errors" to fieldErrors, "discards" to discards, "reconcile" to reconcile,
+        "field_errors" to fieldErrors, "discards" to discards, "reconcile" to reconcile, "booking_answers" to bookingAnswers,
+        "problem_at" to problemAt,
         "files" to files.map { f -> mapOf("id" to f.id, "part" to f.part, "field" to f.field, "kind" to f.kind,
             "path" to f.path, "content_type" to f.contentType, "source" to f.source, "size" to f.size,
             "sha256" to f.sha256, "label" to f.label, "server_id" to f.serverId, "sent" to f.sent,
@@ -107,6 +116,8 @@ data class Draft(
                 fieldErrors = (o["field_errors"] as? JsonObject).orEmpty().mapValues { (it.value as? JsonPrimitive)?.contentOrNull ?: "" },
                 discards = (o["discards"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
                 reconcile = b("reconcile"),
+                bookingAnswers = (JsonLogic.fromJson(o["booking_answers"]) as? Map<String, Any?>).orEmpty(),
+                problemAt = s("problem_at"),
                 files = (o["files"] as? JsonArray).orEmpty().map { it.jsonObject }.map { f ->
                     fun fs(k: String) = (f[k] as? JsonPrimitive)?.contentOrNull
                     LocalFile(fs("id")!!, fs("part")!!, fs("field")!!, fs("kind")!!, fs("path")!!, fs("content_type")!!,
@@ -161,7 +172,21 @@ class DraftStore(private val dir: File,
     /** Draft files on the phone that can't be read (booking ids): never counted as sent, never deleted unseen. */
     @Synchronized
     fun unreadable(): List<String> = dir.listFiles { f -> f.name.endsWith(".json") }.orEmpty()
-        .map { it.name.removeSuffix(".json") }.filter { it !in cache && get(it) == null }
+        .map { it.name.removeSuffix(".json") }.filter { it !in cache && get(it) == null } +
+        setAside().map { it.name.removeSuffix(DAMAGED) }
+
+    private fun setAside(): List<File> = dir.listFiles { f -> f.name.endsWith(DAMAGED) }.orEmpty().toList()
+
+    /**
+     * Before a new draft is started for a lead whose draft file can't be read: move the damaged one
+     * aside (kept for Ops, never overwritten, N-4). It still counts as unreadable, so sign-out stops
+     * and nothing is swept.
+     */
+    @Synchronized
+    fun setAsideDamaged(bookingId: String) {
+        val f = fileOf(bookingId)
+        if (f.exists() && get(bookingId) == null) f.renameTo(File(dir, bookingId + DAMAGED))
+    }
 
     /** Kept in memory and queued for writing; the newest save of a draft is always the one written. */
     fun save(d: Draft): Draft { stage(d); flushLater(d.bookingId); return d }
@@ -221,10 +246,13 @@ class DraftStore(private val dir: File,
     @Synchronized
     fun sweep(now: Long = System.currentTimeMillis()) {
         val drafts = dir.listFiles { f -> f.name.endsWith(".json") }.orEmpty().map { get(it.name.removeSuffix(".json")) }
-        if (drafts.any { it == null }) return
+        if (drafts.any { it == null } || setAside().isNotEmpty()) return
         val used = all().flatMap { d -> d.files.map { File(it.path).name } }.toSet()
         val old = now - 60 * 60 * 1000
         filesDir.listFiles().orEmpty().filter { it.name !in used && it.lastModified() < old }.forEach { it.delete() }
         dir.listFiles { f -> f.name.endsWith(".tmp") && f.lastModified() < old }.orEmpty().forEach { it.delete() }
     }
 }
+
+/** The name ending of a draft file moved aside because it couldn't be read. */
+private const val DAMAGED = ".damaged"

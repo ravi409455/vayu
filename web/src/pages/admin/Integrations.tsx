@@ -131,9 +131,10 @@ function DeliveryLog({ integration, onClose }: { integration: Integration; onClo
   const { say, fail } = useToast();
   const refresh = useRefresh();
   const [status, setStatus] = useState("");
+  const [page, setPage] = useState(1);
   const q = useQuery({
-    queryKey: keys.deliveries(integration.id, status),
-    queryFn: ({ signal }) => api<Page<Delivery>>(`integrations/${integration.id}/deliveries`, { query: { status }, signal }),
+    queryKey: keys.deliveries(integration.id, status, page),
+    queryFn: ({ signal }) => api<Page<Delivery>>(`integrations/${integration.id}/deliveries`, { query: { status, page }, signal }),
   });
   const resend = useMutation({
     mutationFn: (d: Delivery) => api(`deliveries/${d.id}/resend`, { body: {} }),
@@ -155,7 +156,14 @@ function DeliveryLog({ integration, onClose }: { integration: Integration; onClo
               ["failed", "Failed"],
             ] as const
           ).map(([k, l]) => (
-            <button key={k} aria-pressed={status === k} onClick={() => setStatus(k)}>
+            <button
+              key={k}
+              aria-pressed={status === k}
+              onClick={() => {
+                setStatus(k);
+                setPage(1);
+              }}
+            >
               {l}
             </button>
           ))}
@@ -163,6 +171,17 @@ function DeliveryLog({ integration, onClose }: { integration: Integration; onClo
         <span className="grow muted small" style={{ textAlign: "right" }}>
           {q.data ? `${q.data.count} message${q.data.count === 1 ? "" : "s"}` : ""}
         </span>
+        {/* 50 a page, newest first: older ones are a click away, never silently missing */}
+        {(page > 1 || q.data?.next) && (
+          <span className="seg sm" role="group" aria-label="Pages">
+            <button disabled={page === 1} onClick={() => setPage(page - 1)}>
+              Newer
+            </button>
+            <button disabled={!q.data?.next} onClick={() => setPage(page + 1)}>
+              Older
+            </button>
+          </span>
+        )}
       </div>
       {q.data && q.data.results.length > 0 && (
         <div className="table-card">

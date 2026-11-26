@@ -34,6 +34,23 @@ def _failures_key(username: str, ip: str, user: Any) -> str:
     return f"login-failures:{username.strip().lower()}:{ip}:{stamp}"
 
 
+ACCOUNT_ALERT_AFTER = 50          # wrong tries on one account from any addresses, in an hour
+
+
+def _count_account_failures(user: Any) -> None:
+    """Guessing spread over many addresses never locks (nobody can lock a colleague out), but it
+    raises one alert (error log, so Sentry sees it) when one account collects many wrong tries."""
+    from django.core.cache import cache
+
+    if user is None:
+        return
+    key = f"login-failures-account:{user.pk}"
+    cache.add(key, 0, 3600)
+    if cache.incr(key) == ACCOUNT_ALERT_AFTER:
+        log.event("auth.many_failures", level=logging.ERROR, user_id=user.pk,
+                  tries=ACCOUNT_ALERT_AFTER)
+
+
 def authenticate(username: str, password: str, ip: str = "") -> User:
     """Check credentials (F-055). Every failure gets the same answer, so it never says whether a
     username exists, is disabled or is locked. Five wrong tries lock that username from that
@@ -60,6 +77,7 @@ def authenticate(username: str, password: str, ip: str = "") -> User:
         log.event("auth.sign_in_failed", level=logging.WARNING, user_id=who, ip=ip, reason=reason)
         if failures + 1 >= settings.LOCKOUT_MAX_FAILURES:
             log.event("auth.locked_out", level=logging.WARNING, user_id=who, ip=ip)
+        _count_account_failures(user)
         raise fail
     cache.delete(key)
     log.event("auth.sign_in", user=user, ip=ip)

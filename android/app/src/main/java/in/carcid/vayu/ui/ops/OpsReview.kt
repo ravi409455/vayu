@@ -127,8 +127,10 @@ fun ReviewScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
         }
         if (pending.isNotEmpty()) {
             HorizontalDivider(color = Vayu.colors.line)
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("${pending.size} change${if (pending.size == 1) "" else "s"} not saved", color = Vayu.colors.warn, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            // the note sits on its own line: Save fills the row's width, so beside it the note had none
+            Text("${pending.size} change${if (pending.size == 1) "" else "s"} not saved", color = Vayu.colors.warn, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                maxLines = 1, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp))
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 SoftButton("Undo", { pending = emptyMap() })
                 PrimaryButton(if (saving) "Saving…" else "Save", {
                     scope.launch {
@@ -144,7 +146,7 @@ fun ReviewScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
                             env.say(if (e.code == "STALE_INSPECTION") "Someone else changed it meanwhile; loaded their version." else e.message); env.refresh(); saving = false
                         }) { saving = false }
                     }
-                }, enabled = !saving)
+                }, Modifier.weight(1f), enabled = !saving)
             }
         }
     }

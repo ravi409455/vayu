@@ -1,5 +1,7 @@
 package `in`.carcid.vayu.ui.ops
 
+import androidx.compose.foundation.text.TextAutoSize
+import `in`.carcid.vayu.core.ops.allPages
 import `in`.carcid.vayu.core.ops.ListItem
 import `in`.carcid.vayu.core.ops.MediaItem
 import `in`.carcid.vayu.core.ops.Inspection
@@ -348,7 +350,8 @@ private fun RowScope.Tile(icon: androidx.compose.ui.graphics.vector.ImageVector,
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
         Spacer(Modifier.height(4.dp))
-        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = tint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, fontWeight = FontWeight.SemiBold, color = tint, maxLines = 1, softWrap = false,
+            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 13.sp), modifier = Modifier.padding(horizontal = 4.dp))
     }
 }
 
@@ -363,7 +366,7 @@ fun Confirm(title: String, text: String, yes: String, onClose: () -> Unit, onYes
 @Composable
 fun AssignSheet(env: OpsEnv, b: Bk, onClose: () -> Unit, onAssign: (Int) -> Unit) {
     val day = b.date.ifEmpty { env.today().toString() }
-    val jobs = rememberLoad(env, "bookings?date_from=$day&date_to=$day&order=schedule").value?.data?.rows().orEmpty().map(::Bk).filter { it.stage != "cancelled" }
+    val jobs = rememberLoad(env, allPages("bookings?date_from=$day&date_to=$day&order=schedule")).value?.data?.rows().orEmpty().map(::Bk).filter { it.stage != "cancelled" }
     var find by remember { mutableStateOf("") }
     var pick by remember { mutableStateOf(b.expert) }
     val at = runCatching { LocalTime.parse(b.time) }.getOrNull()
