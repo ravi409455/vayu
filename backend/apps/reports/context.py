@@ -1,5 +1,6 @@
 """Everything a report shows, worked out from the stored data: which pages and parts appear, each
 row's label, answer and colour, and which photos go in each grid. Missing values never raise."""
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
@@ -19,6 +20,22 @@ MEDIA = NOT_VALUES                          # the field-type registry
 # the option keys that mean "Not able to check": the demo option sets' and the real (Clappia)
 # forms', where the answer "Not Able to Check" becomes not_able_to_check (C-02)
 NOT_CHECKED = {"not_checked", "not_able_to_check"}
+
+
+NOT_POINTS = ("rating", "derived", "image", "form_choice")    # never something the expert records
+
+
+def _ops_only(f: Field) -> bool:
+    """A question of a section (or page) the form hides from experts while they inspect."""
+    for layer in (f.access, f.section.access, f.section.page.access):
+        level = ((layer or {}).get("expert") or {}).get("in_progress")
+        if level is not None:
+            return level == "hidden"
+    return False
+
+
+def _as_list(value) -> list:
+    return value if isinstance(value, list) else [value]
 NOT_ROWS = MEDIA | {"form_choice"}          # never a row of a table
 
 
@@ -112,7 +129,7 @@ class Source:
         versions = (("booking", booking_form_version()), *self.insp.pinned().items())
         for kind, version in versions:
             self.fields[kind] = ({f.key: f for f in Field.objects.filter(version=version)
-                                  .select_related("section")} if version else {})
+                                  .select_related("section__page")} if version else {})
         version = self.insp.form_version
         result = evaluate_form(spec_from_version(version), self.answers,
                                timezone.localdate().isoformat())
@@ -183,9 +200,18 @@ class Source:
                   if f.type in ("single_choice", "multi_choice")]
         answered = self.answers["inspection"]
         checks = [(f, c) for f, c in checks if c.text and c.tone]      # answered checks only
-        unsure = [f.label for f, _ in checks if answered.get(f.key) in NOT_CHECKED]
+        unsure = [f.label for f, _ in checks  # a multi-choice answer is a list
+                  if NOT_CHECKED & set(_as_list(answered.get(f.key)))]
         out["sys"].update(checks=str(len(checks)), not_checked=str(len(unsure)),
                           not_checked_list=", ".join(unsure))
+        # the inspection's predefined checkpoints: every check, reading, detail, photo and video
+        # asked on every car of this type. The same number for each such inspection: a photo or
+        # remark asked only when a check finds a problem is not one, nor is what only Ops fill
+        blank = evaluate_form(spec_from_version(self.version), {"booking": b.answers},
+                              timezone.localdate().isoformat())
+        points = [f for f in self.form_fields() if f.type not in NOT_POINTS
+                  and blank.visible.get(f.key) and not _ops_only(f)]
+        out["sys"]["points"] = str(len(points))
         from . import media_links
 
         out["sys"].update(media_links.values(self))      # photos_url, photo_count, videos_...
@@ -299,6 +325,11 @@ def table_rows(src: Source, part: dict, data: dict) -> list[dict]:
     return out
 
 
+def _shown(label: str) -> str:
+    """A photo field's name as a caption: under a picture, "Image" / "Photo(s)" says nothing."""
+    return re.sub(r"\s+(images?|photos?)$", "", label, flags=re.I) or label
+
+
 def photo_items(src: Source, part: dict) -> list[dict]:
     s = part["source"]
     if s["kind"] == "fields":
@@ -326,8 +357,8 @@ def photo_items(src: Source, part: dict) -> list[dict]:
         kind = part.get("caption", "label")
         answer = check if kind == "check" and check_field and check and check.text else None
         caption = {
-            "label": f.label,
-            "check": check_field.label if answer and check_field else f.label,
+            "label": _shown(f.label),
+            "check": check_field.label if answer and check_field else _shown(f.label),
             "custom": placeholders.render(part.get("caption_text", ""), values, html=False),
             "none": ""}[kind]
         out += [{"media": mid, "caption": caption, "answer": answer.text if answer else "",

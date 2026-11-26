@@ -62,7 +62,9 @@ def missing_files(booking: Booking) -> list[dict[str, Any]]:
         if version is None:
             continue
         answers = insp.answers.get(part) or {}
-        required = evaluate_form(spec_from_version(version), insp.answers, today).required
+        # with the booking's answers: a rule may look at them (e.g. the inspection type)
+        required = evaluate_form(spec_from_version(version),
+                                 {"booking": booking.answers, **insp.answers}, today).required
         for f in Field.objects.filter(version=version, type__in=KINDS).order_by("order", "id"):
             value = answers.get(f.key)
             gone = [i for i in ([value] if isinstance(value, str) else value or [])

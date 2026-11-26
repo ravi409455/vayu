@@ -459,7 +459,7 @@ table.t.emphasis thead th {{ border-bottom: .2mm solid var(--line); color: var(-
 .text h2 {{ font-family: var(--head); font-size: 1.55em; font-weight: 700; margin: 0 0 1.5mm;
   break-after: avoid }}
 .text h2::before {{ content: ""; display: inline-block; width: 2.6mm; height: 2.6mm; margin-right: 1.6mm;
-  border: .7mm solid var(--brand); border-radius: 50%; vertical-align: .1mm; box-sizing: border-box }}
+  border: .7mm solid var(--brand); border-radius: 50%; vertical-align: .13em; box-sizing: border-box }}
 .text h2 .small {{ font-size: .55em; font-weight: 500; color: var(--muted); margin-left: 2mm }}
 .text h3 {{ font-family: var(--head); font-size: 1.2em; margin: 1.5mm 0 1mm }}
 .text li {{ break-inside: avoid }}

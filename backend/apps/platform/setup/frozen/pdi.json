@@ -8,6 +8,285 @@
  "spec": {
   "pages": [
    {
+    "title": "Additional Checks",
+    "sections": [
+     {
+      "title": "Expert Comments",
+      "library": "expert_comments",
+      "fields": [
+       {
+        "key": "expert_comments",
+        "label": "Expert Comments",
+        "type": "long_text",
+        "config": {},
+        "required": false,
+        "helper_text": ""
+       }
+      ]
+     },
+     {
+      "title": "Additional Details",
+      "library": "additional_details",
+      "fields": [
+       {
+        "key": "manufacturing_date",
+        "label": "Manufacturing Date",
+        "type": "short_text",
+        "config": {},
+        "required": false,
+        "helper_text": "",
+        "show_if": {
+         "!=": [
+          {
+           "var": "booking.inspection_type"
+          },
+          "used_car"
+         ]
+        }
+       },
+       {
+        "key": "price_estimate",
+        "label": "Price Estimate",
+        "type": "short_text",
+        "config": {},
+        "required": false,
+        "helper_text": "",
+        "show_if": {
+         "==": [
+          {
+           "var": "booking.inspection_type"
+          },
+          "used_car"
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "title": "Key Checks",
+      "library": "key_checks",
+      "fields": [
+       {
+        "key": "key_check_1_label",
+        "label": "Key Check 1 Label",
+        "type": "short_text",
+        "config": {},
+        "required": false,
+        "helper_text": ""
+       },
+       {
+        "key": "key_check_1_value",
+        "label": "Key Check 1 Value",
+        "type": "short_text",
+        "config": {},
+        "required": false,
+        "helper_text": ""
+       },
+       {
+        "key": "key_check_2_label",
+        "label": "Key Check 2 Label",
+        "type": "short_text",
+        "config": {},
+        "required": false,
+        "helper_text": ""
+       },
+       {
+        "key": "key_check_2_value",
+        "label": "Key Check 2 Value",
+        "type": "short_text",
+        "config": {},
+        "required": false,
+        "helper_text": ""
+       },
+       {
+        "key": "key_check_3_label",
+        "label": "Key Check 3 Label",
+        "type": "short_text",
+        "config": {},
+        "required": false,
+        "helper_text": ""
+       },
+       {
+        "key": "key_check_3_value",
+        "label": "Key Check 3 Value",
+        "type": "short_text",
+        "config": {},
+        "required": false,
+        "helper_text": ""
+       },
+       {
+        "key": "key_check_4_label",
+        "label": "Key Check 4 Label",
+        "type": "short_text",
+        "config": {},
+        "required": false,
+        "helper_text": ""
+       },
+       {
+        "key": "key_check_4_value",
+        "label": "Key Check 4 Value",
+        "type": "short_text",
+        "config": {},
+        "required": false,
+        "helper_text": ""
+       },
+       {
+        "key": "key_check_5_label",
+        "label": "Key Check 5 Label",
+        "type": "short_text",
+        "config": {},
+        "required": false,
+        "helper_text": ""
+       },
+       {
+        "key": "key_check_5_value",
+        "label": "Key Check 5 Value",
+        "type": "short_text",
+        "config": {},
+        "required": false,
+        "helper_text": ""
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "title": "Inspection Delay",
+    "sections": [
+     {
+      "title": "Inspection Delay",
+      "library": "inspection_delay",
+      "fields": [
+       {
+        "key": "inspection_45_minutes_delayed",
+        "label": "Inspection 45 Minutes Delayed?",
+        "config": {
+         "options": [
+          {
+           "key": "no",
+           "label": "No"
+          },
+          {
+           "key": "yes",
+           "label": "Yes"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "single_choice"
+       },
+       {
+        "key": "delay_amount",
+        "label": "Amount (Pending + 500)",
+        "config": {
+         "min": 500
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "number",
+        "show_if": {
+         "==": [
+          {
+           "var": "inspection.inspection_45_minutes_delayed"
+          },
+          "yes"
+         ]
+        }
+       },
+       {
+        "key": "delay_payment_mode",
+        "label": "Payment Mode",
+        "config": {
+         "options": [
+          {
+           "key": "cash",
+           "label": "Cash"
+          },
+          {
+           "key": "upi",
+           "label": "UPI"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "single_choice",
+        "show_if": {
+         "==": [
+          {
+           "var": "inspection.inspection_45_minutes_delayed"
+          },
+          "yes"
+         ]
+        }
+       },
+       {
+        "key": "delay_pay_qr",
+        "label": "CarCID QR Code",
+        "type": "image",
+        "config": {
+         "asset": "@pay_qr"
+        },
+        "required": false,
+        "helper_text": "",
+        "show_if": {
+         "and": [
+          {
+           "==": [
+            {
+             "var": "inspection.inspection_45_minutes_delayed"
+            },
+            "yes"
+           ]
+          },
+          {
+           "==": [
+            {
+             "var": "inspection.delay_payment_mode"
+            },
+            "upi"
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "key": "delay_payment_screenshot",
+        "label": "Payment Screenshot",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo",
+        "show_if": {
+         "and": [
+          {
+           "==": [
+            {
+             "var": "inspection.inspection_45_minutes_delayed"
+            },
+            "yes"
+           ]
+          },
+          {
+           "==": [
+            {
+             "var": "inspection.delay_payment_mode"
+            },
+            "upi"
+           ]
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   },
+   {
     "title": "Car Details",
     "sections": [
      {
@@ -33,6 +312,10 @@
           {
            "key": "citro_n",
            "label": "Citroën"
+          },
+          {
+           "key": "datsun",
+           "label": "Datsun"
           },
           {
            "key": "fiat",
@@ -83,6 +366,10 @@
            "label": "MG"
           },
           {
+           "key": "mitsubishi",
+           "label": "Mitsubishi"
+          },
+          {
            "key": "nissan",
            "label": "Nissan"
           },
@@ -115,7 +402,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "car_compan",
         "type": "single_choice"
        },
        {
@@ -124,7 +410,6 @@
         "config": {},
         "required": true,
         "helper_text": "If Car Company is not mentioned in the drop down",
-        "clappia": "car_compan_1",
         "type": "short_text",
         "show_if": {
          "==": [
@@ -137,11 +422,10 @@
        },
        {
         "key": "variant",
-        "label": "Variant",
+        "label": "Car Variant",
         "config": {},
         "required": true,
         "helper_text": "",
-        "clappia": "car_varian",
         "type": "short_text"
        },
        {
@@ -274,7 +558,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "car_regist_1",
         "type": "single_choice"
        },
        {
@@ -283,9 +566,67 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "car_regist_2",
         "type": "short_text"
        },
+       {
+        "key": "car_colour",
+        "label": "Car Colour",
+        "config": {},
+        "required": true,
+        "helper_text": "",
+        "type": "short_text"
+       },
+       {
+        "key": "car_km_current_reading",
+        "label": "Car KM Current Reading",
+        "config": {
+         "min": 0,
+         "max": 999999,
+         "unit": "km"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "number"
+       },
+       {
+        "key": "car_km_reading_photo",
+        "label": "Car Km Reading Photo",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo"
+       },
+       {
+        "key": "number_of_car_keys_available",
+        "label": "Number of Car Keys Available",
+        "config": {
+         "min": 0,
+         "max": 10
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "number"
+       },
+       {
+        "key": "chassis_no_plate",
+        "label": "Chassis No Plate",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo"
+       }
+      ],
+      "library": "car_details"
+     },
+     {
+      "title": "Engine and Fuel Details",
+      "fields": [
        {
         "key": "fuel_type",
         "label": "Fuel Type",
@@ -315,7 +656,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "fueltype",
         "type": "multi_choice"
        },
        {
@@ -327,7 +667,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "engine_cap",
         "type": "number"
        },
        {
@@ -347,55 +686,34 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "transmission",
         "type": "single_choice"
        },
        {
-        "key": "car_colour",
-        "label": "Car Colour",
-        "config": {},
+        "key": "gear_shifting_panel",
+        "label": "Gear Shifting Panel",
+        "type": "photo",
         "required": true,
         "helper_text": "",
-        "clappia": "car_colour",
-        "type": "short_text"
-       },
-       {
-        "key": "car_km_current_reading",
-        "label": "Car KM Current Reading",
-        "config": {
-         "min": 0,
-         "max": 999999,
-         "unit": "km"
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "car_km_cur",
-        "type": "number"
-       },
-       {
-        "key": "car_km_reading_photo",
-        "label": "Car Km Reading Photo",
         "config": {
          "max_count": 1,
          "capture": "camera"
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "car_km_rea",
-        "type": "photo"
+        }
        },
        {
-        "key": "number_of_car_keys_available",
-        "label": "Number of Car Keys Available",
-        "config": {
-         "min": 0,
-         "max": 10
-        },
+        "key": "engine_number",
+        "label": "Engine Number",
+        "config": {},
         "required": true,
         "helper_text": "",
-        "clappia": "number_of_",
-        "type": "number"
-       },
+        "type": "short_text"
+       }
+      ],
+      "library": "engine_and_fuel_details",
+      "parent": "Car Details"
+     },
+     {
+      "title": "Chassis Number",
+      "fields": [
        {
         "key": "chassis_no",
         "label": "Chassis Number",
@@ -404,29 +722,9 @@
         "helper_text": "",
         "clappia": "chassis_nu",
         "type": "short_text"
-       },
-       {
-        "key": "engine_number",
-        "label": "Engine Number",
-        "config": {},
-        "required": true,
-        "helper_text": "",
-        "clappia": "engine_num",
-        "type": "short_text"
-       },
-       {
-        "key": "chassis_no_plate",
-        "label": "Chassis No Plate",
-        "config": {
-         "max_count": 1,
-         "capture": "camera"
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "chassis_no_plate",
-        "type": "photo"
        }
-      ]
+      ],
+      "parent": "Car Details"
      }
     ],
     "gate": true
@@ -478,8 +776,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "form_22",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "form_22"
        },
        {
         "key": "form_21",
@@ -500,8 +798,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "form_21",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "form_21"
        },
        {
         "key": "registration_certificate",
@@ -522,8 +820,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rc",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "registration_certificate"
        },
        {
         "key": "temporary_registration",
@@ -574,8 +872,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "road_tax_receipt",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "road_tax_receipt"
        },
        {
         "key": "puc_certificate",
@@ -618,8 +916,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "warranty_card",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "warranty_card"
        },
        {
         "key": "owner_s_manual",
@@ -640,8 +938,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "owner_manual",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "owner_s_manual"
        },
        {
         "key": "service_booklet",
@@ -662,12 +960,12 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "service_booklet",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "service_booklet"
        },
        {
         "key": "bank_finance_noc",
-        "label": "Bank finance NOC",
+        "label": "Bank Finance NOC",
         "config": {
          "options": [
           {
@@ -689,12 +987,12 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "bank_finance_noc",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "bank_finance_noc"
        },
        {
         "key": "extended_warranty",
-        "label": "Extended warranty",
+        "label": "Extended Warranty",
         "config": {
          "options": [
           {
@@ -711,8 +1009,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "extended_warranty",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "extended_warranty"
        },
        {
         "key": "accessories_invoice",
@@ -733,12 +1031,12 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "accessories_invoice",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "accessories_invoice"
        },
        {
         "key": "bi_fuel_certification",
-        "label": "Bi Fuel Certification",
+        "label": "Bi-Fuel Certificate",
         "config": {
          "options": [
           {
@@ -760,8 +1058,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "bifuel_certi",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "bi_fuel_certification"
        },
        {
         "key": "bi_fuel_certificate_photo",
@@ -795,7 +1093,7 @@
       "fields": [
        {
         "key": "driver_front_door",
-        "label": "Driver- Front Door",
+        "label": "Driver - Front Door",
         "config": {
          "options": [
           {
@@ -871,8 +1169,18 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_fro",
         "type": "multi_choice"
+       },
+       {
+        "key": "driver_front_door_paint_gauge_reading",
+        "label": "Driver - Front Door Paint Gauge Reading",
+        "type": "photo",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "max_count": 2,
+         "capture": "camera"
+        }
        },
        {
         "key": "driver_front_door_photos",
@@ -884,7 +1192,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_fro_4",
         "type": "photo",
         "show_if": {
          "some": [
@@ -976,8 +1283,18 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_10",
         "type": "multi_choice"
+       },
+       {
+        "key": "driver_front_fender_paint_gauge_reading",
+        "label": "Driver - Front Fender Paint Gauge Reading",
+        "type": "photo",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "max_count": 2,
+         "capture": "camera"
+        }
        },
        {
         "key": "driver_front_fender_photos",
@@ -989,7 +1306,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_front_fender_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -1050,7 +1366,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "_side_wind",
         "type": "multi_choice"
        },
        {
@@ -1063,7 +1378,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_front_door_window_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -1120,7 +1434,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_orv_1",
         "type": "multi_choice"
        },
        {
@@ -1133,7 +1446,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_svmh_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -1190,7 +1502,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_orv",
         "type": "multi_choice"
        },
        {
@@ -1203,7 +1514,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_svmg_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -1253,7 +1563,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_indicator_front1",
         "type": "multi_choice"
        },
        {
@@ -1266,7 +1575,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_indicator_front_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -1315,12 +1623,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_8",
         "type": "multi_choice"
        },
        {
         "key": "driver_front_wheel_arch_fender_lining_photos",
-        "label": "Driver Front Wheel Arch/Fender Lining Photos",
+        "label": "Driver Front Wheel Arch / Fender Lining Photos",
         "config": {
          "max_count": 5,
          "capture": "camera",
@@ -1328,7 +1635,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_front_wheel_arch_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -1351,7 +1657,7 @@
        },
        {
         "key": "driver_front_mud_flap",
-        "label": "Driver - Front Mud flap",
+        "label": "Driver - Front Mud Flap",
         "config": {
          "options": [
           {
@@ -1375,7 +1681,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_9",
         "type": "single_choice"
        },
        {
@@ -1388,7 +1693,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_front_mud_flap_photos",
         "type": "photo",
         "show_if": {
          "in": [
@@ -1434,7 +1738,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid__front_cladding11",
         "type": "multi_choice"
        },
        {
@@ -1447,7 +1750,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_front_cladding_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -1494,7 +1796,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_roof_rail12",
         "type": "single_choice"
        },
        {
@@ -1507,7 +1808,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_roof_rail_photos",
         "type": "photo",
         "show_if": {
          "in": [
@@ -1577,7 +1877,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sill_11",
         "type": "multi_choice"
        },
        {
@@ -1590,7 +1889,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_door_sill_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -1693,8 +1991,18 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_back_door_1",
         "type": "multi_choice"
+       },
+       {
+        "key": "driver_back_door_paint_gauge_reading",
+        "label": "Driver - Back Door Paint Gauge Reading",
+        "type": "photo",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "max_count": 2,
+         "capture": "camera"
+        }
        },
        {
         "key": "driver_back_door_photos",
@@ -1706,7 +2014,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_back_door_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -1769,7 +2076,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "side_windo",
         "type": "multi_choice"
        },
        {
@@ -1782,7 +2088,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_back_door_window_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -1837,7 +2142,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_read_cladding11",
         "type": "multi_choice"
        },
        {
@@ -1850,7 +2154,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_rear_cladding_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -1899,12 +2202,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_rear_wheel_arch11",
         "type": "multi_choice"
        },
        {
         "key": "driver_rear_wheel_arch_fender_lining_photos",
-        "label": "Driver Rear Wheel Arch/Fender Lining Photos",
+        "label": "Driver Rear Wheel Arch / Fender Lining Photos",
         "config": {
          "max_count": 5,
          "capture": "camera",
@@ -1912,7 +2214,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_rear_wheel_arch_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -1935,7 +2236,7 @@
        },
        {
         "key": "driver_back_mud_flap",
-        "label": "Driver - Back Mud flap",
+        "label": "Driver - Back Mud Flap",
         "config": {
          "options": [
           {
@@ -1959,7 +2260,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_back_mud_flap_12",
         "type": "single_choice"
        },
        {
@@ -1972,7 +2272,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_back_mud_flap_photos",
         "type": "photo",
         "show_if": {
          "in": [
@@ -2049,8 +2348,18 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_rear_quarter_panel11",
         "type": "multi_choice"
+       },
+       {
+        "key": "driver_back_quarter_panel_paint_gauge_reading",
+        "label": "Driver - Back Quarter Panel Paint Gauge Reading",
+        "type": "photo",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "max_count": 2,
+         "capture": "camera"
+        }
        },
        {
         "key": "driver_back_quarter_panel_photos",
@@ -2062,7 +2371,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_back_quarter_panel_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -2116,7 +2424,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_7",
         "type": "multi_choice"
        },
        {
@@ -2129,7 +2436,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_back_indicator_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -2178,7 +2484,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_indicator_back",
         "type": "multi_choice"
        },
        {
@@ -2191,7 +2496,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_back_indicator_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -2247,7 +2551,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rear_winds",
         "type": "multi_choice"
        },
        {
@@ -2260,7 +2563,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rear_windshield_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -2322,7 +2624,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "connected_",
         "type": "multi_choice"
        },
        {
@@ -2335,7 +2636,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "connected_taillight_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -2392,7 +2692,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid__tailight7",
         "type": "multi_choice"
        },
        {
@@ -2405,7 +2704,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_taillight_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -2462,7 +2760,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_tailight",
         "type": "multi_choice"
        },
        {
@@ -2475,7 +2772,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_taillight_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -2523,7 +2819,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rear_numbe",
         "type": "multi_choice"
        },
        {
@@ -2535,7 +2830,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rear_number_plate_photos",
         "type": "photo",
         "show_if": null
        },
@@ -2610,7 +2904,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rear_bumpe",
         "type": "multi_choice"
        },
        {
@@ -2623,7 +2916,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rear_bumper_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -2721,12 +3013,22 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "boot_space",
         "type": "multi_choice"
        },
        {
+        "key": "boot_space_door_backdoor_paint_gauge_reading",
+        "label": "Boot Space Door / Backdoor Paint Gauge Reading",
+        "type": "photo",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "max_count": 2,
+         "capture": "camera"
+        }
+       },
+       {
         "key": "boot_space_door_backdoor_photos",
-        "label": "Boot Space Door/Backdoor Photos",
+        "label": "Boot Space Door / Backdoor Photos",
         "config": {
          "max_count": 5,
          "capture": "camera",
@@ -2734,7 +3036,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "boot_space_door_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -2839,8 +3140,18 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_back_door",
         "type": "multi_choice"
+       },
+       {
+        "key": "passenger_back_door_paint_gauge_reading",
+        "label": "Passenger - Back Door Paint Gauge Reading",
+        "type": "photo",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "max_count": 2,
+         "capture": "camera"
+        }
        },
        {
         "key": "passenger_back_door_photos",
@@ -2852,7 +3163,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_backdoor_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -2915,7 +3225,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "side_windo_2",
         "type": "multi_choice"
        },
        {
@@ -2928,7 +3237,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_back_door_window_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -2944,76 +3252,6 @@
              "scratches",
              "damaged",
              "loose"
-            ]
-           ]
-          }
-         ]
-        }
-       },
-       {
-        "key": "fuel_filler_flap",
-        "label": "Fuel Filler Flap",
-        "config": {
-         "options": [
-          {
-           "key": "ok",
-           "label": "Ok",
-           "tone": "ok"
-          },
-          {
-           "key": "scratches",
-           "label": "Scratches",
-           "tone": "warn",
-           "is_defect": true,
-           "severity": "minor"
-          },
-          {
-           "key": "damaged",
-           "label": "Damaged",
-           "tone": "bad",
-           "is_defect": true,
-           "severity": "major"
-          },
-          {
-           "key": "rusted",
-           "label": "Rusted",
-           "tone": "bad",
-           "is_defect": true,
-           "severity": "major"
-          }
-         ]
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "driver_sid_fuel_flap12",
-        "type": "multi_choice"
-       },
-       {
-        "key": "fuel_filler_flap_photos",
-        "label": "Fuel Filler Flap Photos",
-        "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "fuel_filler_flap"
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "fuel_filler_flap_photos",
-        "type": "photo",
-        "show_if": {
-         "some": [
-          {
-           "var": "inspection.fuel_filler_flap"
-          },
-          {
-           "in": [
-            {
-             "var": ""
-            },
-            [
-             "scratches",
-             "damaged",
-             "rusted"
             ]
            ]
           }
@@ -3077,7 +3315,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_door_sill1",
         "type": "multi_choice"
        },
        {
@@ -3090,7 +3327,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_door_sill_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -3179,8 +3415,18 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_rear_quarter_panel1",
         "type": "multi_choice"
+       },
+       {
+        "key": "passenger_back_quarter_panel_paint_gauge_reading",
+        "label": "Passenger - Back Quarter Panel Paint Gauge Reading",
+        "type": "photo",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "max_count": 2,
+         "capture": "camera"
+        }
        },
        {
         "key": "passenger_back_quarter_panel_photos",
@@ -3192,7 +3438,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_back_quarter_panel_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -3246,12 +3491,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_rear_wheel_arch1",
         "type": "multi_choice"
        },
        {
         "key": "passenger_rear_wheel_arch_fender_lining_photos",
-        "label": "Passenger Rear Wheel Arch/Fender Lining Photos",
+        "label": "Passenger Rear Wheel Arch / Fender Lining Photos",
         "config": {
          "max_count": 5,
          "capture": "camera",
@@ -3259,7 +3503,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_rear_wheel_arch_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -3313,7 +3556,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_rear_cladding1",
         "type": "multi_choice"
        },
        {
@@ -3326,7 +3568,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_rear_cladding_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -3349,7 +3590,7 @@
        },
        {
         "key": "passenger_back_mud_flap",
-        "label": "Passenger - Back Mud flap",
+        "label": "Passenger - Back Mud Flap",
         "config": {
          "options": [
           {
@@ -3373,7 +3614,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_back_mud_flap1",
         "type": "single_choice"
        },
        {
@@ -3386,7 +3626,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_back_mud_flap_photos",
         "type": "photo",
         "show_if": {
          "in": [
@@ -3425,7 +3664,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_roof_rail1",
         "type": "single_choice"
        },
        {
@@ -3438,7 +3676,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_roof_rail_photos",
         "type": "photo",
         "show_if": {
          "in": [
@@ -3529,8 +3766,18 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_front_door",
         "type": "multi_choice"
+       },
+       {
+        "key": "passenger_front_door_paint_gauge_reading",
+        "label": "Passenger - Front Door Paint Gauge Reading",
+        "type": "photo",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "max_count": 2,
+         "capture": "camera"
+        }
        },
        {
         "key": "passenger_front_door_photos",
@@ -3542,7 +3789,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_front_door_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -3605,7 +3851,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "side_windo_1",
         "type": "multi_choice"
        },
        {
@@ -3618,7 +3863,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_front_door_window_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -3663,12 +3907,18 @@
            "tone": "bad",
            "is_defect": true,
            "severity": "major"
+          },
+          {
+           "key": "damaged",
+           "label": "Damaged",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_orv_2",
         "type": "multi_choice"
        },
        {
@@ -3681,7 +3931,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_svmh_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -3695,7 +3944,8 @@
             },
             [
              "scratches",
-             "not_ok"
+             "not_ok",
+             "damaged"
             ]
            ]
           }
@@ -3737,7 +3987,6 @@
         },
         "required": false,
         "helper_text": "",
-        "clappia": "passenger_orvm_glass",
         "type": "multi_choice"
        },
        {
@@ -3750,7 +3999,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_svmg_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -3800,7 +4048,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_indicator_front",
         "type": "multi_choice"
        },
        {
@@ -3813,7 +4060,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_front_indicator_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -3898,8 +4144,18 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_front_fender_1",
         "type": "multi_choice"
+       },
+       {
+        "key": "passenger_front_fender_paint_gauge_reading",
+        "label": "Passenger - Front Fender Paint Gauge Reading",
+        "type": "photo",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "max_count": 2,
+         "capture": "camera"
+        }
        },
        {
         "key": "passenger_front_fender_photos",
@@ -3911,7 +4167,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_front_fender_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -3939,7 +4194,7 @@
        },
        {
         "key": "passenger_front_mud_flap",
-        "label": "Passenger - Front Mud flap",
+        "label": "Passenger - Front Mud Flap",
         "config": {
          "options": [
           {
@@ -3963,7 +4218,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_front_mud_flap1",
         "type": "single_choice"
        },
        {
@@ -3976,7 +4230,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_front_mud_flap_photos",
         "type": "photo",
         "show_if": {
          "in": [
@@ -4017,12 +4270,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_",
         "type": "multi_choice"
        },
        {
         "key": "passenger_front_wheel_arch_fender_lining_photos",
-        "label": "Passenger Front Wheel Arch/Fender Lining Photos",
+        "label": "Passenger Front Wheel Arch / Fender Lining Photos",
         "config": {
          "max_count": 5,
          "capture": "camera",
@@ -4030,7 +4282,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_front_wheel_arch_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -4084,7 +4335,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_front_cladding1",
         "type": "multi_choice"
        },
        {
@@ -4097,7 +4347,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_front_cladding_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -4120,7 +4369,7 @@
        },
        {
         "key": "windshield",
-        "label": "WindShield",
+        "label": "Windshield",
         "config": {
          "options": [
           {
@@ -4153,7 +4402,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "windshield",
         "type": "multi_choice"
        },
        {
@@ -4166,7 +4414,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "windshield_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -4190,11 +4437,10 @@
        },
        {
         "key": "match_glasses_serial_number_remark",
-        "label": "Match Glasses Serial Number Remark",
+        "label": "Glass Serial Numbers Remark",
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "match_glas_1",
         "type": "short_text",
         "show_if": {
          "in": [
@@ -4210,7 +4456,7 @@
        },
        {
         "key": "match_all_glasses_serial_number",
-        "label": "Match All Glasses Serial Number",
+        "label": "Glass Serial Numbers",
         "config": {
          "options": [
           {
@@ -4234,7 +4480,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "match_glas",
         "type": "single_choice"
        },
        {
@@ -4308,8 +4553,18 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_bonn_top",
         "type": "multi_choice"
+       },
+       {
+        "key": "front_bonnet_top_paint_gauge_reading",
+        "label": "Front Bonnet Top Paint Gauge Reading",
+        "type": "photo",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "max_count": 2,
+         "capture": "camera"
+        }
        },
        {
         "key": "front_bonnet_top_photos",
@@ -4321,7 +4576,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_bonnet_top_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -4419,7 +4673,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_bump",
         "type": "multi_choice"
        },
        {
@@ -4432,7 +4685,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_bumper_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -4491,6 +4743,13 @@
            "severity": "minor"
           },
           {
+           "key": "panel_gaps",
+           "label": "Panel Gaps",
+           "tone": "warn",
+           "is_defect": true,
+           "severity": "minor"
+          },
+          {
            "key": "major_scratches",
            "label": "Major Scratches",
            "tone": "bad",
@@ -4523,7 +4782,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_gril",
         "type": "multi_choice"
        },
        {
@@ -4536,7 +4794,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_grill_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -4552,6 +4809,7 @@
              "repainted",
              "minor_scratches",
              "minor_dents",
+             "panel_gaps",
              "major_scratches",
              "major_dents",
              "damaged",
@@ -4588,7 +4846,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "fog_lights",
         "type": "single_choice"
        },
        {
@@ -4601,7 +4858,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "fog_lights_photos",
         "type": "photo",
         "show_if": {
          "in": [
@@ -4649,7 +4905,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_1",
         "type": "multi_choice"
        },
        {
@@ -4662,7 +4917,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_headlight_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -4719,7 +4973,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_headlight",
         "type": "multi_choice"
        },
        {
@@ -4732,7 +4985,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_headlight_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -4780,7 +5032,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_numb",
         "type": "single_choice"
        },
        {
@@ -4792,7 +5043,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_number_plate_photos",
         "type": "photo",
         "show_if": null
        },
@@ -4867,8 +5117,18 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "car_top_outside",
         "type": "multi_choice"
+       },
+       {
+        "key": "car_roof_outside_paint_gauge_reading",
+        "label": "Car Roof Outside Paint Gauge Reading",
+        "type": "photo",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "max_count": 2,
+         "capture": "camera"
+        }
        },
        {
         "key": "car_roof_outside_photos",
@@ -4880,7 +5140,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "car_roof_outside_photos",
         "type": "photo",
         "show_if": {
          "some": [
@@ -4906,16 +5165,114 @@
           }
          ]
         }
+       },
+       {
+        "key": "match_all_glasses_serial_number_photos",
+        "label": "Glass Serial Numbers Photos",
+        "config": {
+         "max_count": 5,
+         "capture": "camera",
+         "photo_of": "match_all_glasses_serial_number"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo",
+        "show_if": {
+         "in": [
+          {
+           "var": "inspection.match_all_glasses_serial_number"
+          },
+          [
+           "not_matching"
+          ]
+         ]
+        }
        }
-      ]
+      ],
+      "library": "exterior_body"
+     },
+     {
+      "title": "Fuel Filler Flap",
+      "fields": [
+       {
+        "key": "fuel_filler_flap",
+        "label": "Fuel Filler Flap",
+        "config": {
+         "options": [
+          {
+           "key": "ok",
+           "label": "Ok",
+           "tone": "ok"
+          },
+          {
+           "key": "scratches",
+           "label": "Scratches",
+           "tone": "warn",
+           "is_defect": true,
+           "severity": "minor"
+          },
+          {
+           "key": "damaged",
+           "label": "Damaged",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          },
+          {
+           "key": "rusted",
+           "label": "Rusted",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "multi_choice"
+       },
+       {
+        "key": "fuel_filler_flap_photos",
+        "label": "Fuel Filler Flap Photos",
+        "config": {
+         "max_count": 5,
+         "capture": "camera",
+         "photo_of": "fuel_filler_flap"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo",
+        "show_if": {
+         "some": [
+          {
+           "var": "inspection.fuel_filler_flap"
+          },
+          {
+           "in": [
+            {
+             "var": ""
+            },
+            [
+             "scratches",
+             "damaged",
+             "rusted"
+            ]
+           ]
+          }
+         ]
+        }
+       }
+      ],
+      "library": "fuel_filler_flap",
+      "parent": "Exterior Body"
      }
     ]
    },
    {
-    "title": "Body Frame Accidental Checklist",
+    "title": "Body Frame",
     "sections": [
      {
-      "title": "Body Frame Accidental Checklist",
+      "title": "Body Frame",
       "fields": [
        {
         "key": "radiator_core_support",
@@ -4945,35 +5302,44 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "radiator_c1",
         "type": "multi_choice"
        },
        {
         "key": "radiator_core_support_image",
         "label": "Radiator Core Support Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "radiator_core_support"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "radiator_c_2",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.radiator_core_support"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.radiator_core_support"
             },
-            [
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -4981,7 +5347,7 @@
        },
        {
         "key": "match_chassis_no_plate_with_the_real_body",
-        "label": "Match Chassis No Plate with the Real Body",
+        "label": "Chassis Number on Body",
         "config": {
          "options": [
           {
@@ -5005,7 +5371,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "match_chas",
         "type": "single_choice"
        },
        {
@@ -5043,7 +5408,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid",
         "type": "multi_choice"
        },
        {
@@ -5052,7 +5416,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "driver_sid_4",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -5097,29 +5460,39 @@
         "key": "driver_side_strut_tower_apron_image",
         "label": "Driver Side Strut Tower Apron Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "driver_side_strut_tower_apron"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_2",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.driver_side_strut_tower_apron"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.driver_side_strut_tower_apron"
             },
-            [
-             "rusted",
-             "replaced",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "rusted",
+               "replaced",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -5160,7 +5533,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_sid_3",
         "type": "multi_choice"
        },
        {
@@ -5169,7 +5541,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "passenger__3",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -5214,29 +5585,39 @@
         "key": "passenger_strut_tower_apron_image",
         "label": "Passenger Strut Tower Apron Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "passenger_strut_tower_apron"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger__2",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.passenger_strut_tower_apron"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.passenger_strut_tower_apron"
             },
-            [
-             "rusted",
-             "replaced",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "rusted",
+               "replaced",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -5270,7 +5651,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_front_rail_1",
         "type": "multi_choice"
        },
        {
@@ -5279,7 +5659,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "driver_sid_front_rail__remark1",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -5322,30 +5701,40 @@
        },
        {
         "key": "driver_side_front_rail_photo",
-        "label": "Driver Side Front Rail photo",
+        "label": "Driver Side Front Rail Photo",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "driver_side_front_rail"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_front_rail_image1",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.driver_side_front_rail"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.driver_side_front_rail"
             },
-            [
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -5379,7 +5768,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_front_rail",
         "type": "multi_choice"
        },
        {
@@ -5388,7 +5776,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "passenger_side_front_rail_remark",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -5433,28 +5820,38 @@
         "key": "passenger_side_front_rail_image",
         "label": "Passenger Side Front Rail Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "passenger_side_front_rail"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_front_rail_image",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.passenger_side_front_rail"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.passenger_side_front_rail"
             },
-            [
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -5502,7 +5899,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_bonn_underbody",
         "type": "multi_choice"
        },
        {
@@ -5511,7 +5907,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "front_bonn_underbody_remark",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -5556,30 +5951,40 @@
         "key": "front_bonnet_underbody_image",
         "label": "Front Bonnet UnderBody Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "front_bonnet_underbody"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_bonn_underbody_image",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.front_bonnet_underbody"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.front_bonnet_underbody"
             },
-            [
-             "scratches",
-             "repainted",
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "scratches",
+               "repainted",
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -5627,37 +6032,46 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_a_pillar_1",
         "type": "multi_choice"
        },
        {
         "key": "driver_side_a_pillar_image",
         "label": "Driver Side A Pillar Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "driver_side_a_pillar"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_a_pillar_image_1",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.driver_side_a_pillar"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.driver_side_a_pillar"
             },
-            [
-             "scratches",
-             "repainted",
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "scratches",
+               "repainted",
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -5669,7 +6083,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "driver_sid_a_pillar_remark_1",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -5752,7 +6165,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_b_pillar_1",
         "type": "multi_choice"
        },
        {
@@ -5761,7 +6173,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "driver_sid_b_pillar_remark_1",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -5806,30 +6217,40 @@
         "key": "driver_side_b_pillar_image",
         "label": "Driver Side B Pillar Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "driver_side_b_pillar"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_5",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.driver_side_b_pillar"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.driver_side_b_pillar"
             },
-            [
-             "scratches",
-             "repainted",
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "scratches",
+               "repainted",
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -5877,37 +6298,46 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_c_pillar_1",
         "type": "multi_choice"
        },
        {
         "key": "driver_side_c_pillar_image",
         "label": "Driver Side C Pillar Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "driver_side_c_pillar"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_c_pillar_image_1",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.driver_side_c_pillar"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.driver_side_c_pillar"
             },
-            [
-             "scratches",
-             "repainted",
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "scratches",
+               "repainted",
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -5919,7 +6349,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "driver_sid_c_pillar_3",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -6007,37 +6436,46 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_d_pillar1",
         "type": "multi_choice"
        },
        {
         "key": "driver_side_d_pillar_image",
         "label": "Driver Side D Pillar Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "driver_side_d_pillar"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_d_pillar_image3",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.driver_side_d_pillar"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.driver_side_d_pillar"
             },
-            [
-             "scratches",
-             "repainted",
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "scratches",
+               "repainted",
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -6049,7 +6487,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "driver_sid_d_pillar_remark6",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -6094,31 +6531,20 @@
         "key": "driver_side_running_board_image",
         "label": "Driver Side Running Board Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "driver_side_running_board"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_side_running_board_image",
         "type": "photo",
         "show_if": {
          "or": [
           {
-           "some": [
+           "==": [
             {
-             "var": "inspection.driver_side_running_board"
+             "var": "booking.inspection_type"
             },
-            {
-             "in": [
-              {
-               "var": ""
-              },
-              [
-               "accidental"
-              ]
-             ]
-            }
+            "used_car"
            ]
           },
           {
@@ -6132,7 +6558,10 @@
                "var": ""
               },
               [
-               "rusted"
+               "scratches",
+               "repainted",
+               "rusted",
+               "accidental"
               ]
              ]
             }
@@ -6183,7 +6612,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid__running_board1",
         "type": "multi_choice"
        },
        {
@@ -6192,7 +6620,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "driver_side_running_board_remark",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -6275,37 +6702,46 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "boot_lock_pillar",
         "type": "multi_choice"
        },
        {
         "key": "boot_lock_pillar_image",
         "label": "Boot Lock Pillar Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "boot_lock_pillar"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "boot_lock_pillar_image",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.boot_lock_pillar"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.boot_lock_pillar"
             },
-            [
-             "scratches",
-             "repainted",
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "scratches",
+               "repainted",
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -6317,7 +6753,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "boot_floor_5",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -6390,13 +6825,6 @@
            "severity": "major"
           },
           {
-           "key": "replaced",
-           "label": "Replaced",
-           "tone": "bad",
-           "is_defect": true,
-           "severity": "major"
-          },
-          {
            "key": "accidental",
            "label": "Accidental",
            "tone": "bad",
@@ -6407,38 +6835,46 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "boot_floor",
         "type": "multi_choice"
        },
        {
         "key": "boot_floor_image",
         "label": "Boot Floor Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "boot_floor"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "boot_floor_2",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.boot_floor"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.boot_floor"
             },
-            [
-             "scratches",
-             "repainted",
-             "rusted",
-             "replaced",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "scratches",
+               "repainted",
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -6450,7 +6886,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "boot_floor_1",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -6497,7 +6932,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "rear_subfr_remark_1",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -6580,37 +7014,46 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rear_subfr",
         "type": "multi_choice"
        },
        {
         "key": "rear_sub_frame_z_axle_image",
         "label": "Rear Sub Frame / Z Axle Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "rear_sub_frame_z_axle"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rear_subfr_image1",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.rear_sub_frame_z_axle"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.rear_sub_frame_z_axle"
             },
-            [
-             "scratches",
-             "repainted",
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "scratches",
+               "repainted",
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -6663,7 +7106,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_sid_d_pillar",
         "type": "multi_choice"
        },
        {
@@ -6672,7 +7114,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "passenger_sid_d_pillar_remark4",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -6717,30 +7158,40 @@
         "key": "passenger_side_d_pillar_image",
         "label": "Passenger Side D Pillar Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "passenger_side_d_pillar"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_d_pillar_image1",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.passenger_side_d_pillar"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.passenger_side_d_pillar"
             },
-            [
-             "scratches",
-             "repainted",
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "scratches",
+               "repainted",
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -6788,37 +7239,46 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_sid_c_pillar",
         "type": "multi_choice"
        },
        {
         "key": "passenger_side_c_pillar_image",
         "label": "Passenger Side C Pillar Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "passenger_side_c_pillar"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_c_pillar_image1",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.passenger_side_c_pillar"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.passenger_side_c_pillar"
             },
-            [
-             "scratches",
-             "repainted",
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "scratches",
+               "repainted",
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -6830,7 +7290,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "passenger__sid_c_pillar_remark4",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -6913,7 +7372,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_sid_b_pillar",
         "type": "multi_choice"
        },
        {
@@ -6922,7 +7380,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "passenger_side_b_pillar_remark4",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -6967,30 +7424,40 @@
         "key": "passenger_side_b_pillar_image",
         "label": "Passenger Side B Pillar Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "passenger_side_b_pillar"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger__sid_b_pillar_image1",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.passenger_side_b_pillar"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.passenger_side_b_pillar"
             },
-            [
-             "scratches",
-             "repainted",
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "scratches",
+               "repainted",
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -7038,37 +7505,46 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_sid_a_pillar",
         "type": "multi_choice"
        },
        {
         "key": "passenger_side_a_pillar_image",
         "label": "Passenger Side A Pillar Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "passenger_side_a_pillar"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_sid_a_pillar_image",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.passenger_side_a_pillar"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.passenger_side_a_pillar"
             },
-            [
-             "scratches",
-             "repainted",
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "scratches",
+               "repainted",
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -7080,7 +7556,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "passenger_side_a_pillar_remark",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -7123,7 +7598,7 @@
        },
        {
         "key": "passenger_side_running_board_board",
-        "label": "Passenger Side Running Board Board",
+        "label": "Passenger Side Running Board",
         "config": {
          "options": [
           {
@@ -7163,37 +7638,46 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_running_board",
         "type": "multi_choice"
        },
        {
         "key": "passenger_side_running_board_image",
         "label": "Passenger Side Running Board Image",
         "config": {
-         "max_count": 5,
-         "capture": "camera",
-         "photo_of": "passenger_side_running_board_board"
+         "max_count": 1,
+         "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_side_running_board_image",
         "type": "photo",
         "show_if": {
-         "some": [
+         "or": [
           {
-           "var": "inspection.passenger_side_running_board_board"
+           "==": [
+            {
+             "var": "booking.inspection_type"
+            },
+            "used_car"
+           ]
           },
           {
-           "in": [
+           "some": [
             {
-             "var": ""
+             "var": "inspection.passenger_side_running_board_board"
             },
-            [
-             "scratches",
-             "repainted",
-             "rusted",
-             "accidental"
-            ]
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "scratches",
+               "repainted",
+               "rusted",
+               "accidental"
+              ]
+             ]
+            }
            ]
           }
          ]
@@ -7205,7 +7689,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "passenger_side_running_board_remark",
         "type": "short_text",
         "show_if": {
          "or": [
@@ -7245,8 +7728,73 @@
           }
          ]
         }
+       },
+       {
+        "key": "radiator_core_support_remark",
+        "label": "Radiator Core Support Remark",
+        "config": {},
+        "required": false,
+        "helper_text": "",
+        "type": "short_text",
+        "show_if": {
+         "or": [
+          {
+           "some": [
+            {
+             "var": "inspection.radiator_core_support"
+            },
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "accidental"
+              ]
+             ]
+            }
+           ]
+          },
+          {
+           "some": [
+            {
+             "var": "inspection.radiator_core_support"
+            },
+            {
+             "in": [
+              {
+               "var": ""
+              },
+              [
+               "rusted"
+              ]
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "key": "chassis_remark",
+        "label": "Chassis Remark",
+        "config": {},
+        "required": false,
+        "helper_text": "",
+        "type": "short_text",
+        "show_if": {
+         "in": [
+          {
+           "var": "inspection.match_chassis_no_plate_with_the_real_body"
+          },
+          [
+           "not_matching"
+          ]
+         ]
+        }
        }
-      ]
+      ],
+      "library": "body_frame"
      }
     ]
    },
@@ -7265,8 +7813,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "car_start_",
-        "type": "video"
+        "type": "video",
+        "library": "car_start_video"
        },
        {
         "key": "car_start",
@@ -7289,20 +7837,20 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "car_start",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "car_start"
        },
        {
         "key": "wiring_photo",
-        "label": "Wiring photo",
+        "label": "Wiring Image",
         "config": {
          "max_count": 1,
          "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "wiring_ima",
-        "type": "photo"
+        "type": "photo",
+        "library": "wiring_photo"
        },
        {
         "key": "wiring",
@@ -7332,24 +7880,24 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "wiring",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "wiring"
        },
        {
         "key": "engine_noise_video",
-        "label": "Engine Noise Video",
+        "label": "Engine Noise Recording",
         "config": {
          "max_count": 1,
          "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "engine_noi_1",
-        "type": "video"
+        "type": "video",
+        "library": "engine_noise_video"
        },
        {
         "key": "engine_noise",
-        "label": "Engine Noise",
+        "label": "Abnormal Engine Noise",
         "config": {
          "options": [
           {
@@ -7368,8 +7916,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "engine_noi",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "engine_noise"
        },
        {
         "key": "engine_oil_quality_image",
@@ -7380,8 +7928,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "engine_oil_1",
-        "type": "photo"
+        "type": "photo",
+        "library": "engine_oil_quality_image"
        },
        {
         "key": "engine_oil_quality",
@@ -7418,8 +7966,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "engine_oil",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "engine_oil_quality"
        },
        {
         "key": "engine_oil_cap",
@@ -7442,12 +7990,12 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "engine_oil_2",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "engine_oil_cap"
        },
        {
         "key": "smoke_from_dipstick_point",
-        "label": "Smoke from dipstick point",
+        "label": "Smoke From Dipstick Point",
         "config": {
          "options": [
           {
@@ -7466,8 +8014,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "smoke_from",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "smoke_from_dipstick_point"
        },
        {
         "key": "engine_oil_leakage",
@@ -7495,7 +8043,7 @@
        },
        {
         "key": "engine_oil_leakage_photo",
-        "label": "Engine Oil Leakage photo",
+        "label": "Engine Oil Leakage Photo",
         "config": {
          "max_count": 5,
          "capture": "camera",
@@ -7537,8 +8085,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "engine_mou",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "engine_mounting_and_components"
        },
        {
         "key": "ac_compressor_mounting",
@@ -7561,8 +8109,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "ac_compres",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "ac_compressor_mounting"
        },
        {
         "key": "engine_vibration",
@@ -7585,8 +8133,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "engine_vib",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "engine_vibration"
        },
        {
         "key": "hoses",
@@ -7609,8 +8157,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "hoses",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "hoses"
        },
        {
         "key": "coolant_quality",
@@ -7640,8 +8188,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "coolant_qu",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "coolant_quality"
        },
        {
         "key": "coolant_level",
@@ -7664,8 +8212,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "coolant_le",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "coolant_level"
        },
        {
         "key": "battery",
@@ -7693,7 +8241,7 @@
           },
           {
            "key": "rusted_dissolved_battery_tray",
-           "label": "Rusted/Dissolved Battery Tray",
+           "label": "Rusted / Dissolved Battery Tray",
            "tone": "bad",
            "is_defect": true,
            "severity": "major"
@@ -7702,12 +8250,12 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "battery",
-        "type": "multi_choice"
+        "type": "multi_choice",
+        "library": "battery"
        },
        {
         "key": "transmission_oil_leakage",
-        "label": "Transmission oil leakage",
+        "label": "Transmission Oil Leakage",
         "config": {
          "options": [
           {
@@ -7726,8 +8274,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "transmissi",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "transmission_oil_leakage"
        },
        {
         "key": "ac_fan_belt",
@@ -7750,8 +8298,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "ac_fan_bel",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "ac_fan_belt"
        },
        {
         "key": "engine_fan_belt",
@@ -7774,12 +8322,12 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "engine_fan",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "engine_fan_belt"
        },
        {
         "key": "radiator_fan",
-        "label": "Radiator fan",
+        "label": "Radiator Fan",
         "config": {
          "options": [
           {
@@ -7798,8 +8346,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "radiator_f",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "radiator_fan"
        },
        {
         "key": "radiator_condition",
@@ -7822,8 +8370,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "radiator_c_3",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "radiator_condition"
        },
        {
         "key": "exhaust_pipe",
@@ -7846,12 +8394,12 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "exhaust_pi",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "exhaust_pipe"
        },
        {
         "key": "exhaust_sound",
-        "label": "Exhaust Sound",
+        "label": "Abnormal Exhaust Sound",
         "config": {
          "options": [
           {
@@ -7870,17 +8418,17 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "exhaust_so",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "exhaust_sound"
        },
        {
         "key": "smoke_emission",
-        "label": "Smoke Emission",
+        "label": "Exhaust Smoke",
         "config": {
          "options": [
           {
-           "key": "ok",
-           "label": "Ok",
+           "key": "not_present",
+           "label": "Not Present",
            "tone": "ok"
           },
           {
@@ -7894,21 +8442,21 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "smoke_emis",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "smoke_emission"
        },
        {
         "key": "smoke_emission_video",
-        "label": "Smoke Emission Video",
+        "label": "Exhaust Smoke Video",
         "config": {
          "max_count": 1,
          "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "smoke_emis_1",
         "type": "video",
-        "show_if": null
+        "show_if": null,
+        "library": "smoke_emission_video"
        }
       ]
      }
@@ -7927,76 +8475,86 @@
          "options": [
           {
            "key": "full",
-           "label": "Full"
+           "label": "Full",
+           "tone": "ok"
           },
           {
            "key": "medium",
-           "label": "Medium"
+           "label": "Medium",
+           "tone": "warn"
           },
           {
            "key": "low",
-           "label": "Low"
+           "label": "Low",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "minor"
           },
           {
            "key": "empty",
-           "label": "Empty"
+           "label": "Empty",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           }
          ]
         },
         "required": false,
         "helper_text": "",
-        "clappia": "battery_st",
         "type": "single_choice"
        },
        {
         "key": "generator_state",
-        "label": "Generator State",
+        "label": "Generator / Alternator State",
         "config": {
          "options": [
           {
-           "key": "high",
-           "label": "High"
+           "key": "good",
+           "label": "Good",
+           "tone": "ok"
           },
           {
-           "key": "good",
-           "label": "Good"
+           "key": "high_voltage",
+           "label": "High Voltage",
+           "tone": "warn"
           },
           {
            "key": "faulty",
-           "label": "Faulty"
+           "label": "Faulty",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           }
          ]
         },
         "required": false,
         "helper_text": "",
-        "clappia": "generator_",
         "type": "single_choice"
        },
        {
         "key": "battery_state_photo",
-        "label": "Battery State photo",
+        "label": "Battery State Photo",
         "config": {
          "max_count": 1,
          "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "battery_st_1",
         "type": "photo"
        },
        {
         "key": "generator_state_photo",
-        "label": "Generator State photo",
+        "label": "Generator / Alternator State Photo",
         "config": {
          "max_count": 1,
          "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "generator_st_2",
         "type": "photo"
        }
-      ]
+      ],
+      "library": "battery_and_charging"
      }
     ]
    },
@@ -8015,8 +8573,8 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "cng_plate",
-        "type": "photo"
+        "type": "photo",
+        "library": "cng_plate_photo"
        },
        {
         "key": "cng_hydro_test_date",
@@ -8024,8 +8582,8 @@
         "config": {},
         "required": true,
         "helper_text": "",
-        "clappia": "cng_hydro_",
-        "type": "date"
+        "type": "date",
+        "library": "cng_hydro_test_date"
        },
        {
         "key": "cng_fitting",
@@ -8038,14 +8596,15 @@
           },
           {
            "key": "outside_fitted_conventional",
-           "label": "Outside Fitted (Conventional)"
+           "label": "Outside Fitted (Conventional)",
+           "tone": "warn"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "cng_fittin",
-        "type": "single_choice"
+        "type": "single_choice",
+        "library": "cng_fitting"
        }
       ],
       "show_if": {
@@ -8076,24 +8635,24 @@
       "fields": [
        {
         "key": "any_fault_codes_present",
-        "label": "Any Fault Codes Present ?",
+        "label": "OBD Fault Codes",
         "config": {
          "options": [
           {
-           "key": "no",
-           "label": "No",
+           "key": "not_present",
+           "label": "Not Present",
            "tone": "ok"
           },
           {
-           "key": "yes",
-           "label": "Yes",
+           "key": "present",
+           "label": "Present",
            "tone": "bad",
            "is_defect": true,
            "severity": "major"
           },
           {
            "key": "port_not_working",
-           "label": "Port not working",
+           "label": "Port Not Working",
            "tone": "bad",
            "is_defect": true,
            "severity": "major"
@@ -8107,7 +8666,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "any_fault_",
         "type": "single_choice"
        },
        {
@@ -8119,7 +8677,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "obd_scan_image",
         "type": "photo",
         "show_if": {
          "!": {
@@ -8134,7 +8691,8 @@
          }
         }
        }
-      ]
+      ],
+      "library": "obd_scan"
      }
     ]
    },
@@ -8146,17 +8704,17 @@
       "fields": [
        {
         "key": "central_lock_working",
-        "label": "Central Lock Working",
+        "label": "Central Lock",
         "config": {
          "options": [
           {
-           "key": "ok",
-           "label": "Ok",
+           "key": "working",
+           "label": "Working",
            "tone": "ok"
           },
           {
-           "key": "not_ok",
-           "label": "Not Ok",
+           "key": "not_working",
+           "label": "Not Working",
            "tone": "bad",
            "is_defect": true,
            "severity": "major"
@@ -8170,36 +8728,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "central_lo",
-        "type": "single_choice"
-       },
-       {
-        "key": "ignition_switch_push_button",
-        "label": "Ignition Switch / Push Button",
-        "config": {
-         "options": [
-          {
-           "key": "ok",
-           "label": "Ok",
-           "tone": "ok"
-          },
-          {
-           "key": "not_ok",
-           "label": "Not Ok",
-           "tone": "bad",
-           "is_defect": true,
-           "severity": "major"
-          }
-         ]
-        },
-        "required": true,
-        "helper_text": "Start the car engine",
-        "clappia": "ignition_s",
         "type": "single_choice"
        },
        {
         "key": "driver_front_indicator",
-        "label": "Driver - Front Indicator",
+        "label": "Driver - Front Indicator Light",
         "config": {
          "options": [
           {
@@ -8218,12 +8751,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_fro_1",
         "type": "single_choice"
        },
        {
         "key": "passenger_front_indicator_electrical_and_interior",
-        "label": "Passenger - Front Indicator (electrical and interior)",
+        "label": "Passenger - Front Indicator Light",
         "config": {
          "options": [
           {
@@ -8242,7 +8774,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_front_indicator1",
         "type": "single_choice"
        },
        {
@@ -8266,7 +8797,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_car_",
         "type": "single_choice"
        },
        {
@@ -8290,7 +8820,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_car__3",
         "type": "single_choice"
        },
        {
@@ -8314,7 +8843,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_car__2",
         "type": "single_choice"
        },
        {
@@ -8338,7 +8866,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_car__1",
         "type": "single_choice"
        },
        {
@@ -8367,12 +8894,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "number_pla",
         "type": "single_choice"
        },
        {
         "key": "driver_back_indicator_electrical_and_interior",
-        "label": "Driver - Back Indicator (electrical and interior)",
+        "label": "Driver - Back Indicator Light",
         "config": {
          "options": [
           {
@@ -8391,12 +8917,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_bac",
         "type": "single_choice"
        },
        {
         "key": "passenger_back_indicator_electrical_and_interior",
-        "label": "Passenger - Back Indicator (electrical and interior)",
+        "label": "Passenger - Back Indicator Light",
         "config": {
          "options": [
           {
@@ -8415,7 +8940,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_back_indicator",
         "type": "single_choice"
        },
        {
@@ -8444,7 +8968,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "back_numb_1",
         "type": "single_choice"
        },
        {
@@ -8468,7 +8991,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_ligh",
         "type": "single_choice"
        },
        {
@@ -8492,7 +9014,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_ligh_1",
         "type": "single_choice"
        },
        {
@@ -8516,7 +9037,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "back_car_m",
         "type": "single_choice"
        },
        {
@@ -8540,7 +9060,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "back_car_m_1",
         "type": "single_choice"
        },
        {
@@ -8564,7 +9083,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "steering_w",
         "type": "single_choice"
        },
        {
@@ -8593,7 +9111,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "steering_m",
         "type": "single_choice"
        },
        {
@@ -8622,7 +9139,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "back_camer",
         "type": "single_choice"
        },
        {
@@ -8651,7 +9167,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "reverse_parking_sensor",
         "type": "single_choice"
        },
        {
@@ -8675,12 +9190,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "multi_func",
         "type": "single_choice"
        },
        {
         "key": "multi_function_display_photo",
-        "label": "Multi Function Display photo",
+        "label": "Multi Function Display Photo",
         "config": {
          "max_count": 5,
          "capture": "camera",
@@ -8688,7 +9202,6 @@
         },
         "required": true,
         "helper_text": "In Car On",
-        "clappia": "multi_func_1",
         "type": "photo",
         "show_if": {
          "in": [
@@ -8711,7 +9224,6 @@
         },
         "required": true,
         "helper_text": "In Car Start",
-        "clappia": "multi_func_2",
         "type": "photo",
         "show_if": {
          "in": [
@@ -8745,7 +9257,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "car_horn",
         "type": "single_choice"
        },
        {
@@ -8774,7 +9285,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "entertainm",
         "type": "single_choice"
        },
        {
@@ -8808,7 +9318,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "cruise_control",
         "type": "single_choice"
        },
        {
@@ -8832,7 +9341,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "interior_l",
         "type": "single_choice"
        },
        {
@@ -8861,7 +9369,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "sun_roof_c",
         "type": "single_choice"
        },
        {
@@ -8890,36 +9397,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "bonnet_rel",
-        "type": "single_choice"
-       },
-       {
-        "key": "check_onboard_computer_adblue_level_diesel_cars",
-        "label": "Check Onboard computer AdBlue Level - diesel Cars",
-        "config": {
-         "options": [
-          {
-           "key": "working",
-           "label": "Working",
-           "tone": "ok"
-          },
-          {
-           "key": "not_working",
-           "label": "Not Working",
-           "tone": "bad",
-           "is_defect": true,
-           "severity": "major"
-          },
-          {
-           "key": "not_applicable",
-           "label": "Not Applicable",
-           "tone": "muted"
-          }
-         ]
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "check_onbo",
         "type": "single_choice"
        },
        {
@@ -8943,7 +9420,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "window_saf",
         "type": "single_choice"
        },
        {
@@ -8967,7 +9443,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "left_side_",
         "type": "single_choice"
        },
        {
@@ -8991,7 +9466,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "right_side",
         "type": "single_choice"
        },
        {
@@ -9015,7 +9489,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "glove_box",
         "type": "single_choice"
        },
        {
@@ -9039,8 +9512,58 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "wiper",
         "type": "single_choice"
+       },
+       {
+        "key": "wiper_washer_spray",
+        "label": "Wiper Washer Spray",
+        "type": "single_choice",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "options": [
+          {
+           "key": "working",
+           "label": "Working",
+           "tone": "ok"
+          },
+          {
+           "key": "not_working",
+           "label": "Not Working",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          }
+         ]
+        }
+       },
+       {
+        "key": "rear_wiper",
+        "label": "Rear Wiper",
+        "type": "single_choice",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "options": [
+          {
+           "key": "working",
+           "label": "Working",
+           "tone": "ok"
+          },
+          {
+           "key": "not_working",
+           "label": "Not Working",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          },
+          {
+           "key": "not_applicable",
+           "label": "Not Applicable",
+           "tone": "muted"
+          }
+         ]
+        }
        },
        {
         "key": "rear_view_mirror",
@@ -9063,7 +9586,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rear_view_",
         "type": "single_choice"
        },
        {
@@ -9087,7 +9609,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "dashboard_",
         "type": "single_choice"
        },
        {
@@ -9111,12 +9632,22 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "car_top_fr",
         "type": "single_choice"
        },
        {
-        "key": "fuel_cap_release_operation",
-        "label": "Fuel Cap Release Operation",
+        "key": "car_roof_from_inside_photo",
+        "label": "Car Roof from Inside Photo",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo"
+       },
+       {
+        "key": "seat_adjustment_driver_side",
+        "label": "Seat Adjustment Driver Side",
         "config": {
          "options": [
           {
@@ -9130,49 +9661,11 @@
            "tone": "bad",
            "is_defect": true,
            "severity": "major"
-          },
-          {
-           "key": "not_applicable",
-           "label": "Not Applicable",
-           "tone": "muted"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "fuel_cap_r",
-        "type": "single_choice"
-       },
-       {
-        "key": "car_roof_from_inside_photo",
-        "label": "Car Roof from Inside photo",
-        "config": {
-         "max_count": 1,
-         "capture": "camera"
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "car_top_image",
-        "type": "photo"
-       },
-       {
-        "key": "seat_adjustment_driver_side",
-        "label": "Seat Adjustment Driver Side",
-        "config": {
-         "options": [
-          {
-           "key": "working",
-           "label": "Working"
-          },
-          {
-           "key": "not_working",
-           "label": "Not Working"
-          }
-         ]
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "seat_adjus",
         "type": "single_choice"
        },
        {
@@ -9182,17 +9675,20 @@
          "options": [
           {
            "key": "ok",
-           "label": "Ok"
+           "label": "Ok",
+           "tone": "ok"
           },
           {
            "key": "not_ok",
-           "label": "Not Ok"
+           "label": "Not Ok",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_driv_1",
         "type": "single_choice"
        },
        {
@@ -9221,7 +9717,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_driv",
         "type": "single_choice"
        },
        {
@@ -9231,17 +9726,20 @@
          "options": [
           {
            "key": "ok",
-           "label": "Ok"
+           "label": "Ok",
+           "tone": "ok"
           },
           {
            "key": "not_ok",
-           "label": "Not Ok"
+           "label": "Not Ok",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_driv_2",
         "type": "single_choice"
        },
        {
@@ -9251,17 +9749,20 @@
          "options": [
           {
            "key": "ok",
-           "label": "Ok"
+           "label": "Ok",
+           "tone": "ok"
           },
           {
            "key": "not_ok",
-           "label": "Not Ok"
+           "label": "Not Ok",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_pass",
         "type": "single_choice"
        },
        {
@@ -9290,7 +9791,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_pass_2",
         "type": "single_choice"
        },
        {
@@ -9300,17 +9800,20 @@
          "options": [
           {
            "key": "ok",
-           "label": "Ok"
+           "label": "Ok",
+           "tone": "ok"
           },
           {
            "key": "not_ok",
-           "label": "Not Ok"
+           "label": "Not Ok",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_pass_1",
         "type": "single_choice"
        },
        {
@@ -9320,17 +9823,20 @@
          "options": [
           {
            "key": "working",
-           "label": "Working"
+           "label": "Working",
+           "tone": "ok"
           },
           {
            "key": "not_working",
-           "label": "Not Working"
+           "label": "Not Working",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "seat_adjus_passenger1",
         "type": "single_choice"
        },
        {
@@ -9354,7 +9860,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "window_dri",
         "type": "single_choice"
        },
        {
@@ -9378,7 +9883,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "window_pas",
         "type": "single_choice"
        },
        {
@@ -9402,7 +9906,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "window_pas_1",
         "type": "single_choice"
        },
        {
@@ -9426,7 +9929,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "window_dri_1",
         "type": "single_choice"
        },
        {
@@ -9436,21 +9938,25 @@
          "options": [
           {
            "key": "working",
-           "label": "Working"
+           "label": "Working",
+           "tone": "ok"
           },
           {
            "key": "not_working",
-           "label": "Not Working"
+           "label": "Not Working",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           },
           {
            "key": "not_applicable",
-           "label": "Not Applicable"
+           "label": "Not Applicable",
+           "tone": "muted"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "seat_adjus_2",
         "type": "single_choice"
        },
        {
@@ -9479,7 +9985,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "back_drive",
         "type": "single_choice"
        },
        {
@@ -9489,17 +9994,20 @@
          "options": [
           {
            "key": "ok",
-           "label": "Ok"
+           "label": "Ok",
+           "tone": "ok"
           },
           {
            "key": "not_ok",
-           "label": "Not Ok"
+           "label": "Not Ok",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "back_drive_2",
         "type": "single_choice"
        },
        {
@@ -9509,17 +10017,20 @@
          "options": [
           {
            "key": "ok",
-           "label": "Ok"
+           "label": "Ok",
+           "tone": "ok"
           },
           {
            "key": "not_ok",
-           "label": "Not Ok"
+           "label": "Not Ok",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "back_drive_1",
         "type": "single_choice"
        },
        {
@@ -9529,21 +10040,25 @@
          "options": [
           {
            "key": "working",
-           "label": "Working"
+           "label": "Working",
+           "tone": "ok"
           },
           {
            "key": "not_working",
-           "label": "Not Working"
+           "label": "Not Working",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           },
           {
            "key": "not_applicable",
-           "label": "Not Applicable"
+           "label": "Not Applicable",
+           "tone": "muted"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "seat_adjus_1",
         "type": "single_choice"
        },
        {
@@ -9572,7 +10087,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "back_passe",
         "type": "single_choice"
        },
        {
@@ -9582,17 +10096,20 @@
          "options": [
           {
            "key": "ok",
-           "label": "Ok"
+           "label": "Ok",
+           "tone": "ok"
           },
           {
            "key": "not_ok",
-           "label": "Not Ok"
+           "label": "Not Ok",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "back_passe_1",
         "type": "single_choice"
        },
        {
@@ -9602,93 +10119,109 @@
          "options": [
           {
            "key": "ok",
-           "label": "Ok"
+           "label": "Ok",
+           "tone": "ok"
           },
           {
            "key": "not_ok",
-           "label": "Not Ok"
+           "label": "Not Ok",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "back_passe_2",
         "type": "single_choice"
        },
        {
         "key": "rear_side_floor_7_seater",
-        "label": "Rear Side Floor - 7 Seater",
+        "label": "Third Row Floor",
         "config": {
          "options": [
           {
            "key": "ok",
-           "label": "Ok"
+           "label": "Ok",
+           "tone": "ok"
           },
           {
            "key": "not_ok",
-           "label": "Not Ok"
+           "label": "Not Ok",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           },
           {
            "key": "covered_not_able_to_see",
-           "label": "Covered - Not Able To See"
+           "label": "Covered - Not Able To See",
+           "tone": "warn"
           },
           {
            "key": "not_applicable",
-           "label": "Not Applicable"
+           "label": "Not Applicable",
+           "tone": "muted"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rear_side_",
         "type": "single_choice"
        },
        {
         "key": "rear_seat_condition_7_seater",
-        "label": "Rear Seat Condition - 7 Seater",
+        "label": "Third Row Seat Condition",
         "config": {
          "options": [
           {
            "key": "ok",
-           "label": "Ok"
+           "label": "Ok",
+           "tone": "ok"
           },
           {
            "key": "not_ok",
-           "label": "Not Ok"
+           "label": "Not Ok",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           },
           {
            "key": "not_applicable",
-           "label": "Not Applicable"
+           "label": "Not Applicable",
+           "tone": "muted"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rear_seat_",
         "type": "single_choice"
        },
        {
         "key": "rear_seat_belt_7_seater",
-        "label": "Rear Seat Belt - 7 Seater",
+        "label": "Third Row Seat Belt",
         "config": {
          "options": [
           {
            "key": "ok",
-           "label": "Ok"
+           "label": "Ok",
+           "tone": "ok"
           },
           {
            "key": "not_ok",
-           "label": "Not Ok"
+           "label": "Not Ok",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
           },
           {
            "key": "not_applicable",
-           "label": "Not Applicable"
+           "label": "Not Applicable",
+           "tone": "muted"
           }
          ]
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_pass_3",
         "type": "single_choice"
        },
        {
@@ -9712,7 +10245,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "child_safe",
         "type": "single_choice"
        },
        {
@@ -9721,10 +10253,96 @@
         "config": {},
         "required": true,
         "helper_text": "Mention if anything not working",
-        "clappia": "check_all_",
         "type": "short_text"
        }
-      ]
+      ],
+      "library": "electrical_and_interior"
+     },
+     {
+      "title": "Ignition and Fuel Controls",
+      "fields": [
+       {
+        "key": "ignition_switch_push_button",
+        "label": "Ignition Switch / Push Button",
+        "config": {
+         "options": [
+          {
+           "key": "ok",
+           "label": "Ok",
+           "tone": "ok"
+          },
+          {
+           "key": "not_ok",
+           "label": "Not Ok",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "Start the car engine",
+        "type": "single_choice"
+       },
+       {
+        "key": "check_onboard_computer_adblue_level_diesel_cars",
+        "label": "AdBlue Level Display (Diesel)",
+        "config": {
+         "options": [
+          {
+           "key": "working",
+           "label": "Working",
+           "tone": "ok"
+          },
+          {
+           "key": "not_working",
+           "label": "Not Working",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          },
+          {
+           "key": "not_applicable",
+           "label": "Not Applicable",
+           "tone": "muted"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "single_choice"
+       },
+       {
+        "key": "fuel_cap_release_operation",
+        "label": "Fuel Cap Release Operation",
+        "config": {
+         "options": [
+          {
+           "key": "working",
+           "label": "Working",
+           "tone": "ok"
+          },
+          {
+           "key": "not_working",
+           "label": "Not Working",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          },
+          {
+           "key": "not_applicable",
+           "label": "Not Applicable",
+           "tone": "muted"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "single_choice"
+       }
+      ],
+      "library": "ignition_and_fuel_controls",
+      "parent": "Electrical and Interior"
      }
     ]
    },
@@ -9734,30 +10352,6 @@
      {
       "title": "Warning Lights",
       "fields": [
-       {
-        "key": "check_engine",
-        "label": "Check Engine",
-        "config": {
-         "options": [
-          {
-           "key": "not_present",
-           "label": "Not Present",
-           "tone": "ok"
-          },
-          {
-           "key": "present",
-           "label": "Present",
-           "tone": "bad",
-           "is_defect": true,
-           "severity": "major"
-          }
-         ]
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "engine_war",
-        "type": "single_choice"
-       },
        {
         "key": "power_steering_problem",
         "label": "Power Steering Problem",
@@ -9784,7 +10378,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "power_stee",
         "type": "single_choice"
        },
        {
@@ -9813,7 +10406,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "abs_warnin",
         "type": "single_choice"
        },
        {
@@ -9842,7 +10434,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "airbag_sensor",
         "type": "single_choice"
        },
        {
@@ -9866,31 +10457,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "battery_wa",
-        "type": "single_choice"
-       },
-       {
-        "key": "low_engine_oil",
-        "label": "Low Engine Oil",
-        "config": {
-         "options": [
-          {
-           "key": "not_present",
-           "label": "Not Present",
-           "tone": "ok"
-          },
-          {
-           "key": "present",
-           "label": "Present",
-           "tone": "bad",
-           "is_defect": true,
-           "severity": "major"
-          }
-         ]
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "oil_pressu",
         "type": "single_choice"
        },
        {
@@ -9914,7 +10480,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "low_cool",
         "type": "single_choice"
        },
        {
@@ -9938,12 +10503,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_sys_war",
         "type": "single_choice"
        },
        {
         "key": "any_other_lights_found",
-        "label": "Any Other Lights Found?",
+        "label": "Other Warning Lights",
         "config": {
          "options": [
           {
@@ -9962,7 +10526,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "any_other_control",
         "type": "single_choice"
        },
        {
@@ -9971,7 +10534,6 @@
         "config": {},
         "required": true,
         "helper_text": "",
-        "clappia": "control_pa",
         "type": "short_text",
         "show_if": {
          "==": [
@@ -9982,7 +10544,61 @@
          ]
         }
        }
-      ]
+      ],
+      "library": "warning_lights"
+     },
+     {
+      "title": "Engine Warning Lights",
+      "fields": [
+       {
+        "key": "check_engine",
+        "label": "Check Engine Light",
+        "config": {
+         "options": [
+          {
+           "key": "not_present",
+           "label": "Not Present",
+           "tone": "ok"
+          },
+          {
+           "key": "present",
+           "label": "Present",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "single_choice"
+       },
+       {
+        "key": "low_engine_oil",
+        "label": "Low Engine Oil",
+        "config": {
+         "options": [
+          {
+           "key": "not_present",
+           "label": "Not Present",
+           "tone": "ok"
+          },
+          {
+           "key": "present",
+           "label": "Present",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "single_choice"
+       }
+      ],
+      "library": "engine_warning_lights",
+      "parent": "Warning Lights"
      }
     ]
    },
@@ -9994,17 +10610,17 @@
       "fields": [
        {
         "key": "air_conditioning_turning_on",
-        "label": "Air Conditioning Turning On",
+        "label": "AC Switching On",
         "config": {
          "options": [
           {
-           "key": "ok",
-           "label": "Ok",
+           "key": "working",
+           "label": "Working",
            "tone": "ok"
           },
           {
-           "key": "not_ok",
-           "label": "Not Ok",
+           "key": "not_working",
+           "label": "Not Working",
            "tone": "bad",
            "is_defect": true,
            "severity": "major"
@@ -10013,40 +10629,41 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "air_condit",
         "type": "single_choice"
        },
        {
         "key": "ac_cool_temperature",
         "label": "AC Cool Temperature",
-        "config": {},
+        "config": {
+         "unit": "°C"
+        },
         "required": true,
         "helper_text": "",
-        "clappia": "ac_cool_te",
         "type": "number"
        },
        {
         "key": "ac_hot_temperature",
         "label": "AC Hot Temperature",
-        "config": {},
+        "config": {
+         "unit": "°C"
+        },
         "required": true,
         "helper_text": "",
-        "clappia": "ac_hot_te",
         "type": "number"
        },
        {
         "key": "air_conditioning_direction_mode_working",
-        "label": "Air Conditioning Direction Mode Working",
+        "label": "AC Air Direction Modes",
         "config": {
          "options": [
           {
-           "key": "ok",
-           "label": "Ok",
+           "key": "working",
+           "label": "Working",
            "tone": "ok"
           },
           {
-           "key": "not_ok",
-           "label": "Not Ok",
+           "key": "not_working",
+           "label": "Not Working",
            "tone": "bad",
            "is_defect": true,
            "severity": "major"
@@ -10055,22 +10672,21 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "air_condit_5",
         "type": "single_choice"
        },
        {
         "key": "de_fogger_front_vent_working",
-        "label": "De fogger Front Vent Working",
+        "label": "Front Defogger Vent",
         "config": {
          "options": [
           {
-           "key": "ok",
-           "label": "Ok",
+           "key": "working",
+           "label": "Working",
            "tone": "ok"
           },
           {
-           "key": "not_ok",
-           "label": "Not Ok",
+           "key": "not_working",
+           "label": "Not Working",
            "tone": "bad",
            "is_defect": true,
            "severity": "major"
@@ -10079,22 +10695,21 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "air_condit_4",
         "type": "single_choice"
        },
        {
         "key": "de_fogger_rear_vent_working",
-        "label": "De fogger Rear Vent Working",
+        "label": "Rear Defogger Vent",
         "config": {
          "options": [
           {
-           "key": "ok",
-           "label": "Ok",
+           "key": "working",
+           "label": "Working",
            "tone": "ok"
           },
           {
-           "key": "not_ok",
-           "label": "Not Ok",
+           "key": "not_working",
+           "label": "Not Working",
            "tone": "bad",
            "is_defect": true,
            "severity": "major"
@@ -10108,22 +10723,21 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "de_fogger_",
         "type": "single_choice"
        },
        {
         "key": "air_conditioning_all_vents",
-        "label": "Air Conditioning All Vents",
+        "label": "AC Vents",
         "config": {
          "options": [
           {
-           "key": "ok",
-           "label": "Ok",
+           "key": "working",
+           "label": "Working",
            "tone": "ok"
           },
           {
-           "key": "not_ok",
-           "label": "Not Ok",
+           "key": "not_working",
+           "label": "Not Working",
            "tone": "bad",
            "is_defect": true,
            "severity": "major"
@@ -10132,7 +10746,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "air_condit_3",
         "type": "single_choice"
        },
        {
@@ -10156,7 +10769,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "ac_abnorma",
         "type": "single_choice"
        },
        {
@@ -10168,7 +10780,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "ac_cool_mo",
         "type": "photo"
        },
        {
@@ -10180,10 +10791,21 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "ac_hot_mo",
         "type": "photo"
+       },
+       {
+        "key": "air_condition_video_at_fan_max_speed",
+        "label": "Air Condition Video at Fan Max Speed",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "video"
        }
-      ]
+      ],
+      "library": "air_conditioning"
      }
     ]
    },
@@ -10214,7 +10836,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_peda",
         "type": "single_choice"
        },
        {
@@ -10238,12 +10859,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "steering",
         "type": "single_choice"
        },
        {
         "key": "steering_coming_back_while_driving",
-        "label": "Steering coming Back While Driving",
+        "label": "Steering Self-Centring",
         "config": {
          "options": [
           {
@@ -10267,12 +10887,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "steering_c",
         "type": "single_choice"
        },
        {
         "key": "steering_weird_noise",
-        "label": "Steering Weird Noise",
+        "label": "Abnormal Steering Noise",
         "config": {
          "options": [
           {
@@ -10291,7 +10910,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "steering_w_1",
         "type": "single_choice"
        },
        {
@@ -10320,7 +10938,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "alignment",
         "type": "single_choice"
        },
        {
@@ -10349,7 +10966,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "bubbling",
         "type": "single_choice"
        },
        {
@@ -10378,15 +10994,15 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "steering_v",
         "type": "single_choice"
        }
-      ]
+      ],
+      "library": "brakes_and_steering"
      }
     ]
    },
    {
-    "title": "Test drive",
+    "title": "Axle",
     "sections": [
      {
       "title": "Axle",
@@ -10412,7 +11028,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "left_axle",
         "type": "single_choice"
        },
        {
@@ -10436,12 +11051,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "right_axle",
         "type": "single_choice"
        },
        {
         "key": "abnormal_noise",
-        "label": "Abnormal noise",
+        "label": "Abnormal Axle Noise",
         "config": {
          "options": [
           {
@@ -10460,10 +11074,21 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "abnormal_n",
         "type": "single_choice"
+       },
+       {
+        "key": "axle_rotating_video",
+        "label": "Axle Rotating Video",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "First extremet Left and Then extreme Right",
+        "type": "video"
        }
-      ]
+      ],
+      "library": "axle"
      }
     ]
    },
@@ -10475,7 +11100,7 @@
       "fields": [
        {
         "key": "check_gear_box_transmission_shifting",
-        "label": "Check Gear Box/ Transmission Shifting",
+        "label": "Gear Shifting",
         "config": {
          "options": [
           {
@@ -10506,12 +11131,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "check_gear",
         "type": "single_choice"
        },
        {
         "key": "check_4x4_shifting",
-        "label": "Check 4x4 Shifting",
+        "label": "4x4 Shifting",
         "config": {
          "options": [
           {
@@ -10535,7 +11159,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "check_4x4_",
         "type": "single_choice"
        },
        {
@@ -10564,7 +11187,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "clutch_ped",
         "type": "single_choice"
        },
        {
@@ -10588,7 +11210,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "clutch_eng",
         "type": "single_choice"
        },
        {
@@ -10612,7 +11233,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "clutch_eng_1",
         "type": "single_choice"
        },
        {
@@ -10636,10 +11256,10 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "clutch_eng_2",
         "type": "single_choice"
        }
-      ]
+      ],
+      "library": "transmission_and_clutch_pedal"
      }
     ]
    },
@@ -10655,7 +11275,6 @@
         "config": {},
         "required": true,
         "helper_text": "",
-        "clappia": "tyre_size",
         "type": "short_text"
        },
        {
@@ -10675,7 +11294,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "tyre_type",
         "type": "single_choice"
        },
        {
@@ -10695,7 +11313,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rim_type",
         "type": "single_choice"
        },
        {
@@ -10726,8 +11343,20 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driverfron",
         "type": "single_choice"
+       },
+       {
+        "key": "driver_front_tyre_tread_depth_mm",
+        "label": "Driver Front Tyre Tread Depth (mm)",
+        "type": "number",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "unit": "mm",
+         "min": 0,
+         "max": 20,
+         "decimals": 1
+        }
        },
        {
         "key": "driver_front_tyre_tread_depth",
@@ -10738,7 +11367,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_fro_2",
         "type": "photo"
        },
        {
@@ -10750,7 +11378,6 @@
         },
         "required": false,
         "helper_text": "",
-        "clappia": "driverfron_1",
         "type": "short_text"
        },
        {
@@ -10774,7 +11401,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driverfron_4",
         "type": "single_choice"
        },
        {
@@ -10805,8 +11431,20 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driverfron_2",
         "type": "single_choice"
+       },
+       {
+        "key": "driver_back_tyre_tread_depth_mm",
+        "label": "Driver Back Tyre Tread Depth (mm)",
+        "type": "number",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "unit": "mm",
+         "min": 0,
+         "max": 20,
+         "decimals": 1
+        }
        },
        {
         "key": "driver_back_tyre_tread_depth",
@@ -10817,7 +11455,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_fro_3",
         "type": "photo"
        },
        {
@@ -10826,7 +11463,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "driverfron_3",
         "type": "short_text"
        },
        {
@@ -10850,7 +11486,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driverfron_5",
         "type": "single_choice"
        },
        {
@@ -10881,8 +11516,20 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_back_tyre1",
         "type": "single_choice"
+       },
+       {
+        "key": "passenger_back_tyre_tread_depth_mm",
+        "label": "Passenger Back Tyre Tread Depth (mm)",
+        "type": "number",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "unit": "mm",
+         "min": 0,
+         "max": 20,
+         "decimals": 1
+        }
        },
        {
         "key": "passenger_back_tyre_tread_depth",
@@ -10893,7 +11540,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "pass_bac_1",
         "type": "photo"
        },
        {
@@ -10902,7 +11548,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "passenger_back_tyre_date1",
         "type": "short_text"
        },
        {
@@ -10926,7 +11571,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_back_tyre_shape1",
         "type": "single_choice"
        },
        {
@@ -10957,8 +11601,20 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_front_tyre1",
         "type": "single_choice"
+       },
+       {
+        "key": "passenger_front_tyre_tread_depth_mm",
+        "label": "Passenger Front Tyre Tread Depth (mm)",
+        "type": "number",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "unit": "mm",
+         "min": 0,
+         "max": 20,
+         "decimals": 1
+        }
        },
        {
         "key": "passenger_front_tyre_tread_depth",
@@ -10969,7 +11625,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger__10",
         "type": "photo"
        },
        {
@@ -10978,7 +11633,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "passenger_front_tyre_date",
         "type": "short_text"
        },
        {
@@ -11002,7 +11656,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger_front_tyre_shape",
         "type": "single_choice"
        },
        {
@@ -11038,8 +11691,30 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "stepney_ty",
         "type": "single_choice"
+       },
+       {
+        "key": "stepney_tyre_tread_depth_mm",
+        "label": "Stepney Tyre Tread Depth (mm)",
+        "type": "number",
+        "required": true,
+        "helper_text": "",
+        "config": {
+         "unit": "mm",
+         "min": 0,
+         "max": 20,
+         "decimals": 1
+        },
+        "show_if": {
+         "!": {
+          "==": [
+           {
+            "var": "inspection.stepney_tyre_depth_check"
+           },
+           "stepney_not_available"
+          ]
+         }
+        }
        },
        {
         "key": "stepney_tyre_tread_depth",
@@ -11050,7 +11725,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "stepney__11",
         "type": "photo",
         "show_if": null
        },
@@ -11060,7 +11734,6 @@
         "config": {},
         "required": false,
         "helper_text": "",
-        "clappia": "stepney_ty_1",
         "type": "short_text",
         "show_if": {
          "!": {
@@ -11091,6 +11764,11 @@
            "severity": "major"
           },
           {
+           "key": "not_applicable",
+           "label": "Not Applicable",
+           "tone": "muted"
+          },
+          {
            "key": "not_able_to_check",
            "label": "Not Able to Check",
            "tone": "warn"
@@ -11099,7 +11777,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "stepney_ty_2",
         "type": "single_choice",
         "show_if": {
          "!": {
@@ -11114,7 +11791,7 @@
        },
        {
         "key": "signs_of_camber_issue",
-        "label": "Signs of Camber Issue",
+        "label": "Camber Issue",
         "config": {
          "options": [
           {
@@ -11133,10 +11810,10 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "signs_of_c",
         "type": "single_choice"
        }
-      ]
+      ],
+      "library": "tyres"
      }
     ]
    },
@@ -11172,7 +11849,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_pads",
         "type": "single_choice"
        },
        {
@@ -11201,7 +11877,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_disc",
         "type": "single_choice"
        },
        {
@@ -11235,7 +11910,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_cali",
         "type": "single_choice"
        },
        {
@@ -11264,7 +11938,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_pads_1",
         "type": "single_choice"
        },
        {
@@ -11293,7 +11966,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_disc_1",
         "type": "single_choice"
        },
        {
@@ -11327,7 +11999,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_cali_1",
         "type": "single_choice"
        },
        {
@@ -11356,12 +12027,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_pads_2",
         "type": "single_choice"
        },
        {
         "key": "brake_discs_back_passengerside",
-        "label": "Brake Discs Back PassengerSide",
+        "label": "Brake Discs Back Passenger Side",
         "config": {
          "options": [
           {
@@ -11385,12 +12055,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_disc_2",
         "type": "single_choice"
        },
        {
         "key": "brake_calipers_back_passengerside",
-        "label": "Brake Calipers Back PassengerSide",
+        "label": "Brake Calipers Back Passenger Side",
         "config": {
          "options": [
           {
@@ -11419,12 +12088,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_cali_2",
         "type": "single_choice"
        },
        {
         "key": "brake_pads_back_driverside",
-        "label": "Brake Pads Back DriverSide",
+        "label": "Brake Pads Back Driver Side",
         "config": {
          "options": [
           {
@@ -11448,12 +12116,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_pads_3",
         "type": "single_choice"
        },
        {
         "key": "brake_discs_back_driverside",
-        "label": "Brake Discs Back DriverSide",
+        "label": "Brake Discs Back Driver Side",
         "config": {
          "options": [
           {
@@ -11477,12 +12144,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_disc_3",
         "type": "single_choice"
        },
        {
         "key": "brake_calipers_back_driverside",
-        "label": "Brake Calipers Back DriverSide",
+        "label": "Brake Calipers Back Driver Side",
         "config": {
          "options": [
           {
@@ -11511,7 +12177,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_cali_3",
         "type": "single_choice"
        },
        {
@@ -11535,7 +12200,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_flui",
         "type": "single_choice"
        },
        {
@@ -11559,7 +12223,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "brake_flui_1",
         "type": "single_choice"
        },
        {
@@ -11583,10 +12246,10 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "parking_ha",
         "type": "single_choice"
        }
-      ]
+      ],
+      "library": "brakes"
      }
     ]
    },
@@ -11598,7 +12261,7 @@
       "fields": [
        {
         "key": "car_height",
-        "label": "Car Height",
+        "label": "Ride Height",
         "config": {
          "options": [
           {
@@ -11617,7 +12280,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "car_height",
         "type": "single_choice"
        },
        {
@@ -11641,7 +12303,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "shocks_and",
         "type": "single_choice"
        },
        {
@@ -11665,7 +12326,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_12",
         "type": "single_choice"
        },
        {
@@ -11689,7 +12349,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_16",
         "type": "single_choice"
        },
        {
@@ -11713,7 +12372,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_13",
         "type": "single_choice"
        },
        {
@@ -11737,10 +12395,54 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_17",
         "type": "single_choice"
+       },
+       {
+        "key": "driver_side_front_shocker_photo",
+        "label": "Driver Side Front Shocker Photo",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo"
+       },
+       {
+        "key": "passenger_side_front_shocker_photo",
+        "label": "Passenger Side Front Shocker Photo",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo"
+       },
+       {
+        "key": "driver_side_rear_shocker_photo",
+        "label": "Driver Side Rear Shocker Photo",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo"
+       },
+       {
+        "key": "passenger_side_rear_shocker_photo",
+        "label": "Passenger Side Rear Shocker Photo",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo"
        }
-      ]
+      ],
+      "library": "suspension"
      }
     ]
    },
@@ -11790,7 +12492,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_18",
         "type": "multi_choice"
        },
        {
@@ -11833,7 +12534,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger__8",
         "type": "multi_choice"
        },
        {
@@ -11876,12 +12576,155 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rear_subfr_1",
         "type": "multi_choice"
        },
        {
+        "key": "front_protection_cover",
+        "label": "Front Protection Cover",
+        "config": {
+         "options": [
+          {
+           "key": "ok",
+           "label": "Ok",
+           "tone": "ok"
+          },
+          {
+           "key": "not_ok",
+           "label": "Not Ok",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          },
+          {
+           "key": "not_able_to_check",
+           "label": "Not Able to Check",
+           "tone": "warn"
+          },
+          {
+           "key": "not_applicable",
+           "label": "Not Applicable",
+           "tone": "muted"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "single_choice"
+       },
+       {
+        "key": "rear_protection_cover",
+        "label": "Rear Protection Cover",
+        "config": {
+         "options": [
+          {
+           "key": "ok",
+           "label": "Ok",
+           "tone": "ok"
+          },
+          {
+           "key": "not_ok",
+           "label": "Not Ok",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          },
+          {
+           "key": "not_able_to_check",
+           "label": "Not Able to Check",
+           "tone": "warn"
+          },
+          {
+           "key": "not_applicable",
+           "label": "Not Applicable",
+           "tone": "muted"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "single_choice"
+       },
+       {
+        "key": "any_fluid_leaks_under_body",
+        "label": "Fluid Leaks Under Body",
+        "config": {
+         "options": [
+          {
+           "key": "not_present",
+           "label": "Not Present",
+           "tone": "ok"
+          },
+          {
+           "key": "present",
+           "label": "Present",
+           "tone": "bad",
+           "is_defect": true,
+           "severity": "major"
+          },
+          {
+           "key": "not_able_to_check",
+           "label": "Not Able to Check",
+           "tone": "warn"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "single_choice"
+       },
+       {
+        "key": "underbody_left",
+        "label": "Underbody Left",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo"
+       },
+       {
+        "key": "underbody_right",
+        "label": "Underbody Right",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo"
+       },
+       {
+        "key": "underbody_front",
+        "label": "Underbody Front",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo"
+       },
+       {
+        "key": "underbody_rear",
+        "label": "Underbody Rear",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo"
+       }
+      ],
+      "library": "underbody"
+     },
+     {
+      "title": "Engine, Exhaust and Fuel Tank",
+      "fields": [
+       {
         "key": "engine_damage_underbody",
-        "label": "Engine Damage UnderBody",
+        "label": "Engine Underbody",
         "config": {
          "options": [
           {
@@ -11919,12 +12762,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "engine_dam",
         "type": "multi_choice"
        },
        {
         "key": "under_trays",
-        "label": "Under trays",
+        "label": "Under Trays",
         "config": {
          "options": [
           {
@@ -11953,75 +12795,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "under_tray",
-        "type": "single_choice"
-       },
-       {
-        "key": "front_protection_cover",
-        "label": "Front Protection Cover",
-        "config": {
-         "options": [
-          {
-           "key": "ok",
-           "label": "Ok",
-           "tone": "ok"
-          },
-          {
-           "key": "not_ok",
-           "label": "Not Ok",
-           "tone": "bad",
-           "is_defect": true,
-           "severity": "major"
-          },
-          {
-           "key": "not_able_to_check",
-           "label": "Not Able to Check",
-           "tone": "warn"
-          },
-          {
-           "key": "not_applicable",
-           "label": "Not Applicable",
-           "tone": "muted"
-          }
-         ]
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "front_prot",
-        "type": "single_choice"
-       },
-       {
-        "key": "rear_protection_cover",
-        "label": "Rear Protection Cover",
-        "config": {
-         "options": [
-          {
-           "key": "ok",
-           "label": "Ok",
-           "tone": "ok"
-          },
-          {
-           "key": "not_ok",
-           "label": "Not Ok",
-           "tone": "bad",
-           "is_defect": true,
-           "severity": "major"
-          },
-          {
-           "key": "not_able_to_check",
-           "label": "Not Able to Check",
-           "tone": "warn"
-          },
-          {
-           "key": "not_applicable",
-           "label": "Not Applicable",
-           "tone": "muted"
-          }
-         ]
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "rear_prote",
         "type": "single_choice"
        },
        {
@@ -12057,12 +12830,11 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "silencer",
         "type": "multi_choice"
        },
        {
         "key": "fuel_tank",
-        "label": "Fuel tank",
+        "label": "Fuel Tank",
         "config": {
          "options": [
           {
@@ -12093,95 +12865,19 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "fuel_tank",
         "type": "multi_choice"
-       },
-       {
-        "key": "any_fluid_leaks_under_body",
-        "label": "Any fluid Leaks under Body",
-        "config": {
-         "options": [
-          {
-           "key": "not_present",
-           "label": "Not Present",
-           "tone": "ok"
-          },
-          {
-           "key": "present",
-           "label": "Present",
-           "tone": "bad",
-           "is_defect": true,
-           "severity": "major"
-          },
-          {
-           "key": "not_able_to_check",
-           "label": "Not Able to Check",
-           "tone": "warn"
-          }
-         ]
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "any_fluid_",
-        "type": "single_choice"
-       },
-       {
-        "key": "underbody_left",
-        "label": "Underbody Left",
-        "config": {
-         "max_count": 1,
-         "capture": "camera"
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "underbody_",
-        "type": "photo"
-       },
-       {
-        "key": "underbody_right",
-        "label": "Underbody Right",
-        "config": {
-         "max_count": 1,
-         "capture": "camera"
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "underbody__1",
-        "type": "photo"
-       },
-       {
-        "key": "underbody_front",
-        "label": "Underbody Front",
-        "config": {
-         "max_count": 1,
-         "capture": "camera"
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "underbody__2",
-        "type": "photo"
-       },
-       {
-        "key": "underbody_rear",
-        "label": "Underbody Rear",
-        "config": {
-         "max_count": 1,
-         "capture": "camera"
-        },
-        "required": true,
-        "helper_text": "",
-        "clappia": "underbody__3",
-        "type": "photo"
        }
-      ]
+      ],
+      "library": "engine_exhaust_and_fuel_tank",
+      "parent": "UnderBody"
      }
     ]
    },
    {
-    "title": "Equipments",
+    "title": "Tool Kit",
     "sections": [
      {
-      "title": "Equipments",
+      "title": "Tool Kit",
       "fields": [
        {
         "key": "tool_kit",
@@ -12204,7 +12900,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "tool_kit",
         "type": "single_choice"
        },
        {
@@ -12216,10 +12911,10 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "tool_kit_i",
         "type": "photo"
        }
-      ]
+      ],
+      "library": "tool_kit"
      }
     ]
    },
@@ -12238,19 +12933,17 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_view",
         "type": "photo"
        },
        {
         "key": "corner_front_driver",
-        "label": "Corner Front Driver",
+        "label": "Corner Front - Driver",
         "config": {
          "max_count": 1,
          "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "oblique_fr",
         "type": "photo"
        },
        {
@@ -12262,19 +12955,17 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "driver_sid_19",
         "type": "photo"
        },
        {
         "key": "corner_back_driver",
-        "label": "Corner Back Driver",
+        "label": "Corner Back - Driver",
         "config": {
          "max_count": 1,
          "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "oblique_re_1",
         "type": "photo"
        },
        {
@@ -12286,19 +12977,17 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rear_view",
         "type": "photo"
        },
        {
         "key": "corner_back_passenger",
-        "label": "Corner Back Passenger",
+        "label": "Corner Back - Passenger",
         "config": {
          "max_count": 1,
          "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "oblique_re",
         "type": "photo"
        },
        {
@@ -12310,19 +12999,17 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "passenger__9",
         "type": "photo"
        },
        {
         "key": "corner_front_passenger",
-        "label": "Corner Front Passenger",
+        "label": "Corner Front - Passenger",
         "config": {
          "max_count": 1,
          "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "oblique_fr_1",
         "type": "photo"
        },
        {
@@ -12334,7 +13021,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "front_inte",
         "type": "photo"
        },
        {
@@ -12346,7 +13032,6 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "rear_inter",
         "type": "photo"
        },
        {
@@ -12358,22 +13043,21 @@
         },
         "required": true,
         "helper_text": "",
-        "clappia": "_way_switc",
         "type": "photo"
        },
        {
         "key": "trunk_open",
-        "label": "Trunk open",
+        "label": "Trunk Open",
         "config": {
          "max_count": 1,
          "capture": "camera"
         },
         "required": true,
         "helper_text": "",
-        "clappia": "trunk_open",
         "type": "photo"
        }
-      ]
+      ],
+      "library": "car_images_from_all_directions"
      }
     ]
    },
@@ -12389,7 +13073,6 @@
         "config": {},
         "required": true,
         "helper_text": "Short Answer",
-        "clappia": "any_issues",
         "type": "long_text"
        },
        {
@@ -12402,11 +13085,11 @@
         },
         "required": false,
         "helper_text": "",
-        "clappia": "photos_of_",
         "type": "photo",
         "show_if": null
        }
-      ]
+      ],
+      "library": "final_car_result"
      }
     ]
    },
@@ -12454,7 +13137,7 @@
        },
        {
         "key": "rating_tires",
-        "label": "Tires rating",
+        "label": "Tyres rating",
         "type": "rating",
         "config": {
          "category": "tires"
@@ -12470,33 +13153,9 @@
  "extra": {
   "key_checks": [
    {
-    "key": "manufacturing_date",
-    "label": "Manufacturing Date",
-    "type": "date",
-    "default": "Not Mentioned"
-   },
-   {
-    "key": "keycheck1",
-    "label": "Key check 1",
-    "type": "text",
-    "default": ""
-   },
-   {
-    "key": "keycheck2",
-    "label": "Key check 2",
-    "type": "text",
-    "default": ""
-   },
-   {
-    "key": "keycheck3",
-    "label": "Key check 3",
-    "type": "text",
-    "default": ""
-   },
-   {
     "key": "tyre_manufacturing_year",
     "label": "Tyre Manufacturing Year",
-    "type": "number",
+    "type": "text",
     "default": "2026"
    },
    {
@@ -12510,6 +13169,12 @@
     "label": "Repainted Panels",
     "type": "text",
     "default": "Not Found"
+   },
+   {
+    "key": "rusting_in_body",
+    "label": "Rusting in Body",
+    "type": "text",
+    "default": "Not Found"
    }
   ],
   "rating_config": {
@@ -12519,7 +13184,8 @@
      "label": "Exterior",
      "sections": [
       "Exterior Body",
-      "Body Frame Accidental Checklist"
+      "Body Frame",
+      "Fuel Filler Flap"
      ]
     },
     {
@@ -12534,7 +13200,9 @@
      "label": "Electronics",
      "sections": [
       "Electrical and Interior",
-      "Warning Lights"
+      "Warning Lights",
+      "Ignition and Fuel Controls",
+      "Engine Warning Lights"
      ]
     },
     {
@@ -12550,14 +13218,15 @@
     },
     {
      "key": "tires",
-     "label": "Tires",
+     "label": "Tyres",
      "sections": [
       "Tyres",
       "Brakes",
       "Brakes and Steering",
       "Axle",
       "Suspension",
-      "UnderBody"
+      "UnderBody",
+      "Engine, Exhaust and Fuel Tank"
      ]
     }
    ]
