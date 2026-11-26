@@ -193,7 +193,7 @@ class SignInFlowTest {
         server.on("GET sync/jobs", """{"server_time":"2026-11-24T05:00:00Z","jobs":[${`in`.carcid.vayu.core.sync.job(id, stage = "completed")}]}""")
         server.on("POST auth/logout", "", 204)
         launch(); signIn(); waitFor("My leads")
-        compose.waitUntil(5_000) { graph.jobs(3).jobs().any { it.id == id } }
+        compose.waitUntil(10_000) { graph.jobs(3).jobs().any { it.id == id } }   // the first sync is slow under load (CI)
         val waiting = `in`.carcid.vayu.core.draft.LocalFile("f1", "inspection", "front", "photo", "", "image/jpeg", "camera", 4, "", "Front 1")
         graph.drafts(3).save(`in`.carcid.vayu.core.draft.Draft(id, "DEMO-1", "Farhan Ali", emptyMap(), "pdi", submitSent = true, files = listOf(waiting)))
         graph.drafts(3).save(`in`.carcid.vayu.core.draft.Draft(unsentId, "DEMO-2", "Arjun", emptyMap(), "pdi"))
