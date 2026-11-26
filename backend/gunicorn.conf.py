@@ -7,6 +7,9 @@ from gunicorn.glogging import Logger
 
 bind = "0.0.0.0:8000"
 workers = int(os.environ.get("WEB_CONCURRENCY", "2"))   # a 4 GB box; on 8 GB: 4
+# a request may run 2 minutes, not gunicorn's 30 s: a template preview draws the whole PDF in the
+# request (on staging's 2 vCPU about 45 s for a full PDI); past 30 s gunicorn killed the worker
+timeout = int(os.environ.get("GUNICORN_TIMEOUT", "120"))
 accesslog = "-"
 access_log_format = '%(h)s %(t)s "%(m)s %(U)s" %(s)s %(B)s %(L)s'
 TOKEN = re.compile(r"/(verify|zips|zip)/[^/]+")
@@ -15,7 +18,8 @@ TOKEN = re.compile(r"/(verify|zips|zip)/[^/]+")
 class SafeLogger(Logger):
     def atoms(self, resp, req, environ, request_time):
         atoms = super().atoms(resp, req, environ, request_time)
-        atoms["U"] = TOKEN.sub(r"/\1/<token>", atoms.get("U", ""))
+        # "U" can be None (a request cut off before its path was read): never crash the log line
+        atoms["U"] = TOKEN.sub(r"/\1/<token>", atoms.get("U") or "")
         return atoms
 
 

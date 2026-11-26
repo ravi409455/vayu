@@ -833,10 +833,10 @@ def test_a_storage_failure_is_recorded_as_such(renv, settings, monkeypatch):
     set_template(renv)
     real_put = st.put
 
-    def failing_put(key, data, content_type):
+    def failing_put(key, data, content_type, c=None):
         if key.startswith("reports/"):
             raise ClientError({"Error": {"Code": "500", "Message": "https://secret.example"}}, "Put")
-        return real_put(key, data, content_type)
+        return real_put(key, data, content_type, c)
 
     monkeypatch.setattr(st, "put", failing_put)
     b = complete_job(renv, settings=settings)
