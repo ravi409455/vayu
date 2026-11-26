@@ -1,10 +1,23 @@
-# Weekly PRs for the Docker base images and the GitHub Actions we pin by commit id: old images and
-# actions collect security holes (docs/plan-deploy.md 1.18). App libraries are upgraded by hand.
+# Weekly update PRs for the Docker base images and the GitHub Actions we pin: old images and actions
+# collect security holes (docs/plan-deploy.md 1.18). App libraries are upgraded by hand.
+# Grouped: at most one PR a week for all Actions and one for all images, so CI runs twice, not once
+# per update. Node (the web build) stays on its long-term-support line: no major jumps.
 version: 2
 updates:
   - package-ecosystem: docker
     directories: [/backend, /infra]
     schedule: {interval: weekly}
+    open-pull-requests-limit: 1
+    groups:
+      docker-images: {patterns: ["*"]}
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
   - package-ecosystem: github-actions
     directory: /
     schedule: {interval: weekly}
+    open-pull-requests-limit: 1
+    groups:
+      github-actions: {patterns: ["*"]}
