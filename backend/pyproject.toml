@@ -27,6 +27,9 @@ dependencies = [
   "pillow-heif>=1.9.0",
   "pypdf>=7.1.1",
   "pyjwt>=2.8",
+  # kombu 5.7 (Celery's Redis transport) imports it without declaring it: without this line every
+  # worker in the production image crashes at start (found in the deploy rehearsal)
+  "packaging>=24",
 ]
 
 [dependency-groups]

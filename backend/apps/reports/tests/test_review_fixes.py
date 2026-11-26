@@ -88,12 +88,12 @@ def test_the_verify_link_never_wraps_even_with_hyphens_in_the_token():
     from apps.reports import render
 
     token = "-".join(["abcdefgh"] * 4)                        # 35 characters, four hyphens
-    url = f"https://verify.carcid.in/{token}"
+    url = f"https://vayu.carcid.in/report/verify/{token}"
     values = {"sys": {"booking_id": "SA1", "inspection_type": "PDI", "verify_url": url}}
     pages = [{"title": "V", "parts": [{"type": "verify"}]}]
     pdf = render.render_pdf(render.render_html(pages, {}, values))
     text = pypdf.PdfReader(io.BytesIO(pdf)).pages[0].extract_text()
-    assert f"verify.carcid.in/{token}" in text
+    assert f"vayu.carcid.in/report/verify/{token}" in text
 
 
 def test_the_report_info_carries_the_public_verify_link(report_env, settings):

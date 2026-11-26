@@ -12,7 +12,7 @@ look for the closest one.
 | Firebase (FCM) | **Phase 15** | push notifications to experts |
 | Android keystore | **Phase 15** | signing the APK (no account; a file) |
 | Sentry | at deploy | error tracking |
-| DNS for carcid.in | at deploy | app / staging / verify subdomains |
+| DNS for carcid.in | at deploy | `vayu` and `vayu-staging` subdomains |
 | DigitalOcean | at the very end | the two servers |
 
 ## Cloudflare R2 (Phase 6)
@@ -25,7 +25,7 @@ look for the closest one.
    buckets. Copy the **Access Key ID** and **Secret Access Key** (shown once) and note the
    **S3 endpoint** `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`.
 5. On each bucket → **Settings → CORS policy**, allow:
-   - origins: `https://app.carcid.in`, `https://staging.carcid.in`, `http://localhost:5173`
+   - `vayu-prod`: `https://vayu.carcid.in`; `vayu-staging`: `https://vayu-staging.carcid.in`, `http://localhost:5173`
    - methods: `GET, PUT, POST, HEAD`; allowed headers: `*`; **expose header `ETag`**; max age 3600.
    (Browser uploads break without CORS; the ETag header is required for multipart uploads.)
 6. Put the key pair in `backend/.env.local` (git-ignored). Tell me only the bucket names and
@@ -53,10 +53,12 @@ never enter the repo.
 2. Create three projects: **Django** `vayu-server`, **React** `vayu-web`, **Android** `vayu-android`.
 3. For each: Settings → Projects → **Client Keys (DSN)**. The DSN goes in `SENTRY_DSN`
    (server env). The server refuses to start in production without it.
-4. Web: put the `vayu-web` DSN in `VITE_SENTRY_DSN` before building the web (it is read at build time;
-   empty means web Sentry is off). For readable stack traces, also create an auth token
-   (Settings → Auth Tokens, scope `project:releases`) and set `SENTRY_AUTH_TOKEN` and `SENTRY_ORG`:
-   the build then uploads its source maps to Sentry and deletes them, so they are never served.
+4. Web: the `vayu-web` DSN goes in the GitHub repo **variable** `VITE_SENTRY_DSN` (Settings →
+   Secrets and variables → Actions → Variables; empty means web Sentry is off) and the organization
+   slug in the variable `SENTRY_ORG`. The deploy workflow bakes it into the one web image. For
+   readable stack traces, also create an auth token (Settings → Auth Tokens, scope
+   `project:releases`) and save it as the repo **secret** `SENTRY_AUTH_TOKEN`: the build then
+   uploads its source maps to Sentry and deletes them, so they are never served.
    Web events carry no request bodies, cookies, headers, query strings, typed text or console output.
 5. Android release builds: the `vayu-android` DSN goes in `SENTRY_DSN_ANDROID` (or
    `-Pvayu.sentryDsn`). For readable crash stack traces, also set `SENTRY_AUTH_TOKEN` (Settings →
@@ -66,7 +68,8 @@ never enter the repo.
 
 ## DNS (at deploy)
 At wherever carcid.in is registered, add `A` records pointing to the DigitalOcean droplets:
-`app.carcid.in` and `verify.carcid.in` → production IP; `staging.carcid.in` → staging IP.
+`vayu.carcid.in` → production IP; `vayu-staging.carcid.in` → staging IP. (The customer QR page is
+`vayu.carcid.in/report/verify/<code>`: no separate address.)
 
 ## DigitalOcean (the very end)
 Production droplet: Bangalore (BLR1), 4 vCPU / 8 GB. Staging: smaller (2 vCPU / 4 GB is enough).

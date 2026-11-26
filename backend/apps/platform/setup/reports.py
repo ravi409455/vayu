@@ -4,6 +4,7 @@ form's own sections. The look (theme) and the disclaimer are shared items, edite
 import io
 import json
 from pathlib import Path
+from typing import Any
 
 from apps.forms.models import Form, FormAsset, Section, VersionStatus
 
@@ -16,6 +17,22 @@ FINAL = "Final Car Result"
 RATINGS = "Ratings"
 # long sections print two checks a row (four columns)
 TWO_PER_ROW = ("exterior", "body frame", "engine", "electrical", "tyres")
+# the Ops-only pages (common.py): never a page of checks, each prints in its own place
+OPS_COMMENTS, OPS_CHECKS, OPS_DETAILS = "Expert Comments", "Key Checks", "Additional Details"
+SERVICE = "Service History Details"
+VARIANT = "Car Variant"
+# what an empty service-history answer prints (Clappia's starting values)
+SERVICE_EMPTY = {"indication_of_odometer_rollback": "Not able to check", "engine_work_done": "No",
+                 "transmission_work_done": "No", "service_history_analysis": None}
+# the cover's details: short names, so each row keeps to one line (the form's labels stay)
+SHORT = {"Car KM Current Reading": "Odometer", "Number of Car Keys Available": "Keys",
+         "Engine Capacity (in CC)": "Engine Capacity", "Car Registered State": "Reg. State",
+         "Car Registered City": "Reg. City", "Car Registration Number": "Registration No.",
+         "Car Registration Year (Model)": "Model Year",
+         "Car Colour": "Colour", "Transmission Type": "Transmission",
+         "Chassis Number": "Chassis No.", "Engine Number": "Engine No."}
+ALSO_PICTURED = ("gear_shifting_panel",)       # photos from other sections on Car pictures
+SHARE = "_share"      # on a page while it is built: (shared part key, name, from part[, to part])
 
 
 def brand(admin) -> tuple[str, str]:
@@ -56,15 +73,152 @@ def _heading(text: str, sub: str = "") -> dict:
     return {"type": "text", "html": f"<h2>{text}{small}</h2>", "box": {"space_below": 0.5}}
 
 
-def _cols(*columns: list, widths: tuple = ()) -> dict:
-    return {"type": "columns", "gap": 6, "columns": [
-        {"parts": c, **({"width": widths[k]} if widths else {})} for k, c in enumerate(columns)]}
+def _cols(*columns: list, widths: tuple = (), align: str = "top") -> dict:
+    return {"type": "columns", "gap": 6, **({"align": align} if align != "top" else {}),
+            "columns": [{"parts": c, **({"width": widths[k]} if widths else {})}
+                        for k, c in enumerate(columns)]}
 
 
 def _grid(columns: list, cells: list, **look) -> dict:
     return {"type": "table", "look": {"header": True, "emphasis": True, "stripes": False, **look},
             "source": {"kind": "grid", "columns": columns,
                        "rows": [{"label": "", "cells": cells}]}}
+
+
+def _details(rows: list[tuple]) -> dict:
+    """The cover's label / value list. A row is (label, a field or a line of text, shown when);
+    one whose answer is empty is left out."""
+    return {"type": "table", "look": {"kv": True, "stripes": False, "header": False},
+            "source": {"kind": "grid", "columns": [{"label": "Value"}], "rows": [
+                {"label": label, "cells": [cell], **({"show_if": when} if when else {})}
+                for label, cell, when in rows]}}
+
+
+def _documents(docs, priced: bool) -> list[dict]:
+    """The cover's documents; on a Used Car, Ops' price estimate beside them (as on Clappia)."""
+    if docs is None:
+        return []
+    if not priced:
+        return [_heading("Documents"), _sec(docs.key, per_row=2, header=False)]
+    shown = _filled("price_estimate")
+    price = ("font-family: var(--head); font-weight: 700; text-align: center; "
+             "color: var(--brand); font-size: 2.1em; line-height: 1.2; margin-top: 3mm")
+    return [{"type": "spacer", "height": 6},              # room under the rating tables
+            _cols([_heading("Documents"), _sec(docs.key, header=False)], [
+                {"type": "html", "show_if": shown, "html": "Estimated Price",
+                 "css": "font-family: var(--head); font-weight: 700; font-size: 1.7em; "
+                        "text-align: center; margin-bottom: 2mm"},
+                {"type": "text", "align": "center", "size": "small", "show_if": shown,
+                 "html": '<p class="tone-muted">This estimate reflects the overall condition of '
+                         "the car, considering factors such as the quality of the exterior, "
+                         "interior, and mechanical components</p>"},
+                {"type": "html", "show_if": shown, "html": "{{ inspection.price_estimate }}",
+                 "css": price}], widths=(50, 50))]
+
+
+def _service_history(section) -> list[dict]:
+    """Used Car: the service centre's record on a page of its own (after the pictures, before the
+    verify page). An answer Ops left empty prints Clappia's starting value."""
+    if section is None:
+        return []
+    rows = []
+    for f in section.fields.order_by("order"):
+        empty = SERVICE_EMPTY.get(f.key, "NA")
+        rows.append({"field": f"inspection.{f.key}", **({"fallback": empty} if empty else {})})
+    return [{"title": "Service history", "style": "normal", "parts": [
+        _heading("Service history", "from the authorised service centre's records"),
+        {"type": "table", "look": {"header": False},
+         "source": {"kind": "fields", "rows": rows}}]}]
+
+
+def _filled(key: str) -> dict:
+    return {"!!": [{"var": f"inspection.{key}"}]}
+
+
+def _own_checks(sec) -> list[dict]:
+    """The key checks Ops named themselves: one row per pair whose label is filled, in a table
+    of its own that (with its heading) is left out when Ops added none."""
+    if sec is None:
+        return []
+    keys = [f.key for f in sec.fields.order_by("order")]
+    pairs = [(k, k[:-len("label")] + "value") for k in keys if k.endswith("_label")]
+    pairs = [(a, b) for a, b in pairs if b in keys]
+    if not pairs:
+        return []
+    any_named = {"or": [_filled(a) for a, _ in pairs]}
+    return [{**_heading("Additional key checks"), "show_if": any_named},
+            {"type": "table", "look": {"header": False},
+             "source": {"kind": "grid", "columns": [{"label": "Check"}, {"label": "Result"}],
+                        "rows": [{"label": "", "show_if": _filled(a),
+                                  "cells": [{"field": f"inspection.{a}"},
+                                            {"field": f"inspection.{b}"}]} for a, b in pairs]}}]
+
+
+def _comments(ops_section) -> list[dict]:
+    """"Expert comments": what Ops wrote on their page, and nothing when they wrote nothing. The
+    expert's own summary ("Any Issues found in the car?") is never printed, as in Clappia: only
+    its photos are (owner, 2026-11-26)."""
+    if ops_section is None:
+        return []
+    ops = ops_section.fields.order_by("order").first().key
+    box = {"padding": 3, "background": "muted", "border": "left", "border_color": "brand",
+           "border_width": 1}
+    return [{**_heading("Expert comments"), "show_if": _filled(ops)},
+            {"type": "text", "html": f"<p>{{{{ inspection.{ops} }}}}</p>", "box": box,
+             "show_if": _filled(ops)}]
+
+
+def _section_page(s, page, kids: list, shared: bool) -> dict:
+    """One section's report page: its checks and photos, then (same heading, same table style)
+    those of the sections split off from it."""
+    # a section on a test-drive page says so ("Axle  during test drive")
+    sub = "" if page.title == s.title or page.title.lower() in s.title.lower() else (
+        "during test drive" if page.title == "Test drive" else page.title.lower())
+    two: dict[str, Any] = {"per_row": 2} if s.title.lower().startswith(TWO_PER_ROW) else {}
+    tables = [_sec(c.key, header=False, **two) for c in kids]      # the checks stay together
+    part = {"title": s.title, "style": "normal",
+            "parts": [_heading(s.title, sub), _sec(s.key, **two), *tables, _photos(s.key),
+                      *[_photos(c.key) for c in kids]]}
+    if s.show_if:
+        part["show_if"] = s.show_if
+    if shared:                      # the heading stays the page's (Used Car adds the phase)
+        part[SHARE] = (f"section_{s.key}", f"{s.title}: checks and photos", 1)
+    return part
+
+
+# small sections that share a report page (review, 2026-11-27), in the form's own order
+TOGETHER = [{"Battery and Charging", "OBD Scan"}, {"Transmission and Clutch Pedal", "Axle"}]
+
+
+def _together(pages: list[dict]) -> list[dict]:
+    """The section pages, with each pair of small sections on one page (each keeps its heading)."""
+    out: list[dict] = []
+    for page in pages:
+        first = next((p for p in out for pair in TOGETHER
+                      if page["title"] in pair and p["title"] in pair - {page["title"]}
+                      and "show_if" not in p and "show_if" not in page), None)
+        if first is None:
+            out.append(page)
+            continue
+        first["parts"] = [*first["parts"], *page["parts"]]
+        first["title"] = f"{first['title']} and {page['title']}"
+        first.pop(SHARE, None)              # two sections on it: no longer one shared part
+    return out
+
+
+def _family(form_key: str) -> tuple[dict[str, str], set[str], dict]:
+    """(this form's split-off section → the shared one it prints with, the sections something is
+    split off from in any form, the library sections). A section page is one shared part when
+    all three forms print the very same thing: a library section every form has, with nothing
+    split off from it anywhere (setup/common.py)."""
+    from . import forms as setup_forms
+
+    def parents(key: str) -> dict[str, str]:
+        return {x["title"]: x["parent"] for pg in setup_forms.inspection(key)[0]["pages"]
+                for x in pg["sections"] if x.get("parent")}
+
+    everywhere = {p for k, *_ in setup_forms.INSPECTIONS for p in parents(k).values()}
+    return parents(form_key), everywhere, setup_forms.library()["sections"]
 
 
 def definition(version, form_key: str, logo: str, watermark: str) -> dict:
@@ -77,58 +231,73 @@ def definition(version, form_key: str, logo: str, watermark: str) -> dict:
     by_title = {s.title: s for s, _ in sections}
     cats = (version.rating_config or {}).get("categories", [])
 
+    parent, split_somewhere, lib = _family(form_key)
+
+    def kids(title: str) -> list:
+        return [c for c, _ in sections if parent.get(c.title) == title]
+
+    def same_everywhere(sec) -> bool:
+        item = sec.library_item
+        return (item is not None and len(lib.get(item.key, {}).get("forms", [])) == 3
+                and sec.title not in split_somewhere)
+
     car = by_title.get("Car Details")
-    kv_rows = [{"field": "booking.booking_id", "label": "Booking ID"},
-               {"field": "booking.car_make_model", "label": "Car"}]
+    kv_rows: list[tuple[str, dict[str, str], dict | None]] = [
+        ("Booking ID", {"field": "booking.booking_id"}, None)]
     if car is not None:
-        # 12 rows, as approved: chassis first, not "Car Company" (the Car row names it)
-        details = sorted((f for f in car.fields.order_by("order") if f.type not in (
-            "photo", "video") and "company" not in f.label.lower()),
-            key=lambda f: f.key != "chassis_no")
-        kv_rows += [{"field": f"inspection.{f.key}"} for f in details][:10]
+        # chassis first; not "Car Company" (the Car row names it) nor the variant (it is part of
+        # the Car row: "Honda Amaze VXI")
+        details = sorted((f for sec in (car, *kids(car.title)) for f in sec.fields.order_by("order")
+                          if f.type not in ("photo", "video") and "company" not in f.label.lower()),
+                         key=lambda f: f.key != "chassis_no")
+        variant = next((f.key for f in details if f.label == VARIANT), None)
+        kv_rows.append(("Car", {"text": "{{ sys.car }}" + (
+            f" {{{{ inspection.{variant} }}}}" if variant else "")}, None))
+        rows = [(SHORT.get(f.label, f.label), {"field": f"inspection.{f.key}"}, _filled(f.key))
+                for f in details if f.label != VARIANT][:10]
+        if by_title.get(OPS_DETAILS) is not None:      # what Ops found on the plate (PDI, EV)
+            rows.insert(1, ("Mfg. Date", {"field": "inspection.manufacturing_date"},
+                            _filled("manufacturing_date")))
+        kv_rows += rows
+    else:
+        kv_rows.append(("Car", {"text": "{{ sys.car }}"}, None))
     pics = by_title.get(PICTURES)
     cover_photo = next((f.key for f in pics.fields.order_by("order") if f.type == "photo"),
                        None) if pics else None
-    final = by_title.get(FINAL)
-    comments = next((f.key for f in final.fields.all() if f.type == "long_text"), None) \
-        if final else None
 
     cover = [_cols([{"type": "photos", "per_row": 1, "shape": "4:3", "caption": "none",
                      "source": {"kind": "fields", "fields": [f"inspection.{cover_photo}"]}}]
                    if cover_photo else [],
-                   [{"type": "table", "look": {"kv": True, "stripes": False, "label_width": 42},
-                     "source": {"kind": "fields", "rows": kv_rows}}], widths=(52, 48)),
+                   [_details(kv_rows)], widths=(52, 48),
+                   align="middle"),          # the photo sits centred beside the details
              _heading("Overall rating"),
              _grid([{"label": c["label"]} for c in cats] + [{"label": "Expert rating",
                                                              "width": 22}],
                    [{"field": f"inspection.rating_{c['key']}"} for c in cats]
                    + [{"text": "{{ sys.overall }}"}]),
-             _grid([{"label": "Issues found"}, {"label": "Not able to check"},
-                    {"label": "Checks done"}],
-                   [{"text": "{{ sys.issues }}"}, {"text": "{{ sys.not_checked }}"},
-                    {"text": "{{ sys.checks }}"}])]
+             # what the customer sees at a glance: the problems, and how much was looked at
+             # (every check, reading, photo and video the expert recorded)
+             _grid([{"label": "Issues found"}, {"label": "Checkpoints inspected"}],
+                   [{"text": "{{ sys.issues }}"}, {"text": "{{ sys.points }}"}])]
     docs = by_title.get("Car Documents")
-    if docs is not None:
-        cover += [_heading("Documents"), _sec(docs.key, per_row=2, header=False)]
+    cover += _documents(docs, priced=form_key == "used_car" and OPS_DETAILS in by_title)
 
     summary = [_heading("Issues found", "from all sections"),
-               {"type": "table", "source": {"kind": "defects"},
-                "style_rules": [{"when": "critical", "bold": True, "background": "bad"}]},
-               {"type": "photos", "per_row": 3, "caption": "check", "source": {"kind": "issues"}},
-               {"type": "text", "html": '<p><strong class="tone-warn">Not able to check:</strong> '
-                                        "{{ sys.not_checked_list }}</p>"}]
+               # every row alike: the result's own colour says how bad (review, 2026-11-27)
+               {"type": "table", "source": {"kind": "defects"}},
+               {"type": "photos", "per_row": 3, "caption": "check", "source": {"kind": "issues"}}]
+    # the issues have a page to themselves; Key Checks, Ops' own and the comment share the next
     checks = [kc for kc in version.key_checks or [] if kc.get("in_report", True)]
+    review: list[dict] = []
     if checks:
-        summary += [_heading("Key checks"), {"type": "table", "source": {
+        review += [_heading("Key checks"), {"type": "table", "source": {
             "kind": "fields", "rows": [{"field": f"check.{kc['key']}"} for kc in checks]}}]
-    if comments:
-        summary += [_heading("Expert comments"),
-                    {"type": "text", "html": f"<p>{{{{ inspection.{comments} }}}}</p>",
-                     "box": {"padding": 3, "background": "muted", "border": "left",
-                             "border_color": "brand", "border_width": 1}}]
+    review += _own_checks(by_title.get(OPS_CHECKS))
+    review += _comments(by_title.get(OPS_COMMENTS))
 
-    pages = [{"title": "Cover", "style": "cover", "parts": cover},
-             {"title": "Summary", "style": "normal", "parts": summary},
+    pages = [{"title": "Cover", "style": "cover", "parts": cover},     # Key checks come first
+             *([{"title": "Key checks", "style": "normal", "parts": review}] if review else []),
+             {"title": "Issues found", "style": "normal", "parts": summary},
              {"title": "Detailed report", "style": "full", "parts": [
                  {"type": "spacer", "height": 70},
                  {"type": "text", "align": "center", "size": "small",
@@ -138,25 +307,21 @@ def definition(version, form_key: str, logo: str, watermark: str) -> dict:
                   "html": "<p>Detailed Report</p>"},
                  {"type": "spacer", "height": 10},
                  _cols([], [{"type": "contents", "columns": 2}], [], widths=(15, 70, 15))]}]
-    for s, page in sections:
-        if s.title in (*COVER, PICTURES, FINAL, RATINGS):
-            continue
-        # a section on a test-drive page says so ("Axle  during test drive")
-        sub = "" if page.title == s.title or page.title.lower() in s.title.lower() else (
-            "during test drive" if page.title == "Test drive" else page.title.lower())
-        table = (_sec(s.key, per_row=2) if s.title.lower().startswith(TWO_PER_ROW)
-                 else _sec(s.key))
-        part = {"title": s.title, "style": "normal",
-                "parts": [_heading(s.title, sub), table,
-                          _photos(s.key)]}
-        if s.show_if:
-            part["show_if"] = s.show_if
-        pages.append(part)
+    pages += _together([_section_page(sec, page, kids(sec.title), same_everywhere(sec))
+                        for sec, page in sections
+                        if sec.title not in (*COVER, PICTURES, FINAL, RATINGS, OPS_COMMENTS,
+                                             OPS_CHECKS, OPS_DETAILS, SERVICE, *parent)])
     if pics is not None:
-        pages.append({"title": "Car pictures", "style": "normal", "parts": [
+        # the overview photos are one shared part; a form's own extra pictures follow them
+        more = [f"inspection.{f.key}" for sec, _ in sections for f in sec.fields.order_by("order")
+                if f.key in ALSO_PICTURED]
+        pages.append({"title": "Car pictures", "style": "normal", SHARE: (
+            "car_pictures", "Car pictures", 0, 2), "parts": [
             _heading("Car pictures"),
             {"type": "photos", "per_row": 2,
-             "source": {"kind": "section", "section": f"inspection.{pics.key}"}}]})
+             "source": {"kind": "section", "section": f"inspection.{pics.key}"}},
+            *([{"type": "photos", "per_row": 2,
+                "source": {"kind": "fields", "fields": more}}] if more else [])]})
 
     # the approved PDI report gives the look, the verify page and the disclaimer
     base = pdi_report.pdf_definition(logo, watermark, "")
@@ -169,6 +334,8 @@ def definition(version, form_key: str, logo: str, watermark: str) -> dict:
             verify["parts"].insert(k + 1, {"type": "button", "link": "verify",
                                            "label": "Verify this report"})
             break
+    pages += _service_history(by_title.get(SERVICE))
+    verify[SHARE] = ("verify_report", "Verify this report", 0)
     pages += [verify, {"title": "Disclaimer", "style": "normal", "parts": []}]
     base["pages"] = pages
     base["filename"] = "{{ sys.booking_id }}" + code + ".pdf"
@@ -197,6 +364,14 @@ def _shared(admin, definition: dict, force: bool = False) -> dict:
     text = (ASSETS / "pdi-disclaimer.html").read_text()
     item = save("snippet", "disclaimer", "Report disclaimer",
                 {"parts": [{"type": "text", "columns": 2, "size": "fine", "html": text}]})
+    for pg in definition["pages"]:         # pages identical in all three reports: one shared part
+        if SHARE in pg:
+            key, name, start, *stop = pg.pop(SHARE)
+            end = stop[0] if stop else len(pg["parts"])
+            item = save("snippet", key, name, {"parts": pg["parts"][start:end]})
+            pg["parts"] = pg["parts"][:start] + [
+                {"type": "snippet", "ref": {"key": key, "revision": item.revision}}
+            ] + pg["parts"][end:]
     page = next(p for p in definition["pages"] if p["title"] == "Disclaimer")
     page["parts"] = [{"type": "snippet", "ref": {"key": "disclaimer",
                                                  "revision": item.revision}}]

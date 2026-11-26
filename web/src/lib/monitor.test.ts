@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { report, scrub, scrubCrumb, startMonitoring, stripQuery } from "./monitor";
+import { report, scrub, scrubCrumb, sentryEnvironment, startMonitoring, stripQuery } from "./monitor";
 
 describe("web errors to Sentry (R-36, F-235)", () => {
   it("is off without a DSN: nothing loads, nothing is sent", async () => {
@@ -54,7 +54,7 @@ describe("web errors to Sentry (R-36, F-235)", () => {
     vi.doUnmock("@sentry/react");
   });
   it("masks the report and ZIP tokens in customer page paths (N11)", () => {
-    expect(stripQuery("https://verify.carcid.in/verify/abcDEF_123")).toBe("https://verify.carcid.in/verify/[token]");
+    expect(stripQuery("https://vayu.carcid.in/report/verify/abcDEF_123")).toBe("https://vayu.carcid.in/report/verify/[token]");
     expect(stripQuery("/verify/abc/photos?x=1")).toBe("/verify/[token]");
     expect(stripQuery("/api/v1/verify/abc")).toBe("/api/v1/verify/[token]");
     expect(stripQuery("/zip/tok")).toBe("/zip/[token]");
@@ -66,5 +66,15 @@ describe("web errors to Sentry (R-36, F-235)", () => {
     } as never);
     expect(e.transaction).toBe("/verify/[token]");
     expect(e.exception?.values?.[0]?.value).toBe("ApiError");
+  });
+
+  it("one web build: the Sentry label comes from the address in a production build", () => {
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_SENTRY_ENV", "");
+    expect(sentryEnvironment("vayu-staging.carcid.in")).toBe("staging");
+    expect(sentryEnvironment("vayu.carcid.in")).toBe("production");
+    vi.stubEnv("VITE_SENTRY_ENV", "e2e");
+    expect(sentryEnvironment("vayu.carcid.in")).toBe("e2e");
+    vi.unstubAllEnvs();
   });
 });

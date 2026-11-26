@@ -607,7 +607,7 @@ def test_a_completed_booking_gets_a_pdf_automatically(renv, settings):
                    "CAR PICTURES", "Please refer to the last page", "rev 1"):
         assert needle in text, needle
     assert "Page 1 of 2" in text and "Page 2 of 2" in text
-    assert f"verify.carcid.in/{r.token}" in text
+    assert f"vayu.carcid.in/report/verify/{r.token}" in text
     assert len(reader.pages) == 2                                    # cover, then the detail page
     assert sum(len(p.images) for p in reader.pages) >= 4             # cover + 2 grid photos + QR
     for page in reader.pages:                                         # no blank pages
@@ -1085,3 +1085,15 @@ def test_the_designer_is_warned_about_blank_pages_and_headings_left_alone():
     assert "“Alone”" in checks[1]["message"]
     ok = render.render_with_layout("<html><body><h2>T</h2><p>rows</p></body></html>")[2]
     assert ok == []
+
+
+def test_checkpoints_leave_out_what_only_ops_fill(renv, settings):
+    """sys.points counts what the expert records, not a section the form hides from experts."""
+    from apps.forms.models import Section
+
+    b = complete_job(renv, door="dent", photos=1, settings=settings, fuel="petrol")
+    src = source(b)
+    before = int(src.values()["sys"]["points"])
+    sec = Section.objects.filter(version=src.insp.form_version)[0]
+    Section.objects.filter(pk=sec.pk).update(access={"expert": {"in_progress": "hidden"}})
+    assert int(source(b).values()["sys"]["points"]) < before

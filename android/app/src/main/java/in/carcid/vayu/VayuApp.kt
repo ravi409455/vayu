@@ -186,7 +186,8 @@ class VayuApp : Application() {
         if (BuildConfig.SENTRY_DSN.isNotBlank()) Thread { io.sentry.android.core.SentryAndroid.init(this) { o ->
             o.dsn = BuildConfig.SENTRY_DSN
             o.release = "vayu@${BuildConfig.VERSION_NAME}+${BuildConfig.VERSION_CODE}"
-            o.environment = if (BuildConfig.DEBUG) "debug" else "release"
+            // the same labels as the server and the web: production, staging (and debug)
+            o.environment = if (BuildConfig.BUILD_TYPE == "release") "production" else BuildConfig.BUILD_TYPE
             privateCrashReports(o)
         }; android.util.Log.i("Vayu", "crash reports on: ${io.sentry.Sentry.isEnabled()}") }
             .apply { priority = Thread.MIN_PRIORITY }.start()

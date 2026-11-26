@@ -316,6 +316,19 @@ def test_not_able_to_check_counts_the_key_the_real_forms_use(renv, settings):
                                           source(b).cell("inspection.door"))
 
 
+def test_not_able_to_check_in_a_multi_choice_answer_counts_too(renv, settings):
+    set_template(renv)
+    from apps.forms.models import Field
+
+    f = Field.objects.get(key="door", version__status="published")
+    Field.objects.filter(pk=f.pk).update(type="multi_choice", config={**f.config, "options": [
+        *f.config["options"], {"key": "not_able_to_check", "label": "Not Able to Check"}]})
+    b = complete_job(renv, booking_id="NC2", door=["not_able_to_check"], photos=0,
+                     settings=settings)
+    sv = source(b).values()["sys"]                    # a list answer used to crash the report
+    assert sv["not_checked"] == "1" and sv["not_checked_list"] == "door"
+
+
 def test_the_frozen_forms_name_not_able_to_check_with_keys_the_report_reads():
     frozen = Path(__file__).resolve().parents[2] / "platform" / "setup" / "frozen"
     found = 0

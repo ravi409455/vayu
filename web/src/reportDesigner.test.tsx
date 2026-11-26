@@ -447,9 +447,9 @@ describe("download links", () => {
         : json({ booking_id: "DEMO-3", link: "photos", count: 48, zip: "zips/abc" }),
     );
     render(
-      <MemoryRouter initialEntries={["/verify/tok/photos"]}>
+      <MemoryRouter initialEntries={["/report/verify/tok/photos"]}>
         <Routes>
-          <Route path="/verify/:token/:link" element={<ReportMediaPage />} />
+          <Route path="/report/verify/:token/:link" element={<ReportMediaPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -470,9 +470,9 @@ describe("download links", () => {
       new Response(JSON.stringify({ code: "NO_MEDIA", message: "x" }), { status: 404, headers: { "Content-Type": "application/json" } }),
     );
     render(
-      <MemoryRouter initialEntries={["/verify/tok/videos"]}>
+      <MemoryRouter initialEntries={["/report/verify/tok/videos"]}>
         <Routes>
-          <Route path="/verify/:token/:link" element={<ReportMediaPage />} />
+          <Route path="/report/verify/:token/:link" element={<ReportMediaPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -487,9 +487,9 @@ describe("download links", () => {
       new Response(JSON.stringify({ code: "LINK_EXPIRED", detail: "x" }), { status: 410, headers: { "Content-Type": "application/json" } }),
     );
     render(
-      <MemoryRouter initialEntries={["/verify/tok/photos"]}>
+      <MemoryRouter initialEntries={["/report/verify/tok/photos"]}>
         <Routes>
-          <Route path="/verify/:token/:link" element={<ReportMediaPage />} />
+          <Route path="/report/verify/:token/:link" element={<ReportMediaPage />} />
         </Routes>
       </MemoryRouter>,
     );
