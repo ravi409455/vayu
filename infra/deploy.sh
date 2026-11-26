@@ -26,6 +26,10 @@ git fetch --quiet origin main
 git merge-base --is-ancestor "$SHA" origin/main || die "$SHA is not on main"
 
 PREV=$(cat .deployed 2>/dev/null || true)
+
+# the server's settings, fresh from Phase (a secret changed there arrives with this deploy)
+bash "$VAYU_INFRA/secrets.sh"
+[[ -f "$VAYU_ENV_FILE" ]] || die "no $VAYU_ENV_FILE (and no .phase to fetch it from Phase)"
 APP_HOST=$(envval APP_HOST)
 
 # Private images (once the repo is private): a read-only package token in the env file.

@@ -25,14 +25,35 @@ Every customer QR link is `https://<address>/report/verify/<code>`.
    Updates, automatic security updates, firewall (22, 80, 443), Docker with log limits, the
    `deploy` user, swap on small servers, UTC clock, the code in `/srv/vayu`, the nightly backup
    timer. After it, `root` and passwords can't log in: `ssh deploy@<address>`.
-3. Env file: copy `.env.example` to `/srv/vayu/.env.staging` (or `.env.prod`), set the
-   non-secret values, then paste each secret from Phase (`nano`). Then `chmod 600` it.
-   Avoid `$` in secrets (Docker Compose reads it as a variable).
-4. Firebase file (from the laptop):
+3. **Settings come from Phase** (`infra/secrets.sh`, run by every deploy). Nobody edits the env
+   file: it is rewritten from Phase app `vayu`, environment Staging (or Production), together with
+   the Firebase key file. In Phase, that environment must hold:
+   - the non-secret values: import `infra/phase-staging.env` (or `phase-production.env`) with
+     **New Secret → Import secrets**;
+   - the secrets: `DJANGO_SECRET_KEY`, `DB_PASSWORD`, `SENTRY_DSN`, `S3_ENDPOINT_URL`,
+     `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `BACKUP_ACCESS_KEY_ID`,
+     `BACKUP_SECRET_ACCESS_KEY`, `BACKUP_PUBLIC_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON` (the whole
+     JSON file), and later `BACKUP_HEARTBEAT_URL`, `WORKERS_HEARTBEAT_URL`.
+   A missing required value stops the deploy before anything changes. No value may contain a line
+   break or a `'` (the Firebase JSON is the one multi-line value; it becomes a file).
+4. **The server's Phase key** (the one secret on the server). In Phase: Access Control → Service
+   Accounts → **Create Service Account** `vayu-staging-server` (role Service) → app `vayu` →
+   Access → Service accounts → **Add service account**, environment **Staging only** → back in
+   Access Control → Service Accounts → Manage → **+ Create Token** (no expiry, or a year with a
+   reminder). On the server:
    ```bash
-   scp vayu-<server>-firebase.json deploy@<address>:/srv/vayu/secrets/firebase-service-account.json
-   ssh deploy@<address> chmod 600 /srv/vayu/secrets/firebase-service-account.json
+   ssh deploy@<address>
+   umask 077 && nano /srv/vayu/.phase
    ```
+   Two lines, then save (Ctrl+O, Enter, Ctrl+X):
+   ```
+   PHASE_ENV=Staging
+   PHASE_SERVICE_TOKEN=pss_service:v2:...
+   ```
+   Check: `chmod 600 /srv/vayu/.phase && bash /srv/vayu/infra/secrets.sh` → "settings: N values
+   from Phase". Production: its own service account (`vayu-prod-server`, Production only).
+   To change a secret later: change it in Phase, then deploy the live commit again (Actions →
+   deploy → Run workflow). If Phase is unreachable during a deploy, the last good settings stay.
 5. The GitHub robot's key, locked to the deploy script. Make it on the laptop:
    ```bash
    ssh-keygen -t ed25519 -N "" -C "github-deploy-<server>" -f ./deploy-<server>
