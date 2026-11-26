@@ -5,8 +5,18 @@ import json
 
 from django.db import transaction
 
+from apps.forms import library as form_library
 from apps.forms import services as form_services
-from apps.forms.models import Field, Form, FormVersion, Page, Section, VersionStatus
+from apps.forms.models import (
+    Field,
+    Form,
+    FormVersion,
+    LibraryItem,
+    LibraryKind,
+    Page,
+    Section,
+    VersionStatus,
+)
 
 FIELD_ATTRS = ("key", "label", "type", "config", "required", "show_if", "helper_text")
 
@@ -75,7 +85,7 @@ def apply(admin, form: Form, spec: dict, extra: dict | None = None, force: bool 
                            "first. Nothing was changed.")
     if draft is None:
         draft = form_services.create_draft(admin, form) if live else form.versions.get()
-    _fill(draft, spec)
+    _fill(admin, draft, spec)
     for k, val in extra.items():
         setattr(draft, k, val)
     draft.save()
@@ -110,7 +120,25 @@ class SetupRefused(Exception):
     """Something the Admin owns stands in the way of a forced re-run."""
 
 
-def _fill(v: FormVersion, spec: dict) -> None:
+def library(admin, lib: dict, force: bool = False) -> dict[str, int]:
+    """The library sections and fields the forms link to: made when missing; one already there
+    is the Admin's and is kept, unless [force]d and different (then saved as a new revision)."""
+    made = {"sections": 0, "fields": 0}
+    for group, kind in (("sections", LibraryKind.SECTION), ("fields", LibraryKind.FIELD)):
+        for key, item in lib[group].items():
+            found = LibraryItem.objects.filter(kind=kind, key=key).first()
+            if found is None:
+                form_library.create_item(admin, kind=kind, key=key, name=item.get("name"),
+                                         definition=item["definition"])
+                made[group] += 1
+            elif force and found.definition != item["definition"]:
+                form_library.update_item(admin, found, definition=item["definition"],
+                                         revision=found.revision)
+                made[group] += 1
+    return made
+
+
+def _fill(admin, v: FormVersion, spec: dict) -> None:
     system = {f.key: f for f in Field.objects.filter(version=v, is_system=True)}
     Field.objects.filter(version=v, is_system=False).delete()
     old_sections = list(Section.objects.filter(version=v))
@@ -122,21 +150,15 @@ def _fill(v: FormVersion, spec: dict) -> None:
         page = Page.objects.create(version=v, title=p["title"], order=1000 + pn,
                                    gate=p.get("gate", False))
         for sn, s in enumerate(p["sections"]):
+            if s.get("library"):               # a library section: linked, the library's content
+                item = LibraryItem.objects.get(kind=LibraryKind.SECTION, key=s["library"])
+                sec = form_library.add_section(admin, page, item, link=True)
+                Section.objects.filter(pk=sec.pk).update(order=sn)
+                continue
             sec = Section.objects.create(version=v, page=page, title=s["title"], order=sn,
-                                         show_if=s.get("show_if"))
+                                         show_if=s.get("show_if"), access=s.get("access") or {})
             for fn, f in enumerate(s["fields"]):
-                sf = system.get(f["key"])
-                if sf is not None:
-                    keep = {"section": sec, "order": fn, "label": f["label"]}
-                    if f["config"].get("options") and sf.config.get("options") is not None:
-                        keep["config"] = {**sf.config, "options": f["config"]["options"]}
-                    Field.objects.filter(pk=sf.pk).update(**keep)
-                    placed.add(sf.key)
-                    continue
-                Field.objects.create(version=v, section=sec, order=fn, key=f["key"],
-                                     label=f["label"], type=f["type"], config=f["config"],
-                                     required=f["required"], show_if=f.get("show_if"),
-                                     helper_text=f.get("helper_text") or "")
+                _place(admin, v, sec, fn, f, system, placed)
     missing = set(system) - placed
     if missing:      # a system field the spec does not place: keep it on the first page
         first = Section.objects.filter(version=v, page__order=1000).order_by("order").first()
@@ -148,6 +170,28 @@ def _fill(v: FormVersion, spec: dict) -> None:
         p.delete()
     for n, page in enumerate(Page.objects.filter(version=v).order_by("order", "id")):
         Page.objects.filter(pk=page.pk).update(order=n)
+
+
+def _place(admin, v: FormVersion, sec: Section, order: int, f: dict, system: dict[str, Field],
+           placed: set[str]) -> None:
+    """One question of the spec in its section: a library field (linked), a system field (moved
+    and relabelled), or the form's own."""
+    if f.get("library"):
+        item = LibraryItem.objects.get(kind=LibraryKind.FIELD, key=f["library"])
+        linked = form_library.add_field(admin, sec, item, link=True)
+        Field.objects.filter(pk=linked.pk).update(order=order)
+        return
+    sf = system.get(f["key"])
+    if sf is not None:
+        keep = {"section": sec, "order": order, "label": f["label"]}
+        if f["config"].get("options") and sf.config.get("options") is not None:
+            keep["config"] = {**sf.config, "options": f["config"]["options"]}
+        Field.objects.filter(pk=sf.pk).update(**keep)
+        placed.add(sf.key)
+        return
+    Field.objects.create(version=v, section=sec, order=order, key=f["key"], label=f["label"],
+                         type=f["type"], config=f["config"], required=f["required"],
+                         show_if=f.get("show_if"), helper_text=f.get("helper_text") or "")
 
 
 def ensure_form(admin, *, key: str, name: str, itype: str) -> Form:

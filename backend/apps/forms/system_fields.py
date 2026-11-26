@@ -24,7 +24,9 @@ SYSTEM_FIELDS: dict[str, list[dict]] = {
          "config": {"role": "expert"}},
     ],
     "custom": [
-        {"key": "chassis_no", "label": "Chassis number", "type": "short_text", "required": True},
+        # scan: the phone reads it off the chassis plate with the camera; the expert can correct it
+        {"key": "chassis_no", "label": "Chassis number", "type": "short_text", "required": True,
+         "config": {"scan": True}},
     ],
     # the check-in the expert does before the inspection
     "start": [
