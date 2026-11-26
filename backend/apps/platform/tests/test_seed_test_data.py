@@ -46,7 +46,9 @@ def test_it_fills_every_flow(settings, s3):  # noqa: F811
     from apps.media.models import MediaAsset
 
     used = next(b for b in Booking.objects.filter(stage="submitted", inspection_type="used_car"))
-    frame = used.counted_inspection().answers["inspection"]["driver_side_a_pillar_image"]
+    counted = used.counted_inspection()
+    assert counted is not None
+    frame = counted.answers["inspection"]["driver_side_a_pillar_image"]
     MediaAsset.objects.filter(id__in=frame).update(status="uploading")
     row = next(r for r in missing_files(used) if r["key"] == "driver_side_a_pillar_image")
     assert row["required"] is True
@@ -60,7 +62,10 @@ def test_it_fills_every_flow(settings, s3):  # noqa: F811
     def report_text(ref: str) -> str:
         b = Booking.objects.get(booking_id=ref)
         insp = b.counted_inspection()
-        pdf, _ = build_pdf(b, insp, published_template(b, insp), "tok", 1)
+        assert insp is not None
+        template = published_template(b, insp)
+        assert template is not None
+        pdf, _ = build_pdf(b, insp, template, "tok", 1)
         return "\n".join(p.extract_text() for p in pypdf.PdfReader(io.BytesIO(pdf)).pages)
 
     named = report_text("TST-1001")
@@ -85,7 +90,9 @@ def test_it_fills_every_flow(settings, s3):  # noqa: F811
 
     counts: dict[str, set[str]] = {}
     for done in Booking.objects.filter(stage="completed"):
-        src = context.Source(done, done.counted_inspection(), revision=1, token="t")
+        made = done.counted_inspection()
+        assert made is not None
+        src = context.Source(done, made, revision=1, token="t")
         counts.setdefault(done.inspection_type, set()).add(src.values()["sys"]["points"])
     assert counts == {"pdi": {"335"}, "used_car": {"349"}, "ev": {"302"}}, counts
     # the expert's own summary text is never printed (as in Clappia): only Ops' comment is

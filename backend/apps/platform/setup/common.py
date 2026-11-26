@@ -452,7 +452,7 @@ class Sharing:
                          else {"options": [{**self.pool[x], "label": x} for x in more]})}
                 if q["key"] in taken:
                     raise ValueError(f"{name}: the key {q['key']} is taken")
-                taken.add(q["key"])
+                taken.add(str(q["key"]))
                 out.append((f, q))
         return out
 
