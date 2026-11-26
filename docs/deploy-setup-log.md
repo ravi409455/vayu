@@ -557,19 +557,12 @@ the person's ⋯ menu → **Sign out of every device**), or `revoke_devices` on 
 ## Phase 5 · Backups and alerts 🔄
 
 ### 5.1 · Watching the server's resources (owner asked 2026-11-26)
-Two halves: **when** it was busy (DigitalOcean) and **which service** (our recorder).
+DigitalOcean alerts say **when** the server was busy. (A recorder of *which service* used what,
+`infra/resources.sh` every 5 minutes, was built and then **removed** on the owner's decision the
+same day: script, cron line and `/srv/vayu/logs` are gone. Which service is busy can be seen live
+with `docker stats` when needed.)
 
-**a) Recorder ✅** `infra/resources.sh`, every 5 minutes (cron of `deploy`, `bootstrap.sh` sets it):
-one line for the box (load, memory, swap, disk) and one per container (CPU, memory), in
-`/srv/vayu/logs/resources-<date>.log`, 14 days kept. After an alert:
-```bash
-ssh deploy@<server> /srv/vayu/infra/resources.sh show 12     # the last hour, sample by sample
-ssh deploy@<server> 'grep pdf-worker /srv/vayu/logs/resources-2026-11-26.log'   # one service's day
-```
-First sample on staging (filling test data): memory 1.5 / 3.9 GB, swap 0, disk 8%, busiest the API
-at 3.6% CPU.
-
-**b) DigitalOcean alerts ✅ → Slack `#vayu-alerts`** (2026-11-26). DigitalOcean → **Insights** →
+**DigitalOcean alerts ✅ → Slack `#vayu-alerts`** (2026-11-26). DigitalOcean → **Insights** →
 **Alerts** → **Alert Rules** (the new place; there is no "alert policy" menu any more). Four rules,
 each: resource type **Droplets**, resource **tag `vayu-web`** (not "All Droplets": the account
 has other company servers; production gets the tag too), notification channel
@@ -645,7 +638,7 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 
 | Item | When |
 |---|---|
-| Merge PR 37 (this log, resource recorder) | when CI is green |
+| Merge PR 37 (this log, DigitalOcean alerts) | when CI is green |
 | Time the PDF preview on staging after PR 42 deploys | after the merge |
 | Phase 4: rehearse a rollback (Actions → deploy → Run workflow → previous commit) | after the merges |
 | Every deploy run waits for production Approve: cancel it until production exists (after PR 42 it no longer blocks staging) | until Phase 7 |
