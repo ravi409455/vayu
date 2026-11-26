@@ -6,7 +6,7 @@ import re
 from gunicorn.glogging import Logger
 
 bind = "0.0.0.0:8000"
-workers = int(os.environ.get("WEB_CONCURRENCY", "4"))   # staging: 2
+workers = int(os.environ.get("WEB_CONCURRENCY", "2"))   # a 4 GB box; on 8 GB: 4
 accesslog = "-"
 access_log_format = '%(h)s %(t)s "%(m)s %(U)s" %(s)s %(B)s %(L)s'
 TOKEN = re.compile(r"/(verify|zips|zip)/[^/]+")

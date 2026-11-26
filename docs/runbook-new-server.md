@@ -7,16 +7,17 @@ the same steps; the differences are in the env file (`.env.example` marks each s
 | | Staging | Production |
 |---|---|---|
 | Address | `vayu-staging.carcid.in` | `vayu.carcid.in` |
-| Droplet | 2 vCPU / 4 GB, BLR1 | 4 vCPU / 8 GB, BLR1 |
+| Droplet | 2 vCPU / 4 GB, BLR1, **on demand** (§1a) | 2 vCPU / 4 GB, BLR1, always on (resize to 8 GB if the load test or alerts say so) |
 | Database | Postgres in Docker (`DB_HOST=postgres`) | DigitalOcean managed Postgres (`DB_SSLMODE=require`) |
 | Env file | `/srv/vayu/.env.staging` | `/srv/vayu/.env.prod` |
 | Bucket / backups | `vayu-staging` / `vayu-backups/staging/` | `vayu-prod` / `vayu-backups/prod/` |
-| Deploys | after every merge to `main` (CI green) | after the owner presses Approve |
+| Deploys | after every merge to `main` (CI green), while it is up | after the owner presses Approve |
 
 Every customer QR link is `https://<address>/report/verify/<code>`.
 
 ## 1. Build the server (once)
-1. Create the droplet (plan 2.2 / 7.1), add it to the `vayu-web` firewall, point DNS at it.
+1. Create the droplet (plan 2.2 / 7.1) with the tag `vayu-web` (the `vayu-web` firewall applies to
+   every droplet with that tag; staging also gets the tag `vayu-staging`), point DNS at it.
 2. From the laptop:
    ```bash
    ssh root@<server ip> 'bash -s' < infra/bootstrap.sh
@@ -52,6 +53,26 @@ Every customer QR link is `https://<address>/report/verify/<code>`.
 The images live in GitHub's package store (`ghcr.io/ravi409455/vayu-api` and `vayu-web`). While the
 repo is public they are public. Once it is private: make a GitHub token with only `read:packages`
 and put `GHCR_USER` / `GHCR_TOKEN` in the env file; `deploy.sh` logs in with it.
+
+## 1a. Staging on demand
+A powered-off droplet is still billed, so staging lives as a snapshot between test rounds and only
+exists while you test (about $0.036 an hour while up; the snapshot about $0.06 per GB a month).
+On the laptop, once: `brew install doctl`, then `doctl auth init` with the DigitalOcean API token
+(Phase → `vayu-owner` → `DO_API_TOKEN`).
+```bash
+infra/staging.sh up       # from the newest snapshot; prints the new IP
+```
+Change the registrar's A record `vayu-staging` to that IP (the script waits until DNS shows it),
+then GitHub → Actions → deploy → Run workflow with the latest `main` commit. Test. Then:
+```bash
+infra/staging.sh down     # power off → snapshot → delete; keeps the 2 newest snapshots
+```
+- Everything is in the snapshot: code, env file, Firebase file, test data, https certificate,
+  SSH host key (so `SSH_KNOWN_HOSTS` in GitHub stays valid).
+- While staging is down, a merge to `main` makes the staging deploy fail and production waits:
+  production only ever gets what staging passed. Bring staging up and run the workflow again.
+- The nightly backup only runs while staging is up; the snapshot is staging's real backup.
+- `infra/staging.sh status` shows what exists. It only touches the droplet named `vayu-staging`.
 
 ## 2. Forms, reports, lists and staff (once per server)
 ```bash
