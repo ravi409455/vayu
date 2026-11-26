@@ -167,7 +167,7 @@ jobs:
         run: npx playwright test
         working-directory: web
         env: {CI: "true"}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with: {name: playwright-report, path: "web/test-results", retention-days: 7}
   docker:
@@ -218,7 +218,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: unit tests, screenshots, 80% coverage of core/, lint (new issues only), debug and release builds
         run: ./gradlew --no-daemon verifyRoborazziDebug koverVerifyDebug lintDebug assembleDebug assembleRelease
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with: {name: android-test-reports, path: "android/app/build/reports", retention-days: 7}
   # The one check for branch protection to require: it always runs and reports. Green when every
