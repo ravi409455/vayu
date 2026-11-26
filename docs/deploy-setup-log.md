@@ -461,6 +461,29 @@ Checked from outside:
 | Services | api (healthy), worker, zip-worker, pdf-worker, beat, postgres (healthy), redis (healthy), caddy |
 | Live commit (`/srv/vayu/.deployed`) | `35fdec9` |
 
+### 3.6 · Forms, reports, staff and test data 🔄
+`seed_test_data` sets up every form, report and list (it runs `setup_platform`), then makes the
+test logins and 3 days of test bookings. Staging only: it refuses on production.
+1. Owner: one password for all test logins, made without a trailing line break and saved in
+   Phase → `vayu` → Staging → `STAGING_TESTER_PASSWORD` (Deploy):
+   ```bash
+   python3 -c "import secrets;print(secrets.token_urlsafe(24),end='')" | pbcopy
+   ```
+2. Claude, on the server (the password is read there from the settings file; it never passes
+   through chat):
+   ```bash
+   bash infra/secrets.sh        # fetch the new setting
+   source infra/lib.sh && export VAYU_TAG=$(cat .deployed) P=$(envval STAGING_TESTER_PASSWORD)
+   compose exec -T -e P api sh -c 'python manage.py seed_test_data --confirm staging-1 --password "$P"'
+   ```
+Test logins on https://vayu-staging.carcid.in (password: Phase `STAGING_TESTER_PASSWORD`):
+
+| Login | Role |
+|---|---|
+| `admin` | Admin |
+| `ops`, `ops2` | Ops |
+| `expert`, `expert2` … `expert7` | Expert |
+
 ### Dependabot ✅ grouped (PR 30)
 Its first run opened 6 PRs at once (Actions and the Node image), each a full CI run, which queued
 ahead of `main`'s CI. Closed them and cancelled their runs. New rule: one grouped PR a week for all
