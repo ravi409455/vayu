@@ -20,7 +20,7 @@ the place this plan names (the server's env file or a GitHub secret).
 
 | Topic | Decision |
 |---|---|
-| Hosting | DigitalOcean, Bangalore (BLR1). Both 2 vCPU / 4 GB ($24). Production is always on and moves to 4 vCPU / 8 GB only if the load test or alerts say so (one click, about a minute down). |
+| Hosting | DigitalOcean, Bangalore (BLR1). Both 2 vCPU / 4 GB ($24). Production is always on; its size is the cheapest one that passes the realistic load test (`docs/plan-load-test.md`: 1 vCPU / 2 GB, 2 vCPU / 2 GB or 2 vCPU / 4 GB), and it grows later if the alerts say so (one click, about a minute down). |
 | Staging | **On demand** (decided 2026-11-26): a switched-off droplet is still billed, so staging lives as a snapshot and is only created while testing, about once a month (`infra/staging.sh up` / `down`). |
 | Database | Production: DigitalOcean **Managed Postgres** (restore to any minute of the last 7 days) plus our own nightly dump to R2. Staging: Postgres in Docker, nightly dump. |
 | Files | Cloudflare R2 (already set up): one bucket per server, plus a new backups bucket. |
@@ -480,10 +480,10 @@ Staging is "done" only when all of these pass. Each is a line in the runbook's c
    labelled `staging`, with readable code lines → the Slack alert arrives.
 6. **Security headers**: securityheaders.com and SSL Labs both grade **A** for the staging address.
    The CSP report shows nothing blocked during steps 1 and 2 → switch CSP from "report only" to enforced.
-7. **Load test** (`perf/locustfile.py`, 200 users for 10 minutes, signing in slowly, 1.17): 95 of
-   100 requests under half a second, no errors. Staging is the same size as production, so this
-   result is production's too. If it fails, resize staging to 4 vCPU / 8 GB for an hour (about
-   $0.07) and run again: if that passes, production moves to 8 GB before launch.
+7. **Load test**: the realistic test in `docs/plan-load-test.md` (owner's numbers: 50 experts,
+   5 Ops, 100 inspections and 200 bookings a day, external API at 100 calls/min, 15 webhooks per
+   booking), run at 1 vCPU / 2 GB, 2 vCPU / 2 GB and 2 vCPU / 4 GB. Production gets the cheapest
+   size that passes.
 8. **Backup and restore drill** passed (5.3).
 9. **Rollback** rehearsed (4.2).
 10. **Reboot test**: restart the droplet from the DigitalOcean dashboard → everything comes back
@@ -498,8 +498,8 @@ Staging is "done" only when all of these pass. Each is a line in the runbook's c
 Same steps as staging, with these differences.
 
 ### 7.1 [YOU] Production server
-Create → Droplets → BLR1, Ubuntu 24.04, **2 vCPU / 4 GB** (8 GB only if the staging load test
-said so), Monitoring ticked (Backups not needed: this server holds no data), your SSH key,
+Create → Droplets → BLR1, Ubuntu 24.04, **the size the load test chose** (`docs/plan-load-test.md`
+§6; 2 vCPU / 4 GB until it has run), Monitoring ticked (Backups not needed: this server holds no data), your SSH key,
 hostname `vayu-prod`, tag `vayu-web` (the firewall then covers it). Tell Claude the IP. Claude runs the same `infra/bootstrap.sh` as on staging.
 
 ### 7.2 [YOU] Managed database
