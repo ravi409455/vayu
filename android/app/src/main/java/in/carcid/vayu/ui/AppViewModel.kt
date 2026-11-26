@@ -261,17 +261,19 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         if (signingOut) return                       // a second tap while the first sign-out runs
         signingOut = true
         viewModelScope.launch {
+            val refresh = tokens.refresh()
+            var told = false
             try {
                 val me = signedIn()
                 val (drafts, files) = me?.let { graph.drafts(it).unsentCounts() } ?: (0 to 0)
-                // no signal: the server still thinks this phone is signed in; end it at the next sign-in
-                val refresh = tokens.refresh()
-                if (`in`.carcid.vayu.core.attempt { api.logout(drafts, files) }.isFailure && refresh != null) tokens.setPendingLogout(refresh)
+                told = `in`.carcid.vayu.core.attempt { api.logout(drafts, files) }.isSuccess
                 // unsent work stays for this person's next sign-in here; with none, nothing of theirs stays
                 me?.let { graph.forgetCopies(it); graph.forgetDrafts(it, all = graph.drafts(it).all().none { d -> d.unsent }) }
                 graph.clearNotices()
             } finally {
-                // whatever failed above, the sign-in itself always ends
+                // whatever failed above, the sign-in itself always ends; a server that didn't hear
+                // it (no signal, or a failure before the call) is told at the next sign-in
+                if (!told && refresh != null) tokens.setPendingLogout(refresh)
                 tokens.clear()
                 jobs.forget()
                 bell.clear()

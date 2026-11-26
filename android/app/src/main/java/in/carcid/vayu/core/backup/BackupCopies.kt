@@ -90,10 +90,12 @@ class BackupCopies(
      * then a copy whose draft is gone is kept.
      */
     @Synchronized fun clean(files: Map<String, State>, sure: Boolean = true) {
-        if (!canWrite()) return
+        // without access the folder can't be listed (nothing is "found" or taken as gone), but this
+        // install's own copies that are due are still deleted: the keep rules never fail open
+        val access = canWrite()
         val now = clock()
         val known = entries.map { it.path }.toSet()
-        val newlyFound = folder.listFiles().orEmpty().filter { it.isDirectory }.flatMap { d ->
+        val newlyFound = if (!access) emptyList() else folder.listFiles().orEmpty().filter { it.isDirectory }.flatMap { d ->
             d.listFiles().orEmpty().filter { it.isFile && !it.name.startsWith(".") && it.path !in known }
         }.map { Entry(it.path, foundAt = now) }
         entries = (entries + newlyFound).mapNotNull { e ->
@@ -105,7 +107,7 @@ class BackupCopies(
                 else -> e
             }
             val goes = when {
-                !File(e.path).exists() -> true
+                access && !File(e.path).exists() -> true
                 updated.foundAt != null -> now - updated.foundAt >= KEEP_MS
                 state == State.WAITING -> false
                 state == State.DONE -> now - updated.madeAt >= KEEP_MS
@@ -116,7 +118,8 @@ class BackupCopies(
                 updated.neverAt != null -> now - updated.neverAt >= KEEP_MS
                 else -> true
             }
-            if (goes) { File(e.path).delete(); null } else updated
+            // a copy that couldn't be deleted stays listed, and is tried again next time
+            if (goes && gone(e.path, access)) null else updated
         }
         save()
         removeEmptyFolders()
@@ -128,11 +131,13 @@ class BackupCopies(
     private fun remove(match: (Entry) -> Boolean) {
         val (gone, kept) = entries.partition(match)
         if (gone.isEmpty()) return
-        gone.forEach { File(it.path).delete() }
-        entries = kept
+        entries = kept + gone.filterNot { gone(it.path, canWrite()) }
         save()
         removeEmptyFolders()
     }
+
+    /** Delete [path]; true when it is gone (a file that can't even be seen counts only with access). */
+    private fun gone(path: String, access: Boolean): Boolean { val f = File(path); return f.delete() || (access && !f.exists()) }
 
     private fun removeEmptyFolders() =
         folder.listFiles().orEmpty().filter { it.isDirectory && it.list().isNullOrEmpty() }.forEach { it.delete() }

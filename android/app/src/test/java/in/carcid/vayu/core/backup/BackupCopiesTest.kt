@@ -63,6 +63,27 @@ class BackupCopiesTest {
         assertFalse(folder.resolve("TST-1014").exists())
     }
 
+    @Test fun dueCopiesAreStillDeletedAfterFileAccessIsTurnedOff() {
+        val c = copies(); c.copy(b, photo())
+        access = false
+        now += 2 * day
+        c.clean(mapOf("f1" to BackupCopies.State.DONE))
+        assertFalse(folder.resolve("TST-1014/Exterior - Front left 1.jpg").exists())
+        assertNull(c.found.value)
+    }
+
+    @Test fun aCopyThatCantBeDeletedStaysListedAndIsTriedAgain() {
+        val c = copies(); c.copy(b, photo())
+        val dir = folder.resolve("TST-1014")
+        dir.setWritable(false)                                                 // the delete fails
+        now += 2 * day
+        c.clean(mapOf("f1" to BackupCopies.State.DONE))
+        assertTrue(dir.resolve("Exterior - Front left 1.jpg").exists())
+        dir.setWritable(true)
+        c.clean(mapOf("f1" to BackupCopies.State.DONE))
+        assertFalse(dir.resolve("Exterior - Front left 1.jpg").exists())
+    }
+
     @Test fun aCopyTheServerStillNeedsIsNeverDeleted() {
         val c = copies(); c.copy(b, photo())
         now += 30 * day
