@@ -86,18 +86,22 @@ class MissingFiles(APIView):
     permission_classes = [perm("media.manage")]
 
     def get(self, request, pk):
-        rows = services.missing_files(services.writable_booking(request, pk))
-        return Response({"missing": rows,
-                         "can_finish": bool(rows) and not any(r["required"] for r in rows)})
+        b = services.writable_booking(request, pk)
+        rows = services.missing_files(b)
+        return Response({"missing": rows, "can_finish": bool(rows),
+                         "phone": services.expert_phone(b) if rows else None})
 
 
 class Finish(APIView):
-    """Ops: finish a job without the expert's missing optional files (every required one is in)."""
+    """Ops: finish a job without the expert's missing files, required ones too, with a reason
+    (customer_waiting, phone_lost, other) and an optional note."""
 
     permission_classes = [perm("media.manage")]
 
     def post(self, request, pk):
-        b = services.finish_without_missing(request.user, services.writable_booking(request, pk))
+        b = services.finish_without_missing(
+            request.user, services.writable_booking(request, pk),
+            str(request.data.get("reason") or ""), str(request.data.get("note") or ""))
         return Response({"stage": b.stage})
 
 

@@ -13,7 +13,7 @@ from .answers import (
     unarrived,
 )
 from .cleanup import asset_keys, drop_zips, report_out_of_date
-from .completion import check_completion, finish_without_missing, missing_files
+from .completion import check_completion, expert_phone, finish_without_missing, missing_files
 from .ops import (
     FILE_TYPES,
     LOOSE_LIMIT,
@@ -39,9 +39,9 @@ from .uploads import (
 __all__ = [
     "FILE_TYPES", "LIMITS", "LOOSE_LIMIT", "MB", "NEVER_ARRIVED", "OPS_KINDS", "OPS_STAGES",
     "_body", "_urls", "asset_keys", "attach", "booking_media", "check_completion",
-    "check_ops_upload", "complete", "delete_asset", "drop_zips", "expected_media", "field_for",
-    "finish_without_missing", "first_unarrived", "hidden_fields", "initiate", "is_manager",
-    "live_asset", "max_count", "missing_files", "progress", "readable_booking",
+    "check_ops_upload", "complete", "delete_asset", "drop_zips", "expected_media", "expert_phone",
+    "field_for", "finish_without_missing", "first_unarrived", "hidden_fields", "initiate",
+    "is_manager", "live_asset", "max_count", "missing_files", "progress", "readable_booking",
     "reference_errors", "referenced_ids", "remove", "report_out_of_date", "stuck_uploads",
     "submitted_answer", "unarrived", "word", "writable_booking",
 ]

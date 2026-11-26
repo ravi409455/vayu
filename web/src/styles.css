@@ -1756,6 +1756,31 @@ button.sm {
 .bad-text {
   color: var(--bad);
 }
+.ok-text {
+  color: var(--ok);
+}
+/* a booking waiting for files: one row per field with an Upload in place of the missing ones */
+.missing-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  color: var(--ink);
+}
+.missing-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+.missing-row.done {
+  color: var(--muted);
+}
+.missing-row.drop {
+  outline: 2px dashed var(--warn);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
 .warn-text {
   color: var(--warn);
 }

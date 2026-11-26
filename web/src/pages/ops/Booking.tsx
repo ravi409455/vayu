@@ -242,7 +242,7 @@ function Detail({ id }: { id: string }) {
       ))}
       {booking.conflict && <ConflictBanner booking={booking} insps={insps.data ?? []} experts={experts.data ?? []} onResolved={reload} />}
       {booking.stage === "submitted" && can("media.manage") && (
-        <WaitingFiles booking={booking} onFinished={reload} onMedia={() => setTab("media")} />
+        <WaitingFiles booking={booking} fields={mediaFields(pinned)} expert={expert?.name || expert?.username || ""} onFinished={reload} />
       )}
       <Tabs
         value={current}

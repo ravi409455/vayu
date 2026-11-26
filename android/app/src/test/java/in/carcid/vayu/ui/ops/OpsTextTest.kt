@@ -101,6 +101,10 @@ class OpsTextTest {
         val done = Json.parseToJsonElement("""{"kind":"finished_without_files","by":{"name":"Priya Ops"},
             "changes":{"stage":["submitted","completed"],"missing":2},"keys":["inspection.front_photos","stage"]}""").jsonObject
         assertEquals("Finished by Priya Ops without 2 files: Front photos", activityText(done, env))
+        val why = Json.parseToJsonElement("""{"kind":"finished_without_files","by":{"name":"Priya Ops"},
+            "changes":{"stage":["submitted","completed"],"missing":3,"required":1,"reason":"customer_waiting","note":"Called twice"},
+            "keys":["inspection.front_photos","stage"]}""").jsonObject
+        assertEquals("Finished by Priya Ops without 3 files (1 required): Front photos · customer is waiting · \"Called twice\"", activityText(why, env))
         fun media(kind: String) = Json.parseToJsonElement("""{"kind":"$kind","by":{"name":"Priya Ops"},"changes":{},"keys":["start.selfie"]}""").jsonObject
         assertEquals("Priya Ops replaced a file in Selfie", activityText(media("media_replaced"), env))
         assertEquals("Priya Ops added a file to Selfie", activityText(media("media_added"), env))
@@ -123,5 +127,20 @@ class OpsTextTest {
         assertEquals("Pay later?: Not filled", answerWords(f, "__none__"))
         assertEquals("Pay later?: Yes", answerWords(f, "true"))
         assertEquals(null, answerWords(null, "true"))
+    }
+
+    /** Missing files: Ops can tell a phone still sending (wait) from a lost one (upload here). */
+    @Test fun thePhoneLineSaysWaitOrUploadHere() {
+        val now = OffsetDateTime.parse("2026-11-27T12:00:00+05:30")
+        fun phone(seen: String?, files: Int) = Json.parseToJsonElement(
+            """{"last_seen_at":${seen?.let { "\"$it\"" } ?: "null"},"files":$files}""").jsonObject
+        assertEquals("Imran's phone: seen 10 mins ago, still holds 3 files. Usually wait. If stuck, ask Imran to open Vayu on Wi-Fi.",
+            phoneLine("Imran", phone("2026-11-27T11:50:00+05:30", 3), now))
+        assertEquals("Imran's phone: not seen for 9 h, still holds 1 file. It may be lost. Get the files from Imran and upload them here.",
+            phoneLine("Imran", phone("2026-11-27T03:00:00+05:30", 1), now))
+        assertEquals("Imran's phone is signed out or never checked in. Get the files from Imran and upload them here.", phoneLine("Imran", null, now))
+        val row = MissingRow.parse(Json.parseToJsonElement("""{"part":"inspection","key":"front","label":"Front","count":2,"required":true,
+            "ids":["a","b"],"of":5,"page":"Inspection","section":"Exterior"}""").jsonObject)
+        assertEquals(listOf("a", "b"), row.ids); assertEquals(true, row.required); assertEquals("inspection.front", row.id)
     }
 }
