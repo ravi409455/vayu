@@ -14,7 +14,7 @@ Status: ✅ done · 🔄 in progress · ⏳ not started
 | 0 | Safety first: secrets home, 2-step login, SSH key | ✅ 2026-11-26 |
 | 1 | Code changes (PR 27) | ✅ merged 2026-11-26 as `35fdec9` |
 | 2 | Accounts and dashboards | ✅ 2026-11-26 (2.5c, the Firebase key restriction, waits for the staging app) |
-| 3 | Staging server setup | 🔄 first deploy live 2026-11-26; forms, staff and test data next |
+| 3 | Staging server setup | ✅ 2026-11-26: live, with test data |
 | 4 | Deploy pipeline | 🔄 merge → staging works; rollback not yet rehearsed |
 | 5 | Backups and alerts | ⏳ |
 | 6 | Prove staging | ⏳ |
@@ -461,7 +461,7 @@ Checked from outside:
 | Services | api (healthy), worker, zip-worker, pdf-worker, beat, postgres (healthy), redis (healthy), caddy |
 | Live commit (`/srv/vayu/.deployed`) | `35fdec9` |
 
-### 3.6 · Forms, reports, staff and test data 🔄
+### 3.6 · Forms, reports, staff and test data ✅
 `seed_test_data` sets up every form, report and list (it runs `setup_platform`), then makes the
 test logins and 3 days of test bookings. Staging only: it refuses on production.
 1. Owner: one password for all test logins, made without a trailing line break and saved in
@@ -483,6 +483,31 @@ Test logins on https://vayu-staging.carcid.in (password: Phase `STAGING_TESTER_P
 | `admin` | Admin |
 | `ops`, `ops2` | Ops |
 | `expert`, `expert2` … `expert7` | Expert |
+
+Result (it took about 20 minutes, mostly uploading the test photos to R2):
+
+| What | Count |
+|---|---|
+| Logins | 10 |
+| Forms | 7 |
+| Bookings | 30: draft 3, assigned 5, in progress 3, submitted 2, completed 16, cancelled 1 |
+| PDF reports | 16 (one per completed booking) |
+| Photos | 1,685 verified in R2; 5 left "uploading" on purpose (the stuck-upload screen) |
+
+Sign-in checked: `ops` and `expert` sign in; `admin` is refused by the phone app on purpose (Admins
+use the web portal).
+
+Lessons:
+- Run long commands on the server with `ssh -o ServerAliveInterval=30`: the first run's SSH
+  connection dropped while idle (exit 255), although the command itself finished.
+- A command's arguments are visible in `ps` / `docker top`. Claude printed the running process
+  list and the testers' password appeared in the chat: the password was replaced in Phase and on
+  the test logins (3.7). Since then: process lists by name only. (Better later: let
+  `seed_test_data` read the password from the environment instead of an argument.)
+
+### 3.7 · Replace the exposed testers' password 🔄
+New value in Phase → `vayu` → Staging → `STAGING_TESTER_PASSWORD` (Deploy), then set on all 10
+test logins on the server from the fetched setting.
 
 ### Dependabot ✅ grouped (PR 30)
 Its first run opened 6 PRs at once (Actions and the Node image), each a full CI run, which queued
