@@ -166,6 +166,19 @@ class BackupCopiesTest {
         assertNull(c.found.value)                                              // and they don't come back
     }
 
+    @Test fun aFoundCopyThatCantBeDeletedKeepsTheNotice() {
+        copies().copy(b, photo())
+        app.resolve("backup-index.json").delete()
+        val c = copies(); c.clean(emptyMap())
+        val dir = folder.resolve("TST-1014")
+        dir.setWritable(false)                                                 // the delete fails
+        c.dropFound()
+        assertEquals(1, c.found.value!!.files)
+        dir.setWritable(true)
+        c.dropFound()
+        assertNull(c.found.value)
+    }
+
     @Test fun theIndexIsKeptAcrossAppStarts() {
         copies().copy(b, photo())
         now += 5 * day

@@ -82,7 +82,7 @@ class BackupCopies(
     @Synchronized fun drop(fileId: String) = remove { it.fileId == fileId }
 
     /** The expert sent the copies from an earlier install to Ops: they go at once, with the notice. */
-    @Synchronized fun dropFound() { remove { it.foundAt != null }; _found.value = null }
+    @Synchronized fun dropFound() { remove { it.foundAt != null }; showFound() }
 
     /** A lead was discarded: all its copies go at once. */
     @Synchronized fun dropBooking(bookingId: String) = remove { it.bookingId == bookingId }
@@ -126,6 +126,11 @@ class BackupCopies(
         }
         save()
         removeEmptyFolders()
+        showFound()
+    }
+
+    /** The notice comes from what is really left: a found copy that couldn't be deleted keeps it up. */
+    private fun showFound() {
         _found.value = entries.filter { it.foundAt != null }.takeIf { it.isNotEmpty() }?.let { f ->
             Found(f.map { File(it.path).parentFile!!.name }.distinct().sorted(), f.size, f.minOf { it.foundAt!! } + KEEP_MS)
         }
