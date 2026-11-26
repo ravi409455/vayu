@@ -72,10 +72,11 @@ def test_it_fills_every_flow(settings, s3):  # noqa: F811
     assert "Additional key checks" in named and "Service history" in named
     assert "Verified, 3 services" in named and "Clean car overall" in named
     assert "Key Check 3" not in named                       # an unnamed pair prints nothing
+    for text in (named, used_report := report_text("TST-1002")):   # a late start is not printed
+        assert "Inspection Delay" not in text and "45 Minutes Delayed" not in text
     plain = report_text("TST-1009")
     assert "Additional key checks" not in plain and "Key Check 1" not in plain
     assert "Mfg. Date" in named and "March 2026" in named            # on the cover (PDI, EV)
-    used_report = report_text("TST-1002")
     assert "Estimated Price" in used_report and "12,50,000" in used_report
     assert "Service history" in used_report and "36,400 km" in used_report
     assert "Not able to check" in used_report           # an empty answer prints its fallback
