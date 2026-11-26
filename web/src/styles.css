@@ -1701,6 +1701,23 @@ button.sm {
 .summary-strip > div:last-child {
   border-right: 0;
 }
+.kc-list {
+  margin: 0 0 12px;
+}
+.kc-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.kc-list dt {
+  color: var(--muted);
+}
+.kc-list dd {
+  margin: 0;
+  text-align: right;
+}
 .big {
   font-size: 20px;
   font-weight: 600;
