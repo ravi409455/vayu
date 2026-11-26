@@ -20,6 +20,10 @@
 # the test's changes: its own address, Sentry off, no backups, no heartbeats, a fresh database.
 # Files go to the staging bucket; `down` deletes the test bookings' files by their IDs only.
 #
+# Cloud runs use the test-only form (owner, 2026-11-27): a PDI copy with an extra last page, so an
+# inspection sends 100 photos (150 on 2 of every 9) and 15 videos (`loadtest_prepare --test-form`).
+# The local run on the Mac keeps the real PDI form with its 5 videos.
+#
 # Needs on main: the load-test code (perf/loadtest.py, perf/receiver.py, perf/report.py and
 # `manage.py loadtest_prepare`). LT_SRC: a checkout to take perf/ from (default: this one).
 # shellcheck disable=SC2016,SC2029  # remote commands: $… must expand on the server, not here
@@ -172,7 +176,8 @@ cmd_prepare() {
     compose cp /tmp/staff.csv api:/tmp/staff.csv && rm /tmp/staff.csv &&
     compose exec -T api python manage.py setup_platform --users /tmp/staff.csv >/dev/null &&
     compose exec -T api python manage.py loadtest_prepare --password '$pw' \
-      --receiver https://hooks.$load.sslip.io --out /tmp/lt.json --experts 400 --ops 40 &&
+      --receiver https://hooks.$load.sslip.io --out /tmp/lt.json --experts 400 --ops 40 \
+      --test-form &&
     compose cp api:/tmp/lt.json /tmp/lt.json"
   # the test data goes to the load server (it holds logins and the API key: owner-only files)
   on "deploy@$ip" 'cat /tmp/lt.json && rm -f /tmp/lt.json' \
