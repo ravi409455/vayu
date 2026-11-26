@@ -101,7 +101,7 @@ services:
       - caddyconfig:/config
     environment:
       APP_HOST: ${APP_HOST}
-      CSP_HEADER: ${CSP_HEADER:-Content-Security-Policy-Report-Only}
+      CSP_HEADER: ${CSP_HEADER:-Content-Security-Policy}
     depends_on: [api]
     logging: *logs
 volumes:

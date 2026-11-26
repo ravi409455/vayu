@@ -26,28 +26,32 @@ read -rsp "Paste the backup unlocking key: " SECRET || die "no key given"; echo
 [[ "$SECRET" == AGE-SECRET-KEY-* ]] || die "that is not a backup unlocking key (AGE-SECRET-KEY-...)"
 
 mkdir -p backups
-trap 'rm -f backups/restore.dump backups/restore.dump.age' EXIT
+trap 'rm -f backups/restore.dump.age' EXIT
 s3 cp --only-show-errors "$PREFIX$NAME" restore.dump.age < /dev/null
-age -d -i <(printf '%s\n' "$SECRET") -o backups/restore.dump backups/restore.dump.age
-unset SECRET
+# the unlocked dump is never written to disk: it streams from age straight into pg_restore
+unlocked() { age -d -i <(printf '%s\n' "$SECRET") backups/restore.dump.age; }
 
 SIZES="ANALYZE; SELECT relname AS table, n_live_tup AS rows FROM pg_stat_user_tables ORDER BY n_live_tup DESC LIMIT 12;"
 START=$(date +%s)
 
 if [[ "$MODE" == --into-live ]]; then
-  pg pg_restore --clean --if-exists --no-owner --no-privileges -d "$(envval DB_NAME)" < backups/restore.dump
+  unlocked | pg pg_restore --clean --if-exists --no-owner --no-privileges -d "$(envval DB_NAME)"
+  unset SECRET
   echo "== restored into the live database in $(( $(date +%s) - START ))s. Now:"
   pg psql -c "$SIZES"
   exit 0
 fi
 
-# the drill: a throwaway Postgres on this server (customer data never leaves it)
+# the drill: a throwaway Postgres on this server (customer data never leaves it), with no network
+# at all (reached only through docker exec) and a password nobody knows
 docker rm -f vayu-restore-drill >/dev/null 2>&1 || true
-docker run -d --name vayu-restore-drill -e POSTGRES_PASSWORD=drill postgres:16-alpine >/dev/null
-trap 'rm -f backups/restore.dump backups/restore.dump.age; docker rm -f vayu-restore-drill >/dev/null 2>&1 || true' EXIT
+docker run -d --name vayu-restore-drill --network none \
+  -e POSTGRES_PASSWORD="$(head -c 24 /dev/urandom | base64 | tr -dc A-Za-z0-9)" postgres:16-alpine >/dev/null
+trap 'rm -f backups/restore.dump.age; docker rm -f vayu-restore-drill >/dev/null 2>&1 || true' EXIT
 until docker exec vayu-restore-drill pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
 sleep 2
-docker exec -i vayu-restore-drill pg_restore --no-owner --no-privileges -U postgres -d postgres < backups/restore.dump
+unlocked | docker exec -i vayu-restore-drill pg_restore --no-owner --no-privileges -U postgres -d postgres
+unset SECRET
 echo "== restored in $(( $(date +%s) - START ))s. Backup:"
 docker exec vayu-restore-drill psql -U postgres -c "$SIZES"
 echo "== live now (rows added since the backup are expected):"

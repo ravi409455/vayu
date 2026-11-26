@@ -160,6 +160,7 @@ then deletes the container. Record each drill below.
 
 ## 9. Security headers
 Caddy sends HSTS, nosniff, a referrer policy, a permissions policy and the content rules (CSP).
-`CSP_HEADER` in the env file: `Content-Security-Policy-Report-Only` (the browser only reports, in
-its console) until a full staging run (sign-in, booking, inspection with photos and video, PDF
-preview, QR page) shows nothing blocked; then `Content-Security-Policy`, and redeploy.
+`CSP_HEADER` defaults to `Content-Security-Policy` (enforced). Staging alone starts with
+`CSP_HEADER=Content-Security-Policy-Report-Only` (the browser only reports, in its console) until a
+full run (sign-in, booking, inspection with photos and video, PDF preview, QR page) shows nothing
+blocked; then remove the line and redeploy. Production never runs report-only.
