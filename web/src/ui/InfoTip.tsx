@@ -1,8 +1,9 @@
 import { Info } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
-/** The little "i": hover (or focus, or tap) for a plain-words explanation of what something is for. */
-export function InfoTip({ children, label = "More info" }: { children: ReactNode; label?: string }) {
+/** The little "i": hover (or focus, or tap) for a plain-words explanation of what something is for.
+ *  ``before``: text shown in front of the "i" that opens it on hover too (a whole history line). */
+export function InfoTip({ children, label = "More info", before }: { children: ReactNode; label?: string; before?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
   const id = useId();
@@ -35,6 +36,7 @@ export function InfoTip({ children, label = "More info" }: { children: ReactNode
   };
   return (
     <span className="tip" ref={box} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      {before}
       <button
         type="button"
         className="tip-btn"

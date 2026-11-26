@@ -140,8 +140,9 @@ class Inspection(models.Model):
 
 class BookingActivity(models.Model):
     """What happened to a booking, for its timeline and the "edited by Ops" filter.
-    Append-only. Values are kept only for schedule / stage / assignment keys; other changes
-    keep just the field keys (answers can be sensitive and are visible per role)."""
+    Append-only. Every change keeps its old and new value (long text cut, files counted), shown
+    only to people who may see that field; a deleted booking's rows keep only the schedule /
+    stage / assignment values (activity.forget_values)."""
 
     # kept when the booking is deleted, for metrics (F-247): then only booking_ref names it
     booking = models.ForeignKey(Booking, null=True, on_delete=models.SET_NULL,
@@ -151,7 +152,7 @@ class BookingActivity(models.Model):
                               on_delete=models.PROTECT, related_name="+")  # null: the system
     # created | changed | edited | inspection_edited | ratings_changed
     kind = models.CharField(max_length=24)
-    changes = models.JSONField(default=dict)   # {key: [old, new]} for SAFE_KEYS only
+    changes = models.JSONField(default=dict)   # {key: [old, new]}, see activity.log
     keys = models.JSONField(default=list)      # every changed key ("part.key" for inspections)
     inspection = models.ForeignKey(Inspection, null=True, blank=True, on_delete=models.SET_NULL,
                                    related_name="+")
