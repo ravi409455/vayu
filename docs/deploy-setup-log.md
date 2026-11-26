@@ -564,7 +564,12 @@ After PR 42 (code) and PR 37 (docs) merged a few minutes apart, staging still ra
    building and deploying.
 Fix (PR "deploy every merge"): no docs-only shortcut. Every merge to `main` builds and deploys
 (docs-only: a cached build and a 10-20 s restart of staging). A hand-started run (Actions →
-deploy → Run workflow) builds its images too, so it works for any commit on `main`.
+deploy → Run workflow) builds the images if they are missing, so it works for any commit on `main`.
+After the security review of that change:
+- a hand-started run takes only a full commit id that is already on `main` (checked with GitHub
+  before anything is built or pushed);
+- images are never rebuilt or overwritten: if a commit's images exist, they are deployed as they are;
+- only merges to `main` write the build cache.
 How to notice next time: `ssh deploy@<staging> cat /srv/vayu/.deployed` should equal the newest
 commit on `main` after each deploy run.
 ## Phase 5 · Backups and alerts 🔄
