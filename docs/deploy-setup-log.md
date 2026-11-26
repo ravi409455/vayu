@@ -14,8 +14,8 @@ Status: ✅ done · 🔄 in progress · ⏳ not started
 | 0 | Safety first: secrets home, 2-step login, SSH key | ✅ 2026-11-26 |
 | 1 | Code changes (PR 27) | ✅ merged 2026-11-26 as `35fdec9` |
 | 2 | Accounts and dashboards | ✅ 2026-11-26 (2.5c, the Firebase key restriction, waits for the staging app) |
-| 3 | Staging server setup | 🔄 server ready, settings from Phase work; first deploy next |
-| 4 | Deploy pipeline | ⏳ |
+| 3 | Staging server setup | ✅ 2026-11-26: live, with test data |
+| 4 | Deploy pipeline | 🔄 merge → staging works; rollback not yet rehearsed |
 | 5 | Backups and alerts | ⏳ |
 | 6 | Prove staging | ⏳ |
 | 7 | Production | ⏳ |
@@ -439,17 +439,151 @@ What it took (lessons):
 
 ### Merged
 - PR 27 (Phase 1 code, settings from Phase, staging on demand) → `main` as `35fdec9`.
+- PR 18 (`docs/plan-deploy.md` and this log) → `main` as `2f1408a`. From now on this log changes
+  through a docs PR (the `main` ruleset refuses direct pushes).
 
-### Dependabot ✅ grouped (PR 30)
+### 3.5 · First deploy ✅ (2026-11-26, automatic)
+Nobody touched the server: PR 27 merged → CI green on `main` → the deploy workflow built both
+images once (`ghcr.io/ravi409455/vayu-api` and `vayu-web`, tag = commit id) → logged in with the
+locked robot key → `deploy.sh` fetched the settings from Phase, ran the migrations, started
+everything, health ok. The run then waited for **Approve** on production: not approved (no
+production server yet), the run was cancelled. Until Phase 7, cancel that waiting step each time.
+
+Checked from outside:
+
+| Check | Result |
+|---|---|
+| `https://vayu-staging.carcid.in/` | 200 in 0.3 s |
+| `/api/v1/health` (database, Redis, R2 storage, workers, Firebase push) | `{"status":"ok"}` |
+| `/report/verify/<code>` | 200 |
+| https certificate | Let's Encrypt, valid to 2027-02-24, Caddy renews it by itself |
+| Headers | HSTS, nosniff, CSP report-only (staging, as planned) |
+| Services | api (healthy), worker, zip-worker, pdf-worker, beat, postgres (healthy), redis (healthy), caddy |
+| Live commit (`/srv/vayu/.deployed`) | `35fdec9` |
+
+### 3.6 · Forms, reports, staff and test data ✅
+`seed_test_data` sets up every form, report and list (it runs `setup_platform`), then makes the
+test logins and 3 days of test bookings. Staging only: it refuses on production.
+1. Owner: one password for all test logins, made without a trailing line break and saved in
+   Phase → `vayu` → Staging → `STAGING_TESTER_PASSWORD` (Deploy):
+   ```bash
+   python3 -c "import secrets;print(secrets.token_urlsafe(24),end='')" | pbcopy
+   ```
+2. Claude, on the server (the password is read there from the settings file; it never passes
+   through chat):
+   ```bash
+   bash infra/secrets.sh        # fetch the new setting
+   source infra/lib.sh && export VAYU_TAG=$(cat .deployed) P=$(envval STAGING_TESTER_PASSWORD)
+   compose exec -T -e P api sh -c 'python manage.py seed_test_data --confirm staging-1 --password "$P"'
+   ```
+Test logins on https://vayu-staging.carcid.in (password: Phase `STAGING_TESTER_PASSWORD`):
+
+| Login | Role |
+|---|---|
+| `admin` | Admin |
+| `ops`, `ops2` | Ops |
+| `expert`, `expert2` … `expert7` | Expert |
+
+Result (it took about 20 minutes, mostly uploading the test photos to R2):
+
+| What | Count |
+|---|---|
+| Logins | 10 |
+| Forms | 7 |
+| Bookings | 30: draft 3, assigned 5, in progress 3, submitted 2, completed 16, cancelled 1 |
+| PDF reports | 16 (one per completed booking) |
+| Photos | 1,685 verified in R2; 5 left "uploading" on purpose (the stuck-upload screen) |
+
+Sign-in checked: `ops` and `expert` sign in; `admin` is refused by the phone app on purpose (Admins
+use the web portal).
+
+Lessons:
+- Run long commands on the server with `ssh -o ServerAliveInterval=30`: the first run's SSH
+  connection dropped while idle (exit 255), although the command itself finished.
+- A command's arguments are visible in `ps` / `docker top`. Claude printed the running process
+  list and the testers' password appeared in the chat: the password was replaced in Phase and on
+  the test logins (3.7). Since then: process lists by name only. (Better later: let
+  `seed_test_data` read the password from the environment instead of an argument.)
+
+### 3.7 · Replace the exposed testers' password ✅ (2026-11-26)
+New value in Phase → `vayu` → Staging → `STAGING_TESTER_PASSWORD` (Deploy), then set on all 10
+test logins on the server from the fetched setting (Django `set_password`, value read from the
+settings file inside the container, never printed): "passwords changed: 10".
+Checked: the old password is refused (`/api/v1/auth/login` → 401), the new one signs in (200).
+
+### Dependabot ✅ grouped (now in PR 42)
 Its first run opened 6 PRs at once (Actions and the Node image), each a full CI run, which queued
 ahead of `main`'s CI. Closed them and cancelled their runs. New rule: one grouped PR a week for all
 GitHub Actions and one for all Docker images; no Node major jumps (stay on LTS), no Python minor
-jumps.
+jumps. In force on `main` since PR 42 (`cc40087`); #43 (one more single update from before) closed.
+
+### 3.8 · First bugs found on staging, and the "staging round" PR 42 ✅ merged as `cc40087` (from session "bugs on staging")
+**PDF template preview failed** ("The server had a problem"). The preview draws the whole PDF
+inside the web request. A full PDI took 43 s on staging: 1 s data, 30 s fetching ~150 photos one by
+one (a new storage client each time), 12 s drawing. That is past gunicorn's 30 s limit, so the
+worker was killed. A bug in the log formatter (request path empty) then hid the real error behind
+a `TypeError`. Measured on staging with 40 photos:
+
+| How the photos are fetched | Time |
+|---|---|
+| one by one, a new storage client each | 7.2 s |
+| one by one, one client | 4.7 s |
+| one client, 8 at a time | 0.8 s |
+
+**PR 42 "Staging round"** (combines PRs 30, 39, 40 and 41, which are closed):
+- `secrets.sh` trims spaces and line breaks around Phase values, never names (a spaced name is
+  refused, so it can't shadow a real setting).
+- Dependabot grouped (above).
+- gunicorn timeout 120 s (setting `GUNICORN_TIMEOUT`); the access log survives an empty path.
+- Photos fetched 8 at a time over one storage client, one database query per photo grid: faster
+  preview and faster final PDF.
+- CI on `main`: a newer merge cancels the older run.
+- Deploy queues per job: staging deploys one at a time and a running deploy is never cut off;
+  production has its own queue, so a run waiting for **Approve** no longer blocks staging.
+- `deploy.sh` never goes backwards by accident: an older commit is skipped (a `::warning::` in
+  GitHub). A hand-started run (Run workflow) is sent as `<commit> rollback` and may go back. A
+  damaged `.deployed` or a git error stops the deploy. Tested against a real clone: older skipped;
+  rollback, same commit and newer go through; extra words refused.
+After it deploys, the preview is timed again on staging (result to be added here).
+
+**Phone sign-in of the test logins:** 7 of 9 phone logins sign in with the current password;
+`ops` and `expert` answer 409 `DEVICE_HAS_UNSYNCED_DATA` (signed in from the server as a test
+"phone"; one phone per person). Fix when needed: an Admin signs that phone out (web → Users →
+the person's ⋯ menu → **Sign out of every device**), or `revoke_devices` on the server.
 
 ---
 
 ## Phase 4 · Deploy pipeline ⏳
-## Phase 5 · Backups and alerts ⏳
+## Phase 5 · Backups and alerts 🔄
+
+### 5.1 · Watching the server's resources (owner asked 2026-11-26)
+DigitalOcean alerts say **when** the server was busy. (A recorder of *which service* used what,
+`infra/resources.sh` every 5 minutes, was built and then **removed** on the owner's decision the
+same day: script, cron line and `/srv/vayu/logs` are gone. Which service is busy can be seen live
+with `docker stats` when needed.)
+
+**DigitalOcean alerts ✅ → Slack `#vayu-alerts`** (2026-11-26). DigitalOcean → **Insights** →
+**Alerts** → **Alert Rules** (the new place; there is no "alert policy" menu any more). Four rules,
+each: resource type **Droplets**, resource **tag `vayu-web`** (not "All Droplets": the account
+has other company servers; production gets the tag too), notification channel
+**`slack-vayu-alerts`** only, re-notify every 4 hours:
+
+| Rule | Condition |
+|---|---|
+| `vayu: CPU above 80% for 10 min` | CPU utilization ≥ 80% over 10 minutes |
+| `vayu: memory above 85% for 10 min` | Memory utilization ≥ 85% over 10 minutes |
+| `vayu: disk above 80%` | Disk utilization ≥ 80% over 5 minutes |
+| `vayu: load above 3 for 10 min` | Load average (5 min) ≥ 3 over 10 minutes |
+
+Notification Channels: `slack-vayu-alerts` (Slack, the owner made it) used by 4 rules; `email`
+used by 0 (can be deleted).
+Lessons:
+- `doctl monitoring alert` only knows the old alert system: email, or a raw Slack webhook URL. It
+  cannot use the new Notification Channels. Rules made with it appear twice in the new screen
+  (a Droplets row and a Kubernetes row, because a tag can sit on both). So these rules were made
+  in the web form (by Claude, in the owner's browser), resource type Droplets only.
+- The web form defaults to **All Droplets**: always swap it for the tag.
+
 ## Phase 6 · Prove staging ⏳
 ## Phase 7 · Production ⏳
 
@@ -504,9 +638,10 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 
 | Item | When |
 |---|---|
-| First staging deploy: starts by itself when `main`'s CI passes; then check the site, health page, workers | next |
-| Merge PR 30 (trim values; Dependabot grouped) | when its CI is green |
-| Merge PR 18 (this log and `docs/plan-deploy.md`): until then they exist only on the `docs/plan-deploy` branch | soon |
+| Merge PR 37 (this log, DigitalOcean alerts) | when CI is green |
+| Time the PDF preview on staging after PR 42 deploys | after the merge |
+| Phase 4: rehearse a rollback (Actions → deploy → Run workflow → previous commit) | after the merges |
+| Every deploy run waits for production Approve: cancel it until production exists (after PR 42 it no longer blocks staging) | until Phase 7 |
 | Welcome pages (`/welcome/engineers`, `/welcome/ops`, public APK download; PR welcome-pages): open both on staging after the next deploy; on production in Phase 7, with an uptime monitor on `/welcome/engineers` | next deploy, Phase 7 |
 | 2.5c Restrict the Firebase API key | once "Vayu Staging" is on a phone (Phase 6) |
 | Phase 5: Better Stack uptime and heartbeats (`BACKUP_HEARTBEAT_URL`, `WORKERS_HEARTBEAT_URL` into Phase), DigitalOcean alerts, first restore drill | after the first deploy |
