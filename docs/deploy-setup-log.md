@@ -505,9 +505,11 @@ Lessons:
   the test logins (3.7). Since then: process lists by name only. (Better later: let
   `seed_test_data` read the password from the environment instead of an argument.)
 
-### 3.7 · Replace the exposed testers' password 🔄
+### 3.7 · Replace the exposed testers' password ✅ (2026-11-26)
 New value in Phase → `vayu` → Staging → `STAGING_TESTER_PASSWORD` (Deploy), then set on all 10
-test logins on the server from the fetched setting.
+test logins on the server from the fetched setting (Django `set_password`, value read from the
+settings file inside the container, never printed): "passwords changed: 10".
+Checked: the old password is refused (`/api/v1/auth/login` → 401), the new one signs in (200).
 
 ### Dependabot ✅ grouped (PR 30)
 Its first run opened 6 PRs at once (Actions and the Node image), each a full CI run, which queued
