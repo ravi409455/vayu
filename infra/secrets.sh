@@ -50,7 +50,8 @@ if isinstance(data, list):                       # [{"key": .., "value": ..}] in
     data = {d["key"]: d["value"] for d in data}
 # spaces and line breaks around a value are copy-paste leftovers (`… | pbcopy` adds a line break):
 # never part of a setting, so they go
-data = {k.strip(): str(v).strip() for k, v in data.items()}
+# (values only: a name with spaces is refused below, so it can never shadow a real setting)
+data = {k: str(v).strip() for k, v in data.items()}
 need = ["VAYU_SERVER_KIND", "VAYU_SERVER_NAME", "APP_HOST", "DJANGO_SECRET_KEY", "DB_HOST",
         "DB_PASSWORD", "SENTRY_DSN", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY",
         "FIREBASE_SERVICE_ACCOUNT_JSON"]
