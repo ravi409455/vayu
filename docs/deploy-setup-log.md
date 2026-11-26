@@ -493,7 +493,33 @@ jumps.
 ---
 
 ## Phase 4 · Deploy pipeline ⏳
-## Phase 5 · Backups and alerts ⏳
+## Phase 5 · Backups and alerts 🔄
+
+### 5.1 · Watching the server's resources (owner asked 2026-11-26)
+Two halves: **when** it was busy (DigitalOcean) and **which service** (our recorder).
+
+**a) Recorder ✅** `infra/resources.sh`, every 5 minutes (cron of `deploy`, `bootstrap.sh` sets it):
+one line for the box (load, memory, swap, disk) and one per container (CPU, memory), in
+`/srv/vayu/logs/resources-<date>.log`, 14 days kept. After an alert:
+```bash
+ssh deploy@<server> /srv/vayu/infra/resources.sh show 12     # the last hour, sample by sample
+ssh deploy@<server> 'grep pdf-worker /srv/vayu/logs/resources-2026-11-26.log'   # one service's day
+```
+First sample on staging (filling test data): memory 1.5 / 3.9 GB, swap 0, disk 8%, busiest the API
+at 3.6% CPU.
+
+**b) DigitalOcean alerts ⏳ (owner)** Monitoring → Create alert policy, applied to the **tag
+`vayu-web`** (so production is covered too), sent by email and to Slack `#vayu-alerts`:
+
+| Alert | Above | For |
+|---|---|---|
+| CPU | 80% | 10 min |
+| Memory | 85% | 10 min |
+| Disk | 80% | 5 min |
+| Load (5 min average) | 3 (2 vCPU box) | 10 min |
+
+The graphs themselves (Droplet → **Graphs** / Insights) keep the history: they show when.
+
 ## Phase 6 · Prove staging ⏳
 ## Phase 7 · Production ⏳
 
