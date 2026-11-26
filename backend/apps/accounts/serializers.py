@@ -73,6 +73,9 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField()
     client = serializers.ChoiceField(choices=["web", "mobile"])
     device_name = serializers.CharField(required=False, allow_blank=True, default="")
+    # the app's install (see Device.install_id); older apps don't send it
+    install_id = serializers.UUIDField(required=False, allow_null=True, default=None,
+                                       write_only=True)
 
 
 class PasswordSerializer(serializers.Serializer):

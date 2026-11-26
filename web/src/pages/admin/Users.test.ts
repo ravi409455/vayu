@@ -6,6 +6,7 @@ const p = (over: Partial<Parameters<typeof phoneWords>[0] & object>) => ({
   drafts: 0,
   files: 0,
   unknown: false,
+  signed_out_holding: 0,
   last_seen_at: null,
   ...over,
 });
@@ -22,5 +23,10 @@ describe("deactivate and sign-out warnings say what the phone holds (F-243)", ()
     expect(phoneWords(p({ devices: 0 }))).toMatch(/no phone signed in/);
     expect(phoneWords(p({ unknown: true }))).toMatch(/has not said what it holds/);
     expect(phoneWords(undefined)).toBe("Checking their phone…");
+  });
+  it("counts a phone that signed out still holding work", () => {
+    expect(phoneWords(p({ devices: 0, signed_out_holding: 1, drafts: 2, files: 5 }))).toBe(
+      "Their phone signed out but still holds 2 unfinished bookings and 5 files not yet on the server. These are lost.",
+    );
   });
 });

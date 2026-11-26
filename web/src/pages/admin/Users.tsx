@@ -12,18 +12,27 @@ import { keys } from "../../api/keys";
 
 const ROLE: Record<string, string> = { admin: "Admin", ops: "Ops", expert: "Expert" };
 
-/** What their signed-in phones last reported (server: users/{id}/phone). */
-type PhoneState = { devices: number; drafts: number; files: number; unknown: boolean; last_seen_at: string | null };
+/** What their phones last reported (server: users/{id}/phone): signed-in phones, and phones that
+ * signed out still holding unsent work (signed_out_holding). */
+type PhoneState = {
+  devices: number;
+  drafts: number;
+  files: number;
+  unknown: boolean;
+  signed_out_holding: number;
+  last_seen_at: string | null;
+};
 const n = (k: number, one: string) => `${k} ${one}${k === 1 ? "" : "s"}`;
 
 /** What signing this person out would lose, from their phone's own report (F-243). */
 export function phoneWords(p: PhoneState | undefined): string {
   if (!p) return "Checking their phone…";
-  if (p.devices === 0) return "They have no phone signed in, so nothing on a phone is lost.";
+  if (p.devices === 0 && !p.signed_out_holding) return "They have no phone signed in, so nothing on a phone is lost.";
   const seen = p.last_seen_at ? ` (last heard from ${fmtStamp(p.last_seen_at)})` : "";
   if (p.drafts || p.files) {
     const what = [p.drafts ? n(p.drafts, "unfinished booking") : "", p.files ? n(p.files, "file") : ""].filter(Boolean).join(" and ");
-    return `Their phone still holds ${what} not yet on the server${seen}. These are lost.${p.unknown ? " Another phone has not said what it holds." : ""}`;
+    const phone = p.devices === 0 ? "Their phone signed out but still holds" : "Their phone still holds";
+    return `${phone} ${what} not yet on the server${seen}. These are lost.${p.unknown ? " Another phone has not said what it holds." : ""}`;
   }
   if (p.unknown) return "Their phone has not said what it holds: anything not yet sent may be lost.";
   return `Their phone has sent everything${seen}. Nothing is lost.`;

@@ -79,7 +79,8 @@ class LoginView(APIView):
             raise CodedError("ADMIN_USE_WEB", "The app is for Ops and experts. Admins use the web.",
                              403)
         else:
-            data.update(services.register_device_and_tokens(user, s.validated_data["device_name"]))
+            data.update(services.register_device_and_tokens(
+                user, s.validated_data["device_name"], s.validated_data["install_id"]))
         return Response(data)
 
 
@@ -172,19 +173,35 @@ class MyPictureView(APIView):
         return Response(MeSerializer(user).data)
 
 
+@extend_schema(request=inline_serializer("LogoutCounts", {
+    "drafts": serializers.IntegerField(required=False, min_value=0),
+    "files": serializers.IntegerField(required=False, min_value=0)}))
 class LogoutView(APIView):
+    """Sign out. A phone may say what it still holds unsent (both counts, or none): with unsent
+    work it keeps holding it and only this install may sign back in (docs/plan-media-backup.md)."""
+
     allow_password_change_pending = True
 
     def post(self, request):
         token = request.auth
         device_id = token.get("device_id") if hasattr(token, "get") else None
         if device_id:
-            if Device.objects.filter(pk=device_id, revoked_at__isnull=True).update(
-                    revoked_at=timezone.now(), push_token=""):
-                log.event("auth.device_revoked", user=request.user, count=1)
+            # optional: what the phone still holds; with unsent work it keeps holding it
+            body = request.data if isinstance(request.data, dict) else {}
+            counts = _unsent_counts(body) if body else None
+            services.sign_out_device(request.user, device_id, counts)
         else:
             django_logout(request._request)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _unsent_counts(body: dict) -> dict[str, int]:
+    """{"drafts": n, "files": n} as the phone sent it: both whole numbers, 0 or more."""
+    counts = {k: body.get(k) for k in ("drafts", "files")}
+    if any(type(v) is not int or v < 0 for v in counts.values()):
+        raise CodedError("INVALID_COUNTS", "drafts and files must be whole numbers, 0 or more.",
+                         400)
+    return counts  # type: ignore[return-value]
 
 
 class HeartbeatView(APIView):
@@ -199,11 +216,7 @@ class HeartbeatView(APIView):
         if not device_id:
             raise CodedError("NOT_A_DEVICE", "Only the app sends a heartbeat.", 400)
         body = request.data if isinstance(request.data, dict) else {}
-        counts = {k: body.get(k) for k in ("drafts", "files")}
-        if any(type(v) is not int or v < 0 for v in counts.values()):
-            raise CodedError("INVALID_COUNTS", "drafts and files must be whole numbers, 0 or more.",
-                             400)
-        seen: dict = {"unsynced": counts, "last_seen_at": timezone.now()}
+        seen: dict = {"unsynced": _unsent_counts(body), "last_seen_at": timezone.now()}
         version = body.get("app_version")
         if isinstance(version, str) and version.strip():      # optional; kept for metrics (F-247)
             seen["app_version"] = version.strip()[:32]
@@ -228,10 +241,8 @@ class ChangePasswordView(APIView):
         audit.record(user, "user.change_password", "user", user.id, "Changed their password")
         log.event("auth.password_changed", user=user, changed_by=user.pk)
         # a changed password signs out every other phone (this one keeps working)
-        others = Device.objects.filter(user=user, revoked_at__isnull=True)
-        if hasattr(request.auth, "get") and request.auth.get("device_id"):
-            others = others.exclude(pk=request.auth.get("device_id"))
-        others.update(revoked_at=timezone.now(), push_token="")
+        this_phone = request.auth.get("device_id") if hasattr(request.auth, "get") else None
+        services.revoke_devices(user, keep=this_phone)
         if request._request.user.is_authenticated:  # keep the web session alive
             update_session_auth_hash(request._request, user)
         return Response({"detail": "Password changed."})
@@ -358,20 +369,14 @@ class UserViewSet(viewsets.ModelViewSet):
     @extend_schema(responses=inline_serializer("PhoneState", {
         "devices": serializers.IntegerField(), "drafts": serializers.IntegerField(),
         "files": serializers.IntegerField(), "unknown": serializers.BooleanField(),
+        "signed_out_holding": serializers.IntegerField(),
         "last_seen_at": serializers.DateTimeField(allow_null=True)}))
     @action(detail=True, methods=["get"])
     def phone(self, request, pk=None):
-        """What the person's signed-in phones last said they still hold (F-243), so the deactivate
-        and sign-out warnings say what would be lost. unknown: a phone never reported."""
-        user = self.get_object()
-        devices = list(Device.objects.filter(user=user, revoked_at__isnull=True))
-        reported = [d.unsynced for d in devices if d.unsynced is not None]
-        seen = [d.last_seen_at for d in devices if d.last_seen_at]
-        return Response({"devices": len(devices),
-                         "drafts": sum(int(u.get("drafts", 0) or 0) for u in reported),
-                         "files": sum(int(u.get("files", 0) or 0) for u in reported),
-                         "unknown": len(reported) < len(devices),
-                         "last_seen_at": max(seen) if seen else None})
+        """What the person's phones last said they still hold (F-243), so the deactivate and
+        sign-out warnings say what would be lost: signed-in phones, and phones that signed out
+        still holding work (signed_out_holding). unknown: a signed-in phone never reported."""
+        return Response(services.phone_state(self.get_object()))
 
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
