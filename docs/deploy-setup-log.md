@@ -508,27 +508,27 @@ ssh deploy@<server> 'grep pdf-worker /srv/vayu/logs/resources-2026-11-26.log'   
 First sample on staging (filling test data): memory 1.5 / 3.9 GB, swap 0, disk 8%, busiest the API
 at 3.6% CPU.
 
-**b) DigitalOcean alerts ✅** (2026-11-26, made with `doctl`: the dashboard menus had changed and
-"alert policy" was not found there). Applied to the **tag `vayu-web`** (production is covered
-too), sent to the DigitalOcean account's email:
+**b) DigitalOcean alerts ✅ → Slack `#vayu-alerts`** (2026-11-26). DigitalOcean → **Insights** →
+**Alerts** → **Alert Rules** (the new place; there is no "alert policy" menu any more). Four rules,
+each: resource type **Droplets**, resource **tag `vayu-web`** (not "All Droplets": the account
+has other company servers; production gets the tag too), notification channel
+**`slack-vayu-alerts`** only, re-notify every 4 hours:
 
-| Alert | Above | For |
-|---|---|---|
-| CPU | 80% | 10 min |
-| Memory | 85% | 10 min |
-| Disk | 80% | 5 min |
-| Load (5 min average) | 3 (2 vCPU box) | 10 min |
+| Rule | Condition |
+|---|---|
+| `vayu: CPU above 80% for 10 min` | CPU utilization ≥ 80% over 10 minutes |
+| `vayu: memory above 85% for 10 min` | Memory utilization ≥ 85% over 10 minutes |
+| `vayu: disk above 80%` | Disk utilization ≥ 80% over 5 minutes |
+| `vayu: load above 3 for 10 min` | Load average (5 min) ≥ 3 over 10 minutes |
 
-The graphs themselves (Droplet → **Graphs** / Insights) keep the history: they show when.
-How they were made (the email is read from the account, never typed):
-```bash
-E=$(doctl account get --format Email --no-header)
-doctl monitoring alert create --type v1/insights/droplet/cpu --compare GreaterThan --value 80 \
-  --window 10m --tags vayu-web --emails "$E" --description "vayu: CPU above 80% for 10 min"
-# … and memory_utilization_percent 85 / 10m, disk_utilization_percent 80 / 5m, load_5 3 / 10m
-doctl monitoring alert list          # check
-```
-Slack for these alerts: not yet (DigitalOcean needs a Slack incoming-webhook URL; optional).
+Notification Channels: `slack-vayu-alerts` (Slack, the owner made it) used by 4 rules; `email`
+used by 0 (can be deleted).
+Lessons:
+- `doctl monitoring alert` only knows the old alert system: email, or a raw Slack webhook URL. It
+  cannot use the new Notification Channels. Rules made with it appear twice in the new screen
+  (a Droplets row and a Kubernetes row, because a tag can sit on both). So these rules were made
+  in the web form (by Claude, in the owner's browser), resource type Droplets only.
+- The web form defaults to **All Droplets**: always swap it for the tag.
 
 ## Phase 6 · Prove staging ⏳
 ## Phase 7 · Production ⏳
