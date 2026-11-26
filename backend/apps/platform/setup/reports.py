@@ -4,6 +4,7 @@ form's own sections. The look (theme) and the disclaimer are shared items, edite
 import io
 import json
 from pathlib import Path
+from typing import Any
 
 from apps.forms.models import Form, FormAsset, Section, VersionStatus
 
@@ -173,7 +174,7 @@ def _section_page(s, page, kids: list, shared: bool) -> dict:
     # a section on a test-drive page says so ("Axle  during test drive")
     sub = "" if page.title == s.title or page.title.lower() in s.title.lower() else (
         "during test drive" if page.title == "Test drive" else page.title.lower())
-    two = {"per_row": 2} if s.title.lower().startswith(TWO_PER_ROW) else {}
+    two: dict[str, Any] = {"per_row": 2} if s.title.lower().startswith(TWO_PER_ROW) else {}
     tables = [_sec(c.key, header=False, **two) for c in kids]      # the checks stay together
     part = {"title": s.title, "style": "normal",
             "parts": [_heading(s.title, sub), _sec(s.key, **two), *tables, _photos(s.key),
@@ -241,7 +242,8 @@ def definition(version, form_key: str, logo: str, watermark: str) -> dict:
                 and sec.title not in split_somewhere)
 
     car = by_title.get("Car Details")
-    kv_rows = [("Booking ID", {"field": "booking.booking_id"}, None)]
+    kv_rows: list[tuple[str, dict[str, str], dict | None]] = [
+        ("Booking ID", {"field": "booking.booking_id"}, None)]
     if car is not None:
         # chassis first; not "Car Company" (the Car row names it) nor the variant (it is part of
         # the Car row: "Honda Amaze VXI")
