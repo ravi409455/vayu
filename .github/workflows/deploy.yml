@@ -112,7 +112,7 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/key && chmod 600 ~/.ssh/key
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts   # the server's own key: no man in the middle
           ssh -i ~/.ssh/key -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
-            "deploy@$SSH_HOST" "$SHA $MODE" \
+            "deploy@$SSH_HOST" "$SHA${MODE:+ $MODE}" \
             || { echo "::error::Deploy failed. Staging is on demand: if it is off, run infra/staging.sh up, then this workflow again."; exit 1; }
 
   production:
