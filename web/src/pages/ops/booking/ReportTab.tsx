@@ -107,51 +107,53 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
   }
   return (
     <>
-      <div className="bar">
-        {r && (
-          <>
-            <Pill tone={r.updating ? "warn" : r.status === "ready" ? "ok" : r.status === "failed" ? "bad" : "warn"}>
-              {r.updating ? "Updating…" : r.status === "ready" ? "Ready" : r.status === "failed" ? "Failed" : "Being made"}
-            </Pill>
-            {r.out_of_date && !r.updating && <Pill tone="warn">Out of date</Pill>}
-            <span className="muted small">
-              Revision {r.revision} · {fmtStamp(r.generated_at)}
-            </span>
-          </>
-        )}
-        <span className="grow" />
-        {(r || firstMissing) && can("submissions.edit") && (
-          <button
-            disabled={busy || !!why}
-            title={why || undefined}
-            onClick={() => {
-              if (!regen.isPending) regen.mutate();
-            }}
-          >
-            <RefreshCw size={15} aria-hidden /> {busy ? "Making…" : r ? "Regenerate" : "Make the PDF"}
-          </button>
-        )}
-        {r?.verify_url && r.status === "ready" && (
-          <button disabled={!!notYet} title={notYet || undefined} onClick={() => void copyCheckLink()}>
-            Copy check link
-          </button>
-        )}
-        {r?.url && notYet && (
-          <button className="primary" disabled title={notYet}>
-            <Download size={15} aria-hidden /> Download PDF
-          </button>
-        )}
-        {r?.url && !notYet && (
-          <a
-            className="btn primary"
-            href={r.url}
-            download={r.filename}
-            onClick={() => setTimeout(() => void refresh(keys.bookingPart(booking.id, "activity")), 1500)}
-          >
-            <Download size={15} aria-hidden /> Download PDF
-          </a>
-        )}
-      </div>
+      {(r || firstMissing) && ( // nothing to show yet: no empty row above "No report yet"
+        <div className="bar">
+          {r && (
+            <>
+              <Pill tone={r.updating ? "warn" : r.status === "ready" ? "ok" : r.status === "failed" ? "bad" : "warn"}>
+                {r.updating ? "Updating…" : r.status === "ready" ? "Ready" : r.status === "failed" ? "Failed" : "Being made"}
+              </Pill>
+              {r.out_of_date && !r.updating && <Pill tone="warn">Out of date</Pill>}
+              <span className="muted small">
+                Revision {r.revision} · {fmtStamp(r.generated_at)}
+              </span>
+            </>
+          )}
+          <span className="grow" />
+          {(r || firstMissing) && can("submissions.edit") && (
+            <button
+              disabled={busy || !!why}
+              title={why || undefined}
+              onClick={() => {
+                if (!regen.isPending) regen.mutate();
+              }}
+            >
+              <RefreshCw size={15} aria-hidden /> {busy ? "Making…" : r ? "Regenerate" : "Make the PDF"}
+            </button>
+          )}
+          {r?.verify_url && r.status === "ready" && (
+            <button disabled={!!notYet} title={notYet || undefined} onClick={() => void copyCheckLink()}>
+              Copy check link
+            </button>
+          )}
+          {r?.url && notYet && (
+            <button className="primary" disabled title={notYet}>
+              <Download size={15} aria-hidden /> Download PDF
+            </button>
+          )}
+          {r?.url && !notYet && (
+            <a
+              className="btn primary"
+              href={r.url}
+              download={r.filename}
+              onClick={() => setTimeout(() => void refresh(keys.bookingPart(booking.id, "activity")), 1500)}
+            >
+              <Download size={15} aria-hidden /> Download PDF
+            </a>
+          )}
+        </div>
+      )}
       {(r?.updating || watching) && <p className="muted small">The new PDF is being made. This page shows it by itself.</p>}
       {r?.out_of_date && !busy && (
         <div className="banner warn">Out of date: changes since this PDF. Press Regenerate when you are done to make a new one.</div>
