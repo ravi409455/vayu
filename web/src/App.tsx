@@ -48,8 +48,8 @@ export function App() {
       <Suspense fallback={<p className="muted pad">Loading…</p>}>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/verify/:token" element={<VerifyPage />} />
-          <Route path="/verify/:token/:link" element={<ReportMediaPage />} />
+          <Route path="/report/verify/:token" element={<VerifyPage />} />
+          <Route path="/report/verify/:token/:link" element={<ReportMediaPage />} />
           <Route path="/zip/:token" element={<ZipPage />} />
           <Route
             path="/change-password"

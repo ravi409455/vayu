@@ -30,8 +30,8 @@ def done(renv, settings):
 def test_sys_values_name_the_links_and_count_what_is_behind_them(done):
     _, b, r = done
     sv = source(b, token=r.token).values()["sys"]
-    assert sv["photos_url"] == f"https://verify.carcid.in/{r.token}/photos"
-    assert sv["videos_url"] == f"https://verify.carcid.in/{r.token}/videos"
+    assert sv["photos_url"] == f"https://vayu.carcid.in/report/verify/{r.token}/photos"
+    assert sv["videos_url"] == f"https://vayu.carcid.in/report/verify/{r.token}/videos"
     assert (sv["photo_count"], sv["video_count"]) == ("3", "0")
 
 
@@ -86,8 +86,8 @@ def test_buttons_link_to_the_zip_and_hide_when_there_is_nothing(done):
     pages = context.build(src, d)
     assert [p["link"] for p in pages[0]["parts"]] == ["photos", "verify"]   # no videos
     html = render.render_html(pages, d, src.values())
-    assert f'href="https://verify.carcid.in/{r.token}/photos">All 3 photos</a>' in html
-    assert f'href="https://verify.carcid.in/{r.token}"' in html and "text-align:left" in html
+    assert f'href="https://vayu.carcid.in/report/verify/{r.token}/photos">All 3 photos</a>' in html
+    assert f'href="https://vayu.carcid.in/report/verify/{r.token}"' in html and "text-align:left" in html
     shown = definition.validate_definition(one_page({**BUTTONS[1], "hide_when_empty": False}))
     assert len(context.build(src, shown)[0]["parts"]) == 1
 

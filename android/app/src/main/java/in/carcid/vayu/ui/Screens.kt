@@ -130,7 +130,7 @@ fun AdminRefusedScreen(onBack: () -> Unit) = Shell {
     Illustration(300) { AdminRefusedDrawing() }
     Text("Admin tools live on the web", fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink)
     Spacer(Modifier.height(8.dp))
-    Text("The app is for Ops and experts. Open app.carcid.in on a laptop to manage forms, users and settings.",
+    Text("The app is for Ops and experts. Open vayu.carcid.in on a laptop to manage forms, users and settings.",
         color = Vayu.colors.muted)
     Spacer(Modifier.height(28.dp))
     PrimaryButton("Sign in with another account", onBack)

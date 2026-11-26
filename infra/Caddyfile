@@ -1,9 +1,27 @@
-# The web app and the API on APP_HOST; the customer check page (QR on every report) on VERIFY_HOST.
-(api_and_web) {
+# One address per server (APP_HOST): the web app, the customer report page (/report/verify/...,
+# the QR on every report) and /api to the API. The same image serves staging and production.
+#
+# CSP_HEADER picks how the content rules apply: Content-Security-Policy-Report-Only (the default:
+# the browser only reports what it would block) or Content-Security-Policy (enforced). Staging
+# starts report-only; switch once a full run shows nothing blocked (docs/plan-deploy.md).
+{$APP_HOST} {
 	encode gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(self), geolocation=(self), microphone=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		# R2 serves photos, videos and PDFs and takes uploads (pre-signed URLs); errors go to Sentry
+		{$CSP_HEADER:Content-Security-Policy-Report-Only} "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://*.r2.cloudflarestorage.com; media-src 'self' blob: https://*.r2.cloudflarestorage.com; connect-src 'self' https://*.r2.cloudflarestorage.com https://*.sentry.io; frame-src 'self' blob: https://*.r2.cloudflarestorage.com; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		-Server
+	}
+
 	handle /api/* {
 		reverse_proxy api:8000
 	}
+
 	handle {
 		root * /srv
 		# hashed bundles never change; index.html is always fresh so a release shows at once
@@ -14,19 +32,4 @@
 		try_files {path} /index.html
 		file_server
 	}
-}
-
-{$APP_HOST} {
-	import api_and_web
-}
-
-{$VERIFY_HOST} {
-	# the QR prints VERIFY_BASE_URL/<token> (photos: /<token>/<link>); the web app's pages are
-	# /verify/<token>[/<link>]
-	@printed {
-		path_regexp ^/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)?$
-		not path /verify /verify/* /zip/* /assets/* /api/*
-	}
-	redir @printed /verify{uri} 302
-	import api_and_web
 }

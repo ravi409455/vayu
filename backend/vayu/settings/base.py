@@ -63,6 +63,12 @@ DATABASES = {
         "PASSWORD": env("DB_PASSWORD"),
         "HOST": env("DB_HOST"),
         "PORT": env("DB_PORT", "5432"),
+        # "require" for the managed database in production (it refuses plain connections)
+        "OPTIONS": {"sslmode": env("DB_SSLMODE", "prefer")},
+        # keep a connection for a minute instead of one per request: fewer connections to the
+        # managed database (about 22 allowed on the smallest size) and no TLS handshake per request
+        "CONN_MAX_AGE": int(env("DB_CONN_MAX_AGE", "60")),
+        "CONN_HEALTH_CHECKS": True,
     }
 }
 REDIS_URL = env("REDIS_URL")
@@ -112,7 +118,7 @@ S3_REGION = env("S3_REGION", "auto")
 MEDIA_PART_SIZE = 8 * 1024 * 1024
 MEDIA_URL_TTL = 3600           # pre-signed URL lifetime, seconds
 ZIP_LINK_DAYS = 7
-VERIFY_BASE_URL = env("VERIFY_BASE_URL", "https://verify.carcid.in")
+VERIFY_BASE_URL = env("VERIFY_BASE_URL", "https://vayu.carcid.in/report/verify")
 # one queue per kind of work (F-084): a pile of ZIPs never holds up upload checks or webhooks
 CELERY_TASK_ROUTES = {
     "apps.reports.tasks.render_report": {"queue": "pdf"},
@@ -149,7 +155,11 @@ CELERY_BEAT_SCHEDULE = {
     "stuck-uploads": {"task": "apps.media.tasks.flag_stuck_uploads", "schedule": 3600.0},
     "recheck-uploads": {"task": "apps.media.tasks.recheck_uploads", "schedule": 900.0},
     "late-starts": {"task": "apps.notify.tasks.late_starts", "schedule": 300.0},
+    "heartbeat": {"task": "apps.platform.tasks.heartbeat", "schedule": 300.0},
 }
+# The uptime checker's "workers alive" address: beat queues the heartbeat, a worker pings it. If
+# beat, Redis or the workers stop, the pings stop and the checker alerts. Empty = off.
+WORKERS_HEARTBEAT_URL = env("WORKERS_HEARTBEAT_URL", "")
 
 CELERY_BROKER_URL = REDIS_URL
 CELERY_TASK_ALWAYS_EAGER = False

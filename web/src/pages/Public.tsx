@@ -268,7 +268,7 @@ export function ReportMediaPage() {
       )}
       {validToken(token) && (
         <p className="small">
-          <Link className="text-link" to={`/verify/${encodeURIComponent(token)}`}>
+          <Link className="text-link" to={`/report/verify/${encodeURIComponent(token)}`}>
             Check this report is genuine
           </Link>
         </p>

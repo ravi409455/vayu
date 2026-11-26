@@ -1,0 +1,10 @@
+# Weekly PRs for the Docker base images and the GitHub Actions we pin by commit id: old images and
+# actions collect security holes (docs/plan-deploy.md 1.18). App libraries are upgraded by hand.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directories: [/backend, /infra]
+    schedule: {interval: weekly}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}

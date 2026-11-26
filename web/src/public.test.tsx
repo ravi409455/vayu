@@ -39,7 +39,7 @@ describe("customer links stay on their own endpoints (F-063)", () => {
 describe("the buyer is never told a genuine report is missing because of a hiccup (H-18 web part)", () => {
   it("a server error says 'could not check right now', a 404 says 'could not find'", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(res(500, {}));
-    at("/verify/R5UE8w_q2tpG5p6LQtOeTPxkM6xYG1z8", <VerifyPage />, "/verify/:token");
+    at("/report/verify/R5UE8w_q2tpG5p6LQtOeTPxkM6xYG1z8", <VerifyPage />, "/report/verify/:token");
     expect(await screen.findByText("We could not check this report right now.")).toBeInTheDocument();
     expect(screen.queryByText(/could not find/)).toBeNull();
     expect(screen.getByRole("main")).toBeInTheDocument();

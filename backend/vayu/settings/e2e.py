@@ -29,6 +29,6 @@ WEBHOOK_ALLOW_HTTP = True
 WEBHOOK_ALLOW_PRIVATE = True          # the test receiver listens on localhost
 WEB = os.environ.get("E2E_WEB", "http://localhost:5199")   # the Vite dev server in front of the API
 PUBLIC_BASE_URL = WEB
-VERIFY_BASE_URL = f"{WEB}/verify"
+VERIFY_BASE_URL = f"{WEB}/report/verify"
 CSRF_TRUSTED_ORIGINS = [WEB]
 SERVER_KIND, SERVER_NAME = "local", "local"     # test data may wipe this one

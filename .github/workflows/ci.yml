@@ -181,6 +181,8 @@ jobs:
         run: test "$(docker run --rm vayu-api id -u)" != "0"
       - name: image uses its own venv (not one copied from the host)
         run: docker run --rm vayu-api sh -c 'test "$(which python)" = /app/.venv/bin/python'
+      - name: workers can start (Celery's Redis transport imports; it once needed an undeclared library)
+        run: docker run --rm vayu-api python -c "import kombu.transport.redis, celery.bin.celery"
       - name: image can render a PDF (system libraries present)
         run: docker run --rm vayu-api python -c "from weasyprint import HTML; assert HTML(string='<p>x</p>').write_pdf()[:4] == b'%PDF'"
       - name: image can sign push tokens (RS256 needs cryptography in the runtime install)
@@ -195,13 +197,15 @@ jobs:
       - name: web image (the web app and the verify page behind Caddy) builds and its Caddyfile is valid
         run: |
           docker build -f infra/web.Dockerfile -t vayu-web .
-          docker run --rm -e APP_HOST=app.example.com -e VERIFY_HOST=verify.example.com vayu-web caddy validate --config /etc/caddy/Caddyfile
+          docker run --rm -e APP_HOST=app.example.com vayu-web caddy validate --config /etc/caddy/Caddyfile
           docker run --rm vayu-web test -f /srv/index.html
       - name: the production compose file is valid
         run: |
           touch /tmp/env.prod /tmp/fb.json
           ln -s /tmp/env.prod .env.prod
-          FIREBASE_JSON=/tmp/fb.json docker compose -f infra/docker-compose.prod.yml --env-file /tmp/env.prod config -q
+          export VAYU_TAG=ci FIREBASE_JSON=/tmp/fb.json
+          docker compose -f infra/docker-compose.prod.yml --env-file /tmp/env.prod config -q
+          docker compose -f infra/docker-compose.prod.yml --env-file /tmp/env.prod --profile local-db config -q
   android:
     needs: changes
     if: needs.changes.outputs.code == 'true'

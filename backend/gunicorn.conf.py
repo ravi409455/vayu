@@ -1,11 +1,12 @@
 """Gunicorn in production (F-074 / F-211): the access log never holds search terms (no query
 string) or the report / ZIP tokens in a path (they are links that open customer files)."""
+import os
 import re
 
 from gunicorn.glogging import Logger
 
 bind = "0.0.0.0:8000"
-workers = 4
+workers = int(os.environ.get("WEB_CONCURRENCY", "4"))   # staging: 2
 accesslog = "-"
 access_log_format = '%(h)s %(t)s "%(m)s %(U)s" %(s)s %(B)s %(L)s'
 TOKEN = re.compile(r"/(verify|zips|zip)/[^/]+")

@@ -607,7 +607,7 @@ def test_a_completed_booking_gets_a_pdf_automatically(renv, settings):
                    "CAR PICTURES", "Please refer to the last page", "rev 1"):
         assert needle in text, needle
     assert "Page 1 of 2" in text and "Page 2 of 2" in text
-    assert f"verify.carcid.in/{r.token}" in text
+    assert f"vayu.carcid.in/report/verify/{r.token}" in text
     assert len(reader.pages) == 2                                    # cover, then the detail page
     assert sum(len(p.images) for p in reader.pages) >= 4             # cover + 2 grid photos + QR
     for page in reader.pages:                                         # no blank pages

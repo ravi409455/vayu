@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- "Vayu Staging": a blue icon, so nobody mistakes it for the real app -->
+    <color name="launcher_bg">#1D5FD1</color>
+</resources>
