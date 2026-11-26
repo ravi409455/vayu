@@ -56,6 +56,9 @@ These written rules say the opposite today and are changed, not worked around (s
    - After a reinstall: copies this install didn't make are listed in a notice ("Found copies from
      your earlier install: TST-1014. Send them to Ops. They will be deleted on 28 Nov.") and deleted
      **2 days after they were found**. Accepted risk: moving the phone clock forward deletes them early.
+     The notice has a **Sent to Ops, delete now** button (owner, 2026-11-26): after a confirm ("Do
+     this only after Ops has them… can't be undone") it deletes those copies at once and the notice
+     goes. This install's own copies are not touched.
    - If the app is never installed again, nothing can delete them; Ops tells the expert to delete the
      folder after sending it.
 4. **Permission: "All files access", experts only.**

@@ -180,6 +180,7 @@ private fun expertExtras(vm: AppViewModel, me: `in`.carcid.vayu.core.api.Me): Ex
             bell = bell, onBell = vm.bell::refresh, onRead = vm.bell::read,
             opening = vm.opening.value, onOpened = { vm.opening.value = null },
             found = found,
+            onDeleteFound = { Thread { vm.graph.backup?.dropFound() }.start() },
         )
     }
 }

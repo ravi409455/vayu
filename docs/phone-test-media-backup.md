@@ -57,6 +57,7 @@ Each step says what to do and what you should see. Mark ✅ / ❌ and note anyth
 | E5 | Admin web: Users → Ravi → Sign out devices; sign in again | Signed in; "Turn on file access" screen again |
 | E6 | Turn it on | My leads shows "Found copies from your earlier install: <lead>" with the delete date 2 days later |
 | E7 | Ops web: open that booking, add the shared photos by hand | They are added |
+| E8 | On the notice tap **Sent to Ops, delete now** → **Cancel**, then again → **Delete** | Cancel changes nothing; Delete removes the folder's found copies and the notice |
 
 ## F. Clean-up (2 days)
 Change the phone's date (Settings → System → Date & time, automatic off), then open the app.

@@ -163,8 +163,9 @@ class ExpertExtras(
     /** A booking a tapped notice asks to open (null: none); [onOpened] says it was taken. */
     val opening: String? = null,
     val onOpened: () -> Unit = {},
-    /** Backup copies left by an earlier install (null: none). */
+    /** Backup copies left by an earlier install (null: none); [onDeleteFound]: the expert sent them to Ops. */
     val found: `in`.carcid.vayu.core.backup.BackupCopies.Found? = null,
+    val onDeleteFound: () -> Unit = {},
 ) {
     /** Phone storage, as Uploads and App settings show it. */
     val storage: StorageInfo get() = StorageInfo(freeBytes, sentBytes, drafts.values.sumOf { d -> d.files.count { !it.verified } }) {
@@ -308,7 +309,7 @@ fun MyJobsScreen(me: Me, state: JobsState, today: LocalDate, onProfile: () -> Un
                     Text(state.error, color = Vayu.colors.bad, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(12.dp))
                 }
-                extras.found?.let { FoundCopiesCard(it); Spacer(Modifier.height(12.dp)) }
+                extras.found?.let { FoundCopiesCard(it, extras.onDeleteFound); Spacer(Modifier.height(12.dp)) }
                 val banners = buildList {
                     extras.notices.forEach { (id, text) -> add("ops:$id:$text" to (text to Tone.WARN)) }
                     if (extras.freeBytes < 2 * GB) add("space" to ("%.1f GB free. Clear sent photos on the Uploads tab before it runs out.".format(extras.freeBytes.toDouble() / GB) to Tone.WARN))

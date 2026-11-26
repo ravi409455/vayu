@@ -22,6 +22,8 @@ import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -97,9 +99,20 @@ fun BackupWarning(phoneFull: Boolean, onFreeSpace: () -> Unit) {
     }
 }
 
-/** On My leads after a reinstall: copies the app can't send any more, until they are deleted. */
+/**
+ * On My leads after a reinstall: copies the app can't send any more, until they are deleted on
+ * the date shown or the expert says they sent them to Ops ([onDelete], after a confirm).
+ */
 @Composable
-fun FoundCopiesCard(found: BackupCopies.Found, modifier: Modifier = Modifier) {
+fun FoundCopiesCard(found: BackupCopies.Found, onDelete: () -> Unit, modifier: Modifier = Modifier) {
+    var confirm by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    if (confirm) androidx.compose.material3.AlertDialog(onDismissRequest = { confirm = false }, containerColor = Vayu.colors.bg,
+        title = { Text("Delete the copies?", color = Vayu.colors.ink) },
+        text = { Text("Do this only after Ops has them. ${if (found.files == 1) "The file" else "All ${found.files} files"} " +
+            "in Documents › Vayu from your earlier install will be deleted. This can't be undone.", color = Vayu.colors.ink) },
+        confirmButton = { androidx.compose.material3.TextButton({ confirm = false; onDelete() }) {
+            Text("Delete", color = Vayu.colors.bad, fontWeight = FontWeight.SemiBold) } },
+        dismissButton = { androidx.compose.material3.TextButton({ confirm = false }) { Text("Cancel", color = Vayu.colors.ink) } })
     val day = java.time.Instant.ofEpochMilli(found.deleteAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
         .format(java.time.format.DateTimeFormatter.ofPattern("d MMM"))
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Vayu.colors.warnTint).padding(horizontal = 16.dp, vertical = 14.dp),
@@ -114,5 +127,10 @@ fun FoundCopiesCard(found: BackupCopies.Found, modifier: Modifier = Modifier) {
             fontSize = 14.sp, color = Vayu.colors.ink)
         Text("Files app › Documents › Vayu › lead folder › Share", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
         Text("They will be deleted on $day.", fontSize = 13.sp, color = Vayu.colors.muted)
+        Box(Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(10.dp)).border(1.dp, Vayu.colors.warn, RoundedCornerShape(10.dp))
+            .clickable(role = androidx.compose.ui.semantics.Role.Button) { confirm = true }.padding(horizontal = 14.dp),
+            contentAlignment = Alignment.Center) {
+            Text("Sent to Ops, delete now", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.warn)
+        }
     }
 }

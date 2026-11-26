@@ -152,6 +152,20 @@ class BackupCopiesTest {
         assertNull(c.found.value)
     }
 
+    @Test fun foundCopiesSentToOpsCanBeDeletedAtOnce() {
+        copies().copy(b, photo())
+        app.resolve("backup-index.json").delete()                              // a reinstall
+        val c = copies()
+        c.clean(emptyMap())
+        c.copy(b.copy(fileId = "new", label = "New photo"), photo("mine"))     // this install's own copy
+        c.dropFound()
+        assertNull(c.found.value)
+        assertFalse(folder.resolve("TST-1014/Exterior - Front left 1.jpg").exists())
+        assertTrue(folder.resolve("TST-1014/Exterior - New photo.jpg").exists())   // only the found ones go
+        c.clean(emptyMap())
+        assertNull(c.found.value)                                              // and they don't come back
+    }
+
     @Test fun theIndexIsKeptAcrossAppStarts() {
         copies().copy(b, photo())
         now += 5 * day

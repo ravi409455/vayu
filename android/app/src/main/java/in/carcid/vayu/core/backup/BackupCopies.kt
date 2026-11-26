@@ -81,6 +81,9 @@ class BackupCopies(
     /** A photo was removed or replaced: its copy goes at once. */
     @Synchronized fun drop(fileId: String) = remove { it.fileId == fileId }
 
+    /** The expert sent the copies from an earlier install to Ops: they go at once, with the notice. */
+    @Synchronized fun dropFound() { remove { it.foundAt != null }; _found.value = null }
+
     /** A lead was discarded: all its copies go at once. */
     @Synchronized fun dropBooking(bookingId: String) = remove { it.bookingId == bookingId }
 
