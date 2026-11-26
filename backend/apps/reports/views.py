@@ -3,7 +3,7 @@
 import base64
 
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import Max, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -268,16 +268,28 @@ class Problems(APIView):
             return "stuck" if r.render_started_at and r.render_started_at < killed \
                 else "out_of_date"
 
+        def since(r, kind: str):
+            """When it became a problem (Needs you shows the time and groups by day)."""
+            if kind == "failed":
+                return r.last_failed
+            return r.render_started_at if kind == "stuck" else r.stale_since
+
         missing = tasks.missing_reports()
         if scope_for(request.user, "reports.view", request) == "own":
             missing = missing.filter(own_filter(request.user))
+        rows = qs.select_related("booking").distinct().annotate(
+            last_failed=Max("renders__finished_at", filter=Q(renders__ok=False)))
+        missing = missing.annotate(sent=Max("inspections__submitted_at",
+                                            filter=Q(inspections__status="submitted")))
         return Response([{"booking": str(r.booking_id), "booking_id": r.booking.booking_id,
-                          "status": r.status, "error": r.error, "problem": problem(r),
-                          "out_of_date_since": r.stale_since if r.stale else None}
-                         for r in qs.select_related("booking").distinct()]
+                          "status": r.status, "error": r.error, "problem": kind,
+                          "out_of_date_since": r.stale_since if r.stale else None,
+                          "at": since(r, kind)}
+                         for r in rows for kind in [problem(r)]]
                         # completed with no report at all: Ops open it and press Regenerate
                         + [{"booking": str(b.id), "booking_id": b.booking_id, "status": "missing",
-                            "error": "", "problem": "missing", "out_of_date_since": None}
+                            "error": "", "problem": "missing", "out_of_date_since": None,
+                            "at": b.sent}
                            for b in missing])
 
 
