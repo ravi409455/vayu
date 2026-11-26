@@ -109,7 +109,8 @@ fun FoundCopiesCard(found: BackupCopies.Found, modifier: Modifier = Modifier) {
             Text("Found copies from your earlier install", fontWeight = FontWeight.Bold, color = Vayu.colors.warn)
         }
         Text(found.codes.joinToString("  "), fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
-        Text("${found.files} ${if (found.files == 1) "file" else "photos, videos and files"} the app can't send any more. Send them to Ops:",
+        Text(if (found.files == 1) "1 file the app can't send any more. Send it to Ops:"
+            else "${found.files} photos, videos and files the app can't send any more. Send them to Ops:",
             fontSize = 14.sp, color = Vayu.colors.ink)
         Text("Files app › Documents › Vayu › lead folder › Share", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
         Text("They will be deleted on $day.", fontSize = 13.sp, color = Vayu.colors.muted)

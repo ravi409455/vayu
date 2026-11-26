@@ -101,5 +101,7 @@ photos have no backup copy." with **Free space**; the photo itself is still kept
 | F2 date +2 days: found copies deleted, folder and notice gone | ✅ |
 | F1, F3 (+1 day keeps; discard removes at once), copies of sent/unsent files over days | automated tests only |
 | G phone full | not run (automated test only) |
+| E8 (second run) offline photo on TST-1015 → sign out with unsent work → **uninstall from the phone's own app-info screen** | ✅ server: signed out holding 1 draft / 1 file; copy and `.nomedia` stay; the phone's dialog has no "keep data" option (as designed) |
+| E9 reinstall refused → Admin sign-out → file access → "Found copies: TST-1015, 1 file" | ✅ (fixed the one-file wording: "Send it to Ops") |
 Phone left with: Vayu debug (talks to this branch's server on port 8001), All files access on,
 date automatic, test PDF removed.
