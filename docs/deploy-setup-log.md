@@ -388,7 +388,7 @@ Result, checked afterwards:
 - The server's own SSH fingerprint: `SHA256:yOMBc1Z3D4XpkN6a7LGHAREreTlKmgOAAkrKZxQSjoQ` (the same
   as at the first connection; it stays the same when staging is re-made from its snapshot).
 
-### 3.2 · GitHub robot key ✅ installed on the server / ⏳ owner: GitHub + Phase
+### 3.2 · GitHub robot key ✅
 A key pair made for GitHub Actions only. Its public half is in the server's
 `~/.ssh/authorized_keys`, locked: `command="/srv/vayu/infra/deploy.sh",restrict ssh-ed25519 …
 github-deploy-staging`: it can only run the deploy script, nothing else.
@@ -397,12 +397,42 @@ Owner: private half → GitHub environment `staging` secret `SSH_KEY` and Phase 
 fingerprint line (so GitHub can't be fooled into deploying to another machine). Then the key files
 on the laptop are deleted.
 
-### 3.3 · The server's Phase key ⏳ (owner)
+### 3.3 · The server's Phase key ✅
 `/srv/vayu/.phase` on the server (chmod 600):
 ```
 PHASE_ENV=Staging
 PHASE_SERVICE_TOKEN=<PHASE_TOKEN_STAGING_SERVER from Phase>
 ```
+Typed on the server (`ssh deploy@<staging>`, `umask 077 && nano /srv/vayu/.phase`). Note: a command
+typed into Claude's chat box runs on the Mac, not on the server.
+GitHub `staging` environment secrets set with (from the Mac):
+```bash
+gh secret set SSH_KEY --env staging --repo ravi409455/vayu < deploy-staging
+gh secret set SSH_HOST --env staging --repo ravi409455/vayu --body vayu-staging.carcid.in
+gh secret set SSH_KNOWN_HOSTS --env staging --repo ravi409455/vayu < known_hosts
+```
+Robot key's private half also in Phase `vayu-owner` → `DEPLOY_SSH_KEY_STAGING`; the files deleted.
+
+### 3.4 · First settings fetch from Phase ✅ (after fixes)
+`bash /srv/vayu/infra/secrets.sh` → "settings: 35 values from Phase", both files `600`.
+What it took (lessons):
+1. `FIREBASE_SERVICE_ACCOUNT_JSON` was missing in Phase Staging: pasted in Phase 0 but never
+   **Deployed**. Phase keeps unsaved edits in the editor (copying from there works), but nothing is
+   stored until **Deploy**. Re-added from `~/vayu-keys/vayu-8bb7a-firebase-adminsdk-fbsvc-5905526895.json`.
+2. `BACKUP_PUBLIC_KEY`, `DJANGO_SECRET_KEY`, `DB_PASSWORD` ended in a hidden line break: `… | pbcopy`
+   copies the command's final line break and Phase keeps it. Removed in Phase (End, Backspace,
+   Deploy). PR 30 makes `secrets.sh` trim spaces and line breaks around values from now on (names
+   are never trimmed: a spaced name is refused).
+3. Production's Firebase key was still in `~/Downloads`: put in Phase Production, file deleted.
+
+### Merged
+- PR 27 (Phase 1 code, settings from Phase, staging on demand) → `main` as `35fdec9`.
+
+### Dependabot ✅ grouped (PR 30)
+Its first run opened 6 PRs at once (Actions and the Node image), each a full CI run, which queued
+ahead of `main`'s CI. Closed them and cancelled their runs. New rule: one grouped PR a week for all
+GitHub Actions and one for all Docker images; no Node major jumps (stay on LTS), no Python minor
+jumps.
 ## Phase 4 · Deploy pipeline ⏳
 ## Phase 5 · Backups and alerts ⏳
 ## Phase 6 · Prove staging ⏳
