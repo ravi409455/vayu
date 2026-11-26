@@ -90,10 +90,6 @@ EOF
 systemctl daemon-reload
 systemctl enable --now vayu-backup.timer
 
-echo "== resource recorder every 5 minutes (which service used CPU, memory, disk)"
-( crontab -u deploy -l 2>/dev/null | grep -v infra/resources.sh || true
-  echo '*/5 * * * * /srv/vayu/infra/resources.sh >/dev/null 2>&1' ) | crontab -u deploy -
-
 echo
 echo "Done. Next (docs/runbook-new-server.md): log in as deploy@<this server>, write the env file,"
 echo "copy the Firebase file, add the GitHub robot key, then run the first deploy from GitHub."
