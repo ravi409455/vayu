@@ -1,0 +1,517 @@
+# Deployment setup log
+
+What was actually done, step by step, while setting up staging and production. The plan (the why,
+and steps not done yet) is `docs/plan-deploy.md`; the exact server commands are
+`docs/runbook-new-server.md`. This file is updated after every step until production is live.
+
+**No secrets in this file, ever.** It names where each secret lives (Phase), never the value.
+The repo is public, so nothing here may be more than what anyone could look up.
+
+Status: ✅ done · 🔄 in progress · ⏳ not started
+
+| Phase | What | Status |
+|---|---|---|
+| 0 | Safety first: secrets home, 2-step login, SSH key | ✅ 2026-11-26 |
+| 1 | Code changes (PR 27) | ✅ merged 2026-11-26 as `35fdec9` |
+| 2 | Accounts and dashboards | ✅ 2026-11-26 (2.5c, the Firebase key restriction, waits for the staging app) |
+| 3 | Staging server setup | 🔄 server ready, settings from Phase work; first deploy next |
+| 4 | Deploy pipeline | ⏳ |
+| 5 | Backups and alerts | ⏳ |
+| 6 | Prove staging | ⏳ |
+| 7 | Production | ⏳ |
+
+Quick links: [Where everything lives](#where-everything-lives) · [Open items](#open-items)
+
+---
+
+## Phase 0 · Safety first ✅ (2026-11-26)
+
+### Step 1 · Phase account (console.phase.dev) ✅
+Phase is the one home for every Vayu secret (end-to-end encrypted).
+1. Signed up at **console.phase.dev** with the company email, verified the email.
+2. Created the **sudo password** (16+ characters). It unlocks the secrets. Saved in the Mac
+   **Passwords** app.
+3. Downloaded the **account recovery kit**: printed, kept at the office, and saved in Passwords.
+   ⚠️ Without the sudo password AND the recovery kit, every secret in Phase is gone for good.
+4. Turned on **two-step login** (authenticator app); recovery codes in Passwords.
+5. Organisation `CarCID`, two apps:
+
+| Phase app | Environment | Holds |
+|---|---|---|
+| `vayu` | Development | the Mac's local stack (nothing needed today) |
+| `vayu` | Staging | the staging server's env-file values |
+| `vayu` | Production | the production server's env-file values |
+| `vayu-owner` | Production | things that are not server settings: signing key, Sentry web/Android, DO token, robot keys, backup unlocking key |
+
+What can't live inside Phase: its own sudo password and recovery kit (paper + Passwords app).
+Account passwords and 2-step recovery codes of the other services also live in Passwords.
+
+### Step 2 · Existing secrets moved into Phase ✅
+Files on the Mac (`~/vayu-keys`, readable by the owner only; FileVault on):
+
+| File | What it is | Now in Phase | Check |
+|---|---|---|---|
+| `vayu-release.jks` | Android signing key | `vayu-owner` → Production: `ANDROID_KEYSTORE_B64` (the file as base64 text), `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | fingerprint of the copy in Phase = the file's (SHA-256 `cf8f24d2…0e601e90`) ✅ |
+| `vayu-8bb7a-firebase-adminsdk-….json` | Firebase server key | `vayu` → Staging: `FIREBASE_SERVICE_ACCOUNT_JSON` (staging's key; production gets its own new one in 2.5) | fingerprint of normalised JSON matches (`b0c8f44c…cce29897`) ✅ |
+| `sentry-dsns.env` | 3 Sentry addresses | server DSN → `vayu` Staging and Production `SENTRY_DSN`; web → `vayu-owner` `SENTRY_DSN_WEB`; Android → `vayu-owner` `SENTRY_DSN_ANDROID` | looked at; then the file was **deleted** ✅ |
+
+How a file was checked (the fingerprint is not a secret):
+```bash
+shasum -a 256 ~/vayu-keys/vayu-release.jks                 # the original
+base64 -i ~/vayu-keys/vayu-release.jks | pbcopy             # copy as text, paste into Phase
+pbpaste | base64 -d | shasum -a 256                         # after copying it back from Phase
+pbcopy < /dev/null                                          # clear the clipboard
+```
+
+Kept on the Mac on purpose (tools use them): the signing key and `keystore.properties` (release
+builds), the Firebase file (the local stack's pushes), `backend/.env.local` (the local stack).
+
+**Old R2 test key** (`R2_*` lines in `backend/.env.local`): not moved. It was used once
+(2026-11-23, `docs/r2-check.md`); the local stack uses a fake local bucket. It is replaced by the
+per-server keys in 2.4c, then deleted in Cloudflare together with its lines in `.env.local`.
+
+### Step 3 · Two offline copies of the signing key ✅
+- USB stick, labelled, locked away at the office.
+- Private folder in the company Google Drive (the file only; its passwords stay in Phase).
+- Both copies checked: same fingerprint `cf8f24d2…`.
+
+Why: if the signing key is lost, the app on every phone can never be updated again.
+
+### Step 4 · Two-step login everywhere ✅
+Authenticator app (not SMS) on each; recovery codes saved in the Mac Passwords app.
+
+| Account | Where |
+|---|---|
+| GitHub | Settings → Password and authentication → Two-factor authentication |
+| Google (Firebase) | myaccount.google.com → Security → 2-Step Verification |
+| Cloudflare | My Profile → Authentication → Two-Factor Authentication |
+| Sentry | User Settings → Security → Two-Factor Authentication |
+| GoDaddy (carcid.in) | Account Settings → Login & PIN → 2-Step Verification |
+| Phase | done in step 1 |
+
+### Step 5 · FileVault ✅
+Already on (`fdesetup status` → "FileVault is On").
+
+### Step 6 · Owner SSH key ✅
+```bash
+ssh-keygen -t ed25519 -C "vayu-owner"                       # passphrase saved in Passwords
+ssh-add --apple-use-keychain ~/.ssh/id_ed25519
+printf 'Host *\n  AddKeysToAgent yes\n  UseKeychain yes\n  IdentityFile ~/.ssh/id_ed25519\n' >> ~/.ssh/config
+```
+- Private half: `~/.ssh/id_ed25519` on the Mac, and in Phase → `vayu-owner` →
+  `OWNER_SSH_PRIVATE_KEY` (still locked by its passphrase).
+- Public half (safe to share): `ssh-ed25519 …W68za vayu-owner`, added to DigitalOcean as `owner-mac`.
+
+---
+
+## Phase 1 · Code changes ✅ (PR 27, merged as `35fdec9`)
+
+Branch `deploy/phase-1`, PR https://github.com/ravi409455/vayu/pull/27.
+- One address per server: `vayu.carcid.in`, `vayu-staging.carcid.in`; QR page
+  `/report/verify/<code>`.
+- Security headers in Caddy (HSTS, CSP enforced by default, framing blocked, nosniff, referrer,
+  permissions).
+- One web image for both servers; images built once per commit by GitHub Actions.
+- Compose: images by commit id, env file per server, sizes from it (4 GB box: 2 / 2 / 1 / 1500m),
+  migrations first, Postgres only on staging.
+- Scripts: `infra/bootstrap.sh`, `deploy.sh`, `backup.sh`, `restore.sh`, `staging.sh`.
+- Deploy workflow (staging by itself, production after Approve), Dependabot.
+- "Vayu Staging" Android build (`in.carcid.vayu.staging`, blue icon).
+- Bug found and fixed: Celery workers crashed in the production image (missing `packaging`).
+- Security review fixes: CSP enforced by default, encrypted database link required, restore never
+  writes the unlocked dump to disk.
+
+Added to PR 27 later the same day:
+- **Staging on demand**: `infra/staging.sh up | down | status` (snapshot → delete; re-create from
+  the snapshot); both servers sized for 2 vCPU / 4 GB.
+- **Settings from Phase**: `infra/secrets.sh` (run by every deploy), `infra/phase-staging.env` and
+  `infra/phase-production.env` (the non-secret values to import). Security review fixes: private
+  temp file, token blanked in error text, files created `0600`, secrets never on a command line.
+- **CI fixes**: database connections are kept only in production (the development server leaked
+  them and hung the browser tests); type fixes and a coverage test after PR 28 (`main` had gone red);
+  the made-up-token browser test uses `/report/verify/`; `google-services.json` lists Vayu Staging.
+
+Follow-up PR 30 (open): `secrets.sh` trims spaces and line breaks around values; Dependabot grouped.
+
+---
+
+## Phase 2 · Accounts and dashboards ✅
+
+### Decisions taken on 2026-11-26
+- **Staging is on demand.** A switched-off droplet is still billed, so staging lives as a
+  snapshot between test rounds (`infra/staging.sh up` / `down`), about a week a month.
+- **Production starts on 2 vCPU / 4 GB ($24).** It moves to 8 GB only if the staging load test
+  (same size) or the alerts say so.
+- Cost: about **$43–46 a month** (≈ ₹4,300–4,900 with GST). Table in `docs/plan-deploy.md` §1.
+
+### 2.1 · Slack channel `#vayu-alerts` ✅
+Slack (workspace "Car C.I.D") → **+** next to Channels → Create channel → `vayu-alerts`,
+**public** (so Sentry and Better Stack can post without an invite). Every alarm goes here.
+Checked: `#vayu-alerts` exists, public.
+Lesson: Sentry's "The resource vayu-alerts does not exist or has not been granted access" meant
+the channel had not been created yet. For a private channel the fix would be `/invite @Sentry`.
+
+### 2.2 · DigitalOcean: staging server ✅
+The company's existing DigitalOcean account (it also runs other, unrelated servers; nothing here
+touches them).
+1. Two-step login on; SSH key `owner-mac` added (Settings → Security → Add SSH Key).
+2. **Create → Droplets**:
+
+| Setting | Value |
+|---|---|
+| Region | Bangalore (BLR1) |
+| Image | Ubuntu 24.04 (LTS) x64 |
+| Size | Basic → Regular → 2 vCPU / 4 GB |
+| Monitoring | on |
+| Backups | **off** (staging's backup is its snapshot) |
+| Authentication | SSH key `owner-mac` (never a password) |
+| Hostname | `vayu-staging` |
+| Tags | `vayu-staging`, `vayu-web` |
+
+   Result: droplet `vayu-staging`, IP `139.59.39.207` (changes each time staging is re-created).
+3. **Networking → Firewalls → Create Firewall** `vayu-web`:
+
+| Inbound type | Port | Sources | Why |
+|---|---|---|---|
+| SSH | 22 | all IPv4 + IPv6 | owner logins and GitHub's deploy key (keys only, no passwords) |
+| HTTP | 80 | all | Let's Encrypt proves the domain; redirect to https |
+| HTTPS | 443 | all | web portal, phone app API, customer QR page |
+
+   Everything else inbound is blocked (database, Redis and the app's port 8000 are unreachable).
+   Outbound: left at the defaults (the server must reach GitHub, Ubuntu updates, R2, Sentry,
+   Firebase, Let's Encrypt, the managed database).
+   **Applied to the tag `vayu-web`**, not one droplet: every staging droplet made from a
+   snapshot, and production, are covered by themselves.
+4. **API → Generate New Token** `vayu-owner-laptop` (90 days, Full Access) → Phase →
+   `vayu-owner` → `DO_API_TOKEN`. On the Mac:
+   ```bash
+   brew install doctl
+   doctl auth init          # paste the token
+   ```
+   Checked: account active; droplet, tags and firewall rules as above.
+   ⚠️ The token expires after 90 days (around 2027-02-24): make a new one, update Phase, run
+   `doctl auth init` again.
+
+### 2.3 · DNS record for staging (GoDaddy) ✅
+carcid.in is registered at GoDaddy, which also runs its DNS (`ns19/ns20.domaincontrol.com`).
+GoDaddy → My Products → carcid.in → **DNS** → **Add New Record**:
+
+| Type | Name | Value | TTL |
+|---|---|---|---|
+| A | `vayu-staging` | the staging droplet's IP (now `139.59.39.207`) | 600 seconds |
+
+No other record was touched (the company website and email depend on them).
+The short TTL lets a new IP reach everyone within 10 minutes; `infra/staging.sh up` prints the
+new IP each time and waits until DNS shows it.
+Checked: GoDaddy, Cloudflare (1.1.1.1) and Google (8.8.8.8) all answer `139.59.39.207`.
+
+### 2.4a · R2 buckets and CORS ✅
+dash.cloudflare.com → R2 Object Storage. All buckets **private** (no public access, no custom domain):
+
+| Bucket | Use | CORS allowed origin |
+|---|---|---|
+| `vayu-staging` | staging's photos, videos, PDFs, ZIPs | `https://vayu-staging.carcid.in` |
+| `vayu-prod` | production's | `https://vayu.carcid.in` |
+| `vayu-backups` | encrypted database backups (both servers) | none (no browser uses it) |
+
+CORS policy (each bucket → Settings → CORS Policy), staging shown:
+```json
+[
+  {
+    "AllowedOrigins": ["https://vayu-staging.carcid.in"],
+    "AllowedMethods": ["GET", "PUT", "POST", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+Why: without it, uploads from the web portal fail; `ETag` must be readable for multipart uploads.
+`http://localhost:5173` was left out: the local stack uses a fake local bucket, not R2.
+
+### 2.4b · R2 clean-up rules and the backup lock ✅
+Each bucket → Settings:
+
+| Bucket | Rule | Setting |
+|---|---|---|
+| `vayu-staging`, `vayu-prod` | Object lifecycle rule `abort-unfinished-uploads` | abort incomplete multipart uploads after **14 days**; no object deletion (the app decides) |
+| `vayu-backups` | Object lifecycle rule `expire-backups` | delete objects after **35 days**; abort incomplete uploads after 1 day |
+| `vayu-backups` | **Bucket lock rule** `keep-30-days` | all objects, retention **30 days** (not indefinite) |
+
+Why: unfinished uploads (a phone losing signal mid-video) cost money until removed; 14 days lets
+an expert offline for a week still finish. The lock means nobody, not even someone who breaks into
+a server, can delete a backup younger than 30 days; at day 35 it expires by itself.
+
+### 2.4c · R2 access keys ✅
+One key per job, each limited to one bucket: a leaked key reaches only that bucket, and each can be
+replaced alone. dash.cloudflare.com → R2 Object Storage → **Manage API tokens** → **Create
+Account API token**, four times:
+
+| Token name | Permission | Bucket | Saved in Phase (app → environment) |
+|---|---|---|---|
+| `vayu-staging-app` | Object Read & Write | `vayu-staging` | `vayu` → Staging: `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` |
+| `vayu-prod-app` | Object Read & Write | `vayu-prod` | `vayu` → Production: `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` |
+| `vayu-backups-staging` | Object Read & Write | `vayu-backups` | `vayu` → Staging: `BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY` |
+| `vayu-backups-prod` | Object Read & Write | `vayu-backups` | `vayu` → Production: `BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY` |
+
+TTL: forever. Client IP filtering: none (servers get new IPs). Each token page shows the
+Access Key ID and Secret Access Key **once**: copy straight into Phase.
+Also in Phase (not secret), `vayu` → Staging and Production: `S3_ENDPOINT_URL` =
+`https://<ACCOUNT_ID>.r2.cloudflarestorage.com` (shown on the same page as "S3 API" endpoint).
+Two backup keys rather than one: no secret is shared between staging and production. The backup
+lock (2.4b) still stops either from deleting a backup younger than 30 days.
+Then the **old test token** (the one in `backend/.env.local`, `R2_*` lines) is deleted in the same
+list; nothing uses it. Done, and its 5 `R2_*` lines were removed from `backend/.env.local`.
+### 2.5 · Firebase: staging app, production key, API key restriction 🔄
+Firebase project `vayu-8bb7a` (console.firebase.google.com).
+
+**2.5a · The "Vayu Staging" app** ✅ — Project settings (gear) → General → **Add app** → Android:
+package name `in.carcid.vayu.staging`, nickname `Vayu Staging` → Register → **download
+`google-services.json`** (it now lists both apps; not a secret) → given to Claude, who puts it in
+`android/app/` (PR 27). Without it, `./gradlew assembleStaging` fails.
+Checked: the new file lists `in.carcid.vayu` (entry unchanged) and `in.carcid.vayu.staging`;
+`assembleStaging` builds.
+
+**2.5b · Production's own server key** ✅ — Project settings → **Service accounts** → **Generate
+new private key** → the JSON goes straight into Phase → `vayu` → Production →
+`FIREBASE_SERVICE_ACCOUNT_JSON`, then the downloaded file is deleted. Staging keeps the existing
+key (already in Phase, step 2 of Phase 0), so production shares no key with staging or the Mac.
+
+**2.5c · Restrict the Firebase API key (R-32)** ⏳ — done once "Vayu Staging" is built, and checked
+in Phase 6 (a push still arrives).
+
+### 2.6 · Sentry: projects, build token, Slack alert ✅
+Organisation slug **`car-cid`** (`https://car-cid.sentry.io`; not a secret).
+1. Projects: `vayu-server` (Django), `vayu-web` (React), `vayu-android` (Android).
+2. Build token: Settings → Developer Settings → **Organization Tokens** → `vayu-ci` → Phase →
+   `vayu-owner` → `SENTRY_AUTH_TOKEN`. The builds use it to upload source maps / R8 mappings, so
+   error reports show real file names and lines.
+3. Slack: Settings → Integrations → Slack → workspace "Car C.I.D" connected.
+4. **One alert for all three projects** (Monitors → Alerts → New Alert), named `vayu production errors`:
+
+| Part | Setting |
+|---|---|
+| Source | "Alert on all issues in selected projects": `vayu-server`, `vayu-web`, `vayu-android` (not "all projects": the org has other company projects) |
+| Filter issues | environment **production** only (staging tests never ping Slack) |
+| WHEN any of | **A new issue is created**; **An issue escalates** (Sentry's own spike detection) |
+| IF | Any event |
+| THEN | Slack message to "Car C.I.D" → `#vayu-alerts`; Notify Member → the owner (email) |
+
+   Checked with **Send Test Notification**.
+   If `production` was not offered in the environment list (no production event yet), set it
+   once the first production error has arrived.
+
+### 2.7 · GitHub: branch rules, environments, fork approval ✅
+github.com/ravi409455/vayu → Settings.
+
+**Ruleset `main protect`** (Rules → Rulesets), active on the default branch, empty bypass list:
+
+| Rule | Setting | Why |
+|---|---|---|
+| Restrict deletions | on | `main` can't be deleted |
+| Block force pushes | on | history can't be rewritten |
+| Require status checks | `backend`, `backend-gates`, `web`, `android`, `docker`, `e2e`; branch must be up to date | nothing red reaches `main` (which deploys to staging by itself) |
+| Require a pull request | **off** (owner's choice, 2026-11-26) | |
+| Restrict updates | **off** | ⚠️ on with an empty bypass list, nobody can change `main` at all |
+
+Effect: a direct push to `main` is refused (its new commit has no green checks yet); changes
+arrive by merging a PR whose checks passed (squash).
+
+**Environments** (Environments):
+
+| Environment | Deployment branches | Protection |
+|---|---|---|
+| `staging` | `main` only | none: deploys by itself |
+| `production` | `main` only | **Required reviewers: `ravi409455`** (the Approve button); self-review allowed. Saved with "Save protection rules" (a separate button). |
+
+**Outside pull requests** (Actions → General): "Require approval for all external contributors"
+(the repo is public: a stranger's PR runs no workflow until the owner looks).
+
+**Web build settings** (Secrets and variables → Actions):
+
+| Kind | Name | Value from |
+|---|---|---|
+| Variable | `SENTRY_ORG` | `car-cid` |
+| Variable | `VITE_SENTRY_DSN` | Phase → `vayu-owner` → `SENTRY_DSN_WEB` (every browser sees it; not a secret) |
+| Secret | `SENTRY_AUTH_TOKEN` | Phase → `vayu-owner` → `SENTRY_AUTH_TOKEN` |
+
+Checked from the GitHub API: ruleset rules, required checks, reviewer, fork policy, variables and
+secret names.
+Server SSH secrets per environment come in Phase 3 / 4.
+
+---
+
+## Phase 3 · Staging server setup 🔄
+
+### Decision (2026-11-26): the server fetches its settings from Phase
+Instead of pasting ~15 secrets into a file on the server, every deploy runs `infra/secrets.sh`,
+which asks Phase (app `vayu`, environment Staging or Production) for all settings and writes the
+env file and the Firebase key file. The only secret on the server is one Phase service token in
+`/srv/vayu/.phase`. Change a secret: edit it in Phase, deploy again. Phase down: the last good
+settings stay. A missing value stops the deploy before anything changes. (PR 27, `b4d2681`;
+tested with a fake Phase: normal, `$`/`#` in secrets, missing value, Phase down, wrong file mode.)
+Free plan note: a service account can be limited to one environment, but read-only needs a paid
+plan; the token can also change that environment's secrets. Accepted: the server holds those
+secrets anyway.
+
+### 3.0 · Settings in Phase (owner) ✅
+**a) Non-secret values.** Open `infra/phase-staging.env` (in the repo). Phase → app `vayu` → **New
+Secret** → **Import secrets** → paste the file → import into **Staging** only → **Preview Import**
+→ **Deploy**.
+
+**b) Two new secrets**, made on the Mac and pasted into Phase → `vayu` → Staging:
+
+| Key | Make it with |
+|---|---|
+| `DJANGO_SECRET_KEY` | `python3 -c "import secrets;print(secrets.token_urlsafe(50))" \| pbcopy` |
+| `DB_PASSWORD` | same command (a different value) |
+
+**c) The backup key pair** (`brew install age` once):
+```bash
+age-keygen 2>/dev/null | grep AGE-SECRET-KEY | pbcopy   # the UNLOCKING half
+```
+→ Phase `vayu-owner` → Production → `BACKUP_AGE_SECRET_KEY` (never on a server). Then:
+```bash
+pbpaste | age-keygen -y | pbcopy                         # the LOCKING half (not secret)
+```
+→ Phase `vayu` → Staging **and** Production → `BACKUP_PUBLIC_KEY`. Then `pbcopy < /dev/null`.
+
+**d) Check Staging holds:** the 24 imported values + `DJANGO_SECRET_KEY`, `DB_PASSWORD`,
+`SENTRY_DSN`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`,
+`BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY`, `BACKUP_PUBLIC_KEY`,
+`FIREBASE_SERVICE_ACCOUNT_JSON`.
+
+**e) The server's Phase key:** Access Control → Service Accounts → **Create Service Account**
+`vayu-staging-server` (role Service) → app `vayu` → **Access** → Service accounts → **Add service
+account** → environment **Staging only** → Access Control → Service Accounts → **Manage** →
+**+ Create Token** → copy the `pss_service:v2:…` token → Phase `vayu-owner` →
+`PHASE_TOKEN_STAGING_SERVER` (it goes on the server in 3.2).
+
+### 3.1 · Server set up with `infra/bootstrap.sh` ✅ (Claude, 2026-11-26)
+```bash
+ssh root@139.59.39.207 'bash -s' < infra/bootstrap.sh      # once, from the laptop
+```
+Result, checked afterwards:
+- `root` and passwords can no longer log in (both refused); log in as `deploy@<staging>`.
+- `deploy`: Docker (29.10, Compose 5.8) and logs; no admin rights (it has no password).
+- Firewall on the server too (22, 80, 443); automatic security updates on; 2 GB swap; clock UTC.
+- Code in `/srv/vayu` (from `main`); `/srv/vayu/secrets` readable by `deploy` only.
+- Nightly backup timer enabled (20:30 UTC = 02:00 IST).
+- The server's own SSH fingerprint: `SHA256:yOMBc1Z3D4XpkN6a7LGHAREreTlKmgOAAkrKZxQSjoQ` (the same
+  as at the first connection; it stays the same when staging is re-made from its snapshot).
+
+### 3.2 · GitHub robot key ✅
+A key pair made for GitHub Actions only. Its public half is in the server's
+`~/.ssh/authorized_keys`, locked: `command="/srv/vayu/infra/deploy.sh",restrict ssh-ed25519 …
+github-deploy-staging`: it can only run the deploy script, nothing else.
+Owner: private half → GitHub environment `staging` secret `SSH_KEY` and Phase `vayu-owner` →
+`DEPLOY_SSH_KEY_STAGING`; `SSH_HOST` = `vayu-staging.carcid.in`; `SSH_KNOWN_HOSTS` = the server's
+fingerprint line (so GitHub can't be fooled into deploying to another machine). Then the key files
+on the laptop are deleted.
+
+### 3.3 · The server's Phase key ✅
+`/srv/vayu/.phase` on the server (chmod 600):
+```
+PHASE_ENV=Staging
+PHASE_SERVICE_TOKEN=<PHASE_TOKEN_STAGING_SERVER from Phase>
+```
+Typed on the server (`ssh deploy@<staging>`, `umask 077 && nano /srv/vayu/.phase`). Note: a command
+typed into Claude's chat box runs on the Mac, not on the server.
+GitHub `staging` environment secrets set with (from the Mac):
+```bash
+gh secret set SSH_KEY --env staging --repo ravi409455/vayu < deploy-staging
+gh secret set SSH_HOST --env staging --repo ravi409455/vayu --body vayu-staging.carcid.in
+gh secret set SSH_KNOWN_HOSTS --env staging --repo ravi409455/vayu < known_hosts
+```
+Robot key's private half also in Phase `vayu-owner` → `DEPLOY_SSH_KEY_STAGING`; the files deleted.
+
+### 3.4 · First settings fetch from Phase ✅ (after fixes)
+`bash /srv/vayu/infra/secrets.sh` → "settings: 35 values from Phase", both files `600`.
+What it took (lessons):
+1. `FIREBASE_SERVICE_ACCOUNT_JSON` was missing in Phase Staging: pasted in Phase 0 but never
+   **Deployed**. Phase keeps unsaved edits in the editor (copying from there works), but nothing is
+   stored until **Deploy**. Re-added from `~/vayu-keys/vayu-8bb7a-firebase-adminsdk-fbsvc-5905526895.json`.
+2. `BACKUP_PUBLIC_KEY`, `DJANGO_SECRET_KEY`, `DB_PASSWORD` ended in a hidden line break: `… | pbcopy`
+   copies the command's final line break and Phase keeps it. Removed in Phase (End, Backspace,
+   Deploy). PR 30 makes `secrets.sh` trim spaces and line breaks around values from now on (names
+   are never trimmed: a spaced name is refused).
+3. Production's Firebase key was still in `~/Downloads`: put in Phase Production, file deleted.
+
+### Merged
+- PR 27 (Phase 1 code, settings from Phase, staging on demand) → `main` as `35fdec9`.
+
+### Dependabot ✅ grouped (PR 30)
+Its first run opened 6 PRs at once (Actions and the Node image), each a full CI run, which queued
+ahead of `main`'s CI. Closed them and cancelled their runs. New rule: one grouped PR a week for all
+GitHub Actions and one for all Docker images; no Node major jumps (stay on LTS), no Python minor
+jumps.
+
+---
+
+## Phase 4 · Deploy pipeline ⏳
+## Phase 5 · Backups and alerts ⏳
+## Phase 6 · Prove staging ⏳
+## Phase 7 · Production ⏳
+
+---
+
+## Where everything lives
+
+**Never in this file, git or chat: values.** Names only.
+
+### Phase (console.phase.dev, organisation `CarCID`)
+| App → environment | Keys | Used by |
+|---|---|---|
+| `vayu` → Staging | the 24 non-secret values of `infra/phase-staging.env`; `DJANGO_SECRET_KEY`, `DB_PASSWORD`, `SENTRY_DSN`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (token `vayu-staging-app`), `BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY` (token `vayu-backups-staging`), `BACKUP_PUBLIC_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON` (the Mac's/staging's Firebase key) | the staging server, through `infra/secrets.sh` |
+| `vayu` → Production | **so far**: `SENTRY_DSN`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (token `vayu-prod-app`), `BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY` (token `vayu-backups-prod`), `BACKUP_PUBLIC_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON` (production's own key). **Still to add (Phase 7)**: import `infra/phase-production.env`, new `DJANGO_SECRET_KEY`, the managed database's `DB_PASSWORD` and `DB_HOST` | the production server |
+| `vayu` → Development | nothing yet | the Mac's local stack |
+| `vayu-owner` → Production | `ANDROID_KEYSTORE_B64`, `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, `SENTRY_DSN_WEB`, `SENTRY_DSN_ANDROID`, `SENTRY_AUTH_TOKEN` (`vayu-ci`), `DO_API_TOKEN` (`vayu-owner-laptop`), `OWNER_SSH_PRIVATE_KEY`, `BACKUP_AGE_SECRET_KEY` (unlocks backups; never on a server), `PHASE_TOKEN_STAGING_SERVER`, `DEPLOY_SSH_KEY_STAGING` | the owner |
+
+Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only**.
+
+### Not in Phase
+| What | Where |
+|---|---|
+| Phase sudo password, Phase recovery kit | Mac **Passwords** app + printed kit at the office |
+| Account passwords and 2-step recovery codes (GitHub, Google, Cloudflare, Sentry, GoDaddy, DigitalOcean, Phase) | Mac **Passwords** app |
+| SSH key passphrase | Mac **Passwords** app |
+| Android signing key, offline | USB stick at the office + private company Google Drive folder |
+| `~/vayu-keys/` on the Mac (owner only, FileVault) | `vayu-release.jks`, `keystore.properties` (release builds), `vayu-8bb7a-firebase-adminsdk-fbsvc-5905526895.json` (local stack) |
+| `~/.ssh/id_ed25519` on the Mac | owner SSH key |
+| `doctl` login on the Mac | `doctl auth init` (the `DO_API_TOKEN`) |
+| Staging server `/srv/vayu/.phase` | the server's Phase token (the only secret typed onto a server) |
+| Staging server `/srv/vayu/.env.staging`, `/srv/vayu/secrets/` | written by `secrets.sh` from Phase; never edited by hand |
+| GitHub → environment `staging` → secrets | `SSH_KEY`, `SSH_HOST`, `SSH_KNOWN_HOSTS` |
+| GitHub → repository → secrets / variables | secret `SENTRY_AUTH_TOKEN`; variables `SENTRY_ORG` (`car-cid`), `VITE_SENTRY_DSN` |
+| Cloudflare R2 API tokens | `vayu-staging-app`, `vayu-prod-app`, `vayu-backups-staging`, `vayu-backups-prod` (the old test token: deleted) |
+
+### Names and addresses (not secret)
+| What | Value |
+|---|---|
+| Staging | `https://vayu-staging.carcid.in` (droplet `vayu-staging`, BLR1, IP changes when re-made) |
+| Production | `https://vayu.carcid.in` (not created yet) |
+| Customer QR page | `https://<address>/report/verify/<code>` |
+| DNS | GoDaddy (`ns19/ns20.domaincontrol.com`) |
+| Sentry | organisation `car-cid`; projects `vayu-server`, `vayu-web`, `vayu-android`; alert `vayu production errors` → `#vayu-alerts` |
+| Firebase | project `vayu-8bb7a`; apps `in.carcid.vayu`, `in.carcid.vayu.staging` |
+| DigitalOcean | firewall `vayu-web` (by tag), tags `vayu-web`, `vayu-staging`; SSH key `owner-mac` |
+| GitHub | ruleset `main protect`; environments `staging`, `production` (reviewer `ravi409455`) |
+| Slack | `#vayu-alerts` (public, workspace "Car C.I.D") |
+
+---
+
+## Open items
+
+| Item | When |
+|---|---|
+| First staging deploy: starts by itself when `main`'s CI passes; then check the site, health page, workers | next |
+| Merge PR 30 (trim values; Dependabot grouped) | when its CI is green |
+| Merge PR 18 (this log and `docs/plan-deploy.md`): until then they exist only on the `docs/plan-deploy` branch | soon |
+| 2.5c Restrict the Firebase API key | once "Vayu Staging" is on a phone (Phase 6) |
+| Phase 5: Better Stack uptime and heartbeats (`BACKUP_HEARTBEAT_URL`, `WORKERS_HEARTBEAT_URL` into Phase), DigitalOcean alerts, first restore drill | after the first deploy |
+| Phase Production environment: the rest of its values (table above) | Phase 7 |
+| Production server's Phase service account (`vayu-prod-server`, Production only) and robot key | Phase 7 |
+| DigitalOcean API token `vayu-owner-laptop` expires (90 days) | around 2027-02-24 |
+| Phase service token `vayu-staging-server`: if it was given an expiry, note the date here | check |
+| CSP on staging: switch `CSP_HEADER` from report-only to enforced after a clean full run | Phase 6 |
+
