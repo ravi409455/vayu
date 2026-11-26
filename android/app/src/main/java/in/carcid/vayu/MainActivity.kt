@@ -115,8 +115,9 @@ fun AppRoot(vm: AppViewModel) {
             is Screen.Profile -> {
                 BackHandler { vm.closeProfile() }
                 val extras = if (s.me.role == "expert") expertExtras(vm, s.me) else null
-                ProfileScreen(s, vm::closeProfile, vm::setTheme, vm::signOut, vm::setNotify, storage = extras?.let { e -> { e.storage } },
-                    version = BuildConfig.VERSION_NAME, update = update?.name, onUpdate = { vm.showUpdate.value = true })
+                ProfileScreen(s, vm::closeProfile, vm::setTheme, { vm.signOut() }, vm::setNotify, storage = extras?.let { e -> { e.storage } },
+                    version = BuildConfig.VERSION_NAME, update = update?.name, onUpdate = { vm.showUpdate.value = true },
+                    onSignOutAnyway = { vm.signOut(confirmed = true) }, onStaySignedIn = vm::keepSignedIn)
             }
         }
     }

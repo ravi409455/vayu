@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -47,8 +48,10 @@ class SignInFlowTest {
     private val root = java.nio.file.Files.createTempDirectory("vayu").toFile()
     private lateinit var graph: `in`.carcid.vayu.Graph
 
+    private var kicks = 0
+
     private fun launch() {
-        graph = `in`.carcid.vayu.Graph(Api(server.url, tokens), tokens, root, {},
+        graph = `in`.carcid.vayu.Graph(Api(server.url, tokens), tokens, root, { kicks++ },
             sendPushToken = { pushTokens++ })
         val vm = AppViewModel(graph, "Test phone")
         compose.setContent { AppRoot(vm) }
@@ -92,10 +95,99 @@ class SignInFlowTest {
         compose.onNodeWithText("Sign out").performClick()
         waitFor("Sign in")
         compose.waitUntil(5_000) { !java.io.File(root, "drafts-3").exists() }
+        org.junit.Assert.assertEquals("""{"drafts":0,"files":0}""", server.bodiesOf("POST auth/logout").single())
     }
 
-    /** F-9: a booking Ops finished "without the missing files" doesn't block sign-out; any other unsent work does. */
-    @Test fun aBookingOpsFinishedDoesNotBlockSignOut() {
+    private val unsentId = "00000000-0000-0000-0000-000000000002"
+
+    /** Ravi has DEMO-2 unsent (one photo not sent): its draft and photo file are on the phone. */
+    private fun unsentWork(): java.io.File {
+        val photo = java.io.File(root, "drafts-3/files").apply { mkdirs() }.resolve("front.jpg").apply { writeText("stamped photo") }
+        val file = `in`.carcid.vayu.core.draft.LocalFile("f1", "inspection", "front", "photo", photo.path, "image/jpeg", "camera", 13, "", "Front 1")
+        graph.drafts(3).save(`in`.carcid.vayu.core.draft.Draft(unsentId, "DEMO-2", "Arjun", emptyMap(), "pdi", files = listOf(file)))
+        return photo
+    }
+
+    private fun tapSignOutInSheet() =
+        compose.onAllNodes(androidx.compose.ui.test.hasText("Sign out") and androidx.compose.ui.test.hasClickAction()).onLast().performClick()
+
+    /** plan-media-backup: unsent work no longer blocks sign-out; a warning names the leads first. */
+    @Test fun signingOutWithUnsentWorkWarnsFirstAndStayingSignedInChangesNothing() {
+        signedIn("expert")
+        server.on("POST auth/logout", "", 204)
+        launch(); signIn(); waitFor("My leads")
+        unsentWork()
+        compose.onNodeWithContentDescription("Profile").performClick()
+        compose.onNodeWithText("Sign out").performClick()
+        waitFor("Sign out with unsent work?")
+        compose.onNodeWithText("DEMO-2").assertIsDisplayed()
+        compose.onRoot().captureRoboImage("src/test/screenshots/sign_out_unsent.png", roborazziOptions = options)
+        compose.onNodeWithText("Stay signed in").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("Sign out with unsent work?")).fetchSemanticsNodes().isEmpty() }
+        org.junit.Assert.assertEquals(0, server.bodiesOf("POST auth/logout").size)
+        compose.onNodeWithText("Sign out").assertIsDisplayed()                   // still on Profile
+    }
+
+    /** plan-media-backup: the unsent work stays, the server is told, and it sends at the next sign-in. */
+    @Test fun signingOutKeepsUnsentWorkAndTheNextSignInSendsIt() {
+        signedIn("expert")
+        server.on("POST auth/logout", "", 204)
+        launch(); signIn(); waitFor("My leads")
+        val photo = unsentWork()
+        compose.onNodeWithContentDescription("Profile").performClick()
+        compose.onNodeWithText("Sign out").performClick()
+        waitFor("Sign out with unsent work?")
+        tapSignOutInSheet()
+        waitFor("Sign in")
+        org.junit.Assert.assertEquals("""{"drafts":1,"files":1}""", server.bodiesOf("POST auth/logout").single())
+        org.junit.Assert.assertTrue(photo.exists())
+        org.junit.Assert.assertNotNull(graph.drafts(3).get(unsentId))
+        val before = kicks
+        signIn(); waitFor("My leads")
+        org.junit.Assert.assertNotNull(graph.drafts(3).get(unsentId))
+        org.junit.Assert.assertTrue(kicks > before)                              // the outbox starts sending
+        // the same install both times, so the server lets this phone back in to send it
+        val installs = server.bodiesOf("POST auth/login").map { Regex("\"install_id\":\"([^\"]+)\"").find(it)!!.groupValues[1] }
+        org.junit.Assert.assertEquals(2, installs.size)
+        org.junit.Assert.assertEquals(installs[0], installs[1])
+    }
+
+    /** Another person signing in on this phone neither sees nor removes the first person's unsent work. */
+    @Test fun anotherPersonsSignInKeepsTheFirstPersonsUnsentWork() {
+        signedIn("expert")
+        server.on("POST auth/logout", "", 204)
+        launch(); signIn(); waitFor("My leads")
+        val photo = unsentWork()
+        compose.onNodeWithContentDescription("Profile").performClick()
+        compose.onNodeWithText("Sign out").performClick()
+        waitFor("Sign out with unsent work?")
+        tapSignOutInSheet()
+        waitFor("Sign in")
+        server.on("GET auth/me", """{"id":4,"username":"meera","name":"Meera","role":"expert","must_change_password":false,"theme":"light"}""")
+        signIn(); waitFor("My leads")
+        org.junit.Assert.assertTrue(photo.exists())
+        org.junit.Assert.assertNotNull(graph.drafts(3).get(unsentId))
+        org.junit.Assert.assertTrue(graph.drafts(4).all().isEmpty())
+        org.junit.Assert.assertTrue(compose.onAllNodes(androidx.compose.ui.test.hasText("DEMO-2")).fetchSemanticsNodes().isEmpty())
+    }
+
+    /** No signal at sign-out: the work stays all the same, and the old sign-in ends at the next one. */
+    @Test fun aSignOutWithoutSignalKeepsUnsentWork() {
+        signedIn("expert")
+        server.on("POST auth/logout", "", 503)
+        launch(); signIn(); waitFor("My leads")
+        val photo = unsentWork()
+        compose.onNodeWithContentDescription("Profile").performClick()
+        compose.onNodeWithText("Sign out").performClick()
+        waitFor("Sign out with unsent work?")
+        tapSignOutInSheet()
+        waitFor("Sign in")
+        org.junit.Assert.assertTrue(photo.exists())
+        org.junit.Assert.assertNotNull(tokens.pendingLogout())
+    }
+
+    /** F-9: a booking Ops finished "without the missing files" is not named in the warning; other unsent work is. */
+    @Test fun aBookingOpsFinishedIsNotNamedInTheWarning() {
         signedIn("expert")
         val id = "00000000-0000-0000-0000-000000000001"
         server.on("GET sync/jobs", """{"server_time":"2026-11-24T05:00:00Z","jobs":[${`in`.carcid.vayu.core.sync.job(id, stage = "completed")}]}""")
@@ -104,12 +196,15 @@ class SignInFlowTest {
         compose.waitUntil(5_000) { graph.jobs(3).jobs().any { it.id == id } }
         val waiting = `in`.carcid.vayu.core.draft.LocalFile("f1", "inspection", "front", "photo", "", "image/jpeg", "camera", 4, "", "Front 1")
         graph.drafts(3).save(`in`.carcid.vayu.core.draft.Draft(id, "DEMO-1", "Farhan Ali", emptyMap(), "pdi", submitSent = true, files = listOf(waiting)))
-        graph.drafts(3).save(`in`.carcid.vayu.core.draft.Draft("00000000-0000-0000-0000-000000000002", "DEMO-2", "Arjun", emptyMap(), "pdi"))
+        graph.drafts(3).save(`in`.carcid.vayu.core.draft.Draft(unsentId, "DEMO-2", "Arjun", emptyMap(), "pdi"))
         compose.onNodeWithContentDescription("Profile").performClick()
         compose.onNodeWithText("Sign out").performClick()
-        waitFor("Not sent yet: DEMO-2. Open Uploads to send, finish or discard it, then sign out.")
-        graph.drafts(3).discard("00000000-0000-0000-0000-000000000002")
-        compose.onNodeWithText("Sign out").performClick()
+        waitFor("Sign out with unsent work?")
+        compose.onNodeWithText("DEMO-2").assertIsDisplayed()
+        org.junit.Assert.assertTrue(compose.onAllNodes(androidx.compose.ui.test.hasText("DEMO-1")).fetchSemanticsNodes().isEmpty())
+        graph.drafts(3).discard(unsentId)
+        compose.onNodeWithText("Stay signed in").performClick()
+        compose.onNodeWithText("Sign out").performClick()              // only the finished one left: no warning
         waitFor("Sign in")
     }
 

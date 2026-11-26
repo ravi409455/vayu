@@ -17,7 +17,8 @@ sealed interface Screen {
     data object AdminRefused : Screen
     data class ChangePassword(val busy: Boolean = false, val error: String? = null) : Screen
     data class Home(val me: Me) : Screen
-    data class Profile(val me: Me, val error: String? = null) : Screen
+    /** [unsent]: leads not sent yet, named in the sign-out warning while it is open. */
+    data class Profile(val me: Me, val error: String? = null, val unsent: List<String>? = null) : Screen
 }
 
 /** Sign-in, the forced password change, routing by role, and the profile. */
@@ -236,39 +237,47 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         }
     }
 
-    fun signOut() {
+    /**
+     * Sign out. Unsent work no longer blocks it (docs/plan-media-backup.md): a warning names the
+     * leads first ([confirmed] false), then that person's unsent work stays on this phone and sends
+     * at their next sign-in here; everything else of theirs leaves the phone.
+     */
+    fun signOut(confirmed: Boolean = false) {
         val p = screen.value as? Screen.Profile
         if (p != null) {
-            // the same drafts Uploads lists, by name
-            // a draft file that can't be read may hold work: sign-out deletes drafts, so it stops here
+            // a draft file that can't be read may hold work the app can't keep track of: stop here
             if (graph.drafts(p.me.id).unreadable().isNotEmpty()) {
                 _screen.value = p.copy(error = "A draft on this phone can't be read, so signing out could lose work. " +
-                    "Keep the phone as it is and tell your Ops team.")
+                    "Keep the phone as it is and tell your Ops team.", unsent = null)
                 return
             }
-            // a booking Ops finished "without the missing files" no longer waits for them: they keep
-            // sending while signed in (and are added to the report), but they don't block sign-out (F-9)
+            // a booking Ops finished "without the missing files" no longer waits for them (F-9): not named
             val finished = runCatching { graph.jobs(p.me.id).jobs() }.getOrDefault(emptyList())
                 .filter { it.stage == "completed" }.map { it.id }.toSet()
             val waiting = graph.drafts(p.me.id).all().filter { it.unsent && !(it.submitSent && it.bookingId in finished) }
                 .map { it.code }.sorted()
-            if (waiting.isNotEmpty()) {
-                _screen.value = p.copy(error = "Not sent yet: ${waiting.joinToString(", ")}. Open Uploads to send, finish or discard " +
-                    "${if (waiting.size == 1) "it" else "them"}, then sign out.")
-                return
-            }
+            if (waiting.isNotEmpty() && !confirmed) { _screen.value = p.copy(error = null, unsent = waiting); return }
         }
+        if (signingOut) return                       // a second tap while the first sign-out runs
+        signingOut = true
         viewModelScope.launch {
+            val me = signedIn()
+            val (drafts, files) = me?.let { graph.drafts(it).unsentCounts() } ?: (0 to 0)
             // no signal: the server still thinks this phone is signed in; end it at the next sign-in
             val refresh = tokens.refresh()
-            if (`in`.carcid.vayu.core.attempt { api.logout() }.isFailure && refresh != null) tokens.setPendingLogout(refresh)
-            // nothing is unsent (checked above), so nothing of theirs needs to stay
-            signedIn()?.let { graph.forgetCopies(it); graph.forgetDrafts(it, all = true) }
+            if (`in`.carcid.vayu.core.attempt { api.logout(drafts, files) }.isFailure && refresh != null) tokens.setPendingLogout(refresh)
+            // unsent work stays for this person's next sign-in here; with none, nothing of theirs stays
+            me?.let { graph.forgetCopies(it); graph.forgetDrafts(it, all = graph.drafts(it).all().none { d -> d.unsent }) }
             graph.clearNotices()
             tokens.clear()
             jobs.forget()
             bell.clear()
+            signingOut = false
             _screen.value = Screen.SignIn()
         }
     }
+    private var signingOut = false
+
+    /** The sign-out warning was closed: stay signed in, nothing changes. */
+    fun keepSignedIn() { (screen.value as? Screen.Profile)?.let { _screen.value = it.copy(unsent = null) } }
 }

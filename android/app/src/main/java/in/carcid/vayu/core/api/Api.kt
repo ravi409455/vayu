@@ -61,7 +61,7 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
     suspend fun login(username: String, password: String, deviceName: String): Me {
         val body = call("POST", "auth/login", buildJsonObject {
             put("username", username); put("password", password)
-            put("client", "mobile"); put("device_name", deviceName)
+            put("client", "mobile"); put("device_name", deviceName); put("install_id", tokens.installId())
         }, auth = false)
         tokens.save(body.s("access"), body.s("refresh"))
         expired.value = false
@@ -241,8 +241,9 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         return out.toByteArray()
     }
 
-    suspend fun logout() {
-        try { call("POST", "auth/logout") } finally { tokens.clear() }
+    /** Sign out, telling the server what this phone still holds unsent (it keeps holding that work). */
+    suspend fun logout(drafts: Int, files: Int) {
+        try { call("POST", "auth/logout", buildJsonObject { put("drafts", drafts); put("files", files) }) } finally { tokens.clear() }
     }
 
     /**
