@@ -2,7 +2,7 @@
 # The web app (and the customer verify page) served by Caddy, which also forwards /api to the API.
 # Built from the repo root (the rules in shared/ are part of the web build):
 #   docker build -f infra/web.Dockerfile -t vayu-web .
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
