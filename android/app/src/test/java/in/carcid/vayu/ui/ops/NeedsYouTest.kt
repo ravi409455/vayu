@@ -34,7 +34,9 @@ class NeedsYouTest {
         `in`.carcid.vayu.core.ops.OpsData(`in`.carcid.vayu.core.api.Api("http://localhost/", `in`.carcid.vayu.core.auth.MemoryTokenStore()), java.io.File("build/tmp-ops")),
         Labels(), { today }, 0, {}, {})
 
-    init { TimeZone.setDefault(TimeZone.getTimeZone("Asia/Kolkata")) }
+    private val before: TimeZone = TimeZone.getDefault()
+    @org.junit.Before fun india() = TimeZone.setDefault(TimeZone.getTimeZone("Asia/Kolkata"))
+    @org.junit.After fun back() = TimeZone.setDefault(before)
     private fun at(day: Int, hh: Int, mm: Int) = LocalDate.of(2026, 11, day).atTime(hh, mm).atZone(ZoneId.of("Asia/Kolkata")).toInstant()
 
     private val problems = listOf(

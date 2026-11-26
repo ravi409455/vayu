@@ -233,9 +233,11 @@ class OpsFlowTest {
         compose.onNode(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).performClick()
         waitFor("Report out of date for DEMO-6")
         waitFor("TODAY")                                                          // grouped by the day it went wrong
-        waitFor("10:05")                                                          // when it went out of date
+        // when it went wrong, on this machine's clock (CI runs on UTC)
+        fun clock(iso: String) = `in`.carcid.vayu.ui.clockOf(java.time.OffsetDateTime.parse(iso).atZoneSameInstant(java.time.ZoneId.systemDefault()))
+        waitFor(clock("${TODAY}T10:05:00+05:30"))
         waitFor("Report failed for DEMO-14")                                      // a failed row stays a failure
-        waitFor("9:15")
+        waitFor(clock("${TODAY}T09:15:00+05:30"))
     }
 
     /** F-222: a booking whose phone time wasn't checked says so, and Needs you lists this week's ones. */

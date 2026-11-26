@@ -458,6 +458,7 @@ def test_problems_name_a_completed_booking_with_no_report(done):
     assert row["problem"] == "missing" and row["booking"] == b["id"]
     from apps.bookings.models import Inspection
     sent = Inspection.objects.filter(booking_id=b["id"], status="submitted").latest("submitted_at")
+    assert sent.submitted_at is not None
     assert row["at"] == sent.submitted_at.isoformat().replace("+00:00", "Z")   # when it was sent
     Booking.objects.filter(pk=b["id"]).update(conflict="TWO_EXPERTS")   # Ops choose first
     assert env.ops.get("/api/v1/problems/reports").json() == []
