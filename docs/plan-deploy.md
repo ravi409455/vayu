@@ -480,10 +480,11 @@ Staging is "done" only when all of these pass. Each is a line in the runbook's c
    labelled `staging`, with readable code lines → the Slack alert arrives.
 6. **Security headers**: securityheaders.com and SSL Labs both grade **A** for the staging address.
    The CSP report shows nothing blocked during steps 1 and 2 → switch CSP from "report only" to enforced.
-7. **Load test** (`perf/locustfile.py`, 200 users for 10 minutes, signing in slowly, 1.17): 95 of
-   100 requests under half a second, no errors. Staging is the same size as production, so this
-   result is production's too. If it fails, resize staging to 4 vCPU / 8 GB for an hour (about
-   $0.07) and run again: if that passes, production moves to 8 GB before launch.
+7. **Load tests** (`docs/plan-load-test.md`), after checks 1–6 pass: **low-cost test**
+   (`perf/cloud.sh lowcost`: the owner's real numbers, measured for an hour, on 1 vCPU / 2 GB,
+   2 vCPU / 2 GB and 2 vCPU / 4 GB) and **capacity test** (`perf/cloud.sh capacity <size>`: 1× to 8×
+   on the cheapest passing size and 2 vCPU / 4 GB). Throwaway servers, scripted, cap $5.
+   Production gets the cheapest size that passes the low-cost test.
 8. **Backup and restore drill** passed (5.3).
 9. **Rollback** rehearsed (4.2).
 10. **Reboot test**: restart the droplet from the DigitalOcean dashboard → everything comes back

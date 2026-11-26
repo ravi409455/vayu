@@ -9,6 +9,7 @@ content rules, database and user names, two app limits). Set here: the address, 
 and kind (test), Sentry off (a dummy address; the test counts errors itself), a fresh database
 password and secret key. Everything else (backup keys, heartbeats, tester passwords, anything added
 to staging later) is left out."""
+import os
 import re
 import secrets
 import sys
@@ -45,6 +46,12 @@ env.update({
     "DB_PASSWORD": secrets.token_urlsafe(24), "DJANGO_SECRET_KEY": secrets.token_urlsafe(50),
     "PDF_CONCURRENCY": "1",
 })
+# run D (perf/cloud.sh dbcheck): a temporary managed database instead of Postgres on the server;
+# its details come through the environment (never a command line): "host port user password db"
+if os.environ.get("LT_DB"):
+    db_host, db_port, db_user, db_password, db_name = os.environ["LT_DB"].split()
+    env.update({"DB_HOST": db_host, "DB_PORT": db_port, "DB_USER": db_user,
+                "DB_PASSWORD": db_password, "DB_NAME": db_name, "DB_SSLMODE": "require"})
 for kv in extra:
     key, value = kv.split("=", 1)
     env[key] = value

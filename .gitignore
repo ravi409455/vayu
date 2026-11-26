@@ -39,3 +39,5 @@ android/.kotlin/
 # load tests on throwaway servers (perf/cloud.sh): local state and results
 perf/.cloud/
 perf/results/
+perf/local/results/
+perf/local/.cpuset

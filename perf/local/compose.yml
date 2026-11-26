@@ -1,0 +1,43 @@
+# Local load test (docs/plan-load-test.md): the production compose file, plus
+# - every server container pinned to the same CPU core(s) (LT_CPUSET: "0" = 1 vCPU, "0-1" = 2),
+#   so they share them as on a droplet. Memory is not capped here: the sampler adds up what the
+#   server containers use and compares it with the droplet's 2 or 4 GB.
+# - a file store of its own (s3proxy, standing in for R2, not pinned: R2 is not on the droplet),
+#   reached as s3.lvh.me:9100 by the containers and by the load script alike;
+# - settings that let webhooks reach the receiver on this laptop.
+x-server: &server
+  cpuset: "${LT_CPUSET:-0}"
+  extra_hosts: ["s3.lvh.me:host-gateway", "receiver.lvh.me:host-gateway"]
+x-app: &app
+  <<: *server
+  environment:
+    DJANGO_SETTINGS_MODULE: vayu.settings.loadtest
+    REDIS_URL: redis://redis:6379/0
+    SENTRY_RELEASE: loadtest
+  volumes:
+    - ${FIREBASE_JSON}:/run/secrets/firebase-service-account.json:ro
+    - ../perf/local/loadtest_settings.py:/app/vayu/settings/loadtest.py:ro   # relative to infra/ (the first compose file)
+services:
+  migrate: *app
+  api: *app
+  worker: *app
+  zip-worker: *app
+  pdf-worker: *app
+  beat: *app
+  postgres: *server
+  redis: *server
+  caddy:
+    cpuset: "${LT_CPUSET:-0}"
+  s3:
+    image: andrewgaul/s3proxy:latest
+    environment:
+      S3PROXY_ENDPOINT: http://0.0.0.0:80
+      S3PROXY_AUTHORIZATION: aws-v2-or-v4
+      S3PROXY_IDENTITY: loadtest
+      S3PROXY_CREDENTIAL: loadtest-not-a-secret
+      JCLOUDS_PROVIDER: filesystem
+      JCLOUDS_FILESYSTEM_BASEDIR: /data
+    ports: ["127.0.0.1:9100:80"]
+    volumes: ["ltfiles:/data"]
+volumes:
+  ltfiles:
