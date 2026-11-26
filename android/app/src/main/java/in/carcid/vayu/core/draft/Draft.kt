@@ -76,6 +76,9 @@ data class Draft(
     val locked: Boolean get() = submittedAt != null
     /** Something still has to reach the server (a file it refused for good never will). */
     val unsent: Boolean get() = !submitSent || files.any { !it.verified && !it.refused } || discards.isNotEmpty() || reconcile
+    /** All of it is on the server; only the server's check of some files is still to come (F-5). */
+    val onlyChecking: Boolean get() = submitSent && discards.isEmpty() && !reconcile &&
+        files.all { it.verified || it.refused || (it.sent && it.error == null) }
 
     fun answer(part: String, key: String): Any? = answers[part]?.get(key)
     fun withAnswer(part: String, key: String, v: Any?): Draft =

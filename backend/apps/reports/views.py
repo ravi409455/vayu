@@ -11,6 +11,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
+from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
@@ -444,6 +445,7 @@ class CopyTemplate(APIView):
 
 class ExportTemplate(APIView):
     permission_classes = [perm("pdf_templates.view", "pdf_templates.edit")]
+    renderer_classes = [JSONRenderer]            # a download: never the browsable page (F-11)
 
     def get(self, request, pk):
         v = get_object_or_404(PdfTemplateVersion.objects.select_related("template__form"), pk=pk)

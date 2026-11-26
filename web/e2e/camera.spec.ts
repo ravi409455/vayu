@@ -3,9 +3,13 @@ import { expect, test } from "@playwright/test";
 import { apiAs, expertId, JPEG, json, signIn } from "./api";
 
 test.use({
-  permissions: ["geolocation", "camera", "microphone"],
+  // Firefox has no "camera"/"microphone" permission in Playwright: its prefs below allow a fake one
+  permissions: async ({ browserName }, run) => run(browserName === "firefox" ? ["geolocation"] : ["geolocation", "camera", "microphone"]),
   geolocation: { latitude: 28.6, longitude: 77.2 },
-  launchOptions: { args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] },
+  launchOptions: {
+    args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+    firefoxUserPrefs: { "media.navigator.streams.fake": true, "media.navigator.permission.disabled": true },
+  },
 });
 
 async function job(ref: string): Promise<string> {

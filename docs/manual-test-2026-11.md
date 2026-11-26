@@ -13,8 +13,8 @@ Result words: **PASS**, **FAIL** (listed again under *Failures* with an id), **S
 
 ## Summary
 
-**8 checks failed, 10 failures found (F-1 to F-10); everything else passed or was skipped by the owner.**
-Fixed afterwards in one PR (see the end of this file).
+**8 checks failed, 11 failures found (F-1 to F-11; F-11 turned up when the WebKit/Firefox suites were re-run);
+everything else passed or was skipped by the owner.** All fixed afterwards in one PR (see *Fixes* at the end).
 
 - Web: names and focus order fine; Safari's engine handles photo upload, PDF, filters and tablet width. One real
   Safari/Firefox bug (F-6) breaks navigation while a page is loading and causes almost every WebKit/Firefox e2e failure.
@@ -92,3 +92,26 @@ Phone 1 = the owner's phone, phone 2 = the emulator. Expert A = `expert`, Expert
 | F-8 | Android 1-hour reminder in deep sleep | The "In 1 hour" reminder is a WorkManager job with a delay, and Android holds such jobs while the phone is in deep sleep. MT-4's reminder was due 08:42:00; with the phone locked, battery saver on and in deep sleep it did not show until I forced a maintenance window at 08:44:22. Left alone, deep sleep's windows come about an hour apart and further apart after that, so the reminder can arrive after the job has started. A reminder needs an alarm that may fire in deep sleep (`AlarmManager.setAndAllowWhileIdle`). |
 | F-9 | Android sign-out after Ops finished a booking | Files of a booking Ops already finished "without the missing files" still block sign-out until they are sent. Owner's rule (26 Nov): keep sending them (they are added to the report when they arrive), but they do not block sign-out; unsent work of any other booking still blocks. |
 | F-10 | Android: carrying on a lead on a second phone | A new phone opens a lead started on another phone with an empty check-in, although the server has its answers and photo (`inspection.answers.start`: selfie, place, time, "no"). The photo from before shows only when the expert takes a new one, and then as "2 of 1" with the new photo refused until one is deleted. The web already shows the sent photo straight away (e2e J3f). |
+| F-11 | Web, Safari and Firefox: Admin → Promote → "Download bundle" (and the PDF template export) | Found once F-6 was fixed and the suites were re-run. Safari and Firefox ask for `text/html` when following a download link, and the API answered with its browsable HTML page, which was saved as `pdi-v1.json` (`<title>Promote Export – Django REST framework</title>`). Importing that file then fails. Chrome asks for anything, so it got JSON. |
+
+## Fixes (one PR, after testing)
+
+| Id | Fix | Checked |
+|---|---|---|
+| F-1 | Photo field label wraps; the star and "0 of 1" keep their width. | Emulator at 1.3× / largest size: [after](manual-test-2026-11/fix-big-checkin.jpg) |
+| F-2 | Call / WhatsApp / Directions (expert lead page and Ops booking page): one line that shrinks to fit. | [after](manual-test-2026-11/fix-big-detail.jpg) |
+| F-3 | Lead row: the name may take two lines; tabs shrink before they cut. | [after](manual-test-2026-11/fix-big-leads.jpg) |
+| F-4 | Same for every switch row (Light / Dark / Match phone). | [after](manual-test-2026-11/fix-big-profile.jpg) |
+| F-5 | When everything is on the server and only the server's check is left, the phone asks again in 20 s instead of waiting out the retry pause; Refresh also starts sending. | Emulator: photo held back through 3 failed tries, route back, Refresh → sent in 1 s, checked on the phone 30 s later (was ~16 min). Unit test `onlyCheckingMeansEverythingIsOnTheServer`. |
+| F-6 | `lazyPage` doesn't reload when the page is being left (`beforeunload`/`pagehide`). | Unit test; WebKit/Firefox suites (below). |
+| F-7 | e2e camera tests: no `camera` permission on Firefox; Firefox's fake camera instead. | Firefox camera tests pass. |
+| F-8 | The 1-hour reminder is an `AlarmManager.setAndAllowWhileIdle` alarm (cancelled at sign-out). | Emulator forced into deep sleep: MT-13's 10:09 reminder showed by 10:10:43, still in deep sleep. Unit tests in `NoticesTest`. |
+| F-9 | Sign-out skips submitted drafts whose booking is Completed (Ops finished it); they keep sending while signed in. | Flow test `aBookingOpsFinishedDoesNotBlockSignOut`. |
+| F-10 | Opening a lead started on another phone fetches the server's files at once. | Emulator: MT-1's draft dropped and reopened → "Your photo with car's number plate (from before), sent", 1 of 1: [after](manual-test-2026-11/fix-f10-reopen.jpg). The check-in's typed answers (e.g. "No") are still not brought back; the web does not bring them back either. |
+| F-11 | The bundle and PDF-template exports always answer JSON, and the bundle download is an attachment. | Backend test `test_the_download_is_json_even_when_the_browser_asks_for_html`; WebKit promote e2e passes. |
+
+e2e test changes that are not app bugs (Safari's own rules): the skip-link test presses Option+Tab on WebKit
+(Safari's Tab skips links); the dialog test opens it from the keyboard (Safari never focuses a clicked button); three
+tests that keep files in IndexedDB are skipped on WebKit because Playwright's WebKit runs like a private window,
+where Safari keeps no files there (a normal WebKit profile stores them: checked with a persistent profile); the
+dark-mode test sets Dark through the API (Firefox left a rewritten request open).

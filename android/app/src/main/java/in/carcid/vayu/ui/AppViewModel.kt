@@ -246,7 +246,12 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
                     "Keep the phone as it is and tell your Ops team.")
                 return
             }
-            val waiting = graph.drafts(p.me.id).all().filter { it.unsent }.map { it.code }.sorted()
+            // a booking Ops finished "without the missing files" no longer waits for them: they keep
+            // sending while signed in (and are added to the report), but they don't block sign-out (F-9)
+            val finished = runCatching { graph.jobs(p.me.id).jobs() }.getOrDefault(emptyList())
+                .filter { it.stage == "completed" }.map { it.id }.toSet()
+            val waiting = graph.drafts(p.me.id).all().filter { it.unsent && !(it.submitSent && it.bookingId in finished) }
+                .map { it.code }.sorted()
             if (waiting.isNotEmpty()) {
                 _screen.value = p.copy(error = "Not sent yet: ${waiting.joinToString(", ")}. Open Uploads to send, finish or discard " +
                     "${if (waiting.size == 1) "it" else "them"}, then sign out.")

@@ -26,6 +26,17 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: 
 }
 
 const RELOADED = "vayu:chunk-reload";
+// Safari and Firefox cancel a page file still loading when the browser leaves the page: that is
+// not a missing file, and a reload then would undo where the person was going (F-6)
+let leaving = false;
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
+    leaving = true;
+    setTimeout(() => (leaving = false), 1000); // still here: the person chose to stay
+  });
+  window.addEventListener("pagehide", () => (leaving = true));
+  window.addEventListener("pageshow", () => (leaving = false)); // back from the back/forward cache
+}
 /** A lazy page whose file is gone (a new version went live while the tab was open) reloads the
  *  app once to fetch the new files; a second failure goes to the error boundary. */
 export function lazyPage(load: () => Promise<{ default: ComponentType }>) {
@@ -40,6 +51,7 @@ export function lazyPage(load: () => Promise<{ default: ComponentType }>) {
         return m;
       },
       (e: unknown) => {
+        if (leaving) return new Promise<{ default: ComponentType }>(() => {});
         let first = false;
         try {
           first = !sessionStorage.getItem(RELOADED) && navigator.onLine !== false;

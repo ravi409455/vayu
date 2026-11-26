@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.expert
 
+import androidx.compose.foundation.text.TextAutoSize
 import `in`.carcid.vayu.ui.noteRows
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -362,7 +363,7 @@ private fun JobRow(j: Job, today: LocalDate, d: Draft?, onOpen: (Job) -> Unit) {
             Column(Modifier.weight(1f)) {
                 // name "…" and status; the booking ID in full; car · type; then a note if there is one
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(j.customer.ifBlank { j.bookingId }, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 1,
+                    Text(j.customer.ifBlank { j.bookingId }, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 2,
                         overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     StatusDot(label, tone)
                 }
@@ -449,7 +450,9 @@ private fun Action(icon: ImageVector, label: String, modifier: Modifier, enabled
         val tint = if (enabled) Vayu.colors.ink else Vayu.colors.muted
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
         Spacer(Modifier.height(6.dp))
-        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = tint)
+        // at the largest text size the word shrinks to fit instead of breaking ("WhatsAp / p", F-2)
+        Text(label, fontWeight = FontWeight.SemiBold, color = tint, maxLines = 1, softWrap = false,
+            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 13.sp), modifier = Modifier.padding(horizontal = 4.dp))
     }
 }
 

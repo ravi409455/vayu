@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.components
 
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -159,8 +160,9 @@ fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit, mod
                 .background(if (on) Vayu.colors.bg else Color.Transparent)
                 .selectable(selected = on, role = Role.Tab, onClick = { onSelect(i) }),
                 contentAlignment = Alignment.Center) {
-                // a tab never breaks mid-word: one line, "…" if it can't fit
-                Text(label, style = MaterialTheme.typography.bodyLarge, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                // a tab never breaks mid-word: one line, smaller type at the largest text sizes (F-3, F-4)
+                Text(label, style = MaterialTheme.typography.bodyLarge, maxLines = 1, softWrap = false,
+                    autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 14.sp),
                     fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (on) Vayu.colors.ink else Vayu.colors.muted, modifier = Modifier.padding(horizontal = 4.dp))
             }

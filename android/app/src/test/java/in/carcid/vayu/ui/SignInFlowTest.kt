@@ -94,6 +94,25 @@ class SignInFlowTest {
         compose.waitUntil(5_000) { !java.io.File(root, "drafts-3").exists() }
     }
 
+    /** F-9: a booking Ops finished "without the missing files" doesn't block sign-out; any other unsent work does. */
+    @Test fun aBookingOpsFinishedDoesNotBlockSignOut() {
+        signedIn("expert")
+        val id = "00000000-0000-0000-0000-000000000001"
+        server.on("GET sync/jobs", """{"server_time":"2026-11-24T05:00:00Z","jobs":[${`in`.carcid.vayu.core.sync.job(id, stage = "completed")}]}""")
+        server.on("POST auth/logout", "", 204)
+        launch(); signIn(); waitFor("My leads")
+        compose.waitUntil(5_000) { graph.jobs(3).jobs().any { it.id == id } }
+        val waiting = `in`.carcid.vayu.core.draft.LocalFile("f1", "inspection", "front", "photo", "", "image/jpeg", "camera", 4, "", "Front 1")
+        graph.drafts(3).save(`in`.carcid.vayu.core.draft.Draft(id, "DEMO-1", "Farhan Ali", emptyMap(), "pdi", submitSent = true, files = listOf(waiting)))
+        graph.drafts(3).save(`in`.carcid.vayu.core.draft.Draft("00000000-0000-0000-0000-000000000002", "DEMO-2", "Arjun", emptyMap(), "pdi"))
+        compose.onNodeWithContentDescription("Profile").performClick()
+        compose.onNodeWithText("Sign out").performClick()
+        waitFor("Not sent yet: DEMO-2. Open Uploads to send, finish or discard it, then sign out.")
+        graph.drafts(3).discard("00000000-0000-0000-0000-000000000002")
+        compose.onNodeWithText("Sign out").performClick()
+        waitFor("Sign in")
+    }
+
     /** F-051: a draft file the phone can't read is never deleted by sign-out: sign-out says so and stops. */
     @Test fun aDraftThatCantBeReadStopsTheSignOut() {
         signedIn("expert")

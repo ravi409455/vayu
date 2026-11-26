@@ -131,12 +131,14 @@ fun Question(f: Field, value: Any?, required: Boolean, missing: Boolean, error: 
                 drawRect(bar, size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height)) }.padding(start = 16.dp) },
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (f.type != "image") Row {
-                Text(f.label, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Vayu.colors.ink)
-                if (required) Text(" *", fontWeight = FontWeight.SemiBold, color = Vayu.colors.bad,
+                // the label wraps; the star and "0 of 1" keep their width (F-1: "0/o/f/1" stacked)
+                Text(f.label, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Vayu.colors.ink,
+                    modifier = Modifier.weight(1f, fill = false))
+                if (required) Text(" *", fontWeight = FontWeight.SemiBold, color = Vayu.colors.bad, softWrap = false,
                     modifier = Modifier.semantics { contentDescription = "required" })
                 if (f.isMedia && f.type != "signature") {
                     val n = (value as? List<*>)?.size ?: 0
-                    Text("  $n of ${f.maxCount}", color = Vayu.colors.muted, fontSize = 13.sp)
+                    Text("  $n of ${f.maxCount}", color = Vayu.colors.muted, fontSize = 13.sp, softWrap = false, maxLines = 1)
                 }
             }
             Input(f, value, missing, readOnly, env, onChange)

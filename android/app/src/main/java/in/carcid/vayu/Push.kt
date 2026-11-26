@@ -141,23 +141,39 @@ class PushTokenWorker(context: Context, params: WorkerParameters) : CoroutineWor
     }
 }
 
-/** "In 1 hour: DEMO-8 at 11:00", 60 min before each job not started yet. */
+/**
+ * "In 1 hour: DEMO-8 at 11:00", 60 min before each job not started yet. An alarm that may fire in
+ * deep sleep (a delayed WorkManager job waits for the phone's next maintenance window: F-8).
+ */
 object Reminders {
     private const val TAG = "remind"
+    private const val PREFS = "vayu.reminders"
+
+    internal fun pending(ctx: Context, jobId: String, extras: Intent.() -> Unit = {}): PendingIntent =
+        PendingIntent.getBroadcast(ctx, 0, Intent(ctx, ReminderReceiver::class.java)
+            .setData(android.net.Uri.parse("vayu-remind:$jobId")).apply(extras),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
     /** Set from the saved jobs: every earlier reminder is replaced (moved, cancelled, reassigned jobs). */
     fun schedule(ctx: Context, graph: Graph, user: Int) {
-        val wm = WorkManager.getInstance(ctx)
-        wm.cancelAllWorkByTag(TAG)
-        reminders(graph.jobs(user).jobs(), Instant.now()).forEach { r ->
-            wm.enqueueUniqueWork("remind-${r.jobId}", ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<ReminderWorker>()
-                .addTag(TAG)
-                .setInitialDelay(Duration.between(Instant.now(), r.at).toMillis().coerceAtLeast(0), TimeUnit.MILLISECONDS)
-                .setInputData(workDataOf("job" to r.jobId, "user" to user, "title" to r.title, "body" to r.body)).build())
+        cancel(ctx)
+        val am = ctx.getSystemService(android.app.AlarmManager::class.java)
+        val set = reminders(graph.jobs(user).jobs(), Instant.now()).map { r ->
+            am.setAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, r.at.toEpochMilli(), pending(ctx, r.jobId) {
+                putExtra("job", r.jobId); putExtra("user", user); putExtra("title", r.title); putExtra("body", r.body)
+            })
+            r.jobId
         }
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putStringSet("set", set.toSet()).apply()
     }
 
-    fun cancel(ctx: Context) { WorkManager.getInstance(ctx).cancelAllWorkByTag(TAG) }
+    fun cancel(ctx: Context) {
+        WorkManager.getInstance(ctx).cancelAllWorkByTag(TAG)          // set by older builds
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val am = ctx.getSystemService(android.app.AlarmManager::class.java)
+        prefs.getStringSet("set", emptySet()).orEmpty().forEach { am.cancel(pending(ctx, it)) }
+        prefs.edit().clear().apply()
+    }
 }
 
 /**
@@ -171,17 +187,16 @@ fun forgetLeftovers(ctx: Context) {
     ctx.getSharedPreferences("vayu.stuck", Context.MODE_PRIVATE).edit().clear().apply()
 }
 
-class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-    override suspend fun doWork(): Result {
-        val job = inputData.getString("job") ?: return Result.success()
-        val graph = (applicationContext as VayuApp).graph
-        val owner = inputData.getInt("user", -1)
-        if (graph.signedInId() != owner) return Result.success()   // only the person it was set for
-        val title = inputData.getString("title").orEmpty(); val body = inputData.getString("body").orEmpty()
+class ReminderReceiver : android.content.BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val job = intent.getStringExtra("job") ?: return
+        val graph = (context.applicationContext as VayuApp).graph
+        val owner = intent.getIntExtra("user", -1)
+        if (graph.signedInId() != owner) return                  // only the person it was set for
+        val title = intent.getStringExtra("title").orEmpty(); val body = intent.getStringExtra("body").orEmpty()
         graph.localNotes(owner).add("reminder", title, body, job)
         graph.pushed()                                       // an open bell shows it at once
-        Notices.show(applicationContext, "remind-$job", title, body, job)
-        return Result.success()
+        Notices.show(context, "remind-$job", title, body, job)
     }
 }
 
