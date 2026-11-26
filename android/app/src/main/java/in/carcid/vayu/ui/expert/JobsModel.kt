@@ -104,9 +104,7 @@ class JobsModel(
         return s.jobs().flatMap { j ->
             s.changes(j.id).mapNotNull { row ->
                 val ch = (row["changes"] as? kotlinx.serialization.json.JsonObject).orEmpty()
-                fun pair(k: String) = (ch[k] as? kotlinx.serialization.json.JsonArray)?.map {
-                    (it as? kotlinx.serialization.json.JsonPrimitive)?.takeUnless { p -> p is kotlinx.serialization.json.JsonNull }?.content.orEmpty()
-                }
+                fun pair(k: String) = (ch[k] as? kotlinx.serialization.json.JsonArray)?.map { (it as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty() }
                 val who = "Ops"
                 when {
                     pair("inspection_date") != null || pair("inspection_time") != null -> {

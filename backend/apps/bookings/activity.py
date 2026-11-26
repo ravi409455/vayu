@@ -45,7 +45,7 @@ def _short(v):
 
 
 def _kept(k: str, v):
-    if k in SAFE_KEYS or k.startswith("check."):
+    if _plain(k):
         return v
     if isinstance(v, (list, tuple)) and len(v) == 2:
         return [_short(v[0]), _short(v[1])]
@@ -67,20 +67,25 @@ def forget_values(b) -> None:
     schedule / stage / assignment values, which say nothing about the customer."""
     rows = list(BookingActivity.objects.filter(booking=b))
     for row in rows:
-        row.changes = {k: v for k, v in row.changes.items()
-                       if k in SAFE_KEYS or k.startswith("check.")}
+        row.changes = {k: v for k, v in row.changes.items() if _plain(k)}
     BookingActivity.objects.bulk_update(rows, ["changes"])
 
 
-def for_user(b, user, since=None) -> list[dict]:
+def for_user(b, user, since=None, values: bool = True) -> list[dict]:
     """The timeline as this person may see it. Fail closed: a key (and its value) is shown only
     when the person may see that field at the booking's current stage; rows about an inspection
     form whose submissions they may not see are left out. ``since``: only what others did after it
-    (the phone's "what Ops changed" banner)."""
-    return for_bookings([b], user, since)[b.id]
+    (the phone's "what Ops changed" banner). ``values=False``: only the SAFE_KEYS values, as
+    before every value was kept: the phone's screens stay as they were; only the web shows the
+    old and new value of every change."""
+    return for_bookings([b], user, since, values)[b.id]
 
 
-def for_bookings(bookings, user, since=None) -> dict:
+def _plain(k: str) -> bool:
+    return k in SAFE_KEYS or k.startswith("check.")
+
+
+def for_bookings(bookings, user, since=None, values: bool = True) -> dict:
     """for_user of many bookings at once, in a fixed number of queries (the phone's sync, H-12)."""
     from apps.accounts.permissions import scope_for
     from apps.forms.access import hidden_inspection_forms
@@ -128,7 +133,8 @@ def for_bookings(bookings, user, since=None) -> dict:
             "at": row.at.isoformat(), "kind": row.kind,
             "by": None if row.actor is None else {"id": row.actor.pk, "role": row.actor.role,
                                                   "name": row.actor.name or row.actor.username},
-            "changes": {k: v for k, v in row.changes.items() if shown(b, row, k)},
+            "changes": {k: v for k, v in row.changes.items()
+                        if shown(b, row, k) and (values or _plain(k))},
             "keys": [k for k in row.keys if shown(b, row, k)],
         } for row in by_booking.get(b.id, [])[:200]
             if not (row.inspection_id and row.inspection.form_version.form_id in hidden_forms)]

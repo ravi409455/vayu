@@ -74,8 +74,9 @@ def payload(user, have: set[int], since, context, drafts: set[int] | None = None
                      "my_draft": str(draft.id) if draft else None,
                      "versions": {part: v.id if v else None for part, v in pinned.items()}})
     # what others changed, filtered exactly like the booking's history (fields the expert may not
-    # see are left out, with their old and new values)
-    timelines = activity.for_bookings(bookings, user, since=since) if since is not None else {}
+    # see are left out; values only for the schedule / stage / assignment keys, as before)
+    timelines = (activity.for_bookings(bookings, user, since=since, values=False)
+                 if since is not None else {})
     changes = [{"booking": str(b.id), "booking_id": b.booking_id, **row}
                for b in bookings for row in timelines.get(b.id, [])]
     lists = {ml.key: [{"key": i.key, "label": i.label}

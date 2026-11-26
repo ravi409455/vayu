@@ -178,3 +178,31 @@ def test_rows_about_a_form_whose_submissions_are_hidden_are_left_out(started):
     Form.objects.filter(pk=insp.form_version.form_id).update(submission_roles=["admin"])
     kinds = [r["kind"] for r in timeline(ienv.ops, booking)]
     assert "inspection_edited" not in kinds and "created" in kinds
+
+
+def test_the_phone_gets_the_timeline_without_the_new_values(env, make_user, login):
+    from rest_framework.test import APIClient
+
+    from apps.accounts.models import Role
+
+    b = create(env.ops).json()
+    env.ops.patch(f"/api/v1/bookings/{b['id']}", {"answers": {"customer_name": "Asha Rao"},
+                                                   "row_version": 0}, format="json")
+    make_user(Role.OPS, username="phoneops")
+    phone = APIClient()
+    phone.credentials(HTTP_AUTHORIZATION=f"Bearer {login(APIClient(), 'phoneops').json()['access']}")
+    top = timeline(phone, b)[0]
+    assert top["kind"] == "edited" and top["keys"] == ["customer_name"] and top["changes"] == {}
+    assert timeline(env.ops, b)[0]["changes"]["customer_name"][1] == "Asha Rao"   # the web
+
+
+def test_the_phones_ops_changed_banner_gets_no_new_values(env):
+    from apps.bookings.activity import for_user
+
+    b = create(env.ops).json()
+    env.ops.patch(f"/api/v1/bookings/{b['id']}", {"answers": {"customer_name": "Asha Rao"},
+                                                   "row_version": 0}, format="json")
+    from apps.bookings.models import Booking
+
+    ops = BookingActivity.objects.filter(kind="edited").get().actor
+    assert for_user(Booking.objects.get(pk=b["id"]), ops, values=False)[0]["changes"] == {}
