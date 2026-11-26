@@ -94,15 +94,17 @@ photos have no backup copy." with **Free space**; the photo itself is still kept
 | C7 same install signs back in, old device released, odometer photo verified | ✅ |
 | D1–D3 second expert on the phone sees nothing; Ravi's work back after | ✅ |
 | E1/E2 uninstall without sign-out: 7 copies + `.nomedia` stay | ✅ |
-| E3 share on WhatsApp from the Files app | **owner to do** |
+| E3 share on WhatsApp from the Files app | ✅ (owner, 2026-11-26) |
 | E4 reinstall refused while the old install holds work | ✅ |
 | E5 Admin sign-out devices → sign in → file-access screen again | ✅ |
 | E6 Found copies notice (TST-1018, 7 files, deleted 28 Nov) | ❌ then ✅: it showed only after an app restart; fixed in this PR (looks again when access is turned on), re-tested ✅ |
-| E7 Ops adds the shared files on the web | **owner to do** |
+| E7 Ops adds the shared files on the web | ✅ (owner, on TST-1028: added by ops, verified). Ops can add files only once the expert has **submitted** (existing rule): after an uninstall before submit, the booking must be submitted or reassigned first |
 | F2 date +2 days: found copies deleted, folder and notice gone | ✅ |
 | F1, F3 (+1 day keeps; discard removes at once), copies of sent/unsent files over days | automated tests only |
 | G phone full | not run (automated test only) |
 | E8 (second run) offline photo on TST-1015 → sign out with unsent work → **uninstall from the phone's own app-info screen** | ✅ server: signed out holding 1 draft / 1 file; copy and `.nomedia` stay; the phone's dialog has no "keep data" option (as designed) |
 | E9 reinstall refused → Admin sign-out → file access → "Found copies: TST-1015, 1 file" | ✅ (fixed the one-file wording: "Send it to Ops") |
+| E8 "Sent to Ops, delete now" → Cancel keeps all; → Delete | ✅ Cancel (me), Delete (owner): folder empty, index empty, notice gone |
+| Unexplained loss | Once (between 16:46 and 21:45) the TST-1015 found copy disappeared with nobody pressing Delete. Retest over USB and Wi-Fi: normal use plus a 30-minute watch, the app never deleted it. Likely outside the app (another tool on this Mac kept resetting the phone connection; Files by Google was open). Watch for it in the staging trial |
 Phone left with: Vayu debug (talks to this branch's server on port 8001), All files access on,
 date automatic, test PDF removed.
