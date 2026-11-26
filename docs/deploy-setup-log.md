@@ -511,11 +511,45 @@ test logins on the server from the fetched setting (Django `set_password`, value
 settings file inside the container, never printed): "passwords changed: 10".
 Checked: the old password is refused (`/api/v1/auth/login` → 401), the new one signs in (200).
 
-### Dependabot ✅ grouped (PR 30)
+### Dependabot ✅ grouped (now in PR 42)
 Its first run opened 6 PRs at once (Actions and the Node image), each a full CI run, which queued
 ahead of `main`'s CI. Closed them and cancelled their runs. New rule: one grouped PR a week for all
 GitHub Actions and one for all Docker images; no Node major jumps (stay on LTS), no Python minor
-jumps.
+jumps. Until PR 42 is merged, `main` still has the old rule (one PR per update, e.g. #43).
+
+### 3.8 · First bugs found on staging, and the "staging round" PR 42 🔄 (from session "bugs on staging")
+**PDF template preview failed** ("The server had a problem"). The preview draws the whole PDF
+inside the web request. A full PDI took 43 s on staging: 1 s data, 30 s fetching ~150 photos one by
+one (a new storage client each time), 12 s drawing. That is past gunicorn's 30 s limit, so the
+worker was killed. A bug in the log formatter (request path empty) then hid the real error behind
+a `TypeError`. Measured on staging with 40 photos:
+
+| How the photos are fetched | Time |
+|---|---|
+| one by one, a new storage client each | 7.2 s |
+| one by one, one client | 4.7 s |
+| one client, 8 at a time | 0.8 s |
+
+**PR 42 "Staging round"** (combines PRs 30, 39, 40 and 41, which are closed):
+- `secrets.sh` trims spaces and line breaks around Phase values, never names (a spaced name is
+  refused, so it can't shadow a real setting).
+- Dependabot grouped (above).
+- gunicorn timeout 120 s (setting `GUNICORN_TIMEOUT`); the access log survives an empty path.
+- Photos fetched 8 at a time over one storage client, one database query per photo grid: faster
+  preview and faster final PDF.
+- CI on `main`: a newer merge cancels the older run.
+- Deploy queues per job: staging deploys one at a time and a running deploy is never cut off;
+  production has its own queue, so a run waiting for **Approve** no longer blocks staging.
+- `deploy.sh` never goes backwards by accident: an older commit is skipped (a `::warning::` in
+  GitHub). A hand-started run (Run workflow) is sent as `<commit> rollback` and may go back. A
+  damaged `.deployed` or a git error stops the deploy. Tested against a real clone: older skipped;
+  rollback, same commit and newer go through; extra words refused.
+After it deploys, the preview is timed again on staging (result to be added here).
+
+**Phone sign-in of the test logins:** 7 of 9 phone logins sign in with the current password;
+`ops` and `expert` answer 409 `DEVICE_HAS_UNSYNCED_DATA` (signed in from the server as a test
+"phone"; one phone per person). Fix when needed: an Admin signs that phone out (web → Users →
+the person → Sign out phones), or `revoke_devices` on the server.
 
 ---
 
@@ -611,9 +645,10 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 
 | Item | When |
 |---|---|
-| Forms, reports, staff and test data on staging (`setup_platform`, `seed_test_data`) | next |
-| Merge PR 30 (trim values; Dependabot grouped) | when its CI is green |
-| Every deploy run waits for production Approve: cancel it until production exists | until Phase 7 |
+| Merge PR 42 (staging round), then PR 37 (this log, resource recorder); close #43 after 42 | when CI is green |
+| Time the PDF preview on staging after PR 42 deploys | after the merge |
+| Phase 4: rehearse a rollback (Actions → deploy → Run workflow → previous commit) | after the merges |
+| Every deploy run waits for production Approve: cancel it until production exists (after PR 42 it no longer blocks staging) | until Phase 7 |
 | 2.5c Restrict the Firebase API key | once "Vayu Staging" is on a phone (Phase 6) |
 | Phase 5: Better Stack uptime and heartbeats (`BACKUP_HEARTBEAT_URL`, `WORKERS_HEARTBEAT_URL` into Phase), DigitalOcean alerts, first restore drill | after the first deploy |
 | Phase Production environment: the rest of its values (table above) | Phase 7 |
