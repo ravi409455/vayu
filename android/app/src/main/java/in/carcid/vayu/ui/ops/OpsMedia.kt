@@ -263,6 +263,10 @@ internal fun MediaTile(env: OpsEnv, m: MediaItem, size: androidx.compose.ui.unit
         .semantics { contentDescription = "${m.kind} ${m.fieldKey}" }, contentAlignment = Alignment.Center) {
         img?.let { Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
         if (m.kind == "video") Icon(Icons.Outlined.PlayCircle, null, tint = Color.White, modifier = Modifier.size(30.dp))
+        if (m.hiddenFromCustomer) Text("Hidden", fontSize = 10.sp, color = Vayu.colors.warn, maxLines = 1,
+            modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).clip(RoundedCornerShape(6.dp))
+                .background(Vayu.colors.warnTint).padding(horizontal = 5.dp, vertical = 1.dp)
+                .semantics { contentDescription = "Hidden from customer" })
     }
 }
 
@@ -281,7 +285,11 @@ internal fun MediaViewer(env: OpsEnv, m: MediaItem, fieldLabel: String, onClose:
     Column(Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding()) {
         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             `in`.carcid.vayu.ui.expert.CloseButton("Back", onClose, tint = Color.White)
-            Text(fieldLabel, color = Color.White, fontWeight = FontWeight.Bold)
+            Column {
+                Text(fieldLabel, color = Color.White, fontWeight = FontWeight.Bold)
+                if (m.hiddenFromCustomer) Text("Hidden from customer: not in the report, its downloads or any ZIP",
+                    color = Vayu.colors.warnTint, fontSize = 12.sp)
+            }
         }
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             when {

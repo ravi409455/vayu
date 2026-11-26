@@ -114,7 +114,12 @@ def request_zip(booking, kind: str, excluded: list[str] | None = None,
     """The cached ZIP if there is a fresh one with the same left-out fields and files, else start
     building. Fields the requester may not see never go into their ZIP; [only]: the files it may
     hold (none given: every file)."""
-    excluded, only = sorted(excluded or []), sorted(only or [])
+    from apps.media.services import customer_hidden
+
+    # "Hide from customer" fields never go into any ZIP (owner, 2026-11-27); part of the cache
+    # key, so turning it on makes a fresh ZIP without them
+    excluded = sorted(set(excluded or []) | customer_hidden(booking))
+    only = sorted(only or [])
     z = MediaZip.objects.filter(booking=booking, kind=kind, excluded=excluded,
                                 only=only).order_by("-created_at").first()
     if z is not None and not failed(z) and fresh(z):

@@ -447,6 +447,9 @@ class Resolver:
             z = zips.request_zip(b, kind) if has else None
             return f"{settings.PUBLIC_BASE_URL}/zip/{zips.token_for(z.id)}" if z else None
         if name.startswith("photos."):
+            from apps.media.services import customer_hidden
+            if name[7:] in customer_hidden(b):              # partners are outside the company
+                return []
             return [media_storage.presign_get(a.key, None, ttl) for a in MediaAsset.objects.filter(
                 booking=b, status="verified", kind="photo",
                 field_key=name[7:]).order_by("created_at")]

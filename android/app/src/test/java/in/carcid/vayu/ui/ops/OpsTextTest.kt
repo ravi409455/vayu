@@ -143,4 +143,11 @@ class OpsTextTest {
             "ids":["a","b"],"of":5,"page":"Inspection","section":"Exterior"}""").jsonObject)
         assertEquals(listOf("a", "b"), row.ids); assertEquals(true, row.required); assertEquals("inspection.front", row.id)
     }
+
+    /** A "Hide from customer" file is tagged on the Ops Media screen. */
+    @Test fun aHiddenFromCustomerFileIsMarked() {
+        val rows = listOf("""{"id":"a","field_key":"pay","kind":"photo","status":"verified","hidden_from_customer":true}""",
+            """{"id":"b","field_key":"front","kind":"photo","status":"verified"}""").map { Json.parseToJsonElement(it).jsonObject }
+        assertEquals(listOf(true, false), `in`.carcid.vayu.core.ops.MediaItem.list(rows).map { it.hiddenFromCustomer })
+    }
 }

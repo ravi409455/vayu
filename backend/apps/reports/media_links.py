@@ -39,8 +39,9 @@ def url(token: str, link: str) -> str:
 
 def allowed_fields(src, link: str) -> set[str]:
     kind = LINKS[link][0]
+    hidden = src.customer_hidden
     return {k for k, f in src.fields.get("inspection", {}).items()
-            if f.type == kind and src.shown(f"inspection.{k}")}
+            if f.type == kind and src.shown(f"inspection.{k}") and k not in hidden}
 
 
 def named(src, link: str) -> list[str]:

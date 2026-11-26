@@ -2049,6 +2049,13 @@ label.btn.primary:hover {
   right: 6px;
   background: var(--panel);
 }
+/* a "Hide from customer" field's file: bottom left, so it never covers the other tags */
+.tile-tag.hidden-tag {
+  top: auto;
+  bottom: 26px;
+  background: var(--warn-tint);
+  color: var(--warn);
+}
 .tile-label {
   font-size: 12px;
   color: var(--ink-2);

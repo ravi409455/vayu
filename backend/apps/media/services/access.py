@@ -75,3 +75,26 @@ def hidden_fields(user: Any, booking: Booking) -> set[str]:
 
 def is_manager(user: Any, request: Request | None = None) -> bool:
     return scope_for(user, "media.manage", request) is not None
+
+
+def customer_hidden(booking: Booking) -> set[str]:
+    """Keys of the file fields marked "Hide from customer" (owner, 2026-11-27: payment and other
+    internal photos): never in the report, its download links, partner integrations or any ZIP;
+    only viewable in the app. The newest published version of each form decides, so turning it on
+    reaches older bookings too; a field it no longer has keeps its own version's setting."""
+    from apps.forms.models import FormVersion, VersionStatus
+
+    pinned = {v for i in booking.inspections.all() for v in i.pinned().values() if v is not None}
+    if not pinned:
+        return set()
+    newest = {}
+    for v in FormVersion.objects.filter(form_id__in={v.form_id for v in pinned},
+                                        status=VersionStatus.PUBLISHED).order_by("number"):
+        newest[v.form_id] = v                                  # highest number wins
+    hidden: dict[str, bool] = {}
+    # pinned first, then newest over it: the newest version's setting wins for a key it has
+    for versions in (pinned, set(newest.values()) - pinned):
+        for key, config in Field.objects.filter(version__in=versions, type__in=KINDS
+                                                ).values_list("key", "config"):
+            hidden[key] = (config or {}).get("hide_from_customer") is True
+    return {k for k, v in hidden.items() if v}
