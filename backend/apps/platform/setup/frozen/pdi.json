@@ -256,7 +256,8 @@
         "label": "Payment Screenshot",
         "config": {
          "max_count": 1,
-         "capture": "camera"
+         "capture": "camera",
+         "hide_from_customer": true
         },
         "required": true,
         "helper_text": "",

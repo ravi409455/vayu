@@ -112,7 +112,9 @@ def delay() -> list[dict]:
         {"key": "delay_pay_qr", "label": "CarCID QR Code", "type": "image",
          "config": {"asset": "@pay_qr"}, "required": False, "helper_text": "",
          "show_if": by_upi},
-        {**fields["payment_screenshot"], "key": "delay_payment_screenshot", "show_if": by_upi}]
+        # ours, never the customer's: not in the report, its downloads or a ZIP
+        {**fields["payment_screenshot"], "key": "delay_payment_screenshot", "show_if": by_upi,
+         "config": {**fields["payment_screenshot"]["config"], "hide_from_customer": True}}]
 
 
 def end() -> dict:
@@ -136,6 +138,7 @@ def end() -> dict:
                                       "show_if": upi})
             if f["key"] == "payment_screenshot":
                 f["show_if"] = upi
+                f["config"]["hide_from_customer"] = True      # ours, never the customer's
             if f["key"] == "taking_google_review":      # Clappia's "Google Review QR" picture
                 fields.insert(n + 1, {"key": "review_qr", "label": "Google Review QR",
                                       "type": "image", "config": {"asset": "@review_qr"},
