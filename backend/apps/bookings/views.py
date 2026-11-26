@@ -302,10 +302,15 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
 
     @action(detail=True, methods=["get"])
     def activity(self, request, pk=None):
-        """The booking's timeline, newest first (field keys hidden from this person left out)."""
+        """The booking's timeline, newest first (field keys hidden from this person left out).
+        Every old / new value goes to the web only; the phone (signed in with a token) gets the
+        timeline as before."""
+        from apps.accounts.authentication import DeviceJWTAuthentication
+
         from . import activity
 
-        return Response(activity.for_user(self.get_object(), request.user))
+        phone = isinstance(request.successful_authenticator, DeviceJWTAuthentication)
+        return Response(activity.for_user(self.get_object(), request.user, values=not phone))
 
     @action(detail=True, methods=["get"])
     def inspections(self, request, pk=None):

@@ -522,6 +522,7 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
     _check_files(actor, b, pinned, insp.answers, new, changed)
     keys = sorted(k for _, k in changed)
     if keys:
+        before = insp.answers
         insp.answers = new
         stamp(insp, actor, keys)
         insp.save()
@@ -529,8 +530,9 @@ def edit_inspection(actor, insp: Inspection, answers: dict, row_version: int) ->
         chassis = new["inspection"].get("chassis_no")
         if chassis is not None and b.chassis_no != chassis:
             Booking.objects.filter(pk=b.pk).update(chassis_no=chassis)
-        activity.log(b, actor, "inspection_edited", keys=[f"{p}.{k}" for p, k in changed],
-                     inspection=insp)
+        activity.log(b, actor, "inspection_edited",
+                     {f"{p}.{k}": [(before.get(p) or {}).get(k), new[p].get(k)]
+                      for p, k in changed}, inspection=insp)
         events.emit("inspection.updated", booking=str(b.id), inspection=str(insp.id), keys=keys)
     return insp
 

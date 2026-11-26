@@ -231,12 +231,15 @@ export function Canvas({
             <button type="button" className="icon-only" aria-label="Show pages" title="Show pages" onClick={() => fold(false)}>
               <PanelLeftOpen size={16} aria-hidden />
             </button>
+            <div className="rail-mini-title" aria-hidden>
+              Pages
+            </div>
             {pages.map((p, i) => (
               <button
                 key={p.id}
                 type="button"
                 className={`rail-num${p.id === page?.id ? " on" : ""}`}
-                title={p.title}
+                data-tip={p.title}
                 aria-label={`Page ${i + 1}: ${p.title}`}
                 onClick={() => {
                   onPage(p.id);
