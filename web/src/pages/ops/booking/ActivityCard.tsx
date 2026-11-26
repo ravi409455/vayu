@@ -92,9 +92,13 @@ export function activityDetails(
     if (typeof v === "object") return JSON.stringify(v);
     return String(v);
   };
-  return Object.entries(r.changes ?? {})
-    .filter(([k, v]) => !NOT_DETAIL.has(k) && Array.isArray(v) && v.length === 2)
-    .map(([k, [a, b]]) => `${label(k)}: ${show(k, a)} → ${show(k, b)}`);
+  return (
+    Object.entries(r.changes ?? {})
+      .filter(([k, v]) => !NOT_DETAIL.has(k) && Array.isArray(v) && v.length === 2)
+      // "Assigned to Ravi" already says it all; a reassignment still shows who had it before
+      .filter(([k, [a]]) => !(k === "assigned_expert" && (a === null || a === undefined)))
+      .map(([k, [a, b]]) => `${label(k)}: ${show(k, a)} → ${show(k, b)}`)
+  );
 }
 
 export function ActivityCard({
@@ -147,9 +151,15 @@ function ActivityLine({ text, details }: { text: string; details: string[] }) {
     <div>
       <InfoTip label="What changed" before={<span className="activity-line">{text}</span>}>
         <span className="activity-details">
-          {details.map((d, i) => (
-            <span key={i}>{d}</span>
-          ))}
+          {details.map((d, i) => {
+            const at = d.indexOf(": ");
+            return (
+              <span key={i}>
+                <strong>{d.slice(0, at)}</strong>
+                {d.slice(at)}
+              </span>
+            );
+          })}
         </span>
       </InfoTip>
     </div>

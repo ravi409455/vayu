@@ -55,10 +55,11 @@ describe("what changed, on hover", () => {
       "ok: No → Yes",
       "colours: red → red, blue",
     ]);
-    expect(details({ kind: "changed", changes: { assigned_expert: [null, 5], inspection_type: ["pdi", "ev"] } })).toEqual([
-      "assigned_expert: empty → Ravi",
+    expect(details({ kind: "changed", changes: { assigned_expert: [4, 5], inspection_type: ["pdi", "ev"] } })).toEqual([
+      "assigned_expert: Ravi → Ravi",
       "inspection_type: PDI → EV",
     ]);
+    expect(details({ kind: "changed", changes: { assigned_expert: [null, 5] } })).toEqual([]); // the line says it
   });
   it("leaves out what the line already says and rows with no values", () => {
     expect(details({ kind: "changed", changes: { stage: ["assigned", "in_progress"] } })).toEqual([]);
