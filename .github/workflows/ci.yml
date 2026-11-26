@@ -1,6 +1,7 @@
 name: ci
-# PRs run CI once (on the pull request); main runs on push. A newer push to the same PR cancels the
-# older run, so the runners only work on the latest commit.
+# PRs run CI once (on the pull request); main runs on push. A newer push to the same PR, or a newer
+# merge to main, cancels the older run: the runners only work on the latest commit, and only the
+# latest main commit reaches the deploy (a cancelled run deploys nothing).
 # Docs-only changes (Markdown anywhere, pictures and PDFs under docs/) skip the checks; any script or
 # data file, even under docs/, still runs CI. The skip is decided by the `changes` job, not by a path
 # filter under `on:`: a filtered-out workflow reports nothing, so `ci-result` could never be required.
@@ -11,7 +12,7 @@ on:
 permissions: {contents: read}
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 jobs:
   changes:
     runs-on: ubuntu-latest
