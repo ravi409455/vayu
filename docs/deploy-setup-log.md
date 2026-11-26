@@ -12,13 +12,15 @@ Status: ✅ done · 🔄 in progress · ⏳ not started
 | Phase | What | Status |
 |---|---|---|
 | 0 | Safety first: secrets home, 2-step login, SSH key | ✅ 2026-11-26 |
-| 1 | Code changes (PR 27) | ✅ written, waiting for merge |
+| 1 | Code changes (PR 27) | ✅ merged 2026-11-26 as `35fdec9` |
 | 2 | Accounts and dashboards | ✅ 2026-11-26 (2.5c, the Firebase key restriction, waits for the staging app) |
-| 3 | Staging server setup | ⏳ |
+| 3 | Staging server setup | 🔄 server ready, settings from Phase work; first deploy next |
 | 4 | Deploy pipeline | ⏳ |
 | 5 | Backups and alerts | ⏳ |
 | 6 | Prove staging | ⏳ |
 | 7 | Production | ⏳ |
+
+Quick links: [Where everything lives](#where-everything-lives) · [Open items](#open-items)
 
 ---
 
@@ -102,7 +104,7 @@ printf 'Host *\n  AddKeysToAgent yes\n  UseKeychain yes\n  IdentityFile ~/.ssh/i
 
 ---
 
-## Phase 1 · Code changes ✅ (in PR 27, not merged yet)
+## Phase 1 · Code changes ✅ (PR 27, merged as `35fdec9`)
 
 Branch `deploy/phase-1`, PR https://github.com/ravi409455/vayu/pull/27.
 - One address per server: `vayu.carcid.in`, `vayu-staging.carcid.in`; QR page
@@ -119,7 +121,17 @@ Branch `deploy/phase-1`, PR https://github.com/ravi409455/vayu/pull/27.
 - Security review fixes: CSP enforced by default, encrypted database link required, restore never
   writes the unlocked dump to disk.
 
-**Must be merged before Phase 3** (`bootstrap.sh` downloads the code from `main`).
+Added to PR 27 later the same day:
+- **Staging on demand**: `infra/staging.sh up | down | status` (snapshot → delete; re-create from
+  the snapshot); both servers sized for 2 vCPU / 4 GB.
+- **Settings from Phase**: `infra/secrets.sh` (run by every deploy), `infra/phase-staging.env` and
+  `infra/phase-production.env` (the non-secret values to import). Security review fixes: private
+  temp file, token blanked in error text, files created `0600`, secrets never on a command line.
+- **CI fixes**: database connections are kept only in production (the development server leaked
+  them and hung the browser tests); type fixes and a coverage test after PR 28 (`main` had gone red);
+  the made-up-token browser test uses `/report/verify/`; `google-services.json` lists Vayu Staging.
+
+Follow-up PR 30 (open): `secrets.sh` trims spaces and line breaks around values; Dependabot grouped.
 
 ---
 
@@ -433,7 +445,73 @@ Its first run opened 6 PRs at once (Actions and the Node image), each a full CI 
 ahead of `main`'s CI. Closed them and cancelled their runs. New rule: one grouped PR a week for all
 GitHub Actions and one for all Docker images; no Node major jumps (stay on LTS), no Python minor
 jumps.
+
+---
+
 ## Phase 4 · Deploy pipeline ⏳
 ## Phase 5 · Backups and alerts ⏳
 ## Phase 6 · Prove staging ⏳
 ## Phase 7 · Production ⏳
+
+---
+
+## Where everything lives
+
+**Never in this file, git or chat: values.** Names only.
+
+### Phase (console.phase.dev, organisation `CarCID`)
+| App → environment | Keys | Used by |
+|---|---|---|
+| `vayu` → Staging | the 24 non-secret values of `infra/phase-staging.env`; `DJANGO_SECRET_KEY`, `DB_PASSWORD`, `SENTRY_DSN`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (token `vayu-staging-app`), `BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY` (token `vayu-backups-staging`), `BACKUP_PUBLIC_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON` (the Mac's/staging's Firebase key) | the staging server, through `infra/secrets.sh` |
+| `vayu` → Production | **so far**: `SENTRY_DSN`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (token `vayu-prod-app`), `BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY` (token `vayu-backups-prod`), `BACKUP_PUBLIC_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON` (production's own key). **Still to add (Phase 7)**: import `infra/phase-production.env`, new `DJANGO_SECRET_KEY`, the managed database's `DB_PASSWORD` and `DB_HOST` | the production server |
+| `vayu` → Development | nothing yet | the Mac's local stack |
+| `vayu-owner` → Production | `ANDROID_KEYSTORE_B64`, `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, `SENTRY_DSN_WEB`, `SENTRY_DSN_ANDROID`, `SENTRY_AUTH_TOKEN` (`vayu-ci`), `DO_API_TOKEN` (`vayu-owner-laptop`), `OWNER_SSH_PRIVATE_KEY`, `BACKUP_AGE_SECRET_KEY` (unlocks backups; never on a server), `PHASE_TOKEN_STAGING_SERVER`, `DEPLOY_SSH_KEY_STAGING` | the owner |
+
+Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only**.
+
+### Not in Phase
+| What | Where |
+|---|---|
+| Phase sudo password, Phase recovery kit | Mac **Passwords** app + printed kit at the office |
+| Account passwords and 2-step recovery codes (GitHub, Google, Cloudflare, Sentry, GoDaddy, DigitalOcean, Phase) | Mac **Passwords** app |
+| SSH key passphrase | Mac **Passwords** app |
+| Android signing key, offline | USB stick at the office + private company Google Drive folder |
+| `~/vayu-keys/` on the Mac (owner only, FileVault) | `vayu-release.jks`, `keystore.properties` (release builds), `vayu-8bb7a-firebase-adminsdk-fbsvc-5905526895.json` (local stack) |
+| `~/.ssh/id_ed25519` on the Mac | owner SSH key |
+| `doctl` login on the Mac | `doctl auth init` (the `DO_API_TOKEN`) |
+| Staging server `/srv/vayu/.phase` | the server's Phase token (the only secret typed onto a server) |
+| Staging server `/srv/vayu/.env.staging`, `/srv/vayu/secrets/` | written by `secrets.sh` from Phase; never edited by hand |
+| GitHub → environment `staging` → secrets | `SSH_KEY`, `SSH_HOST`, `SSH_KNOWN_HOSTS` |
+| GitHub → repository → secrets / variables | secret `SENTRY_AUTH_TOKEN`; variables `SENTRY_ORG` (`car-cid`), `VITE_SENTRY_DSN` |
+| Cloudflare R2 API tokens | `vayu-staging-app`, `vayu-prod-app`, `vayu-backups-staging`, `vayu-backups-prod` (the old test token: deleted) |
+
+### Names and addresses (not secret)
+| What | Value |
+|---|---|
+| Staging | `https://vayu-staging.carcid.in` (droplet `vayu-staging`, BLR1, IP changes when re-made) |
+| Production | `https://vayu.carcid.in` (not created yet) |
+| Customer QR page | `https://<address>/report/verify/<code>` |
+| DNS | GoDaddy (`ns19/ns20.domaincontrol.com`) |
+| Sentry | organisation `car-cid`; projects `vayu-server`, `vayu-web`, `vayu-android`; alert `vayu production errors` → `#vayu-alerts` |
+| Firebase | project `vayu-8bb7a`; apps `in.carcid.vayu`, `in.carcid.vayu.staging` |
+| DigitalOcean | firewall `vayu-web` (by tag), tags `vayu-web`, `vayu-staging`; SSH key `owner-mac` |
+| GitHub | ruleset `main protect`; environments `staging`, `production` (reviewer `ravi409455`) |
+| Slack | `#vayu-alerts` (public, workspace "Car C.I.D") |
+
+---
+
+## Open items
+
+| Item | When |
+|---|---|
+| First staging deploy: starts by itself when `main`'s CI passes; then check the site, health page, workers | next |
+| Merge PR 30 (trim values; Dependabot grouped) | when its CI is green |
+| Merge PR 18 (this log and `docs/plan-deploy.md`): until then they exist only on the `docs/plan-deploy` branch | soon |
+| 2.5c Restrict the Firebase API key | once "Vayu Staging" is on a phone (Phase 6) |
+| Phase 5: Better Stack uptime and heartbeats (`BACKUP_HEARTBEAT_URL`, `WORKERS_HEARTBEAT_URL` into Phase), DigitalOcean alerts, first restore drill | after the first deploy |
+| Phase Production environment: the rest of its values (table above) | Phase 7 |
+| Production server's Phase service account (`vayu-prod-server`, Production only) and robot key | Phase 7 |
+| DigitalOcean API token `vayu-owner-laptop` expires (90 days) | around 2027-02-24 |
+| Phase service token `vayu-staging-server`: if it was given an expiry, note the date here | check |
+| CSP on staging: switch `CSP_HEADER` from report-only to enforced after a clean full run | Phase 6 |
+
