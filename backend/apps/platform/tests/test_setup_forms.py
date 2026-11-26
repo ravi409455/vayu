@@ -43,7 +43,7 @@ def put_all(admin, force=False) -> dict:
     lists.apply()
     out = {"booking": build.apply(admin, build.system_form("booking"), forms.booking(),
                                   force=force),
-           "start": build.apply(admin, build.system_form("start"), forms.start(), force=force),
+           "start": build.apply(admin, build.system_form("start"), forms.start(admin), force=force),
            "end": build.apply(admin, build.system_form("end"), forms.end(admin), force=force)}
     build.library(admin, forms.library(), force=force)
     for key, name, itype, _ in forms.INSPECTIONS:
@@ -261,6 +261,43 @@ def test_a_shared_section_never_depends_on_a_question_outside_it():
         check_self_contained("section", validate_section_definition(item["definition"]))
     for item in lib["fields"].values():
         check_self_contained("field", item["definition"])
+
+
+def test_a_late_start_has_its_own_page_after_check_in_with_the_wrap_ups_payment(admin):
+    """Owner, 2026-11-26: "Inspection 45 Minutes Delayed?" is a page of its own; on Yes the
+    payment is taken as on the wrap-up."""
+    from django.utils import timezone
+
+    from apps.forms.models import FormAsset, Page
+    from apps.forms.rules import evaluate_form, spec_from_version
+
+    put_all(admin)
+    v = Form.objects.get(type="start").versions.get(status="published")
+    pages = list(Page.objects.filter(version=v).order_by("order"))
+    assert [(p.title, p.gate) for p in pages] == [("Check-in", True), ("Inspection Delay", True)]
+    start = live_fields("start")
+    assert {k for k, f in start.items() if f.section.page_id == pages[0].id} == {
+        "selfie", "checkin_gps", "checkin_time"}
+    assert start["amount"].label == "Amount (Pending + 500)"
+    assert start["amount"].type == "number" and start["amount"].config == {"min": 500}
+    assert [o["label"] for o in start["payment_mode"].config["options"]] == ["Cash", "UPI"]
+    assert start["pay_qr"].config["asset"] == str(FormAsset.objects.get(name="Payment QR").id)
+    spec, today = spec_from_version(v), timezone.localdate().isoformat()
+    paying = ("amount", "payment_mode", "pay_qr", "payment_screenshot")
+
+    def shown(**answers) -> set[str]:
+        r = evaluate_form(spec, {"start": answers}, today)
+        return {k for k in paying if r.visible[k]}
+
+    assert shown(inspection_45_minutes_delayed="no") == set()
+    assert shown(inspection_45_minutes_delayed="yes") == {"amount", "payment_mode"}
+    assert shown(inspection_45_minutes_delayed="yes", payment_mode="cash") == {
+        "amount", "payment_mode"}
+    assert shown(inspection_45_minutes_delayed="yes", payment_mode="upi") == set(paying)
+    for key in ("pdi", "used_car", "ev"):               # the built-in chassis number is scanned
+        assert live_fields(key)["chassis_no"].config.get("scan") is True
+        if key != "ev":
+            assert live_fields(key)["engine_number"].config.get("scan") is None
 
 
 def test_system_fields_take_clappias_place_and_rules_point_at_our_keys(admin):

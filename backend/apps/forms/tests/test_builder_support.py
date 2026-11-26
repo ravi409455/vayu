@@ -100,6 +100,21 @@ def test_existing_selfies_are_set_to_front_by_the_data_fix(admin, staging):
     assert all(f.config.get("camera") == "front" for f in Field.objects.filter(key="selfie", is_system=True))
 
 
+def test_the_built_in_chassis_number_is_a_scan_field_and_old_ones_are_fixed(admin, staging):
+    import importlib
+
+    from django.apps import apps as live
+
+    from apps.forms.system_fields import SYSTEM_FIELDS
+    chassis = next(f for f in SYSTEM_FIELDS["custom"] if f["key"] == "chassis_no")
+    assert chassis["config"] == {"scan": True}
+    fix = importlib.import_module("apps.forms.migrations.0022_chassis_scan")
+    Field.objects.filter(key="chassis_no").update(config={})          # as made before the change
+    fix.scan(live, None)
+    found = Field.objects.filter(key="chassis_no", is_system=True)
+    assert found.exists() and all(f.config == {"scan": True} for f in found)
+
+
 # ---------------------------------------------------------------- drag reordering
 
 def test_reordering_pages_sections_and_fields_in_one_step(admin, staging):

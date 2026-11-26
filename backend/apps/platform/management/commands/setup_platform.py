@@ -86,7 +86,7 @@ class Command(BaseCommand):
             try:
                 report["booking"] = build.apply(admin, build.system_form("booking"),
                                                 forms.booking(), force=force)
-                report["start"] = build.apply(admin, build.system_form("start"), forms.start(),
+                report["start"] = build.apply(admin, build.system_form("start"), forms.start(admin),
                                               force=force)
                 report["end"] = build.apply(admin, build.system_form("end"), forms.end(admin),
                                             force=force)
