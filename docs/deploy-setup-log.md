@@ -329,7 +329,51 @@ Server SSH secrets per environment come in Phase 3 / 4.
 
 ---
 
-## Phase 3 · Staging server setup ⏳
+## Phase 3 · Staging server setup 🔄
+
+### Decision (2026-11-26): the server fetches its settings from Phase
+Instead of pasting ~15 secrets into a file on the server, every deploy runs `infra/secrets.sh`,
+which asks Phase (app `vayu`, environment Staging or Production) for all settings and writes the
+env file and the Firebase key file. The only secret on the server is one Phase service token in
+`/srv/vayu/.phase`. Change a secret: edit it in Phase, deploy again. Phase down: the last good
+settings stay. A missing value stops the deploy before anything changes. (PR 27, `b4d2681`;
+tested with a fake Phase: normal, `$`/`#` in secrets, missing value, Phase down, wrong file mode.)
+Free plan note: a service account can be limited to one environment, but read-only needs a paid
+plan; the token can also change that environment's secrets. Accepted: the server holds those
+secrets anyway.
+
+### 3.0 · Settings in Phase (owner) ⏳
+**a) Non-secret values.** Open `infra/phase-staging.env` (in the repo). Phase → app `vayu` → **New
+Secret** → **Import secrets** → paste the file → import into **Staging** only → **Preview Import**
+→ **Deploy**.
+
+**b) Two new secrets**, made on the Mac and pasted into Phase → `vayu` → Staging:
+
+| Key | Make it with |
+|---|---|
+| `DJANGO_SECRET_KEY` | `python3 -c "import secrets;print(secrets.token_urlsafe(50))" \| pbcopy` |
+| `DB_PASSWORD` | same command (a different value) |
+
+**c) The backup key pair** (`brew install age` once):
+```bash
+age-keygen 2>/dev/null | grep AGE-SECRET-KEY | pbcopy   # the UNLOCKING half
+```
+→ Phase `vayu-owner` → Production → `BACKUP_AGE_SECRET_KEY` (never on a server). Then:
+```bash
+pbpaste | age-keygen -y | pbcopy                         # the LOCKING half (not secret)
+```
+→ Phase `vayu` → Staging **and** Production → `BACKUP_PUBLIC_KEY`. Then `pbcopy < /dev/null`.
+
+**d) Check Staging holds:** the 24 imported values + `DJANGO_SECRET_KEY`, `DB_PASSWORD`,
+`SENTRY_DSN`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`,
+`BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY`, `BACKUP_PUBLIC_KEY`,
+`FIREBASE_SERVICE_ACCOUNT_JSON`.
+
+**e) The server's Phase key:** Access Control → Service Accounts → **Create Service Account**
+`vayu-staging-server` (role Service) → app `vayu` → **Access** → Service accounts → **Add service
+account** → environment **Staging only** → Access Control → Service Accounts → **Manage** →
+**+ Create Token** → copy the `pss_service:v2:…` token → Phase `vayu-owner` →
+`PHASE_TOKEN_STAGING_SERVER` (it goes on the server in 3.2).
 ## Phase 4 · Deploy pipeline ⏳
 ## Phase 5 · Backups and alerts ⏳
 ## Phase 6 · Prove staging ⏳
