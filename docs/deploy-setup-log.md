@@ -549,7 +549,7 @@ After it deploys, the preview is timed again on staging (result to be added here
 **Phone sign-in of the test logins:** 7 of 9 phone logins sign in with the current password;
 `ops` and `expert` answer 409 `DEVICE_HAS_UNSYNCED_DATA` (signed in from the server as a test
 "phone"; one phone per person). Fix when needed: an Admin signs that phone out (web → Users →
-the person → Sign out phones), or `revoke_devices` on the server.
+the person's ⋯ menu → **Sign out of every device**), or `revoke_devices` on the server.
 
 ---
 
