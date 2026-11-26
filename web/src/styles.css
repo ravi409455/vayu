@@ -932,6 +932,37 @@ div.field > .label-row > span:first-child {
   color: var(--ink);
   font-weight: 600;
 }
+/* folded pages: the page's name at once on hover or keyboard focus (a number alone says nothing) */
+.builder-cols.folded .rail {
+  z-index: 3;
+}
+.rail-mini-title {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 2px 0;
+}
+.rail-num {
+  position: relative;
+}
+.rail-num[data-tip]:hover::after,
+.rail-num[data-tip]:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  background: #101828;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 40;
+}
 .rail-title-row {
   display: flex;
   align-items: center;
