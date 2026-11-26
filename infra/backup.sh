@@ -3,7 +3,7 @@
 # label: "nightly" (the timer, the default) or e.g. "predeploy-abc1234" (deploy.sh).
 #
 # Encrypted with the LOCKING half of the backup key (BACKUP_PUBLIC_KEY, tool: age): this server can
-# make backups but cannot read them. The unlocking half lives in Bitwarden only.
+# make backups but cannot read them. The unlocking half lives in Phase only.
 # The bucket keeps every backup for 30 days whatever anyone does (bucket lock) and deletes it
 # after 35 (lifecycle rule). Only the nightly run pings the uptime checker: no ping, Slack alert.
 # shellcheck source=infra/lib.sh

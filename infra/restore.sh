@@ -5,7 +5,7 @@
 #                                         print the biggest tables next to the live ones; nothing live changes
 #   infra/restore.sh <name> --into-live   disaster only: replace the live database with the backup.
 #                                         Stop the app first (runbook); asks you to type the server name.
-# You paste the backup UNLOCKING key (AGE-SECRET-KEY-..., from Bitwarden) when asked; it is never stored.
+# You paste the backup UNLOCKING key (AGE-SECRET-KEY-..., from Phase) when asked; it is never stored.
 # shellcheck source=infra/lib.sh
 source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 

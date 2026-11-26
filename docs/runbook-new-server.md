@@ -25,7 +25,7 @@ Every customer QR link is `https://<address>/report/verify/<code>`.
    `deploy` user, swap on small servers, UTC clock, the code in `/srv/vayu`, the nightly backup
    timer. After it, `root` and passwords can't log in: `ssh deploy@<address>`.
 3. Env file: copy `.env.example` to `/srv/vayu/.env.staging` (or `.env.prod`), set the
-   non-secret values, then paste each secret from Bitwarden (`nano`). Then `chmod 600` it.
+   non-secret values, then paste each secret from Phase (`nano`). Then `chmod 600` it.
    Avoid `$` in secrets (Docker Compose reads it as a variable).
 4. Firebase file (from the laptop):
    ```bash
@@ -43,7 +43,7 @@ Every customer QR link is `https://<address>/report/verify/<code>`.
    GitHub → Settings → Environments → `staging` (or `production`) → secrets: `SSH_KEY` (the
    private file), `SSH_HOST` (the address) and `SSH_KNOWN_HOSTS` (the output of
    `ssh-keyscan -t ed25519 <address>`, run once you trust the server). Save the private file in
-   Bitwarden, then delete both files from the laptop.
+   Phase, then delete both files from the laptop.
 6. First deploy: GitHub → Actions → deploy → Run workflow → the latest commit id of `main`
    (or merge anything to `main`). Caddy gets the https certificate by itself.
 7. Check: `curl -fsS https://<address>/api/v1/health` → `{"status": "ok"}` (database, Redis,
@@ -67,10 +67,10 @@ C exec api rm /tmp/staff.csv /tmp/staff.csv.passwords
   the file. Everyone changes their password at first sign-in.
 - Running it again only adds what is missing. `--force --confirm <VAYU_SERVER_NAME>` publishes the
   setup's forms and templates again as new versions (it stops if an Admin has a draft open).
-- **Staging only**, test bookings (a random 20+ character password from Bitwarden: staging is on the
+- **Staging only**, test bookings (a random 20+ character password from Phase: staging is on the
   open internet and the code is public):
   ```bash
-  C exec api python manage.py seed_test_data --confirm staging-1 --password '<from Bitwarden>'
+  C exec api python manage.py seed_test_data --confirm staging-1 --password '<from Phase>'
   ```
   It refuses on production (server kind, real bookings).
 
@@ -135,7 +135,7 @@ code safe without touching the database.
 infra/restore.sh                       # list
 infra/restore.sh <name>                # load into a throwaway database, compare row counts
 ```
-It asks for the backup unlocking key (Bitwarden), loads the dump into a temporary Postgres
+It asks for the backup unlocking key (Phase), loads the dump into a temporary Postgres
 container on the same server, prints the biggest tables of the backup and of the live database,
 then deletes the container. Record each drill below.
 
