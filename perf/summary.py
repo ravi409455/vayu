@@ -32,8 +32,9 @@ def summary(run: str) -> str:
             if c is None:
                 cells.append("–")
                 continue
-            cells.append(("PASS " if c["pass"] else "**FAIL** ") + str(c["measured"]))
-            if not c["pass"] and check not in first_break:
+            word = "N/A " if c["pass"] is None else "PASS " if c["pass"] else "**FAIL** "
+            cells.append(word + str(c["measured"]))
+            if c["pass"] is False and check not in first_break:
                 first_break[check] = s["mult"]
         lines.append(f"| {check} | " + " | ".join(cells) + " |")
     held = [s["mult"] for s in steps if s["pass"]]

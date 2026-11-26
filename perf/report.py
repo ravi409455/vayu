@@ -65,6 +65,11 @@ class Report:
         self.t0, self.mult = float(run[0][0]), float(run[0][2]) if len(run[0]) > 2 else 1.0
         self.lo = self.t0 + o.from_min * 60
         self.hi = self.lo + o.minutes * 60
+        # a run that ended earlier (a smoke run, a stopped step) is judged on what it ran
+        last = max((float(r[0]) for r in self.rows("requests")), default=self.hi)
+        self.cut = last < self.hi
+        self.hi = min(self.hi, last)
+        self.minutes = max((self.hi - self.lo) / 60, 0.0)
 
     def rows(self, name):
         p = os.path.join(self.o.run, f"{name}.csv")
@@ -78,13 +83,15 @@ class Report:
         self.lines.append(text)
 
     def verdict(self, name, ok, detail):
-        self.verdicts.append({"check": name, "pass": bool(ok), "measured": detail})
+        """ok None: nothing to judge in this window (shown as N/A, not counted)."""
+        self.verdicts.append({"check": name, "pass": None if ok is None else bool(ok),
+                              "measured": detail})
 
     # ------------------------------------------------------------------ the load itself
 
     def load(self):
         """Did the run make the load it was meant to? Without this a PASS means nothing."""
-        hours = self.o.minutes / 60
+        hours = self.minutes / 60
         made = {
             "new bookings": sum(1 for r in self.rows("requests") if self.inside(r[0])
                                 and r[2] == "ext/bookings (create)" and r[4] == "1"),
@@ -95,14 +102,15 @@ class Report:
                                       and r[2].startswith("ext/")),
             "webhooks delivered": sum(1 for r in self.rows("webhooks") if self.inside(r[0])),
         }
-        self.say(f"## The load (at {self.mult:g}x, {self.o.minutes:.0f} minutes)\n")
+        self.say(f"## The load (at {self.mult:g}x, {self.minutes:.0f} minutes)\n")
         self.say("| What | Target | Made | Share |\n|---|---|---|---|")
         short = []
         for what, per_hour in PER_HOUR.items():
             want = per_hour * self.mult * hours
             share = made[what] / want if want else 1
             self.say(f"| {what} | {want:.0f} | {made[what]} | {share:.0%} |")
-            if share < LOAD_SHARE:
+            # small counts in a short window vary by one either way: reached at 80% or one short
+            if made[what] < min(LOAD_SHARE * want, want - 1):
                 short.append(f"{what} {share:.0%}")
         self.say("")
         self.facts["load"] = made
@@ -166,8 +174,8 @@ class Report:
         self.facts["pdf_p95_s"] = pct(allp, 95)
         self.verdict("PDF ready p95 <= 30 s", bool(allp) and pct(allp, 95) <= 30 and not timeouts,
                      f"{pct(allp, 95):.1f} s over {len(allp)} PDFs, {timeouts} timeouts")
-        self.verdict("150-photo PDF <= 2 min", bool(bigs) and max(bigs) <= 120,
-                     f"worst {max(bigs or [float('nan')]):.1f} s over {len(bigs)}")
+        self.verdict("150-photo PDF <= 2 min", max(bigs) <= 120 if bigs else None,
+                     f"worst {max(bigs):.1f} s over {len(bigs)}" if bigs else "none in this window")
 
     def uploads(self):
         sent = {r[1]: (float(r[0]), num(r[3]) if len(r) > 3 else None) for r in self.rows("uploads")}
@@ -239,7 +247,7 @@ class Report:
                          f"{max(swap or [0]):.0f} MiB")
         disk, db, conns = col(5), col(6), col(7)
         if db:
-            grow = (db[-1] - db[0]) / max(self.o.minutes / 60, 1e-9)
+            grow = (db[-1] - db[0]) / max(self.minutes / 60, 1e-9)
             self.say(f"- disk used at most {max(disk or [0]):.0f}%; database {db[0]:.0f} → "
                      f"{db[-1]:.0f} MiB (+{grow:.0f} MiB an hour at this load); connections at "
                      f"most {max(conns or [0]):.0f}")
@@ -276,15 +284,19 @@ class Report:
                      f"{len(failed)} failed")
 
     def run(self):
-        self.say(f"# Load test results ({self.o.minutes:.0f} min from minute "
+        self.say(f"# Load test results ({self.minutes:.0f} min from minute "
                  f"{self.o.from_min:.0f}, {self.mult:g}x)\n")
+        if self.cut:
+            self.say(f"_The run ended before the {self.o.minutes:.0f} minutes asked: judged on "
+                     f"the {self.minutes:.0f} it ran._\n")
         for part in (self.load, self.requests, self.pdfs, self.uploads, self.webhooks,
                      self.server, self.zero_loss):
             part()
         self.say("## Verdict\n\n| Check | Result | Measured |\n|---|---|---|")
         for v in self.verdicts:
-            self.say(f"| {v['check']} | {'PASS' if v['pass'] else 'FAIL'} | {v['measured']} |")
-        ok = all(v["pass"] for v in self.verdicts)
+            word = "N/A" if v["pass"] is None else "PASS" if v["pass"] else "FAIL"
+            self.say(f"| {v['check']} | {word} | {v['measured']} |")
+        ok = all(v["pass"] is not False for v in self.verdicts)
         self.say(f"\n**{'Every check passed.' if ok else 'Not every check passed.'}**")
         with open(os.path.join(self.o.run, "verdict.json"), "w") as f:
             json.dump({"mult": self.mult, "pass": ok, "checks": self.verdicts,

@@ -307,7 +307,7 @@ except (OSError, ValueError):
     why.append("no results for this step")
     v = {"checks": []}
 for c in v["checks"]:              # real failures (plan §5); a slow answer alone is only recorded
-    if not c["pass"] and c["check"].split(" ")[0] in ("errors", "work", "load"):
+    if c["pass"] is False and c["check"].split(" ")[0] in ("errors", "work", "load"):
         why.append(f"{c['check']}: {c['measured']}")
 cont = open(os.path.join(step, "server-containers.txt")).read() \
     if os.path.exists(os.path.join(step, "server-containers.txt")) else ""
