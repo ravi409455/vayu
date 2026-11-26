@@ -17,7 +17,6 @@ on:
         description: Full commit id on main to deploy (its images must exist, i.e. it was built before)
         required: true
 permissions: {contents: read}
-concurrency: {group: deploy, cancel-in-progress: false}   # one release at a time, in order
 env:
   REGISTRY: ghcr.io/${{ github.repository_owner }}
 
@@ -95,6 +94,9 @@ jobs:
     if: needs.build.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     environment: {name: staging, url: "https://vayu-staging.carcid.in"}
+    # one staging deploy at a time. A running deploy is never cut off (deploy.sh would stop
+    # half-way on the server); of the runs waiting behind it GitHub keeps only the newest.
+    concurrency: {group: deploy-staging, cancel-in-progress: false}
     steps:
       - &ssh-deploy
         name: deploy over SSH (the key can only run infra/deploy.sh <commit>)
@@ -103,17 +105,21 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           SHA: ${{ needs.build.outputs.sha }}
+          # started by hand = a rollback, which may go back to an older commit; a merge never does
+          MODE: ${{ github.event_name == 'workflow_dispatch' && 'rollback' || '' }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/key && chmod 600 ~/.ssh/key
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts   # the server's own key: no man in the middle
           ssh -i ~/.ssh/key -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
-            "deploy@$SSH_HOST" "$SHA" \
+            "deploy@$SSH_HOST" "$SHA${MODE:+ $MODE}" \
             || { echo "::error::Deploy failed. Staging is on demand: if it is off, run infra/staging.sh up, then this workflow again."; exit 1; }
 
   production:
     needs: [build, staging]
     runs-on: ubuntu-latest
     environment: {name: production, url: "https://vayu.carcid.in"}   # waits for the owner's Approve
+    # its own queue: a run waiting for Approve no longer holds up the next staging deploy
+    concurrency: {group: deploy-production, cancel-in-progress: false}
     steps:
       - *ssh-deploy

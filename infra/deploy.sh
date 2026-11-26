@@ -19,13 +19,29 @@ fi
 # shellcheck source=infra/lib.sh
 source "$VAYU_INFRA/lib.sh"
 
-SHA="${SSH_ORIGINAL_COMMAND:-${1:-}}"
+# "<commit>" or "<commit> rollback" (a rollback started by hand may go back to an older commit)
+read -r SHA MODE EXTRA <<<"${SSH_ORIGINAL_COMMAND:-$*}"
 [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || die "give the full 40-character commit id"
+[[ -z "${MODE:-}" || "$MODE" == rollback ]] && [[ -z "${EXTRA:-}" ]] || die "usage: deploy.sh <commit> [rollback]"
 
 git fetch --quiet origin main
 git merge-base --is-ancestor "$SHA" origin/main || die "$SHA is not on main"
 
 PREV=$(cat .deployed 2>/dev/null || true)
+
+# Never backwards by accident: two merges close together can finish their builds out of order, and
+# the older one must not replace the newer one. Only a rollback started by hand goes back.
+if [[ -n "$PREV" && "${MODE:-}" != rollback ]]; then
+  git cat-file -e "$PREV^{commit}" 2>/dev/null || die ".deployed holds '$PREV', not a commit: check it"
+  rc=0; git merge-base --is-ancestor "$PREV" "$SHA" || rc=$?
+  case $rc in
+    0) ;;                                                   # newer (or the same): deploy
+    1) # the ::warning:: line shows in GitHub's run summary, so a skip is never mistaken for a deploy
+       echo "::warning::Deploy skipped: ${SHA:0:7} is older than the live ${PREV:0:7} (a rollback is started by hand)"
+       exit 0 ;;
+    *) die "could not compare ${PREV:0:7} with ${SHA:0:7} (git error $rc)" ;;
+  esac
+fi
 
 # the server's settings, fresh from Phase (a secret changed there arrives with this deploy)
 bash "$VAYU_INFRA/secrets.sh"
