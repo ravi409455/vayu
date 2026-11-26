@@ -342,7 +342,7 @@ Free plan note: a service account can be limited to one environment, but read-on
 plan; the token can also change that environment's secrets. Accepted: the server holds those
 secrets anyway.
 
-### 3.0 · Settings in Phase (owner) ⏳
+### 3.0 · Settings in Phase (owner) ✅
 **a) Non-secret values.** Open `infra/phase-staging.env` (in the repo). Phase → app `vayu` → **New
 Secret** → **Import secrets** → paste the file → import into **Staging** only → **Preview Import**
 → **Deploy**.
@@ -374,6 +374,35 @@ pbpaste | age-keygen -y | pbcopy                         # the LOCKING half (not
 account** → environment **Staging only** → Access Control → Service Accounts → **Manage** →
 **+ Create Token** → copy the `pss_service:v2:…` token → Phase `vayu-owner` →
 `PHASE_TOKEN_STAGING_SERVER` (it goes on the server in 3.2).
+
+### 3.1 · Server set up with `infra/bootstrap.sh` ✅ (Claude, 2026-11-26)
+```bash
+ssh root@139.59.39.207 'bash -s' < infra/bootstrap.sh      # once, from the laptop
+```
+Result, checked afterwards:
+- `root` and passwords can no longer log in (both refused); log in as `deploy@<staging>`.
+- `deploy`: Docker (29.10, Compose 5.8) and logs; no admin rights (it has no password).
+- Firewall on the server too (22, 80, 443); automatic security updates on; 2 GB swap; clock UTC.
+- Code in `/srv/vayu` (from `main`); `/srv/vayu/secrets` readable by `deploy` only.
+- Nightly backup timer enabled (20:30 UTC = 02:00 IST).
+- The server's own SSH fingerprint: `SHA256:yOMBc1Z3D4XpkN6a7LGHAREreTlKmgOAAkrKZxQSjoQ` (the same
+  as at the first connection; it stays the same when staging is re-made from its snapshot).
+
+### 3.2 · GitHub robot key ✅ installed on the server / ⏳ owner: GitHub + Phase
+A key pair made for GitHub Actions only. Its public half is in the server's
+`~/.ssh/authorized_keys`, locked: `command="/srv/vayu/infra/deploy.sh",restrict ssh-ed25519 …
+github-deploy-staging`: it can only run the deploy script, nothing else.
+Owner: private half → GitHub environment `staging` secret `SSH_KEY` and Phase `vayu-owner` →
+`DEPLOY_SSH_KEY_STAGING`; `SSH_HOST` = `vayu-staging.carcid.in`; `SSH_KNOWN_HOSTS` = the server's
+fingerprint line (so GitHub can't be fooled into deploying to another machine). Then the key files
+on the laptop are deleted.
+
+### 3.3 · The server's Phase key ⏳ (owner)
+`/srv/vayu/.phase` on the server (chmod 600):
+```
+PHASE_ENV=Staging
+PHASE_SERVICE_TOKEN=<PHASE_TOKEN_STAGING_SERVER from Phase>
+```
 ## Phase 4 · Deploy pipeline ⏳
 ## Phase 5 · Backups and alerts ⏳
 ## Phase 6 · Prove staging ⏳
