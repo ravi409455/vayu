@@ -225,15 +225,19 @@ class OpsFlowTest {
     }
 
     @Test fun needsYouListsAReportOutOfDate() {
-        server.on("GET problems/reports", """[{"booking":"$B6","booking_id":"DEMO-6","status":"ready","error":"","problem":"out_of_date","out_of_date_since":"${TODAY}T10:05:00+05:30"},
-            {"booking":"$B14","booking_id":"DEMO-14","status":"failed","error":"Renderer crashed","problem":"failed","out_of_date_since":null}]""")
+        server.on("GET problems/reports", """[{"booking":"$B6","booking_id":"DEMO-6","status":"ready","error":"","problem":"out_of_date","out_of_date_since":"${TODAY}T10:05:00+05:30","at":"${TODAY}T10:05:00+05:30"},
+            {"booking":"$B14","booking_id":"DEMO-14","status":"failed","error":"Renderer crashed","problem":"failed","out_of_date_since":null,"at":"${TODAY}T09:15:00+05:30"}]""")
         server.on("GET bookings", """{"count":0,"results":[]}""")                     // nothing else needs Ops
         show()
         compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).performClick()
         waitFor("Report out of date for DEMO-6")
-        waitFor("Since today")                                                    // when it went out of date
+        waitFor("TODAY")                                                          // grouped by the day it went wrong
+        // when it went wrong, on this machine's clock (CI runs on UTC)
+        fun clock(iso: String) = `in`.carcid.vayu.ui.clockOf(java.time.OffsetDateTime.parse(iso).atZoneSameInstant(java.time.ZoneId.systemDefault()))
+        waitFor(clock("${TODAY}T10:05:00+05:30"))
         waitFor("Report failed for DEMO-14")                                      // a failed row stays a failure
+        waitFor(clock("${TODAY}T09:15:00+05:30"))
     }
 
     /** F-222: a booking whose phone time wasn't checked says so, and Needs you lists this week's ones. */
@@ -490,7 +494,8 @@ class OpsFlowTest {
         compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(androidx.compose.ui.test.hasContentDescription("Notifications, ", substring = true)).performClick()
         waitFor("DEMO-8: started 40 min late")
-        compose.onNodeWithText("STARTED LATE · 1").assertIsDisplayed()
+        compose.onNodeWithText("Started late").assertIsDisplayed()               // its category under the title
+        compose.onNodeWithText("11:40", substring = true).assertIsDisplayed()     // booked 11:00, started 40 min late
         compose.onNodeWithText("DEMO-8: started 40 min late").performClick()
         waitFor("Limit: start within 15 min of the booked time.")
         shot("ops_booking_late")

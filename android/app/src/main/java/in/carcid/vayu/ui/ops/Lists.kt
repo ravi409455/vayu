@@ -288,6 +288,7 @@ const val NOT_FILLED = "__none__"
 fun NeedsYouScreen(env: OpsEnv, loaded: List<Need>?, onBack: () -> Unit, onOpen: (String) -> Unit,
                    updates: `in`.carcid.vayu.ui.BellState = `in`.carcid.vayu.ui.BellState(), onRead: (List<Long>?) -> Unit = {}) {
     val problems = loaded.orEmpty()
+    val zone = java.time.ZoneId.systemDefault()
     var tab by rememberSaveable { mutableStateOf(0) }
     val unseen = updates.notes.count { !it.read }
     // looking at Updates counts as reading them (the dots stay until the next visit)
@@ -308,18 +309,18 @@ fun NeedsYouScreen(env: OpsEnv, loaded: List<Need>?, onBack: () -> Unit, onOpen:
             }
             else if (loaded == null) item { Text("Loading…", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
             else if (problems.isEmpty()) item { Text("All clear. Nothing needs you right now.", color = Vayu.colors.muted, modifier = Modifier.padding(vertical = 24.dp)) }
-            else problems.groupBy { it.group }.forEach { (group, list) ->
-              if (group.isNotBlank()) item(key = "h$group") {
-                Section("$group · ${list.size}")
-              }
+            // newest first, one heading per day (like Updates); a problem with no known time goes last
+            else problems.sortedByDescending { it.at }.groupBy { it.at?.atZone(zone)?.toLocalDate() }.forEach { (day, list) ->
+              item(key = "h$day") { `in`.carcid.vayu.ui.DayHeading(day, env.today()) }
               items(list, key = { it.key }) { n ->
-                Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).clickable(role = Role.Button) { onOpen(n.booking) },
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(Modifier.size(10.dp).clip(CircleShape).background(toneColor(n.tone)))
+                Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(role = Role.Button) { onOpen(n.booking) }.padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.padding(top = 6.dp).size(8.dp).clip(CircleShape).background(toneColor(n.tone)))
                     Column(Modifier.weight(1f)) {
-                        Text(n.title, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
-                        Text(n.meta, fontSize = 13.sp, color = Vayu.colors.muted)
+                        Text(n.title, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(n.group, fontSize = 13.sp, color = Vayu.colors.muted, maxLines = 1)
                     }
+                    n.at?.let { Text(`in`.carcid.vayu.ui.clockOf(it.atZone(zone)), fontSize = 12.sp, color = Vayu.colors.muted) }
                 }
                 HorizontalDivider(color = Vayu.colors.line)
               }
@@ -328,8 +329,21 @@ fun NeedsYouScreen(env: OpsEnv, loaded: List<Need>?, onBack: () -> Unit, onOpen:
     }
 }
 
-/** One thing that needs a person (web: lib/problems.ts); [group] is its heading in the bell. */
-data class Need(val key: String, val booking: String, val tone: Tone, val title: String, val meta: String, val group: String = "")
+/**
+ * One thing that needs a person (web: lib/problems.ts): its title, its category ([group]) and
+ * when it became a problem ([at]; null when not known). Needs you groups them by that day.
+ */
+data class Need(val key: String, val booking: String, val tone: Tone, val title: String, val group: String,
+                val at: java.time.Instant? = null)
+
+/** A server time ("2026-11-24T10:05:00Z" or with an offset) as an instant; null when blank or odd. */
+fun instantOf(iso: String?): java.time.Instant? =
+    iso?.takeIf { it.isNotBlank() }?.let { runCatching { java.time.OffsetDateTime.parse(it).toInstant() }.getOrNull() }
+
+/** A booking's booked date and time on this phone's clock; null when either is missing. */
+fun bookedAt(b: Bk): java.time.Instant? = runCatching {
+    java.time.LocalDate.parse(b.date).atTime(java.time.LocalTime.parse(b.time)).atZone(java.time.ZoneId.systemDefault()).toInstant()
+}.getOrNull()
 
 /** Every problem queue as one list, in groups, most urgent group first; null when none could be read (no signal, nothing saved): keep what shows. */
 suspend fun loadNeeds(env: OpsEnv): List<Need>? {
@@ -347,26 +361,27 @@ suspend fun loadNeeds(env: OpsEnv): List<Need>? {
             "bookings?problem=unverified_time&date_from=${t.minusDays(6)}&date_to=$t&order=schedule").map { async { it?.let { p -> rows(p) }.orEmpty() } }.awaitAll()
     }
     val (c, o, st, pd, ty) = all; val lt = all[5]; val qk = all[6]; val uv = all[7]
+    // when it became a problem: started late = when the expert started; too quick = when they submitted
     fun timing(list: List<kotlinx.serialization.json.JsonObject>, f: String, group: String) = list.map(::Bk).mapNotNull { b ->
-        b.flags.firstOrNull { it.flag == f }?.let { fl -> Need(f + b.id, b.id, Tone.WARN, "${b.code}: ${fl.words.replaceFirstChar { it.lowercase() }}",
-            listOf(slot(b, t), b.customer).filter { it.isNotBlank() }.joinToString(" · "), group) } }
+        b.flags.firstOrNull { it.flag == f }?.let { fl ->
+            val late = b.t.timing?.lateMinutes?.toLong() ?: 0
+            val took = if (f == "quick") b.t.timing?.durationMinutes?.toLong() ?: 0 else 0
+            Need(f + b.id, b.id, Tone.WARN, "${b.code}: ${fl.words.replaceFirstChar { it.lowercase() }}", group,
+                bookedAt(b)?.plusSeconds((late + took) * 60)) } }
+    fun alertAt(b: Bk, code: String) = instantOf(b.t.alerts.lastOrNull { it.code == code }?.at) ?: bookedAt(b)
     if (read.get() == 0) return null
-    return o.map(::Bk).map { Need("a" + it.id, it.id, Tone.WARN, "${it.code} has no expert", "Today at ${time12(it.time)} · ${it.customer}", "Unassigned today") } +
-        c.map(::Bk).map { Need("c" + it.id, it.id, Tone.BAD, "Two experts inspected ${it.code}", "${it.customer} · choose which counts", "Conflicts") } +
-        StuckUpload.list(st).map { Need("s" + it.id, it.booking, Tone.BAD, "Photos stuck: ${it.bookingId}",
-            "${env.labels.byUsername(it.expert)} · ${it.fieldKey.replace('_', ' ').replaceFirstChar { c -> c.uppercase() }}", "Stuck uploads") } +
-        // each row names its problem: failed / stuck (tried again by itself), or out of date (Ops press Regenerate, F-219)
-        ReportProblem.list(pd).map { if (it.problem == "out_of_date")
-                Need("p" + it.booking, it.booking, Tone.WARN, "Report out of date for ${it.bookingId}",
-                    listOfNotNull(it.outOfDateSince?.takeIf { v -> v.isNotBlank() }?.let { v -> "Since ${whenStamp(v, t).replaceFirstChar { c -> c.lowercase() }}" },
-                        "Regenerate it when you're done").joinToString(" · "), "Reports")
-            else if (it.problem == "missing") Need("p" + it.booking, it.booking, Tone.BAD, "No report for ${it.bookingId}",
-                "Completed, but its PDF was not made · open it and tap Make the PDF", "Reports")
-            else Need("p" + it.booking, it.booking, Tone.BAD, "Report failed for ${it.bookingId}",
-                if (it.error.isBlank()) "It is tried again by itself" else "${reportError(it.error)} It is tried again by itself", "Reports") } +
-        ty.map(::Bk).map { Need("t" + it.id, it.id, Tone.WARN, "Your type change wasn't applied", "${it.code} · ${it.typeRejected?.let(env.labels::typeRejected) ?: "The expert started another type"}", "Type changes") } +
+    return o.map(::Bk).map { Need("a" + it.id, it.id, Tone.WARN, "${it.code} has no expert", "Unassigned today", bookedAt(it)) } +
+        c.map(::Bk).map { Need("c" + it.id, it.id, Tone.BAD, "Two experts inspected ${it.code}", "Conflicts", alertAt(it, "CONFLICT_TWO_EXPERTS")) } +
+        StuckUpload.list(st).map { Need("s" + it.id, it.booking, Tone.BAD, "Photos stuck: ${it.bookingId}", "Stuck uploads", instantOf(it.createdAt)) } +
+        // each row names its problem: failed / stuck (tried again by itself), out of date (Ops press Regenerate, F-219), or missing
+        ReportProblem.list(pd).map { r ->
+            val at = instantOf(r.at) ?: instantOf(r.outOfDateSince)
+            when (r.problem) {
+                "out_of_date" -> Need("p" + r.booking, r.booking, Tone.WARN, "Report out of date for ${r.bookingId}", "Reports", at)
+                "missing" -> Need("p" + r.booking, r.booking, Tone.BAD, "No report for ${r.bookingId}", "Reports", at)
+                else -> Need("p" + r.booking, r.booking, Tone.BAD, "Report failed for ${r.bookingId}", "Reports", at)
+            } } +
+        ty.map(::Bk).map { Need("t" + it.id, it.id, Tone.WARN, "Type change not applied: ${it.code}", "Type changes", alertAt(it, "TYPE_CHANGE_REJECTED")) } +
         timing(lt, "late", "Started late") + timing(qk, "quick", "Too quick") +
-        uv.map(::Bk).filter { it.unverifiedTime }.map { Need("u" + it.id, it.id, Tone.WARN, "${it.code}: time not verified",
-            listOf(slot(it, t), "the phone's clock was not checked that day, so its times may be off").filter { s -> s.isNotBlank() }.joinToString(" · "),
-            "Unverified times") }
+        uv.map(::Bk).filter { it.unverifiedTime }.map { Need("u" + it.id, it.id, Tone.WARN, "${it.code}: time not verified", "Unverified times", bookedAt(it)) }
 }
