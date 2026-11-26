@@ -98,42 +98,45 @@ export function WaitingFiles({
     }
   };
   return (
-    <div className="banner warn missing-box" role="status" aria-label="Waiting for files">
-      <strong>
-        {total ? `Waiting for ${plural(total, "file")} from the expert${need ? `, ${need} required` : ""}` : "Checking your uploads"}
-      </strong>
-      {q.data && total > 0 && <div className="small">{phoneLine(expert, q.data.phone)}</div>}
-      <ul className="missing-list">
-        {rows.map((m) => (
-          <MissingRow
-            key={id(m)}
-            booking={booking}
-            m={m}
-            f={fields.find((f) => f.part === m.part && f.key === m.key)}
-            checking={!!mine[id(m)]}
-            onUploaded={() => {
-              setMine((x) => ({ ...x, [id(m)]: { at: new Date().toTimeString().slice(0, 5), row: m } }));
-              void q.refetch();
-            }}
-          />
-        ))}
-        {done.map((d) => (
-          <li key={id(d.row)} className="missing-row done">
-            <CircleCheck size={18} aria-hidden className="ok-text" />
-            <div className="grow">
-              {d.row.page} › {d.row.section} › <b>{d.row.label}</b>
-              <div className="muted small">Uploaded by you, {d.at}</div>
-            </div>
-            <span className="pill ok">Done</span>
-          </li>
-        ))}
-      </ul>
-      {total > 0 && (
-        <div className="bar" style={{ marginTop: 8, marginBottom: 0 }}>
-          <span className="muted small grow">Upload them, or finish now and send a partial report.</span>
-          <button onClick={() => setAsking(true)}>Finish without the missing files</button>
-        </div>
-      )}
+    <>
+      <div className="banner warn missing-box" role="status" aria-label="Waiting for files">
+        <strong>
+          {total ? `Waiting for ${plural(total, "file")} from the expert${need ? `, ${need} required` : ""}` : "Checking your uploads"}
+        </strong>
+        {q.data && total > 0 && <div className="small">{phoneLine(expert, q.data.phone)}</div>}
+        <ul className="missing-list">
+          {rows.map((m) => (
+            <MissingRow
+              key={id(m)}
+              booking={booking}
+              m={m}
+              f={fields.find((f) => f.part === m.part && f.key === m.key)}
+              checking={!!mine[id(m)]}
+              onUploaded={() => {
+                setMine((x) => ({ ...x, [id(m)]: { at: new Date().toTimeString().slice(0, 5), row: m } }));
+                void q.refetch();
+              }}
+            />
+          ))}
+          {done.map((d) => (
+            <li key={id(d.row)} className="missing-row done">
+              <CircleCheck size={18} aria-hidden className="ok-text" />
+              <div className="grow">
+                {d.row.page} › {d.row.section} › <b>{d.row.label}</b>
+                <div className="muted small">Uploaded by you, {d.at}</div>
+              </div>
+              <span className="pill ok">Done</span>
+            </li>
+          ))}
+        </ul>
+        {total > 0 && (
+          <div className="bar" style={{ marginTop: 8, marginBottom: 0 }}>
+            <span className="muted small grow">Upload them, or finish now and send a partial report.</span>
+            <button onClick={() => setAsking(true)}>Finish without the missing files</button>
+          </div>
+        )}
+      </div>
+      {/* outside the banner, so the dialog keeps its own colours */}
       {asking && (
         <Modal
           title={`Finish without ${plural(total, "file")}?`}
@@ -168,7 +171,7 @@ export function WaitingFiles({
           </label>
         </Modal>
       )}
-    </div>
+    </>
   );
 }
 
