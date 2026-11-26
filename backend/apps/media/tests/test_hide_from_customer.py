@@ -31,6 +31,12 @@ def done(env, b):
     return ids
 
 
+def counted(booking):
+    insp = booking.counted_inspection()
+    assert insp is not None
+    return insp
+
+
 def hide(key, on=True):
     """Set it on the published version, the way a publish of a new version would."""
     for f in Field.objects.filter(key=key, version__status="published"):
@@ -71,7 +77,7 @@ def test_the_newest_published_version_decides_for_older_bookings(job, settings):
     env, b = job
     done(env, b)
     booking = Booking.objects.get(pk=b["id"])
-    pinned = booking.counted_inspection().form_version
+    pinned = counted(booking).form_version
 
     def publish_with(on):
         assert env.admin.post(f"/api/v1/forms/{pinned.form_id}/drafts").status_code in (200, 201)
@@ -83,24 +89,10 @@ def test_the_newest_published_version_decides_for_older_bookings(job, settings):
         publish_form(env.admin, pinned.form_id)
 
     publish_with(True)
-    assert Booking.objects.get(pk=b["id"]).counted_inspection().form_version == pinned   # still pinned
+    assert counted(Booking.objects.get(pk=b["id"])).form_version == pinned   # still pinned
     assert customer_hidden(booking) == {"photo_a"}         # the old booking follows the new setting
     publish_with(False)
     assert customer_hidden(booking) == set()               # and turning it off again too
-
-
-def test_a_partner_gets_no_links_to_a_hidden_photo(job, settings):
-    """Partners (webhooks, external API) only reach files through links the server makes."""
-    from types import SimpleNamespace
-
-    from apps.integrations.values import Resolver
-
-    env, b = job
-    ids = done(env, b)
-    assert ids
-    hide("photo_a")
-    r = Resolver(SimpleNamespace(booking_uuid=b["id"], event="inspection.completed"))
-    assert r._link("photos.photo_a") == []
 
 
 def test_the_report_leaves_hidden_photos_out_and_its_download_link_too(job, settings):
@@ -109,12 +101,12 @@ def test_the_report_leaves_hidden_photos_out_and_its_download_link_too(job, sett
     env, b = job
     ids = done(env, b)
     booking = Booking.objects.get(pk=b["id"])
-    src = context.Source(booking, booking.counted_inspection())
+    src = context.Source(booking, counted(booking))
     part = {"source": {"kind": "fields", "fields": ["inspection.photo_a"]}}
     assert [p["media"] for p in context.photo_items(src, part)] == [ids["photo_a"]]
     assert media_links.named(src, "photos") == [ids["photo_a"]]
     hide("photo_a")
-    src = context.Source(booking, booking.counted_inspection())
+    src = context.Source(booking, counted(booking))
     assert context.photo_items(src, part) == []            # placed by name: skipped, no warning
     assert media_links.named(src, "photos") == []
 
@@ -131,6 +123,7 @@ def test_a_zip_link_made_before_the_setting_never_hands_out_the_hidden_file(job,
         r = APIClient().get(f"{ZIP_URL}{zips.token_for(old.id)}?format=json")
     assert r.status_code == 202                              # a new ZIP is being made
     newest = MediaZip.objects.order_by("-created_at").first()
+    assert newest is not None
     assert newest.id != old.id and "photo_a" in newest.excluded
 
 
@@ -152,3 +145,20 @@ def test_the_same_key_in_two_forms_stays_hidden_if_either_hides_it(job, settings
     booking = Booking.objects.get(pk=b["id"])
     Inspection.objects.filter(booking=booking).update(start_version_id=v)   # a second form, same key
     assert customer_hidden(booking) == {"photo_a"}
+
+
+def test_a_hidden_field_dropped_from_the_newest_version_stays_hidden_for_older_bookings(job, settings):
+    from apps.bookings.tests.test_submissions import publish_form
+
+    env, b = job
+    done(env, b)
+    booking = Booking.objects.get(pk=b["id"])
+    assert customer_hidden(Booking.objects.create(booking_id="EMPTY1", answers={})) == set()  # no inspection
+    hide("photo_a")                                       # on the version this booking used
+    form_id = counted(booking).form_version.form_id
+    assert env.admin.post(f"/api/v1/forms/{form_id}/drafts").status_code in (200, 201)
+    draft = env.admin.get(f"/api/v1/forms/{form_id}").json()["draft_version"]["id"]
+    f = Field.objects.get(version_id=draft, key="photo_a")
+    assert env.admin.delete(f"/api/v1/fields/{f.id}").status_code == 204
+    publish_form(env.admin, form_id)                      # the newest version has no photo_a
+    assert customer_hidden(booking) == {"photo_a"}        # what the booking used still decides

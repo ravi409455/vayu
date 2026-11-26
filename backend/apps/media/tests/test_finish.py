@@ -190,3 +190,9 @@ def test_missing_files_names_the_expert_phone_so_ops_can_tell_sending_from_lost(
     Device.objects.create(user=expert, last_seen_at=seen, unsynced={"drafts": 0, "files": 3})
     phone = env.ops.get(f"/api/v1/bookings/{b['id']}/missing-files").json()["phone"]
     assert phone["files"] == 3 and phone["last_seen_at"].startswith(seen.isoformat()[:16])
+
+
+def test_no_phone_line_without_a_submitted_inspection(job, settings):
+    from apps.media.services import expert_phone
+    env, b = job
+    assert expert_phone(Booking.objects.get(pk=b["id"])) is None       # started, nothing submitted
