@@ -55,16 +55,18 @@ def head(key: str) -> dict:
     return client().head_object(Bucket=settings.S3_BUCKET, Key=key)
 
 
-def read(key: str) -> bytes:
-    return client().get_object(Bucket=settings.S3_BUCKET, Key=key)["Body"].read()
+def read(key: str, c=None) -> bytes:
+    """c: a client to reuse (making one per call costs setup time; a report reads 150 photos)."""
+    return (c or client()).get_object(Bucket=settings.S3_BUCKET, Key=key)["Body"].read()
 
 
 def stream(key: str, chunk: int = 1024 * 1024):
     return client().get_object(Bucket=settings.S3_BUCKET, Key=key)["Body"].iter_chunks(chunk)
 
 
-def put(key: str, data: bytes, content_type: str) -> None:
-    client().put_object(Bucket=settings.S3_BUCKET, Key=key, Body=data, ContentType=content_type)
+def put(key: str, data: bytes, content_type: str, c=None) -> None:
+    (c or client()).put_object(Bucket=settings.S3_BUCKET, Key=key, Body=data,
+                               ContentType=content_type)
 
 
 def upload_file(path: str, key: str, content_type: str) -> None:

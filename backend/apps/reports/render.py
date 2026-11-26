@@ -7,6 +7,7 @@ import io
 import os
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -56,28 +57,42 @@ def print_keys(media_id) -> list[str]:
 def print_image(media_id: str, edge: int = PRINT_EDGE) -> str | None:
     """A verified photo as a data URI, shrunk once for print and kept (originals untouched).
     edge <= 480 uses the preview made at upload (the designer's live preview)."""
+    asset = MediaAsset.objects.filter(pk=media_id, status="verified").first()
+    return _print_uri(asset, edge) if asset else None
+
+
+def _print_uri(asset: MediaAsset, edge: int, c=None) -> str | None:
+    """print_image without the database: safe to run in a thread (c: a storage client to reuse)."""
     from PIL import Image, ImageOps
 
-    asset = MediaAsset.objects.filter(pk=media_id, status="verified").first()
-    if asset is None:
-        return None
     if edge <= 480 and asset.preview_key:
-        return _jpeg_uri(storage.read(asset.preview_key))
+        return _jpeg_uri(storage.read(asset.preview_key, c))
     key = f"print/{asset.id}-{edge}.jpg"
     try:                       # the copy made by an earlier render: one call, not two (F-093)
-        return _jpeg_uri(storage.read(key))
+        return _jpeg_uri(storage.read(key, c))
     except ClientError:
         pass
     try:
         image = ImageOps.exif_transpose(Image.open(io.BytesIO(storage.read(
-            asset.jpeg_key or asset.key))))
+            asset.jpeg_key or asset.key, c))))
     except (OSError, ValueError, Image.DecompressionBombError):
         return None
     image.thumbnail((edge, edge))
     buf = io.BytesIO()
     image.convert("RGB").save(buf, "JPEG", quality=80)
-    storage.put(key, buf.getvalue(), "image/jpeg")
+    storage.put(key, buf.getvalue(), "image/jpeg", c)
     return _jpeg_uri(buf.getvalue())
+
+
+def _print_uris(media_ids: list[str], edge: int) -> list[str | None]:
+    """A photo grid's pictures, fetched 8 at a time over one storage client (one by one, a full PDI
+    spent 30 s of a 43 s preview waiting on storage). The database is read here, once per grid,
+    never in the threads."""
+    assets = {str(a.pk): a for a in MediaAsset.objects.filter(pk__in=media_ids, status="verified")}
+    c = storage.client()
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return list(pool.map(lambda m: _print_uri(assets[m], edge, c) if m in assets else None,
+                             media_ids))
 
 
 def asset_uri(asset_id: str, opacity: float = 1.0) -> str | None:
@@ -235,8 +250,8 @@ def _photos(part: dict, width_mm: float, edge: int) -> str:
               "brand": "border:0.3mm solid var(--brand)"}[frame.get("border", "none")]
     radius = "border-radius:1.5mm;" if frame.get("round", True) else ""
     figs = []
-    for it in part["items"]:
-        uri = print_image(it["media"], edge)
+    uris = _print_uris([str(it["media"]) for it in part["items"]], edge)
+    for it, uri in zip(part["items"], uris, strict=True):
         img = (f'<img src="{uri}" style="{size}{obj};{border};{radius}">' if uri
                else f'<div class="noimg" style="{size}{radius}">Photo not available</div>')
         cap = ""
