@@ -515,9 +515,9 @@ Checked: the old password is refused (`/api/v1/auth/login` → 401), the new one
 Its first run opened 6 PRs at once (Actions and the Node image), each a full CI run, which queued
 ahead of `main`'s CI. Closed them and cancelled their runs. New rule: one grouped PR a week for all
 GitHub Actions and one for all Docker images; no Node major jumps (stay on LTS), no Python minor
-jumps. Until PR 42 is merged, `main` still has the old rule (one PR per update, e.g. #43).
+jumps. In force on `main` since PR 42 (`cc40087`); #43 (one more single update from before) closed.
 
-### 3.8 · First bugs found on staging, and the "staging round" PR 42 🔄 (from session "bugs on staging")
+### 3.8 · First bugs found on staging, and the "staging round" PR 42 ✅ merged as `cc40087` (from session "bugs on staging")
 **PDF template preview failed** ("The server had a problem"). The preview draws the whole PDF
 inside the web request. A full PDI took 43 s on staging: 1 s data, 30 s fetching ~150 photos one by
 one (a new storage client each time), 12 s drawing. That is past gunicorn's 30 s limit, so the
@@ -645,7 +645,7 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 
 | Item | When |
 |---|---|
-| Merge PR 42 (staging round), then PR 37 (this log, resource recorder); close #43 after 42 | when CI is green |
+| Merge PR 37 (this log, resource recorder) | when CI is green |
 | Time the PDF preview on staging after PR 42 deploys | after the merge |
 | Phase 4: rehearse a rollback (Actions → deploy → Run workflow → previous commit) | after the merges |
 | Every deploy run waits for production Approve: cancel it until production exists (after PR 42 it no longer blocks staging) | until Phase 7 |
