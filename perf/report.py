@@ -30,7 +30,8 @@ def args(argv=None):
     a.add_argument("--from-min", type=float, default=25)
     a.add_argument("--minutes", type=float, default=60)
     a.add_argument("--memory-mb", type=float, default=2048)
-    a.add_argument("--cpus", type=float, default=1, help="the server's vCPUs (CPU 100%% = all of them)")
+    a.add_argument("--cpus", type=float, default=1,
+                   help="the server's vCPUs (CPU 100%% = all of them)")
     return a.parse_args(argv)
 
 
@@ -97,7 +98,8 @@ class Report:
                                 and r[2] == "ext/bookings (create)" and r[4] == "1"),
             "inspections submitted": sum(1 for r in self.rows("inspections")
                                          if self.inside(r[0]) and r[2] == "submitted"),
-            "PDFs made": sum(1 for r in self.rows("pdf") if self.inside(r[0]) and r[3] != "timeout"),
+            "PDFs made": sum(1 for r in self.rows("pdf")
+                             if self.inside(r[0]) and r[3] != "timeout"),
             "external API calls": sum(1 for r in self.rows("requests") if self.inside(r[0])
                                       and r[2].startswith("ext/")),
             "webhooks delivered": sum(1 for r in self.rows("webhooks") if self.inside(r[0])),
@@ -178,7 +180,8 @@ class Report:
                      f"worst {max(bigs):.1f} s over {len(bigs)}" if bigs else "none in this window")
 
     def uploads(self):
-        sent = {r[1]: (float(r[0]), num(r[3]) if len(r) > 3 else None) for r in self.rows("uploads")}
+        sent = {r[1]: (float(r[0]), num(r[3]) if len(r) > 3 else None)
+                for r in self.rows("uploads")}
         done = {r[0]: (num(r[1]), r[2]) for r in self.rows("verified")}
         delays = [done[i][0] - t for i, (t, _) in sent.items()
                   if self.inside(t) and i in done and done[i][0]]
@@ -195,7 +198,8 @@ class Report:
         if insp and size:
             per = size / insp / 1e6
             stored_gb = per * INSPECTIONS_PER_DAY * RETENTION_DAYS / 1000
-            self.say(f"- storage: about {per:.0f} MB per inspection → {per * INSPECTIONS_PER_DAY / 1000:.1f}"
+            day_gb = per * INSPECTIONS_PER_DAY / 1000
+            self.say(f"- storage: about {per:.0f} MB per inspection → {day_gb:.1f}"
                      f" GB a day at 100 a day; kept {RETENTION_DAYS} days ≈ {stored_gb:.0f} GB "
                      f"≈ ${stored_gb * R2_PER_GB_MONTH:.0f} a month in R2\n")
             self.facts["mb_per_inspection"] = round(per, 1)
