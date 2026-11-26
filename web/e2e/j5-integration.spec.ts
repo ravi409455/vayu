@@ -130,7 +130,7 @@ test("a GET or DELETE integration has no body, and the editor says what a bookin
 });
 
 test("verify page for a made-up token says so plainly", async ({ page }) => {
-  await page.goto("/verify/not-a-real-token");
+  await page.goto("/report/verify/not-a-real-token");
   await expect(page.getByRole("alert")).toContainText("could not find this report");
 });
 
