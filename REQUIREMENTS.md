@@ -26,7 +26,7 @@ Reference report: `SA37926PDI.pdf` (PDI, 35 pp). Clappia (garuda) was reviewed r
 - **Field access:** per role **per stage** (hidden / view / edit), set in the form builder.
 - **Experts see only bookings assigned to them** (exception: their own unfinished drafts, see §6). They see the customer phone with tap-to-call.
 - **Security:** every failed sign-in gets the same message; five wrong tries lock **that username from that address** for 15 minutes (not the whole account, not the whole address: many phones share one mobile-network IP); a role change signs the app out; a web sign-in posted from another site is refused; forced password change on first login or after an admin reset. Web sessions expire; Android sessions persist for offline work.
-- **One active device per expert.** Logging in on a new phone signs out the old one after the old phone's data syncs. **An Admin can force "sign out all devices"** (with a data-loss warning) for lost or broken phones; Ops only if an Admin grants it.
+- **One active device per expert.** Logging in on a new phone signs out the old one after the old phone's data syncs. A phone that signed out still holding unsent work keeps blocking another phone; the same install of the app may sign back in and send it (`docs/plan-media-backup.md`). Expert files also get a backup copy in the phone's `Documents/Vayu` folder that survives an uninstall (owner-approved place customer data lives, 2026-11-26). **An Admin can force "sign out all devices"** (with a data-loss warning) for lost or broken phones; Ops only if an Admin grants it.
 - **Config audit log:** who published, promoted or changed a form version or PDF template, master lists, webhooks, API keys, users or roles.
 - **Privacy/DPDP:** legal review happens outside this project; nothing extra is built in v1.
 
@@ -203,7 +203,7 @@ forms at the end of the day; the app keeps its generic nature").
 - **Web:** React. **Android:** Kotlin/Compose. Push via Firebase Cloud Messaging.
 - **Hosting:** one **DigitalOcean Bangalore** VPS (**4 vCPU / 8 GB**) running Docker, with **Cloudflare R2** for media, PDFs and ZIPs.
 - **Domains:** `vayu.carcid.in` (web + API at `/api/v1`, QR page at `/report/verify/<token>`), `vayu-staging.carcid.in`.
-- **APK** is served from a logged-in download page on the web app (latest build in R2). The in-app updater checks the same place.
+- **APK** download is public: the welcome pages (`/welcome/engineers`, `/welcome/ops`) and the web app's Android page link to `/api/v1/app/download` (latest build in R2, rate-limited; nothing in the APK is secret and the app still needs a sign-in). The in-app updater checks the same place.
 - **Staging server** (separate VPS + bucket) is **also the form-authoring environment**, so it needs backups too.
 - **Error tracking** for app, web and server.
 - **Backups:** configured by you.

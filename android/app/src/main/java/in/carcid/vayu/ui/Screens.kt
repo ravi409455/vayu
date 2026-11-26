@@ -2,6 +2,7 @@ package `in`.carcid.vayu.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -160,7 +161,9 @@ fun ProfileScreen(state: Screen.Profile, onBack: () -> Unit, onTheme: (String) -
                   /** Phone storage for App settings (experts); null hides App settings. */
                   storage: (() -> `in`.carcid.vayu.ui.expert.StorageInfo)? = null,
                   /** This build's version, and a newer one on offer (null: up to date). */
-                  version: String = "", update: String? = null, onUpdate: () -> Unit = {}) {
+                  version: String = "", update: String? = null, onUpdate: () -> Unit = {},
+                  /** The sign-out warning ([Screen.Profile.unsent]): sign out anyway, or stay. */
+                  onSignOutAnyway: () -> Unit = {}, onStaySignedIn: () -> Unit = {}) {
     var page by rememberSaveable { mutableStateOf("") }
     if (page == "settings" && storage != null) {
         androidx.activity.compose.BackHandler { page = "" }
@@ -214,7 +217,33 @@ fun ProfileScreen(state: Screen.Profile, onBack: () -> Unit, onTheme: (String) -
                 modifier = Modifier.padding(top = 16.dp))
         }
     }
+    state.unsent?.let { SignOutUnsentSheet(it, onSignOutAnyway, onStaySignedIn) }
 }
+
+/** Signing out with leads not sent yet: they stay on this phone and send at the next sign-in here. */
+@Composable
+private fun SignOutUnsentSheet(leads: List<String>, onSignOut: () -> Unit, onStay: () -> Unit) =
+    `in`.carcid.vayu.ui.components.VayuSheet(onStay, footer = {
+        Row(Modifier.padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            `in`.carcid.vayu.ui.components.SoftButton("Stay signed in", onStay, Modifier.weight(1f))
+            PrimaryButton("Sign out", onSignOut, Modifier.weight(1f))
+        }
+    }) {
+        Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Sign out with unsent work?", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Vayu.colors.ink)
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                leads.forEach { code ->
+                    Text(code, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Vayu.colors.ink,
+                        modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)).background(Vayu.colors.soft)
+                            .padding(horizontal = 10.dp, vertical = 4.dp))
+                }
+            }
+            Text(if (leads.size == 1) "This lead is not sent yet. It stays on this phone and sends when you sign in again."
+                else "These leads are not sent yet. They stay on this phone and send when you sign in again.", color = Vayu.colors.ink)
+            Text("While you're signed out, nothing is sent. Sign in on this phone to send ${if (leads.size == 1) "it" else "them"}.", fontSize = 14.sp, color = Vayu.colors.muted)
+        }
+    }
 
 /** One notification switch; [on] null means it can't be turned off ("Always on"). */
 @Composable

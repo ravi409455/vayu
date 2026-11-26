@@ -553,7 +553,28 @@ the person's ⋯ menu → **Sign out of every device**), or `revoke_devices` on 
 
 ---
 
-## Phase 4 · Deploy pipeline ⏳
+## Phase 4 · Deploy pipeline 🔄
+
+### 4.1 · A code release was skipped, and the fix 🔄 (2026-11-26)
+After PR 42 (code) and PR 37 (docs) merged a few minutes apart, staging still ran `35fdec9`:
+1. PR 42 merged → `main`'s CI started for `cc40087`.
+2. PR 37 merged → CI on `main` cancels the older run when a newer merge arrives (added by PR 42
+   itself), so `cc40087` never finished CI and never deployed.
+3. The deploy for PR 37 compared it only with the commit before it, saw "docs only", and skipped
+   building and deploying.
+Fix (PR 45): no docs-only shortcut. **The newest merge always deploys, whatever files it changed.**
+Merges close together (A, B, C a few minutes apart): CI cancels A's and B's runs, and only C
+deploys; it contains A's and B's changes, so nothing is lost and staging restarts once. If C's CI
+fails, nothing deploys and staging stays on the last good version until a green merge.
+A docs-only merge costs a cached build and a 10-20 s restart of staging.
+A hand-started run (Actions → deploy → Run workflow) builds the images if they are missing, so it works for any commit on `main`.
+After the security review of that change:
+- a hand-started run takes only a full commit id that is already on `main` (checked with GitHub
+  before anything is built or pushed);
+- images are never rebuilt or overwritten: if a commit's images exist, they are deployed as they are;
+- only merges to `main` write the build cache.
+How to notice next time: `ssh deploy@<staging> cat /srv/vayu/.deployed` should equal the newest
+commit on `main` after each deploy run.
 ## Phase 5 · Backups and alerts 🔄
 
 ### 5.1 · Watching the server's resources (owner asked 2026-11-26)
@@ -642,6 +663,7 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 | Time the PDF preview on staging after PR 42 deploys | after the merge |
 | Phase 4: rehearse a rollback (Actions → deploy → Run workflow → previous commit) | after the merges |
 | Every deploy run waits for production Approve: cancel it until production exists (after PR 42 it no longer blocks staging) | until Phase 7 |
+| Welcome pages (`/welcome/engineers`, `/welcome/ops`, public APK download; PR welcome-pages): open both on staging after the next deploy; on production in Phase 7, with an uptime monitor on `/welcome/engineers` | next deploy, Phase 7 |
 | 2.5c Restrict the Firebase API key | once "Vayu Staging" is on a phone (Phase 6) |
 | Phase 5: Better Stack uptime and heartbeats (`BACKUP_HEARTBEAT_URL`, `WORKERS_HEARTBEAT_URL` into Phase), DigitalOcean alerts, first restore drill | after the first deploy |
 | Phase Production environment: the rest of its values (table above) | Phase 7 |

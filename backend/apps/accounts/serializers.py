@@ -1,4 +1,5 @@
 """Request and response bodies for sign-in, the current user, users, passwords and the audit log."""
+from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 
 from apps.core.phone import InvalidPhone, normalize
@@ -68,11 +69,16 @@ class MeSerializer(UserSerializer):
         read_only_fields = [*UserSerializer.Meta.read_only_fields, "theme", "notify_prefs"]
 
 
+# its own name in openapi.yaml: "Login" is the sign-in reply
+@extend_schema_serializer(component_name="LoginRequest")
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField()
     client = serializers.ChoiceField(choices=["web", "mobile"])
     device_name = serializers.CharField(required=False, allow_blank=True, default="")
+    # the app's install (see Device.install_id); older apps don't send it
+    install_id = serializers.UUIDField(required=False, allow_null=True, default=None,
+                                       write_only=True)
 
 
 class PasswordSerializer(serializers.Serializer):

@@ -55,13 +55,18 @@ prototype of every screen below is approved.**
   5. Submit locks the answers → "Submitted, uploading x/y" → Completed when every file has arrived.
   6. Reassigned with a draft → "Reassigned – submit or discard". Cancelled with a draft → the draft
      still syncs. Ops type change after an offline start → the expert's type wins.
-  7. Sign-out is blocked while anything is unsynced; the message names the leads, and Uploads lists
-     exactly those (answers not submitted, files to send or still being checked, files the server
-     refused, drafts of leads no longer on the list with Send / Discard).
+  7. Sign-out is allowed while anything is unsynced (changed 2026-11-26, `docs/plan-media-backup.md`):
+     a warning names the leads; the unsent work stays on the phone and sends when the same person
+     signs in again on it. Uploads lists exactly what is unsent (answers not submitted, files to send
+     or still being checked, files the server refused, drafts of leads no longer on the list with
+     Send / Discard). A draft that can't be read still blocks sign-out.
   7a. A file the server refuses (too large, wrong type) shows its reason in Uploads and can be
      removed, also after Submit; the rest of the inspection is sent without it.
-  7b. After a sign-out nothing of that person stays: their drafts (answers, photos), notices, reminders
-     and saved copies are deleted. Signed out without signal, the server's sign-in for that phone is
+  7b. After a sign-out only that person's unsent work stays (never deleted by the app, never shown
+     to another person); their sent drafts, notices, reminders and saved copies are deleted. Every
+     photo, video, document and signature an expert takes also has a backup copy in
+     `Documents/Vayu/<booking code>/` (hidden from the Gallery) that survives an uninstall; copy
+     rules in `docs/plan-media-backup.md`. Signed out without signal, the server's sign-in for that phone is
      ended at the next sign-in. Signed out by the server: sent drafts are deleted, unsent ones wait.
      Sign-in tokens are sealed with a key in the Android Keystore; an update moves tokens saved by an
      older version, so nobody is signed out by it. Ops' saved copies keep the latest 300.
@@ -167,7 +172,7 @@ Every screen in light and dark, at phone size, with demo data. Where a layout is
 prototype shows the variants side by side for a decision.
 
 **Shared:** splash and update-required, sign in (Admin refused message), forced password change,
-profile (picture, details, theme, password, notifications for Ops, sign out blocked while
+profile (picture, details, theme, password, notifications for Ops, sign out warns while
 unsynced), notifications list (bell), offline highlight, update available, devices signed out
 notice.
 

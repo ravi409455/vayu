@@ -3,8 +3,10 @@ name: deploy
 #   CI passes on main → build the API and web images ONCE, labelled with the commit id →
 #   staging deploys by itself → production waits for the owner's Approve (environment
 #   "production" has a required reviewer) and deploys the SAME images.
-# Rollback: Actions → deploy → Run workflow → the commit id to go back to (its images already exist).
-# A merge that changes only Markdown or docs/ builds and deploys nothing.
+# Rollback: Actions → deploy → Run workflow → the full commit id to go back to (must be on main;
+# its images are reused, never rebuilt).
+# The newest merge always deploys, whatever files it changed. When merges come close together,
+# CI cancels the older run and only the newest deploys; it contains every earlier change.
 # Never runs for pull requests: only after CI on a push to main, or by hand.
 on:
   workflow_run:
@@ -40,38 +42,53 @@ jobs:
         id: what
         env:
           EVENT: ${{ github.event_name }}
+          INPUT_COMMIT: ${{ inputs.commit }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        # The newest merge always deploys, docs-only too. A "docs only, skip" shortcut once skipped a code
+        # release: CI on main cancels an older run when a newer merge arrives, so the code merge
+        # never deployed and the docs merge after it deployed nothing.
+        # A hand-started run (rollback) only takes a full commit id that is already on main,
+        # checked here before anything is built or pushed.
         run: |
           sha=$(git rev-parse HEAD)
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
           if [ "$EVENT" = workflow_dispatch ]; then
-            echo "deploy=true" >> "$GITHUB_OUTPUT"; echo "build=false" >> "$GITHUB_OUTPUT"; exit 0
+            [[ "$INPUT_COMMIT" =~ ^[0-9a-f]{40}$ && "$INPUT_COMMIT" == "$sha" ]] \
+              || { echo "::error::give the full 40-character commit id"; exit 1; }
+            status=$(gh api "repos/$REPO/compare/$sha...main" --jq .status)
+            [[ "$status" == ahead || "$status" == identical ]] \
+              || { echo "::error::$sha is not on main"; exit 1; }
           fi
-          # PRs are squash-merged: one commit per merge, so HEAD~1..HEAD is the whole change
-          if git diff --name-only HEAD~1 HEAD | grep -qvE '(\.md$|^docs/)'; then
-            echo "deploy=true" >> "$GITHUB_OUTPUT"; echo "build=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Docs only: nothing to build or deploy."
-            echo "deploy=false" >> "$GITHUB_OUTPUT"; echo "build=false" >> "$GITHUB_OUTPUT"
-          fi
-      - if: steps.what.outputs.build == 'true'
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - if: steps.what.outputs.build == 'true'
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+          { echo "sha=$sha"; echo "deploy=true"; } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: images already built? (they are never rebuilt or overwritten)
+        id: images
+        env:
+          SHA: ${{ steps.what.outputs.sha }}
+        run: |
+          if docker buildx imagetools inspect "$REGISTRY/vayu-api:$SHA" >/dev/null 2>&1 \
+              && docker buildx imagetools inspect "$REGISTRY/vayu-web:$SHA" >/dev/null 2>&1; then
+            echo "Images for $SHA exist: deploying them as they are."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: API image (API, workers, scheduler)
-        if: steps.what.outputs.build == 'true'
+        if: steps.images.outputs.build == 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: backend
           push: true
           tags: ${{ env.REGISTRY }}/vayu-api:${{ steps.what.outputs.sha }}
           cache-from: type=gha,scope=api
-          cache-to: type=gha,mode=max,scope=api
+          cache-to: ${{ github.event_name == 'workflow_run' && 'type=gha,mode=max,scope=api' || '' }}   # only merges to main write the cache
       - name: web image (Caddy + the web app; one image for staging and production)
-        if: steps.what.outputs.build == 'true'
+        if: steps.images.outputs.build == 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -87,7 +104,7 @@ jobs:
           secrets: |
             sentry_token=${{ secrets.SENTRY_AUTH_TOKEN }}
           cache-from: type=gha,scope=web
-          cache-to: type=gha,mode=max,scope=web
+          cache-to: ${{ github.event_name == 'workflow_run' && 'type=gha,mode=max,scope=web' || '' }}
 
   staging:
     needs: build

@@ -45,6 +45,8 @@ class InspectionModel(
     private val kick: () -> Unit,
     /** The phone's time is checked right now (synced today, clock not changed since). */
     private val verified: () -> Boolean = { true },
+    /** Copies outside the app that survive an uninstall (docs/plan-media-backup.md); null: none. */
+    private val backup: `in`.carcid.vayu.core.backup.BackupCopies? = null,
 ) {
     val draft: Draft get() = drafts.get(bookingId)!!
 
@@ -94,9 +96,12 @@ class InspectionModel(
         commit { d -> d.copy(step = index, visited = if (step.id in d.visited) d.visited else d.visited + step.id) }
     }
 
-    /** Keep a taken photo, video, file or signature and put it in the answer (hashed off the main thread). */
+    /**
+     * Keep a taken photo, video, file or signature and put it in the answer (hashed off the main
+     * thread), then its backup copy outside the app, named after [page] and [label].
+     */
     suspend fun addFile(part: String, field: String, kind: String, file: File, contentType: String, source: String, label: String, single: Boolean,
-                        max: Int = Int.MAX_VALUE) {
+                        max: Int = Int.MAX_VALUE, page: String = "") {
         // locked, or the field already holds its most: not kept
         if (draft.locked || (!single && ((draft.answer(part, field) as? List<*>)?.size ?: 0) >= max)) { file.delete(); return }
         val hash = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { sha256(file) }
@@ -106,10 +111,14 @@ class InspectionModel(
             val value: Any? = if (single) f.id else ((cur as? List<*>).orEmpty() + f.id)
             val replaced = if (single) d.files.firstOrNull { it.id == cur } else null
             replaced?.path?.takeIf { it.isNotEmpty() && !replaced.sent }?.let { File(it).delete() }
+            replaced?.let { backup?.drop(it.id) }
             d.copy(files = d.files.filterNot { single && it.id == cur } + f, discards = d.discards + listOfNotNull(replaced?.serverId))
                 .withAnswer(part, field, value)
         }
         kick()
+        backup?.let { b -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            b.copy(`in`.carcid.vayu.core.backup.BackupCopies.Copy(bookingId, draft.code, f.id, page, label, contentType), file)
+        } }
     }
 
     /** Remove a file; after Submit only one the server refused (the answers went without it). */
@@ -118,6 +127,7 @@ class InspectionModel(
         commit { d ->
             val f = d.files.firstOrNull { it.id == id }
             f?.path?.takeIf { it.isNotEmpty() }?.let { File(it).delete() }
+            backup?.drop(id)
             val cur = d.answer(part, field)
             val value: Any? = if (cur is List<*>) cur.filter { it != id } else null
             // a file the server already has is taken back there too, or it keeps its place
@@ -133,7 +143,7 @@ class InspectionModel(
         kick()
     }
 
-    fun discard() = drafts.discard(bookingId)
+    fun discard() { drafts.discard(bookingId); backup?.dropBooking(bookingId) }
 }
 
 fun sha256(file: File): String {

@@ -1,6 +1,7 @@
 package `in`.carcid.vayu.core.auth
 
 import android.content.Context
+import androidx.core.content.edit
 
 /** Where the sign-in tokens live. The app stays signed in (offline work needs it). */
 interface TokenStore {
@@ -14,6 +15,11 @@ interface TokenStore {
     /** The refresh token of a sign-out the server never heard of (no signal then); kept through clear(). */
     fun pendingLogout(): String? = null
     fun setPendingLogout(refresh: String?) {}
+    /**
+     * This install of the app, made once and kept through sign-outs (gone on uninstall or Clear
+     * storage). The server lets the same install sign back in to send work kept through a sign-out.
+     */
+    fun installId(): String
 }
 
 /** Seals text with a key only this app on this phone can use. */
@@ -99,6 +105,9 @@ class PrefsTokenStore(context: Context, private val sealer: Sealer = KeystoreSea
         val sealed = refresh?.let { r -> runCatching { sealer.seal(r) }.getOrNull() }
         ended.edit().putString("refresh.s", sealed).putString("refresh", if (sealed == null) refresh else null).apply()
     }
+    private val install = context.getSharedPreferences("vayu.install", Context.MODE_PRIVATE)
+    @Synchronized override fun installId(): String = install.getString("id", null)
+        ?: java.util.UUID.randomUUID().toString().also { id -> install.edit(commit = true) { putString("id", id) } }
 }
 
 class MemoryTokenStore : TokenStore {
@@ -114,4 +123,6 @@ class MemoryTokenStore : TokenStore {
     private var ended: String? = null
     override fun pendingLogout() = ended
     override fun setPendingLogout(refresh: String?) { ended = refresh }
+    private val install = java.util.UUID.randomUUID().toString()
+    override fun installId() = install
 }

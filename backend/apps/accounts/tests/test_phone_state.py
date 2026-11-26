@@ -24,7 +24,8 @@ def test_a_phone_that_never_reported_is_unknown_and_none_is_none(api_as, make_us
     admin, _ = api_as(Role.ADMIN)
     target = make_user(Role.EXPERT)
     assert admin.get(f"/api/v1/users/{target.id}/phone").json() == {
-        "devices": 0, "drafts": 0, "files": 0, "unknown": False, "last_seen_at": None}
+        "devices": 0, "drafts": 0, "files": 0, "unknown": False, "signed_out_holding": 0,
+        "last_seen_at": None}
     Device.objects.create(user=target)                               # unsynced is null
     body = admin.get(f"/api/v1/users/{target.id}/phone").json()
     assert body["devices"] == 1 and body["unknown"] is True
