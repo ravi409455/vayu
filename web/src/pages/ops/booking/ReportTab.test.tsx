@@ -63,7 +63,6 @@ describe("a PDF is passed on only once the booking is Completed", () => {
     expect(await screen.findByRole("button", { name: /Download PDF/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Copy check link" })).toBeDisabled();
     expect(screen.queryByRole("link", { name: /Download PDF/ })).toBeNull();
-    expect(screen.getByText(/Available once the booking is Completed/)).toBeInTheDocument();
   });
 });
 

@@ -156,7 +156,6 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
       {r?.out_of_date && !busy && (
         <div className="banner warn">Out of date: changes since this PDF. Press Regenerate when you are done to make a new one.</div>
       )}
-      {r && notYet && <p className="muted small">Download and share: {notYet}</p>}
       {r && why && can("submissions.edit") && <p className="muted small">Regenerate is off: {why}</p>}
       {r?.error && !r.updating && <div className="banner bad">Problem: {reportError(r.error)}. It is tried again by itself.</div>}
       {!r && !firstMissing && <Empty title="No report yet">It is made automatically when the booking is Completed.</Empty>}
