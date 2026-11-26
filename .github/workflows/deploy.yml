@@ -105,12 +105,14 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           SHA: ${{ needs.build.outputs.sha }}
+          # started by hand = a rollback, which may go back to an older commit; a merge never does
+          MODE: ${{ github.event_name == 'workflow_dispatch' && 'rollback' || '' }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/key && chmod 600 ~/.ssh/key
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts   # the server's own key: no man in the middle
           ssh -i ~/.ssh/key -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
-            "deploy@$SSH_HOST" "$SHA" \
+            "deploy@$SSH_HOST" "$SHA $MODE" \
             || { echo "::error::Deploy failed. Staging is on demand: if it is off, run infra/staging.sh up, then this workflow again."; exit 1; }
 
   production:
