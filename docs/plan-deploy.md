@@ -439,7 +439,8 @@ address. The procedure, also in the runbook:
 1. betterstack.com (Better Stack Uptime, free plan) → sign up with the company email.
 2. **Monitors → Create monitor**: URL `https://vayu-staging.carcid.in/api/v1/health`, check every
    1 minute, alert when the response does not contain `ok`. Later the same for production, plus
-   one for `https://vayu.carcid.in/` (the portal page itself). It also warns before the https
+   one for `https://vayu.carcid.in/` (the portal page itself) and one for
+   `https://vayu.carcid.in/welcome/engineers` (the public page staff install from). It also warns before the https
    certificate expires.
 3. **Heartbeats → Create heartbeat** `staging-backup`, expected every 1 day, grace 3 hours. Copy
    its URL into `.env.staging` as `BACKUP_HEARTBEAT_URL` (treat as a secret). Same later for production.
@@ -490,6 +491,9 @@ Staging is "done" only when all of these pass. Each is a line in the runbook's c
     by itself within 2 minutes, health is ok.
 11. **On-demand cycle**: `infra/staging.sh down`, then `up`, update DNS → health is ok, test data
     and https certificate are still there.
+12. **Welcome pages**: `https://vayu-staging.carcid.in/welcome/engineers` and `/welcome/ops` open
+    without sign-in, on a phone and a laptop. "Open Vayu" opens the web app; on the phone, **Download
+    the app** downloads the published "Vayu Staging" APK and it installs.
 
 ---
 
@@ -532,7 +536,7 @@ writes it; passwords it makes are handed out and the file deleted, as the runboo
 `seed_test_data` is never run here; the server refuses it anyway.
 
 ### 7.7 Production checks
-Repeat Phase 6 items 1 to 6, 8 and 10 on production with one real-looking test booking, then
+Repeat Phase 6 items 1 to 6, 8, 10 and 12 on production with one real-looking test booking, then
 cancel that booking. Build the **release** Android app (`in.carcid.vayu`, version code higher
 than any earlier build, release Sentry DSN, mapping uploaded) and publish it with `publish_apk`.
 Add the production uptime monitors, backup heartbeat and alert policies (5.4, 5.5).

@@ -507,6 +507,7 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 | First staging deploy: starts by itself when `main`'s CI passes; then check the site, health page, workers | next |
 | Merge PR 30 (trim values; Dependabot grouped) | when its CI is green |
 | Merge PR 18 (this log and `docs/plan-deploy.md`): until then they exist only on the `docs/plan-deploy` branch | soon |
+| Welcome pages (`/welcome/engineers`, `/welcome/ops`, public APK download; PR welcome-pages): open both on staging after the next deploy; on production in Phase 7, with an uptime monitor on `/welcome/engineers` | next deploy, Phase 7 |
 | 2.5c Restrict the Firebase API key | once "Vayu Staging" is on a phone (Phase 6) |
 | Phase 5: Better Stack uptime and heartbeats (`BACKUP_HEARTBEAT_URL`, `WORKERS_HEARTBEAT_URL` into Phase), DigitalOcean alerts, first restore drill | after the first deploy |
 | Phase Production environment: the rest of its values (table above) | Phase 7 |

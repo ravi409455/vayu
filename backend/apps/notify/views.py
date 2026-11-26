@@ -2,7 +2,9 @@
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers as s_
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.models import Device
@@ -104,7 +106,14 @@ class AppLatestView(APIView):
 
 
 class AppDownloadView(APIView):
-    """The web download link (signed in): sends the browser to the newest APK."""
+    """The download link (public: the /welcome pages' button): sends the browser to the newest APK.
+    Nothing in the APK is secret (the code is public) and the app still needs a sign-in; the link
+    it sends to expires in an hour. Rate-limited like the other public pages."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "public"
 
     def get(self, request):
         from django.http import HttpResponseRedirect

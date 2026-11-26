@@ -13,13 +13,27 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(self), geolocation=(self), microphone=(), payment=(), usb=()"
 		Cross-Origin-Opener-Policy "same-origin"
-		# R2 serves photos, videos and PDFs and takes uploads (pre-signed URLs); errors go to Sentry
-		{$CSP_HEADER:Content-Security-Policy} "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://*.r2.cloudflarestorage.com; media-src 'self' blob: https://*.r2.cloudflarestorage.com; connect-src 'self' https://*.r2.cloudflarestorage.com https://*.sentry.io; frame-src 'self' blob: https://*.r2.cloudflarestorage.com; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		-Server
 	}
 
+	# The web app's content rules: everything except the welcome pages, which have their own below.
+	# R2 serves photos, videos and PDFs and takes uploads (pre-signed URLs); errors go to Sentry.
+	@app not path /welcome/*
+	header @app {$CSP_HEADER:Content-Security-Policy} "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://*.r2.cloudflarestorage.com; media-src 'self' blob: https://*.r2.cloudflarestorage.com; connect-src 'self' https://*.r2.cloudflarestorage.com https://*.sentry.io; frame-src 'self' blob: https://*.r2.cloudflarestorage.com; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
 	handle /api/* {
 		reverse_proxy api:8000
+	}
+
+	# The public welcome pages (/welcome/ops, /welcome/engineers): static, no data, no sign-in.
+	# Each is one self-contained file with its own inline style and script and Google fonts, so it
+	# gets its own content rules; the web app keeps the strict ones above.
+	handle /welcome/* {
+		root * /srv
+		header {$CSP_HEADER:Content-Security-Policy} "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		header Cache-Control "no-cache"
+		try_files {path} {path}/index.html
+		file_server
 	}
 
 	handle {

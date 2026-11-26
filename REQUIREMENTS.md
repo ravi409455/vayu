@@ -203,7 +203,7 @@ forms at the end of the day; the app keeps its generic nature").
 - **Web:** React. **Android:** Kotlin/Compose. Push via Firebase Cloud Messaging.
 - **Hosting:** one **DigitalOcean Bangalore** VPS (**4 vCPU / 8 GB**) running Docker, with **Cloudflare R2** for media, PDFs and ZIPs.
 - **Domains:** `vayu.carcid.in` (web + API at `/api/v1`, QR page at `/report/verify/<token>`), `vayu-staging.carcid.in`.
-- **APK** is served from a logged-in download page on the web app (latest build in R2). The in-app updater checks the same place.
+- **APK** download is public: the welcome pages (`/welcome/engineers`, `/welcome/ops`) and the web app's Android page link to `/api/v1/app/download` (latest build in R2, rate-limited; nothing in the APK is secret and the app still needs a sign-in). The in-app updater checks the same place.
 - **Staging server** (separate VPS + bucket) is **also the form-authoring environment**, so it needs backups too.
 - **Error tracking** for app, web and server.
 - **Backups:** configured by you.
