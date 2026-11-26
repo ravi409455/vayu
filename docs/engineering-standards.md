@@ -28,7 +28,8 @@ copy the old pattern.
 6. **The server enforces every rule.** Screens only hide; permissions, limits and stage rules are
    checked on the server, per object.
 7. **Privacy.** No customer value in logs, crash reports, push messages, URLs or audit text. What
-   leaves the system is listed in the plan. Sign-out clears what the device holds.
+   leaves the system is listed in the plan. Sign-out clears what the device holds, except a
+   person's unsent work and the expert backup copies (`docs/plan-media-backup.md`).
 8. **Comments say why**, not what. Update the comment when the code changes. No commented-out
    code, no TODO without an owner and a reason (a deliberate shortcut is marked `ponytail:` with
    its limit and when to upgrade).
@@ -172,8 +173,10 @@ copy the old pattern.
 - Offline first: everything the expert enters is saved at once; sending goes through the outbox
   and WorkManager; every request carries its client id so a retry is safe; a refusal from the
   server is shown and never blocks unrelated work.
-- Sign-out refuses while unsent work exists, then wipes drafts, files, caches and tokens. Tokens
-  stay sealed with the Keystore.
+- Sign-out keeps that person's unsent work (sent at their next sign-in on this phone) and wipes
+  everything else: sent drafts, caches, notices and tokens. Backup copies in `Documents/Vayu`
+  follow their own clean-up rules (`docs/plan-media-backup.md`). Tokens stay sealed with the
+  Keystore.
 - Text follows font scale; back always goes somewhere sensible; a denied permission offers the
   way to Settings.
 - Tests: unit tests for rules and the outbox, Robolectric for flows, Roborazzi for screens (a new

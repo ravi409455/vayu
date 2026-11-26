@@ -84,6 +84,18 @@ class Device(models.Model):
     app_version = models.CharField(max_length=32, blank=True)   # from the heartbeat (F-247)
     push_token = models.CharField(max_length=4096, blank=True)   # Firebase token; "" = none
     push_token_at = models.DateTimeField(null=True, blank=True)  # when this device last sent it
+    # one install of the app (the phone makes it once; gone on uninstall). Lets that install sign
+    # back in to send work it kept through a sign-out. Never returned by the API, never logged.
+    install_id = models.UUIDField(null=True, blank=True)
+    # set when the phone signed itself out still holding unsent work: it keeps refusing another
+    # phone until the same install signs back in or someone releases it (revoke_devices)
+    held_after_sign_out_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.CheckConstraint(
+            condition=models.Q(held_after_sign_out_at__isnull=True) | models.Q(
+                revoked_at__isnull=False),
+            name="device_held_only_when_signed_out")]
 
     def holds_work(self) -> bool:
         """True when this phone may still hold answers or files the server doesn't have."""

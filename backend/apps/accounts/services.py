@@ -3,12 +3,14 @@ person."""
 
 import logging
 from typing import Any
+from uuid import UUID
 
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -86,28 +88,78 @@ def authenticate(username: str, password: str, ip: str = "") -> User:
     return user
 
 
-def revoke_devices(user: User) -> int:
-    count = Device.objects.filter(user=user, revoked_at__isnull=True).update(
-        revoked_at=timezone.now(), push_token="")
+def revoke_devices(user: User, keep: str | None = None) -> int:
+    """Sign out every phone of this person (but `keep`) and accept the loss of what they hold:
+    a phone that signed itself out holding work stops blocking a new one too. Returns how many
+    phones that touched."""
+    now = timezone.now()
+    phones = Device.objects.filter(user=user)
+    if keep is not None:
+        phones = phones.exclude(pk=keep)
+    count = phones.filter(revoked_at__isnull=True).update(revoked_at=now, push_token="")
+    count += phones.filter(held_after_sign_out_at__isnull=False).update(held_after_sign_out_at=None)
     if count:
         log.event("auth.device_revoked", user_id=user.pk, count=count)
     return count
 
 
-def register_device_and_tokens(user: User, device_name: str) -> dict[str, Any]:
+def sign_out_device(user: User, device_id: str, counts: dict[str, int] | None) -> None:
+    """The phone signs itself out. With unsent work (`counts` above 0) it keeps holding that work:
+    the device is still revoked (its tokens die) but keeps refusing another phone."""
+    now = timezone.now()
+    changes: dict[str, Any] = {"revoked_at": now, "push_token": ""}
+    held = counts if counts is not None and any(counts.values()) else None
+    if counts is not None:
+        changes["unsynced"] = counts
+    if held:
+        changes["held_after_sign_out_at"] = now
+    if Device.objects.filter(pk=device_id, user=user, revoked_at__isnull=True).update(**changes):
+        log.event("auth.device_revoked", user=user, count=1)
+        if held:
+            log.event("auth.signed_out_holding_work", user=user, **held)
+
+
+def phone_state(user: User) -> dict[str, Any]:
+    """What the person's phones last said they still hold: signed-in phones, and phones that
+    signed out still holding work. unknown: a signed-in phone never reported."""
+    devices = list(Device.objects.filter(user=user, revoked_at__isnull=True))
+    held = list(Device.objects.filter(user=user, held_after_sign_out_at__isnull=False))
+    reported = [d.unsynced for d in devices + held if d.unsynced is not None]
+    seen = [d.last_seen_at for d in devices if d.last_seen_at]
+    return {"devices": len(devices),
+            "drafts": sum(int(u.get("drafts", 0) or 0) for u in reported),
+            "files": sum(int(u.get("files", 0) or 0) for u in reported),
+            "unknown": any(d.unsynced is None for d in devices),
+            "signed_out_holding": len(held),
+            "last_seen_at": max(seen) if seen else None}
+
+
+def _phones_holding_work(user: User) -> list[Device]:
+    """Signed-in phones, and phones that signed out holding work, that may hold unsent work."""
+    phones = Device.objects.select_for_update().filter(user=user).filter(
+        Q(revoked_at__isnull=True) | Q(held_after_sign_out_at__isnull=False))
+    return [d for d in phones if d.holds_work()]
+
+
+def register_device_and_tokens(user: User, device_name: str,
+                               install_id: UUID | None = None) -> dict[str, Any]:
     """A new phone replaces the old one, unless the old one may still hold work that hasn't
-    reached the server (then the person syncs it first, or someone allowed to sign it out does)."""
+    reached the server (then the person syncs it first, or someone allowed to sign it out does).
+    The same install of the app is let back in: it takes its own kept work over."""
     with transaction.atomic():
-        busy = next((d for d in Device.objects.select_for_update().filter(
-            user=user, revoked_at__isnull=True) if d.holds_work()), None)
+        holding = _phones_holding_work(user)
+        mine = [d for d in holding if install_id is not None and d.install_id == install_id]
+        busy = next((d for d in holding if d not in mine), None)
         if busy is not None:
             counts = busy.unsynced or {}
             raise CodedError("DEVICE_HAS_UNSYNCED_DATA",
                              "Your other phone still has work that hasn't been sent. Open the app "
                              "there and let it sync, or ask an Admin to sign that phone out.", 409,
                              drafts=counts.get("drafts"), files=counts.get("files"))
+        if mine:
+            log.event("auth.device_taken_over", user=user)
         revoke_devices(user)
-        device = Device.objects.create(user=user, name=device_name)
+        device = Device.objects.create(user=user, name=device_name, install_id=install_id)
     log.event("auth.device_registered", user=user, device=str(device.id))
     refresh = RefreshToken.for_user(user)
     refresh["device_id"] = str(device.id)

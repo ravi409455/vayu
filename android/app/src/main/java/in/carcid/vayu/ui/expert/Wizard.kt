@@ -103,6 +103,9 @@ class InspectionEnv(
     val asset: suspend (String) -> ImageBitmap?,
     /** Ops changed something on this job since the expert last looked ("old -> new"). */
     val opsChanges: List<String> = emptyList(),
+    /** Backup copies outside the app, and whether "All files access" is on (docs/plan-media-backup.md). */
+    val backup: `in`.carcid.vayu.core.backup.BackupCopies? = null,
+    val fileAccess: () -> Boolean = { true },
 )
 
 @Composable
@@ -170,8 +173,8 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
                     shrinkPhoto(raw, out)          // not stamped: an older photo must not look like proof of this visit
                     raw.delete()
                 }
-                model.addFile(part, f.key, "photo", out, "image/jpeg", "gallery", label(f, draft, part), single = false, max = f.maxCount)
-            } else model.addFile(part, f.key, f.type, raw, type, "gallery", label(f, draft, part), single = false, max = f.maxCount)
+                model.addFile(part, f.key, "photo", out, "image/jpeg", "gallery", label(f, draft, part), single = false, max = f.maxCount, page = step.title)
+            } else model.addFile(part, f.key, f.type, raw, type, "gallery", label(f, draft, part), single = false, max = f.maxCount, page = step.title)
         }
     }
     val document = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -180,7 +183,7 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
         scope.launch {
             val raw = newFile(dir, "file")
             val type = withContext(Dispatchers.IO) { copyIn(ctx, uri, raw) } ?: return@launch
-            model.addFile(part, f.key, "file", raw, type, "gallery", label(f, draft, part), single = false, max = f.maxCount)
+            model.addFile(part, f.key, "file", raw, type, "gallery", label(f, draft, part), single = false, max = f.maxCount, page = step.title)
         }
     }
 
@@ -188,13 +191,13 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
         is Tool.Camera -> {
             CameraScreen(t.field, (draft.answer(t.part, t.field.key) as? List<*>)?.size ?: 0, draft.code, env.expertName, env.now,
                 env.verified, dir, onTaken = { file, type ->
-                    scope.launch { model.addFile(t.part, t.field.key, t.field.type, file, type, "camera", label(t.field, model.draft, t.part), single = false, max = t.field.maxCount) }
+                    scope.launch { model.addFile(t.part, t.field.key, t.field.type, file, type, "camera", label(t.field, model.draft, t.part), single = false, max = t.field.maxCount, page = step.title) }
                 }, onDone = { tool = null })
             return
         }
         is Tool.Sign -> {
             SignatureScreen(t.field, dir, onSigned = { file ->
-                scope.launch { model.addFile(t.part, t.field.key, "signature", file, "image/png", "camera", t.field.label, single = true) }; tool = null
+                scope.launch { model.addFile(t.part, t.field.key, "signature", file, "image/png", "camera", t.field.label, single = true, page = step.title) }; tool = null
             }, onClose = { tool = null })
             return
         }
@@ -235,6 +238,15 @@ private fun Wizard(env: InspectionEnv, draft: Draft, filled: Filled, onClose: ()
         }
         Box(Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(Vayu.colors.line)) {
             Box(Modifier.fillMaxWidth(index.toFloat() / steps.lastIndex.coerceAtLeast(1)).height(3.dp).background(Vayu.colors.ink))
+        }
+        // the camera keeps working without backups: a red line says so (access turned off, or no room)
+        if (env.backup != null) {
+            var access by remember { mutableStateOf(env.fileAccess()) }
+            androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { access = env.fileAccess(); onPauseOrDispose {} }
+            val last by env.backup.lastCopy.collectAsState()
+            if (!access || last == `in`.carcid.vayu.core.backup.BackupCopies.Result.PHONE_FULL)
+                BackupWarning(phoneFull = access, onFreeSpace = {
+                    runCatching { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_INTERNAL_STORAGE_SETTINGS)) } })
         }
         val full by env.drafts.writeFailed.collectAsState()
         if (full) Text("The phone is full, so the last answers are not saved yet. Free up space (Uploads → Phone storage).",

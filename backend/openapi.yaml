@@ -569,16 +569,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: {}
+              $ref: '#/components/schemas/LoginRequest'
           application/x-www-form-urlencoded:
             schema:
-              type: object
-              additionalProperties: {}
+              $ref: '#/components/schemas/LoginRequest'
           multipart/form-data:
             schema:
-              type: object
-              additionalProperties: {}
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
       security:
       - {}
       responses:
@@ -621,22 +619,22 @@ paths:
   /api/v1/auth/logout:
     post:
       operationId: auth_logout_create
+      description: |-
+        Sign out. A phone may say what it still holds unsent (both counts, or none): with unsent
+        work it keeps holding it and only this install may sign back in (docs/plan-media-backup.md).
       tags:
       - auth
       requestBody:
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: {}
+              $ref: '#/components/schemas/LogoutCounts'
           application/x-www-form-urlencoded:
             schema:
-              type: object
-              additionalProperties: {}
+              $ref: '#/components/schemas/LogoutCounts'
           multipart/form-data:
             schema:
-              type: object
-              additionalProperties: {}
+              $ref: '#/components/schemas/LogoutCounts'
       security:
       - deviceToken: []
       - cookieAuth: []
@@ -9984,8 +9982,9 @@ paths:
     get:
       operationId: users_phone_retrieve
       description: |-
-        What the person's signed-in phones last said they still hold (F-243), so the deactivate
-        and sign-out warnings say what would be lost. unknown: a phone never reported.
+        What the person's phones last said they still hold (F-243), so the deactivate and
+        sign-out warnings say what would be lost: signed-in phones, and phones that signed out
+        still holding work (signed_out_holding). unknown: a signed-in phone never reported.
       parameters:
       - in: path
         name: id
@@ -10584,6 +10583,14 @@ components:
       - id
       - message
       - rule
+    ClientEnum:
+      enum:
+      - web
+      - mobile
+      type: string
+      description: |-
+        * `web` - web
+        * `mobile` - mobile
     DeviceCheckedRefresh:
       type: object
       properties:
@@ -10907,6 +10914,36 @@ components:
       required:
       - must_change_password
       - user
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        client:
+          $ref: '#/components/schemas/ClientEnum'
+        device_name:
+          type: string
+          default: ''
+        install_id:
+          type: string
+          format: uuid
+          writeOnly: true
+          nullable: true
+      required:
+      - client
+      - password
+      - username
+    LogoutCounts:
+      type: object
+      properties:
+        drafts:
+          type: integer
+          minimum: 0
+        files:
+          type: integer
+          minimum: 0
     MasterList:
       type: object
       properties:
@@ -11542,6 +11579,8 @@ components:
           type: integer
         unknown:
           type: boolean
+        signed_out_holding:
+          type: integer
         last_seen_at:
           type: string
           format: date-time
@@ -11551,6 +11590,7 @@ components:
       - drafts
       - files
       - last_seen_at
+      - signed_out_holding
       - unknown
     Reschedule:
       type: object

@@ -34,6 +34,16 @@ class TokenStoreTest {
         assertEquals("R1", PrefsTokenStore(app, Fake()).refresh())                 // and after the next start
     }
 
+    /** plan-media-backup: one id per install, kept through sign-outs, so the server lets this phone back in. */
+    @Test fun theInstallIdIsMadeOnceAndKeptThroughSignOut() {
+        val s = PrefsTokenStore(app, Fake())
+        val id = s.installId()
+        java.util.UUID.fromString(id)                                            // a real UUID: the server checks it
+        s.save("A", "R"); s.clear()
+        assertEquals(id, s.installId())
+        assertEquals(id, PrefsTokenStore(app, Fake()).installId())                 // and after the next start
+    }
+
     @Test fun newTokensAreSavedSealed() {
         PrefsTokenStore(app, Fake()).save("A2", "R2")
         assertNull(prefs.getString("access", null))
