@@ -83,6 +83,8 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
   const busy = regen.isPending || !!r?.updating || watching;
   // no report at all (its first render was lost or had no layout): Ops can make it from here
   const firstMissing = q.isSuccess && !r && booking.stage === "completed" && !booking.conflict;
+  // a PDF is passed on only once the booking is Completed (every file in, or Ops finished it)
+  const notYet = booking.stage !== "completed" ? "Available once the booking is Completed." : "";
   if (q.isError) return <LoadError error={q.error} what="report" onRetry={q.refetch} />;
   if (q.isPending && can("reports.view")) return <p className="muted pad">Loading…</p>;
   const passedOn = activity.filter((a) => a.kind === "report_downloaded" || a.kind === "report_shared");
@@ -129,8 +131,17 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
             <RefreshCw size={15} aria-hidden /> {busy ? "Making…" : r ? "Regenerate" : "Make the PDF"}
           </button>
         )}
-        {r?.verify_url && r.status === "ready" && <button onClick={() => void copyCheckLink()}>Copy check link</button>}
-        {r?.url && (
+        {r?.verify_url && r.status === "ready" && (
+          <button disabled={!!notYet} title={notYet || undefined} onClick={() => void copyCheckLink()}>
+            Copy check link
+          </button>
+        )}
+        {r?.url && notYet && (
+          <button className="primary" disabled title={notYet}>
+            <Download size={15} aria-hidden /> Download PDF
+          </button>
+        )}
+        {r?.url && !notYet && (
           <a
             className="btn primary"
             href={r.url}
@@ -145,6 +156,7 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
       {r?.out_of_date && !busy && (
         <div className="banner warn">Out of date: changes since this PDF. Press Regenerate when you are done to make a new one.</div>
       )}
+      {r && notYet && <p className="muted small">Download and share: {notYet}</p>}
       {r && why && can("submissions.edit") && <p className="muted small">Regenerate is off: {why}</p>}
       {r?.error && !r.updating && <div className="banner bad">Problem: {reportError(r.error)}. It is tried again by itself.</div>}
       {!r && !firstMissing && <Empty title="No report yet">It is made automatically when the booking is Completed.</Empty>}

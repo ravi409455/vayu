@@ -23,7 +23,11 @@ const report = (over: Record<string, unknown>) => ({
   ...over,
 });
 
-function mount(rep: Record<string, unknown>, perms: Record<string, string> = { "reports.view": "all", "submissions.edit": "all" }) {
+function mount(
+  rep: Record<string, unknown>,
+  perms: Record<string, string> = { "reports.view": "all", "submissions.edit": "all" },
+  stage = "completed",
+) {
   const posts: string[] = [];
   let release!: () => void;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
@@ -44,7 +48,7 @@ function mount(rep: Record<string, unknown>, perms: Record<string, string> = { "
       <MemoryRouter>
         <AuthProvider>
           <ToastProvider>
-            <ReportTab booking={{ id: "b1", stage: "completed" } as never} activity={[]} />
+            <ReportTab booking={{ id: "b1", stage } as never} activity={[]} />
           </ToastProvider>
         </AuthProvider>
       </MemoryRouter>
@@ -52,6 +56,16 @@ function mount(rep: Record<string, unknown>, perms: Record<string, string> = { "
   );
   return { posts, release: () => release() };
 }
+
+describe("a PDF is passed on only once the booking is Completed", () => {
+  it("waiting for files: Download and Copy check link are off, with the reason", async () => {
+    mount(report({ url: "https://x/r.pdf", verify_url: "https://x/v", out_of_date: false }), undefined, "submitted");
+    expect(await screen.findByRole("button", { name: /Download PDF/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Copy check link" })).toBeDisabled();
+    expect(screen.queryByRole("link", { name: /Download PDF/ })).toBeNull();
+    expect(screen.getByText(/Available once the booking is Completed/)).toBeInTheDocument();
+  });
+});
 
 describe("reports are made again only by Regenerate (F-219)", () => {
   it("an out-of-date PDF says so, and a double click sends one regenerate", async () => {

@@ -119,11 +119,13 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
         if (outOfDate && !updating) Note("Something it shows changed since it was made. Regenerate it when you're done.", Vayu.colors.warnTint)
         // one row, to save space: Open · Share · Regenerate (each only when it applies)
         val hasFile = rep?.url?.isNotBlank() == true
+        // a PDF is passed on only once the booking is Completed (every file in, or Ops finished it)
+        val done = b.stage == "completed"
         val canRegenerate = (rep != null || missing) && env.can("submissions.edit")
         val allowed = regen?.allowed == true || missing
         if (hasFile || canRegenerate) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (hasFile) CardButton("Open", Modifier.weight(1f), online) { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }
-            if (hasFile) CardButton("Share", Modifier.weight(1f), online) { scope.launch {
+            if (hasFile) CardButton("Open", Modifier.weight(1f), online && done) { scope.launch { file()?.let { ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uriOf(it), "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) } ?: env.say("Couldn't download the report.") } }
+            if (hasFile) CardButton("Share", Modifier.weight(1f), online && done) { scope.launch {
                 file()?.let {
                     if (!logShared()) return@launch
                     ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/pdf")
@@ -138,6 +140,7 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
                 }
             }
         }
+        if (hasFile && !done) Text("Open and Share: available once the booking is Completed.", fontSize = 13.sp, color = Vayu.colors.muted)
         if (canRegenerate && !allowed && regen?.reason?.isNotBlank() == true) Text(regen.reason, fontSize = 13.sp, color = Vayu.colors.muted)
     }
 }
