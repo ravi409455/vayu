@@ -1,6 +1,6 @@
 import { WEB } from "./ports";
 import { expect, test } from "@playwright/test";
-import { apiAs, json, signIn } from "./api";
+import { apiAs, json, signIn, WEBKIT_PRIVATE } from "./api";
 
 // a real (tiny) JPEG
 const JPEG = Buffer.from(
@@ -124,7 +124,8 @@ test("J3c: a refresh keeps the draft and the pending upload carries on", async (
   await expect(page.getByLabel("Odometer")).toHaveValue("77"); // same answer
 });
 
-test("J3d: an upload that could not reach storage resumes by itself after a refresh", async ({ page }) => {
+test("J3d: an upload that could not reach storage resumes by itself after a refresh", async ({ page, browserName }) => {
+  test.skip(browserName === "webkit", WEBKIT_PRIVATE);
   const id = await assignedJob("J3-4");
   await signIn(page, "expert");
   await page.goto(`/jobs/${id}`);

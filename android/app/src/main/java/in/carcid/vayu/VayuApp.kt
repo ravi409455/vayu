@@ -182,7 +182,15 @@ class OutboxWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         return try {
             val done = graph.send(user)
             alertStuck(applicationContext, graph, user)
-            if (done) Result.success() else Result.retry()
+            when {
+                done -> Result.success()
+                // the files are there and the server checks them in seconds: ask again soon, not after
+                // the growing pause earlier failed sends built up (F-5: 16 minutes of "checking")
+                graph.drafts(user).all().filter { it.unsent }.all { it.onlyChecking } -> {
+                    enqueue(applicationContext, delaySeconds = 20); Result.success()
+                }
+                else -> Result.retry()
+            }
         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
             throw e
         } catch (e: ApiError) {
@@ -193,8 +201,9 @@ class OutboxWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     }
 
     companion object {
-        fun enqueue(context: Context) {
+        fun enqueue(context: Context, delaySeconds: Long = 0) {
             val work = OneTimeWorkRequestBuilder<OutboxWorker>()
+                .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()

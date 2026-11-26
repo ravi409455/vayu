@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import androidx.compose.foundation.text.TextAutoSize
 import `in`.carcid.vayu.core.ops.allPages
 import `in`.carcid.vayu.core.ops.ListItem
 import `in`.carcid.vayu.core.ops.MediaItem
@@ -349,7 +350,8 @@ private fun RowScope.Tile(icon: androidx.compose.ui.graphics.vector.ImageVector,
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
         Spacer(Modifier.height(4.dp))
-        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = tint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, fontWeight = FontWeight.SemiBold, color = tint, maxLines = 1, softWrap = false,
+            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 13.sp), modifier = Modifier.padding(horizontal = 4.dp))
     }
 }
 

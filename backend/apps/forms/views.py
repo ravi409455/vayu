@@ -4,6 +4,7 @@ from django.db.models import Max, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -445,13 +446,18 @@ class KeyChecksView(generics.GenericAPIView):
 
 class PromoteExport(generics.GenericAPIView):
     permission_classes = [perm("forms.promote")]
+    # a download link: Safari and Firefox ask for HTML and saved the browsable page (F-11)
+    renderer_classes = [JSONRenderer]
 
     def get(self, request):
         if not request.query_params.get("version"):
             raise serializers.ValidationError({"version": "This query parameter is required."})
         version = get_object_or_404(FormVersion.objects.select_related("form"),
                                     pk=request.query_params["version"])
-        return Response(promote.export_bundle(version))
+        response = Response(promote.export_bundle(version))
+        response["Content-Disposition"] = (f'attachment; filename="{version.form.key}'
+                                           f'-v{version.number}.json"')
+        return response
 
 
 class PromoteImport(generics.GenericAPIView):

@@ -46,4 +46,21 @@ describe("a page that breaks (R-13)", () => {
     expect(await screen.findByRole("alert")).toBeInTheDocument();
     expect(reload).toHaveBeenCalledTimes(1);
   });
+  it("a page file cancelled because the browser is leaving does not reload (F-6, Safari/Firefox)", async () => {
+    sessionStorage.clear();
+    const reload = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({ ...window.location, reload } as Location);
+    window.dispatchEvent(new Event("pagehide"));
+    const Page = lazyPage(() => Promise.reject(new Error("cancelled")));
+    render(
+      <ErrorBoundary>
+        <Suspense fallback="…">
+          <Page />
+        </Suspense>
+      </ErrorBoundary>,
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    expect(reload).not.toHaveBeenCalled();
+    window.dispatchEvent(new Event("pageshow"));
+  });
 });

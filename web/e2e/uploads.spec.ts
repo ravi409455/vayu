@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { apiAs, expertId, JPEG, json, signIn, uploadFile } from "./api";
+import { apiAs, expertId, JPEG, json, signIn, uploadFile, WEBKIT_PRIVATE } from "./api";
 
 test.use({ permissions: ["geolocation"], geolocation: { latitude: 28.6139, longitude: 77.209 } });
 
@@ -64,7 +64,8 @@ test("opening a lead on the web keeps another device's unfinished upload", async
 });
 
 // H-15: the expert submitted while a photo was still sending, then reloaded: the lead page carries on with it.
-test("a submitted lead sends the file the browser kept, after a reload", async ({ page }) => {
+test("a submitted lead sends the file the browser kept, after a reload", async ({ page, browserName }) => {
+  test.skip(browserName === "webkit", WEBKIT_PRIVATE);
   const id = await assignedJob("UP-2");
   const phone = await apiAs("expert");
   const selfie = await uploadFile(phone, id, "selfie", "photo", "image/jpeg", JPEG);
@@ -178,7 +179,8 @@ test("two tabs on one lead do not silently overwrite each other", async ({ page,
 });
 
 // R-06 / F-242: sign-out says what is not sent yet; signing out anyway leaves nothing behind.
-test("sign-out warns about unsent work, then leaves no drafts or files in the browser", async ({ page }) => {
+test("sign-out warns about unsent work, then leaves no drafts or files in the browser", async ({ page, browserName }) => {
+  test.skip(browserName === "webkit", WEBKIT_PRIVATE);
   const id = await assignedJob("UP-5");
   await signIn(page, "expert");
   await page.goto(`/jobs/${id}`);

@@ -1,0 +1,290 @@
+# WebKit accessibility tree and focus walk
+
+## sign in (http://localhost:5173/login)
+title: Sign in · Vayu
+h1: Sign in to Vayu
+unnamed controls: none
+focus order:
+  input "Username"
+  input "Password"
+  button "Show what I typed"
+  (body)
+  input "Username"
+  input "Password"
+  button "Show what I typed"
+  (body)
+  input "Username"
+  input "Password"
+  button "Show what I typed"
+  (body)
+  input "Username"
+  input "Password"
+  button "Show what I typed"
+  (body)
+  input "Username"
+  input "Password"
+  button "Show what I typed"
+  (body)
+  input "Username"
+  input "Password"
+  button "Show what I typed"
+  (body)
+  input "Username"
+  input "Password"
+  button "Show what I typed"
+  (body)
+  input "Username"
+  input "Password"
+
+## ops today (http://localhost:5173/today)
+title: Today · Vayu
+h1: Today
+unnamed controls: none
+focus order:
+  button "Collapse the menu"
+  input "Search bookings"
+  button "Needs you: 26"
+  button "TO Test account menu"
+  button "All bookings"
+  button "New booking"
+  button "All experts"
+  button "One hour earlier"
+  button "Now"
+  button "9 am–12 pm"
+  button "12–3 pm"
+  button "3–6 pm"
+  button "6–9 pm"
+  button "One hour later"
+  button "Full day"
+  (body)
+  button "Collapse the menu"
+  input "Search bookings"
+  button "Needs you: 26"
+  button "TO Test account menu"
+  button "All bookings"
+  button "New booking"
+  button "All experts"
+  button "One hour earlier"
+  button "Now"
+  button "9 am–12 pm"
+  button "12–3 pm"
+  button "3–6 pm"
+  button "6–9 pm"
+  button "One hour later"
+
+## booking MT-7 (http://localhost:5173/booking/f4d13a03-a8bc-4cfc-9bbc-bded187e0d2c)
+title: MT-7 · Vayu
+h1: Test MT-7 · Datsun Go
+unnamed controls: none
+focus order:
+  button "Collapse the menu"
+  input "Search bookings"
+  button "Needs you: 26"
+  button "TO Test account menu"
+  button "Reschedule"
+  button "Reassign"
+  button "More actions"
+  button[tab] "Booking"
+  button[tab] "Inspection"
+  button[tab] "Media"
+  button[tab] "Review"
+  button[tab] "Report"
+  button "Hide customer, car and activity"
+  button "Edit"
+  (body)
+  button "Collapse the menu"
+  input "Search bookings"
+  button "Needs you: 26"
+  button "TO Test account menu"
+  button "Reschedule"
+  button "Reassign"
+  button "More actions"
+  button[tab] "Booking"
+  button[tab] "Inspection"
+  button[tab] "Media"
+  button[tab] "Review"
+  button[tab] "Report"
+  button "Hide customer, car and activity"
+  button "Edit"
+  (body)
+
+## assign dialog (http://localhost:5173/booking/f4d13a03-a8bc-4cfc-9bbc-bded187e0d2c)
+title: MT-7 · Vayu
+h1: Test MT-7 · Datsun Go
+unnamed controls: none
+focus order:
+  select "Expert"
+  button "Back"
+  button "Assign an expert"
+  (body)
+  select "Expert"
+  button "Back"
+  button "Assign an expert"
+  (body)
+  select "Expert"
+  button "Back"
+  button "Assign an expert"
+  (body)
+  select "Expert"
+  button "Back"
+  button "Assign an expert"
+  (body)
+  select "Expert"
+  button "Back"
+  button "Assign an expert"
+  (body)
+  select "Expert"
+  button "Back"
+  button "Assign an expert"
+  (body)
+  select "Expert"
+  button "Back"
+  button "Assign an expert"
+  (body)
+  select "Expert"
+  button "Back"
+
+## admin builder (http://localhost:5173/forms/4)
+title: PDI · Vayu
+h1: PDI
+Draft v2
+unnamed controls: none
+focus order:
+  button "Collapse the menu"
+  input "Search bookings"
+  button "Needs you: 26"
+  button "TA Test account menu"
+  button "Preview"
+  button "More form actions"
+  button "Check & publish…"
+  button[tab] "Questions"
+  button[tab] "Key Checks"
+  button[tab] "Ratings"
+  button "Hide pages"
+  div[button] "Car Details 15"
+  button[button] "Move page Car Details"
+  div[button] "Car Documents 15"
+  button[button] "Move page Car Documents"
+  div[button] "Exterior Body 108"
+  button[button] "Move page Exterior Body"
+  div[button] "Body Frame Accidental Checklist 57"
+  button[button] "Move page Body Frame Accidental Checklist"
+  div[button] "Engine 28"
+  button[button] "Move page Engine"
+  div[button] "Battery and Charging 4"
+  button[button] "Move page Battery and Charging"
+  div[button] "CNG 3"
+  button[button] "Move page CNG"
+  div[button] "OBD Scan 2"
+  button[button] "Move page OBD Scan"
+  div[button] "Electrical and Interior 65"
+  button[button] "Move page Electrical and Interior"
+  div[button] "Warning Lights 10"
+
+## roles (http://localhost:5173/roles)
+title: Roles & permissions · Vayu
+h1: Roles & permissions
+unnamed controls: none
+focus order:
+  button "Collapse the menu"
+  input "Search bookings"
+  button "Needs you: 26"
+  button "TA Test account menu"
+  button[radio] "Off"
+  button[radio] "All"
+  button[radio] "Off"
+  button[radio] "All"
+  button[radio] "Off"
+  button[radio] "All"
+  button[radio] "Off"
+  button[radio] "All"
+  button[radio] "Off"
+  button[radio] "All"
+  button[radio] "Off"
+  button[radio] "All"
+  button[radio] "Off"
+  button[radio] "All"
+  button[radio] "Off"
+  button[radio] "All"
+  button[radio] "Off"
+  button[radio] "All"
+  button[radio] "Off"
+  button[radio] "All"
+  button[radio] "Off"
+  button[radio] "All"
+  button[radio] "Off"
+  button[radio] "Own"
+  button[radio] "All"
+  button[radio] "Off"
+
+## api keys (http://localhost:5173/api-keys)
+title: API keys · Vayu
+h1: API keys
+unnamed controls: none
+focus order:
+  button "Collapse the menu"
+  input "Search bookings"
+  button "Needs you: 26"
+  button "TA Test account menu"
+  button "New key"
+  button "New key"
+  (body)
+  button "Collapse the menu"
+  input "Search bookings"
+  button "Needs you: 26"
+  button "TA Test account menu"
+  button "New key"
+  button "New key"
+  (body)
+  button "Collapse the menu"
+  input "Search bookings"
+  button "Needs you: 26"
+  button "TA Test account menu"
+  button "New key"
+  button "New key"
+  (body)
+  button "Collapse the menu"
+  input "Search bookings"
+  button "Needs you: 26"
+  button "TA Test account menu"
+  button "New key"
+  button "New key"
+  (body)
+  button "Collapse the menu"
+  input "Search bookings"
+
+## customer report (http://localhost:5173/verify/uAfrCvTwKNOfyKXiopyXGuaXH4tuYhOM)
+title: Car C.I.D.
+h1: Report check
+unnamed controls: none
+focus order:
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)
+  (body)

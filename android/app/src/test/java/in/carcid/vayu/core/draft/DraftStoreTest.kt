@@ -73,4 +73,13 @@ class DraftStoreTest {
         assertTrue(kept.exists()); assertTrue(fresh.exists())
         assertFalse(shot.exists()); assertFalse(tmp.exists())
     }
+
+    /** F-5: sent and only waiting for the server's check is told apart from work still to send. */
+    @Test fun onlyCheckingMeansEverythingIsOnTheServer() {
+        val f = LocalFile("f1", "inspection", "door_photos", "photo", "", "image/jpeg", "camera", 4, "", "Door 1")
+        assertTrue(draft(listOf(f.copy(sent = true))).copy(submitSent = true).onlyChecking)
+        assertFalse(draft(listOf(f)).copy(submitSent = true).onlyChecking)                         // not sent yet
+        assertFalse(draft(listOf(f.copy(sent = true))).onlyChecking)                               // answers not sent
+        assertFalse(draft(listOf(f.copy(sent = true, error = "Arrived damaged"))).copy(submitSent = true).onlyChecking)
+    }
 }
