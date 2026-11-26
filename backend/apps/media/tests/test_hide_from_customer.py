@@ -4,16 +4,18 @@ The newest published version of the form decides, so older bookings follow it to
 from unittest import mock
 
 import pytest
+from rest_framework.test import APIClient
 
 from apps.bookings.models import Booking
 from apps.forms.models import Field
 from apps.media import zips
-from apps.media.models import MediaAsset
+from apps.media.models import MediaAsset, MediaZip
 from apps.media.services import customer_hidden
 from apps.media.tests.conftest import initiate_body, jpeg
 from apps.media.tests.test_upload import job, menv, submit_with  # noqa: F401
 
 pytestmark = pytest.mark.django_db
+ZIP_URL = "/api/v1/zips/"
 
 
 def done(env, b):
@@ -115,3 +117,38 @@ def test_the_report_leaves_hidden_photos_out_and_its_download_link_too(job, sett
     src = context.Source(booking, booking.counted_inspection())
     assert context.photo_items(src, part) == []            # placed by name: skipped, no warning
     assert media_links.named(src, "photos") == []
+
+
+def test_a_zip_link_made_before_the_setting_never_hands_out_the_hidden_file(job, settings):
+    """Security review: an older link to a ZIP that holds the field gives a fresh ZIP without it."""
+    env, b = job
+    done(env, b)
+    booking = Booking.objects.get(pk=b["id"])
+    with mock.patch("apps.media.zips.build_zip.delay"):
+        old = zips.request_zip(booking, "image")
+        MediaZip.objects.filter(pk=old.pk).update(status="ready", key="zips/old.zip")
+        hide("photo_a")
+        r = APIClient().get(f"{ZIP_URL}{zips.token_for(old.id)}?format=json")
+    assert r.status_code == 202                              # a new ZIP is being made
+    newest = MediaZip.objects.order_by("-created_at").first()
+    assert newest.id != old.id and "photo_a" in newest.excluded
+
+
+def test_the_same_key_in_two_forms_stays_hidden_if_either_hides_it(job, settings):
+    """Security review: another form of the booking with the same key must not unhide it."""
+    from apps.bookings.models import Inspection
+    from apps.bookings.tests.conftest import custom_form
+    from apps.bookings.tests.test_submissions import publish_form
+
+    env, b = job
+    done(env, b)
+    hide("photo_a")
+    form = custom_form(env.admin, "other", "Other")
+    v = form["draft_version"]["id"]
+    sec = env.admin.get(f"/api/v1/form-versions/{v}").json()["pages"][0]["sections"][0]["id"]
+    assert env.admin.post(f"/api/v1/sections/{sec}/fields", {"key": "photo_a", "label": "Same key",
+                          "type": "photo", "config": {}}, format="json").status_code == 201
+    publish_form(env.admin, form["id"])
+    booking = Booking.objects.get(pk=b["id"])
+    Inspection.objects.filter(booking=booking).update(start_version_id=v)   # a second form, same key
+    assert customer_hidden(booking) == {"photo_a"}

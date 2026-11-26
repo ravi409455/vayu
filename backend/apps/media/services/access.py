@@ -80,21 +80,29 @@ def is_manager(user: Any, request: Request | None = None) -> bool:
 def customer_hidden(booking: Booking) -> set[str]:
     """Keys of the file fields marked "Hide from customer" (owner, 2026-11-27: payment and other
     internal photos): never in the report, its download links, partner integrations or any ZIP;
-    only viewable in the app. The newest published version of each form decides, so turning it on
-    reaches older bookings too; a field it no longer has keeps its own version's setting."""
+    only viewable in the app. Per form, the newest published version decides, so turning it on
+    reaches older bookings too (a field it no longer has keeps its own version's setting). Files
+    are kept by key alone, so a key hidden by any of the booking's forms stays hidden."""
     from apps.forms.models import FormVersion, VersionStatus
 
     pinned = {v for i in booking.inspections.all() for v in i.pinned().values() if v is not None}
     if not pinned:
         return set()
-    newest = {}
-    for v in FormVersion.objects.filter(form_id__in={v.form_id for v in pinned},
-                                        status=VersionStatus.PUBLISHED).order_by("number"):
-        newest[v.form_id] = v                                  # highest number wins
-    hidden: dict[str, bool] = {}
-    # pinned first, then newest over it: the newest version's setting wins for a key it has
-    for versions in (pinned, set(newest.values()) - pinned):
-        for key, config in Field.objects.filter(version__in=versions, type__in=KINDS
-                                                ).values_list("key", "config"):
-            hidden[key] = (config or {}).get("hide_from_customer") is True
-    return {k for k, v in hidden.items() if v}
+    newest = {v.form_id: v for v in FormVersion.objects.filter(
+        form_id__in={v.form_id for v in pinned}, status=VersionStatus.PUBLISHED).order_by("number")}
+    setting: dict[tuple[int, str], dict[int, bool]] = {}     # (form, key) -> {version: hidden}
+    for vid, form_id, key, config in Field.objects.filter(
+            version__in={*pinned, *newest.values()}, type__in=KINDS).values_list(
+            "version_id", "version__form_id", "key", "config"):
+        setting.setdefault((form_id, key), {})[vid] = (config or {}).get(
+            "hide_from_customer") is True
+    hidden = set()
+    for (form_id, key), by_version in setting.items():
+        top = newest.get(form_id)
+        if top is not None and top.id in by_version:
+            on = by_version[top.id]                      # the newest version decides
+        else:
+            on = any(by_version.values())                # gone from it: what the booking used
+        if on:
+            hidden.add(key)
+    return hidden
