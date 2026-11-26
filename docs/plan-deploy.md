@@ -20,7 +20,8 @@ the place this plan names (the server's env file or a GitHub secret).
 
 | Topic | Decision |
 |---|---|
-| Hosting | DigitalOcean, Bangalore (BLR1). Production 4 vCPU / 8 GB, staging 2 vCPU / 4 GB. |
+| Hosting | DigitalOcean, Bangalore (BLR1). Both 2 vCPU / 4 GB ($24). Production is always on and moves to 4 vCPU / 8 GB only if the load test or alerts say so (one click, about a minute down). |
+| Staging | **On demand** (decided 2026-11-26): a switched-off droplet is still billed, so staging lives as a snapshot and is only created while testing, about once a month (`infra/staging.sh up` / `down`). |
 | Database | Production: DigitalOcean **Managed Postgres** (restore to any minute of the last 7 days) plus our own nightly dump to R2. Staging: Postgres in Docker, nightly dump. |
 | Files | Cloudflare R2 (already set up): one bucket per server, plus a new backups bucket. |
 | Addresses | Production `vayu.carcid.in`. Staging `vayu-staging.carcid.in`. DNS stays at the registrar. |
@@ -34,8 +35,20 @@ the place this plan names (the server's env file or a GitHub secret).
 | Working mode | The owner clicks, this plan guides. Claude writes all code and config. |
 | Order | Staging end to end first. Production is then a copy of what worked. |
 
-Rough monthly cost: production server $48, staging $24, managed Postgres $15, staging server
-backup about $5, R2 and Sentry and uptime checks on free tiers. **About $95 a month.**
+Monthly cost (DigitalOcean prices read 2026-11-26):
+
+| Item | $ a month |
+|---|---|
+| Production droplet, 2 vCPU / 4 GB | 24.00 |
+| Managed Postgres, 1 GB, 10 GB disk | 15.15 |
+| Staging on demand (about a week a month at $0.0357/h) + snapshot (~8 GB × $0.06) | 3 to 6.50 |
+| Production droplet backups | 0 (it holds no data) |
+| R2 | 0 up to 10 GB, then $0.015 per GB a month (downloads free) |
+| Sentry, Better Stack, Phase, Firebase pushes, GitHub (public repo) | 0 (free plans) |
+| **Total** | **about $43 to 46**, plus 18% GST if DigitalOcean charges it (about ₹4,300 to 4,900) |
+
+If production moves to 8 GB: +$24. Going private on GitHub: 2,000 free CI minutes a month, then
+pay per minute or about $4 per user a month.
 
 This plan was reviewed a second time on 2026-11-26 (as a senior engineer and a DevOps engineer
 would) and corrected; the rules that came out of that review are in §1a.
@@ -197,14 +210,19 @@ Slack → **+** next to Channels → Create channel → name `vayu-alerts` → C
 3. Top right **Create → Droplets**:
    - Region: **Bangalore (BLR1)**.
    - Image: **Ubuntu 24.04 (LTS) x64**.
-   - Size: **Basic → Regular → 2 vCPU / 4 GB** ($24).
-   - Tick **Backups** (weekly) and **Monitoring** (free).
+   - Size: **Basic → Regular → 2 vCPU / 4 GB** ($24 a month if left on; billed by the hour).
+   - Tick **Monitoring** (free). Leave **Backups off**: staging's backup is its snapshot.
    - Authentication: **SSH Key** → tick `owner-mac`. Never choose Password.
-   - Hostname: `vayu-staging`.
+   - Hostname: `vayu-staging`. Tags: `vayu-staging` and `vayu-web`.
    - Create. Copy the **IP address** it shows (not a secret; tell Claude).
 4. Networking → **Firewalls → Create Firewall** → name `vayu-web`:
    - Inbound: **SSH (22)**, **HTTP (80)**, **HTTPS (443)** from all addresses; delete anything else.
-   - Outbound: leave as is. Apply to droplet `vayu-staging`. Create.
+   - Outbound: leave as is. Apply to the **tag** `vayu-web` (not one droplet: then every staging
+     droplet made from a snapshot, and production, are covered by themselves). Create.
+5. **API → Generate New Token**, name `vayu-owner-laptop`, 90 days, **Full Access** (doctl needs
+   droplets, snapshots, SSH keys, tags). Save it in Phase → `vayu-owner` → `DO_API_TOKEN`.
+   On the Mac: `brew install doctl`, then `doctl auth init` and paste the token.
+   This is what `infra/staging.sh up` / `down` use.
 
 ### 2.3 [YOU] DNS record for staging
 Log in to the registrar where carcid.in was bought → DNS / Manage DNS → **Add record**:
@@ -391,7 +409,7 @@ rollback to the previous commit and forward again.
 | Staging database | Docker on staging | Nightly dump to `vayu-backups/staging/` | 1 day (test data only) |
 | Photos, videos, PDFs | R2 | R2 keeps several copies itself. There is **no undo**: a file the app deletes is gone. Only the clean-up job deletes, and the key lives only on the server. Accepted risk. | None expected |
 | Server settings (`.env`, Firebase file) | The server | Phase holds every value; the server can be rebuilt from the runbook in about an hour. | None |
-| Whole server | Droplet | Staging: DigitalOcean weekly backup. Production: none needed (it holds no data); rebuild with `bootstrap.sh` + one deploy, about 30 minutes. | Nothing |
+| Whole server | Droplet | Staging: its snapshot (the 2 newest are kept). Production: none needed (it holds no data); rebuild with `bootstrap.sh` + one deploy, about 30 minutes. | Nothing |
 | Android keystore | Mac | Phase + 2 offline copies (Phase 0) | None |
 | Redis (job queue) | Docker | Not backed up. If lost, jobs in flight are redone by the hourly checks. | A few delayed jobs |
 
@@ -463,12 +481,15 @@ Staging is "done" only when all of these pass. Each is a line in the runbook's c
 6. **Security headers**: securityheaders.com and SSL Labs both grade **A** for the staging address.
    The CSP report shows nothing blocked during steps 1 and 2 → switch CSP from "report only" to enforced.
 7. **Load test** (`perf/locustfile.py`, 200 users for 10 minutes, signing in slowly, 1.17): 95 of
-   100 requests under half a second, no errors. Staging is half the size of production; if it only just fails,
-   resize the droplet up for one hour (about $0.07) and run again before changing code.
+   100 requests under half a second, no errors. Staging is the same size as production, so this
+   result is production's too. If it fails, resize staging to 4 vCPU / 8 GB for an hour (about
+   $0.07) and run again: if that passes, production moves to 8 GB before launch.
 8. **Backup and restore drill** passed (5.3).
 9. **Rollback** rehearsed (4.2).
 10. **Reboot test**: restart the droplet from the DigitalOcean dashboard → everything comes back
     by itself within 2 minutes, health is ok.
+11. **On-demand cycle**: `infra/staging.sh down`, then `up`, update DNS → health is ok, test data
+    and https certificate are still there.
 
 ---
 
@@ -477,9 +498,9 @@ Staging is "done" only when all of these pass. Each is a line in the runbook's c
 Same steps as staging, with these differences.
 
 ### 7.1 [YOU] Production server
-Create → Droplets → BLR1, Ubuntu 24.04, **4 vCPU / 8 GB**, Monitoring ticked (Backups not
-needed: this server holds no data), your SSH key, hostname `vayu-prod`. Add it to the `vayu-web`
-firewall. Tell Claude the IP. Claude runs the same `infra/bootstrap.sh` as on staging.
+Create → Droplets → BLR1, Ubuntu 24.04, **2 vCPU / 4 GB** (8 GB only if the staging load test
+said so), Monitoring ticked (Backups not needed: this server holds no data), your SSH key,
+hostname `vayu-prod`, tag `vayu-web` (the firewall then covers it). Tell Claude the IP. Claude runs the same `infra/bootstrap.sh` as on staging.
 
 ### 7.2 [YOU] Managed database
 Create → **Databases** → PostgreSQL **16** → region **BLR1** → Basic, **1 GB / 1 vCPU** ($15; grow
