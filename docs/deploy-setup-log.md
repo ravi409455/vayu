@@ -263,7 +263,15 @@ key (already in Phase, step 2 of Phase 0), so production shares no key with stag
 
 **2.5c · Restrict the Firebase API key (R-32)** ⏳ — done once "Vayu Staging" is built, and checked
 in Phase 6 (a push still arrives).
-### 2.6 · Sentry: projects check, auth token, Slack alerts ⏳
+### 2.6 · Sentry: projects check, auth token, Slack alerts 🔄
+Organisation slug: **`car-cid`** (from `https://car-cid.sentry.io/`; not a secret). It goes in the
+GitHub variable `SENTRY_ORG` (Phase 4) and in `SENTRY_ORG` on the machine that builds the Android app.
+
+| Part | Status |
+|---|---|
+| 3 projects `vayu-server` (Django), `vayu-web` (React), `vayu-android` (Android) | ⏳ |
+| Token `vayu-ci` (Settings → Developer Settings → Organization Tokens) → Phase `vayu-owner` → `SENTRY_AUTH_TOKEN` | ⏳ |
+| Slack integration + 6 alert rules (per project: "new issue" and "seen > 20 times in 1 hour", environment `production`, → `#vayu-alerts` + email) | ⏳ |
 ### 2.7 · GitHub: branch rules, environments, fork approval ⏳
 
 ---
