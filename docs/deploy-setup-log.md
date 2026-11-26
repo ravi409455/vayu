@@ -226,7 +226,7 @@ Why: unfinished uploads (a phone losing signal mid-video) cost money until remov
 an expert offline for a week still finish. The lock means nobody, not even someone who breaks into
 a server, can delete a backup younger than 30 days; at day 35 it expires by itself.
 
-### 2.4c · R2 access keys 🔄
+### 2.4c · R2 access keys ✅
 One key per job, each limited to one bucket: a leaked key reaches only that bucket, and each can be
 replaced alone. dash.cloudflare.com → R2 Object Storage → **Manage API tokens** → **Create
 Account API token**, four times:
@@ -245,8 +245,22 @@ Also in Phase (not secret), `vayu` → Staging and Production: `S3_ENDPOINT_URL`
 Two backup keys rather than one: no secret is shared between staging and production. The backup
 lock (2.4b) still stops either from deleting a backup younger than 30 days.
 Then the **old test token** (the one in `backend/.env.local`, `R2_*` lines) is deleted in the same
-list; nothing uses it.
-### 2.5 · Firebase: staging app, production key, API key restriction ⏳
+list; nothing uses it. Done, and its 5 `R2_*` lines were removed from `backend/.env.local`.
+### 2.5 · Firebase: staging app, production key, API key restriction 🔄
+Firebase project `vayu-8bb7a` (console.firebase.google.com).
+
+**2.5a · The "Vayu Staging" app** ⏳ — Project settings (gear) → General → **Add app** → Android:
+package name `in.carcid.vayu.staging`, nickname `Vayu Staging` → Register → **download
+`google-services.json`** (it now lists both apps; not a secret) → given to Claude, who puts it in
+`android/app/` (PR 27). Without it, `./gradlew assembleStaging` fails.
+
+**2.5b · Production's own server key** ⏳ — Project settings → **Service accounts** → **Generate
+new private key** → the JSON goes straight into Phase → `vayu` → Production →
+`FIREBASE_SERVICE_ACCOUNT_JSON`, then the downloaded file is deleted. Staging keeps the existing
+key (already in Phase, step 2 of Phase 0), so production shares no key with staging or the Mac.
+
+**2.5c · Restrict the Firebase API key (R-32)** ⏳ — done once "Vayu Staging" is built, and checked
+in Phase 6 (a push still arrives).
 ### 2.6 · Sentry: projects check, auth token, Slack alerts ⏳
 ### 2.7 · GitHub: branch rules, environments, fork approval ⏳
 
