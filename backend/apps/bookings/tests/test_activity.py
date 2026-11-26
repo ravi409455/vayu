@@ -48,12 +48,52 @@ def test_reschedule_keeps_the_old_and_new_time(env):
                               "inspection_time": ["15:30", "11:00"]}
 
 
-def test_values_of_ordinary_fields_are_never_stored(env):
+def test_an_ops_edit_keeps_the_old_and_new_value(env):
     b = create(env.ops).json()
     env.ops.patch(f"/api/v1/bookings/{b['id']}", {"answers": {"customer_name": "Asha Rao"},
                                                    "row_version": 0}, format="json")
-    row = BookingActivity.objects.filter(booking_id=b["id"], kind="edited").get()
-    assert row.keys == ["customer_name"] and row.changes == {}
+    top = timeline(env.ops, b)[0]
+    assert top["kind"] == "edited" and top["keys"] == ["customer_name"]
+    assert top["changes"]["customer_name"][1] == "Asha Rao"
+    assert top["changes"]["customer_name"][0] == b["answers"]["customer_name"]
+
+
+def test_an_inspection_edit_keeps_each_answers_old_and_new_value(started):
+    ienv, booking, _ = started
+    submit(ienv.expert, booking)
+    insp = Inspection.objects.get(status="submitted")
+    before = insp.answers["inspection"].get("odometer")
+    ienv.ops.patch(f"/api/v1/inspections/{insp.id}",
+                   {"answers": {"inspection": {"odometer": 50}}, "row_version": 0}, format="json")
+    top = timeline(ienv.ops, booking)[0]
+    assert top["changes"] == {"inspection.odometer": [before, 50]}
+
+
+def test_long_text_is_cut_and_files_are_counted():
+    from apps.bookings.activity import MAX_TEXT, _kept
+
+    file_a, file_b = "8f14e45f-ceea-467a-9b3c-2c1d2e3f4a5b", "c9f0f895-fb98-4b91-8f2e-3a4b5c6d7e8f"
+    assert _kept("note", ["x" * 300, "short"]) == ["x" * MAX_TEXT + "…", "short"]
+    assert _kept("photos", [[file_a], [file_a, file_b]]) == ["1 file", "2 files"]
+    assert _kept("signature", [None, file_a]) == [None, "1 file"]
+    assert _kept("colours", [["red"], ["red", "blue"]]) == [["red"], ["red", "blue"]]
+    assert _kept("media", [file_a, file_b]) == [file_a, file_b]          # kept: Admin opens it
+    assert _kept("ref", [None, "x" * 36]) == [None, "x" * 36]            # 36 long, not a file
+    assert _kept("odd", "plain") == "plain"                              # not an [old, new] pair
+    big = {"k": "y" * 300}
+    assert _kept("where", [None, big])[1].endswith("…")
+
+
+def test_a_deleted_bookings_history_keeps_no_customer_values(env):
+    b = create(env.ops).json()
+    env.ops.patch(f"/api/v1/bookings/{b['id']}", {"answers": {"customer_name": "Asha Rao"},
+                                                   "row_version": 0}, format="json")
+    r = env.admin.delete(f"/api/v1/bookings/{b['id']}")
+    assert r.status_code == 204, r.content
+    rows = BookingActivity.objects.filter(booking_ref=b["booking_id"])
+    edited = rows.get(kind="edited")
+    assert edited.keys == ["customer_name"] and edited.changes == {}
+    assert any("stage" in r.changes for r in rows) or rows.filter(kind="created").exists()
 
 
 def test_keys_hidden_from_a_role_are_left_out(env):
@@ -74,7 +114,9 @@ def test_keys_hidden_from_a_role_are_left_out(env):
                     {"answers": {"secret_note": "x", "customer_name": "B"}, "row_version": 0},
                     format="json")
     assert timeline(env.admin, b)[0]["keys"] == ["customer_name", "secret_note"]
-    assert timeline(env.ops, b)[0]["keys"] == ["customer_name"]
+    assert timeline(env.admin, b)[0]["changes"]["secret_note"] == [None, "x"]
+    ops_row = timeline(env.ops, b)[0]
+    assert ops_row["keys"] == ["customer_name"] and set(ops_row["changes"]) == {"customer_name"}
 
 
 def test_only_people_who_see_the_booking_see_its_timeline(env, make_user, api_as):

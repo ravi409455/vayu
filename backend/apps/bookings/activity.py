@@ -1,9 +1,13 @@
 """The booking timeline: one row per thing that happened (see BookingActivity)."""
+import json
+import uuid
+
 from apps.forms.access import levels_for
 
 from .models import BookingActivity
 
-# values worth keeping for the timeline (still shown only to people who may see the field)
+# kept as they are (the screens read them); every other changed value is kept short by _short and,
+# like these, shown only to people who may see that field
 SAFE_KEYS = {"alert", "stage", "assigned_expert", "inspection_date", "inspection_time",
              "inspection_type", "conflict", "media", "revision", "how", "missing"}
 # not form answers: always visible ("missing": how many files a job was finished without)
@@ -14,14 +18,58 @@ REPORT_KINDS = ("report_downloaded", "report_shared")   # who passed the report 
 REVIEW_KINDS = ("ratings_changed", "key_checks_changed", "alert_cleared")
 
 
+MAX_TEXT = 200   # a long note keeps its first 200 characters in the timeline
+
+
+def _is_file_id(v) -> bool:
+    # ponytail: answers hold uploaded files as their uuid; a text answer that is exactly a uuid
+    # would read as "1 file" (none of our forms ask for one)
+    try:
+        return isinstance(v, str) and len(v) == 36 and bool(uuid.UUID(v))
+    except ValueError:
+        return False
+
+
+def _short(v):
+    """A changed value as the timeline keeps it: files counted (not their ids), long text cut."""
+    if _is_file_id(v):
+        return "1 file"
+    if isinstance(v, list) and v and all(_is_file_id(x) for x in v):
+        return f"{len(v)} file{'' if len(v) == 1 else 's'}"
+    if isinstance(v, (list, dict)):
+        text = json.dumps(v, ensure_ascii=False, default=str)
+        return v if len(text) <= MAX_TEXT else text[:MAX_TEXT] + "…"
+    if isinstance(v, str) and len(v) > MAX_TEXT:
+        return v[:MAX_TEXT] + "…"
+    return v
+
+
+def _kept(k: str, v):
+    if k in SAFE_KEYS or k.startswith("check."):
+        return v
+    if isinstance(v, (list, tuple)) and len(v) == 2:
+        return [_short(v[0]), _short(v[1])]
+    return _short(v)
+
+
 def log(b, actor, kind: str, changes: dict | None = None, keys: list[str] | None = None,
         inspection=None) -> None:
     changes = changes or {}
     BookingActivity.objects.create(
         booking=b, booking_ref=b.booking_id,
         actor=actor if getattr(actor, "pk", None) else None, kind=kind,
-        changes={k: v for k, v in changes.items() if k in SAFE_KEYS or k.startswith("check.")},
+        changes={k: _kept(k, v) for k, v in changes.items()},
         keys=sorted(keys if keys is not None else changes), inspection=inspection)
+
+
+def forget_values(b) -> None:
+    """A deleted booking's rows stay for metrics (F-247) but keep no customer answers: only the
+    schedule / stage / assignment values, which say nothing about the customer."""
+    rows = list(BookingActivity.objects.filter(booking=b))
+    for row in rows:
+        row.changes = {k: v for k, v in row.changes.items()
+                       if k in SAFE_KEYS or k.startswith("check.")}
+    BookingActivity.objects.bulk_update(rows, ["changes"])
 
 
 def for_user(b, user, since=None) -> list[dict]:
