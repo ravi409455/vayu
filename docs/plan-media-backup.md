@@ -2,9 +2,10 @@
 
 Status: **server and Android parts A and B built** (branch `feat/media-backup`, PR #25, draft: not
 merged until phone-tested); the phone test is next. Requirements, senior review, grill-me and screens closed (owner, 2026-11-26).
-Server notes: the sign-in body (`install_id`) stays undocumented in `openapi.yaml` like
-`device_name` (documenting it clashes with the `Login` response schema name); the logout counts are
-documented (`LogoutCounts`).
+Server notes: the whole sign-in request is now documented in `openapi.yaml` (`LoginRequest`,
+with `install_id`; owner's choice 2026-11-26); oasdiff calls username/password/client "new
+required" only because sign-in was never documented before, so that commit is marked
+`[api-break-ok]`. The logout counts are documented (`LogoutCounts`).
 Estimate ≈ 5.5–6.5 days. Follows `docs/engineering-standards.md`.
 
 ## Why

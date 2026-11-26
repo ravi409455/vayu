@@ -569,16 +569,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: {}
+              $ref: '#/components/schemas/LoginRequest'
           application/x-www-form-urlencoded:
             schema:
-              type: object
-              additionalProperties: {}
+              $ref: '#/components/schemas/LoginRequest'
           multipart/form-data:
             schema:
-              type: object
-              additionalProperties: {}
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
       security:
       - {}
       responses:
@@ -10583,6 +10581,14 @@ components:
       - id
       - message
       - rule
+    ClientEnum:
+      enum:
+      - web
+      - mobile
+      type: string
+      description: |-
+        * `web` - web
+        * `mobile` - mobile
     DeviceCheckedRefresh:
       type: object
       properties:
@@ -10906,6 +10912,27 @@ components:
       required:
       - must_change_password
       - user
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        client:
+          $ref: '#/components/schemas/ClientEnum'
+        device_name:
+          type: string
+          default: ''
+        install_id:
+          type: string
+          format: uuid
+          writeOnly: true
+          nullable: true
+      required:
+      - client
+      - password
+      - username
     LogoutCounts:
       type: object
       properties:

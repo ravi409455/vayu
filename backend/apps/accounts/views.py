@@ -52,7 +52,7 @@ def _same_origin(request) -> None:
         raise CodedError("BAD_ORIGIN", "Sign in from the Vayu page itself.", 403)
 
 
-@extend_schema(responses=obj(
+@extend_schema(request=LoginSerializer, responses=obj(
     "Login", user=s_.DictField(), must_change_password=s_.BooleanField(),
     access=s_.CharField(required=False), refresh=s_.CharField(required=False)))
 class LoginView(APIView):
