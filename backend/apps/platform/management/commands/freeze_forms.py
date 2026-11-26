@@ -22,7 +22,8 @@ class Command(BaseCommand):
             "end": (convert.end(), {})}
         made = {key: convert.inspection(key) for key, *_ in forms.INSPECTIONS}
         # what the three forms share goes to the library; the forms are rebuilt on it
-        library, shared, notes = common.share({k: spec for k, (spec, _) in made.items()})
+        library, shared, notes = common.share({k: spec for k, (spec, _) in made.items()},
+                                               convert.delay())
         for key, (spec, extra) in made.items():
             for cat in extra["rating_config"]["categories"]:
                 cat["sections"] = common.with_children(cat["sections"], shared[key])

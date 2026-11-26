@@ -120,6 +120,56 @@
     ]
    },
    {
+    "page": "Inspection Delay",
+    "name": "Inspection Delay",
+    "kind": "master3",
+    "parent": null,
+    "ops": false,
+    "fields": [
+     {
+      "label": "Inspection 45 Minutes Delayed?",
+      "type": "single_choice",
+      "options": [
+       "No",
+       "Yes"
+      ],
+      "where": "master",
+      "pending": []
+     },
+     {
+      "label": "Amount (Pending + 500)",
+      "type": "number",
+      "options": [],
+      "where": "master",
+      "pending": []
+     },
+     {
+      "label": "Payment Mode",
+      "type": "single_choice",
+      "options": [
+       "Cash",
+       "UPI"
+      ],
+      "where": "master",
+      "pending": []
+     },
+     {
+      "label": "CarCID QR Code",
+      "type": "image",
+      "options": [],
+      "where": "master",
+      "pending": []
+     },
+     {
+      "label": "Payment Screenshot",
+      "type": "photo",
+      "options": [],
+      "where": "master",
+      "pending": []
+     }
+    ]
+   },
+   {
     "page": "Car Details",
     "name": "Car Details",
     "kind": "master3",
@@ -4784,6 +4834,56 @@
     ]
    },
    {
+    "page": "Inspection Delay",
+    "name": "Inspection Delay",
+    "kind": "master3",
+    "parent": null,
+    "ops": false,
+    "fields": [
+     {
+      "label": "Inspection 45 Minutes Delayed?",
+      "type": "single_choice",
+      "options": [
+       "No",
+       "Yes"
+      ],
+      "where": "master",
+      "pending": []
+     },
+     {
+      "label": "Amount (Pending + 500)",
+      "type": "number",
+      "options": [],
+      "where": "master",
+      "pending": []
+     },
+     {
+      "label": "Payment Mode",
+      "type": "single_choice",
+      "options": [
+       "Cash",
+       "UPI"
+      ],
+      "where": "master",
+      "pending": []
+     },
+     {
+      "label": "CarCID QR Code",
+      "type": "image",
+      "options": [],
+      "where": "master",
+      "pending": []
+     },
+     {
+      "label": "Payment Screenshot",
+      "type": "photo",
+      "options": [],
+      "where": "master",
+      "pending": []
+     }
+    ]
+   },
+   {
     "page": "Car Details",
     "name": "Car Details",
     "kind": "master3",
@@ -9344,6 +9444,56 @@
     ]
    },
    {
+    "page": "Inspection Delay",
+    "name": "Inspection Delay",
+    "kind": "master3",
+    "parent": null,
+    "ops": false,
+    "fields": [
+     {
+      "label": "Inspection 45 Minutes Delayed?",
+      "type": "single_choice",
+      "options": [
+       "No",
+       "Yes"
+      ],
+      "where": "master",
+      "pending": []
+     },
+     {
+      "label": "Amount (Pending + 500)",
+      "type": "number",
+      "options": [],
+      "where": "master",
+      "pending": []
+     },
+     {
+      "label": "Payment Mode",
+      "type": "single_choice",
+      "options": [
+       "Cash",
+       "UPI"
+      ],
+      "where": "master",
+      "pending": []
+     },
+     {
+      "label": "CarCID QR Code",
+      "type": "image",
+      "options": [],
+      "where": "master",
+      "pending": []
+     },
+     {
+      "label": "Payment Screenshot",
+      "type": "photo",
+      "options": [],
+      "where": "master",
+      "pending": []
+     }
+    ]
+   },
+   {
     "page": "Car Details",
     "name": "Car Details",
     "kind": "master3",
@@ -13533,6 +13683,59 @@
     {
      "label": "Key Check 5 Value",
      "type": "short_text",
+     "options": [],
+     "pending": [],
+     "new_for": []
+    }
+   ]
+  },
+  {
+   "name": "Inspection Delay",
+   "forms": [
+    "PDI",
+    "Used Car",
+    "EV"
+   ],
+   "parent": null,
+   "ops": false,
+   "fields": [
+    {
+     "label": "Inspection 45 Minutes Delayed?",
+     "type": "single_choice",
+     "options": [
+      "No",
+      "Yes"
+     ],
+     "pending": [],
+     "new_for": []
+    },
+    {
+     "label": "Amount (Pending + 500)",
+     "type": "number",
+     "options": [],
+     "pending": [],
+     "new_for": []
+    },
+    {
+     "label": "Payment Mode",
+     "type": "single_choice",
+     "options": [
+      "Cash",
+      "UPI"
+     ],
+     "pending": [],
+     "new_for": []
+    },
+    {
+     "label": "CarCID QR Code",
+     "type": "image",
+     "options": [],
+     "pending": [],
+     "new_for": []
+    },
+    {
+     "label": "Payment Screenshot",
+     "type": "photo",
      "options": [],
      "pending": [],
      "new_for": []
@@ -18183,6 +18386,36 @@
      "when": "always, optional"
     },
     {
+     "label": "Inspection 45 Minutes Delayed?",
+     "section": "Inspection Delay",
+     "type": "single_choice",
+     "when": "always, required"
+    },
+    {
+     "label": "Amount (Pending + 500)",
+     "section": "Inspection Delay",
+     "type": "number",
+     "when": "only on a problem / condition, then required"
+    },
+    {
+     "label": "Payment Mode",
+     "section": "Inspection Delay",
+     "type": "single_choice",
+     "when": "only on a problem / condition, then required"
+    },
+    {
+     "label": "CarCID QR Code",
+     "section": "Inspection Delay",
+     "type": "image",
+     "when": "only on a problem / condition"
+    },
+    {
+     "label": "Payment Screenshot",
+     "section": "Inspection Delay",
+     "type": "photo",
+     "when": "only on a problem / condition, then required"
+    },
+    {
      "label": "Gear Shifting Panel",
      "section": "Engine and Fuel Details",
      "type": "photo",
@@ -18931,7 +19164,7 @@
    },
    "same": 322,
    "before": 413,
-   "after": 454
+   "after": 459
   },
   "Used Car": {
    "added": [
@@ -19060,6 +19293,36 @@
      "section": "Service History Details",
      "type": "long_text",
      "when": "always, optional"
+    },
+    {
+     "label": "Inspection 45 Minutes Delayed?",
+     "section": "Inspection Delay",
+     "type": "single_choice",
+     "when": "always, required"
+    },
+    {
+     "label": "Amount (Pending + 500)",
+     "section": "Inspection Delay",
+     "type": "number",
+     "when": "only on a problem / condition, then required"
+    },
+    {
+     "label": "Payment Mode",
+     "section": "Inspection Delay",
+     "type": "single_choice",
+     "when": "only on a problem / condition, then required"
+    },
+    {
+     "label": "CarCID QR Code",
+     "section": "Inspection Delay",
+     "type": "image",
+     "when": "only on a problem / condition"
+    },
+    {
+     "label": "Payment Screenshot",
+     "section": "Inspection Delay",
+     "type": "photo",
+     "when": "only on a problem / condition, then required"
     },
     {
      "label": "Gear Shifting Panel",
@@ -19835,7 +20098,7 @@
    },
    "same": 319,
    "before": 416,
-   "after": 456
+   "after": 461
   },
   "EV": {
    "added": [
@@ -19916,6 +20179,36 @@
      "section": "Key Checks",
      "type": "short_text",
      "when": "always, optional"
+    },
+    {
+     "label": "Inspection 45 Minutes Delayed?",
+     "section": "Inspection Delay",
+     "type": "single_choice",
+     "when": "always, required"
+    },
+    {
+     "label": "Amount (Pending + 500)",
+     "section": "Inspection Delay",
+     "type": "number",
+     "when": "only on a problem / condition, then required"
+    },
+    {
+     "label": "Payment Mode",
+     "section": "Inspection Delay",
+     "type": "single_choice",
+     "when": "only on a problem / condition, then required"
+    },
+    {
+     "label": "CarCID QR Code",
+     "section": "Inspection Delay",
+     "type": "image",
+     "when": "only on a problem / condition"
+    },
+    {
+     "label": "Payment Screenshot",
+     "section": "Inspection Delay",
+     "type": "photo",
+     "when": "only on a problem / condition, then required"
     },
     {
      "label": "Driver - Front Door Paint Gauge Reading",
@@ -20575,7 +20868,7 @@
    },
    "same": 301,
    "before": 376,
-   "after": 416
+   "after": 421
   }
  },
  "conflicts": [

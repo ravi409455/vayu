@@ -601,8 +601,12 @@ def service_page() -> dict:
         {"title": SERVICE_PAGE, "access": NOT_FOR_EXPERTS, "fields": fields}]}
 
 
-def share(specs: dict[str, dict]) -> tuple[dict, dict[str, dict], list[str]]:
-    """(library, the three specs rebuilt on it, notes). `specs`: form key → converted spec."""
+DELAY_PAGE = "Inspection Delay"
+
+
+def share(specs: dict[str, dict], delay: list[dict]) -> tuple[dict, dict[str, dict], list[str]]:
+    """(library, the three specs rebuilt on it, notes). `specs`: form key → converted spec;
+    `delay`: the questions of the late-start page (convert.delay)."""
     sh = Sharing(specs)
     plan = sh.split()
     sh.share_fields(plan)
@@ -612,8 +616,15 @@ def share(specs: dict[str, dict]) -> tuple[dict, dict[str, dict], list[str]]:
         spec["pages"].insert(0, {"title": OPS_PAGE, "sections": [
             {"title": item["name"], "library": key,
              "fields": copy.deepcopy(item["definition"]["fields"])} for key, item in ops.items()]})
+    # a late start and its payment: the expert's first page, after Ops' (owner, 2026-11-26)
+    late = {clappia.slug(DELAY_PAGE): {"name": DELAY_PAGE, "forms": list(FORMS), "parent": None,
+                                       "definition": {"title": DELAY_PAGE, "fields": delay}}}
+    for spec in forms.values():
+        spec["pages"].insert(1, {"title": DELAY_PAGE, "sections": [
+            {"title": DELAY_PAGE, "library": clappia.slug(DELAY_PAGE),
+             "fields": copy.deepcopy(delay)}]})
     forms["used_car"]["pages"].insert(1, service_page())
-    library = {"sections": {**ops, **sh.sections}, "fields": sh.fields}
+    library = {"sections": {**ops, **late, **sh.sections}, "fields": sh.fields}
     return library, forms, sh.notes
 
 

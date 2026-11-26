@@ -231,6 +231,142 @@
     ]
    },
    {
+    "title": "Inspection Delay",
+    "sections": [
+     {
+      "title": "Inspection Delay",
+      "library": "inspection_delay",
+      "fields": [
+       {
+        "key": "inspection_45_minutes_delayed",
+        "label": "Inspection 45 Minutes Delayed?",
+        "config": {
+         "options": [
+          {
+           "key": "no",
+           "label": "No"
+          },
+          {
+           "key": "yes",
+           "label": "Yes"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "single_choice"
+       },
+       {
+        "key": "delay_amount",
+        "label": "Amount (Pending + 500)",
+        "config": {
+         "min": 500
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "number",
+        "show_if": {
+         "==": [
+          {
+           "var": "inspection.inspection_45_minutes_delayed"
+          },
+          "yes"
+         ]
+        }
+       },
+       {
+        "key": "delay_payment_mode",
+        "label": "Payment Mode",
+        "config": {
+         "options": [
+          {
+           "key": "cash",
+           "label": "Cash"
+          },
+          {
+           "key": "upi",
+           "label": "UPI"
+          }
+         ]
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "single_choice",
+        "show_if": {
+         "==": [
+          {
+           "var": "inspection.inspection_45_minutes_delayed"
+          },
+          "yes"
+         ]
+        }
+       },
+       {
+        "key": "delay_pay_qr",
+        "label": "CarCID QR Code",
+        "type": "image",
+        "config": {
+         "asset": "@pay_qr"
+        },
+        "required": false,
+        "helper_text": "",
+        "show_if": {
+         "and": [
+          {
+           "==": [
+            {
+             "var": "inspection.inspection_45_minutes_delayed"
+            },
+            "yes"
+           ]
+          },
+          {
+           "==": [
+            {
+             "var": "inspection.delay_payment_mode"
+            },
+            "upi"
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "key": "delay_payment_screenshot",
+        "label": "Payment Screenshot",
+        "config": {
+         "max_count": 1,
+         "capture": "camera"
+        },
+        "required": true,
+        "helper_text": "",
+        "type": "photo",
+        "show_if": {
+         "and": [
+          {
+           "==": [
+            {
+             "var": "inspection.inspection_45_minutes_delayed"
+            },
+            "yes"
+           ]
+          },
+          {
+           "==": [
+            {
+             "var": "inspection.delay_payment_mode"
+            },
+            "upi"
+           ]
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   },
+   {
     "title": "Car Details",
     "sections": [
      {

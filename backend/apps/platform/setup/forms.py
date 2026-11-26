@@ -24,14 +24,14 @@ PICTURES = (("@pay_qr", "Payment QR", "pay-qr.jpg"), ("@review_qr", "Google revi
                                                       "review-qr.png"))
 
 
-def _with_pictures(admin, name: str) -> dict:
-    """A form whose "image" fields point at the QR pictures: Clappia's CarCID payment QR and the
-    Google review QR, uploaded once and found by name after (the Admin can replace them in the
-    form builder)."""
+def _with_pictures(admin, data: dict) -> dict:
+    """Form data whose "image" fields point at the QR pictures: Clappia's CarCID payment QR and
+    the Google review QR, uploaded once and found by name after (the Admin can replace them in
+    the form builder)."""
     from apps.forms import assets
     from apps.forms.models import FormAsset
 
-    text = json.dumps(load(name)[0])
+    text = json.dumps(data)
     for marker, label, file in PICTURES:
         if json.dumps(marker) not in text:
             continue
@@ -41,21 +41,24 @@ def _with_pictures(admin, name: str) -> dict:
     return json.loads(text)
 
 
-def start(admin) -> dict:
-    """The check-in and the "Inspection Delay" page (its payment shows the payment QR)."""
-    return _with_pictures(admin, "start")
+def start() -> dict:
+    return load("start")[0]
 
 
 def end(admin) -> dict:
     """The wrap-up, with its payment and Google review QR pictures."""
-    return _with_pictures(admin, "end")
+    return _with_pictures(admin, load("end")[0])
 
 
-def inspection(form_key: str) -> tuple[dict, dict]:
-    return load(form_key)
+def inspection(form_key: str, admin=None) -> tuple[dict, dict]:
+    """With an Admin, the pictures are put in place (the Inspection Delay payment QR)."""
+    spec, extra = load(form_key)
+    return (_with_pictures(admin, spec) if admin else spec), extra
 
 
-def library() -> dict:
-    """The library sections and fields the inspection forms are built on (setup/common.py)."""
+def library(admin=None) -> dict:
+    """The library sections and fields the inspection forms are built on (setup/common.py).
+    With an Admin, the pictures are put in place (the Inspection Delay payment QR)."""
     data = json.loads((FROZEN / "library.json").read_text())
-    return {"sections": data["sections"], "fields": data["fields"]}
+    lib = {"sections": data["sections"], "fields": data["fields"]}
+    return _with_pictures(admin, lib) if admin else lib

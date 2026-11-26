@@ -43,11 +43,11 @@ def put_all(admin, force=False) -> dict:
     lists.apply()
     out = {"booking": build.apply(admin, build.system_form("booking"), forms.booking(),
                                   force=force),
-           "start": build.apply(admin, build.system_form("start"), forms.start(admin), force=force),
+           "start": build.apply(admin, build.system_form("start"), forms.start(), force=force),
            "end": build.apply(admin, build.system_form("end"), forms.end(admin), force=force)}
-    build.library(admin, forms.library(), force=force)
+    build.library(admin, forms.library(admin), force=force)
     for key, name, itype, _ in forms.INSPECTIONS:
-        spec, extra = forms.inspection(key)
+        spec, extra = forms.inspection(key, admin)
         out[key] = build.apply(admin, build.ensure_form(admin, key=key, name=name, itype=itype),
                                spec, extra, force=force)
     return out
@@ -139,14 +139,14 @@ def test_ops_own_page_comes_first_and_experts_never_see_it(admin):
         v = Form.objects.get(key=key).versions.get(status="published")
         pages = list(Page.objects.filter(version=v).order_by("order"))
         assert pages[0].title == "Additional Checks" and not pages[0].gate
-        first = pages[2] if key == "used_car" else pages[1]
-        assert first.title == "Car Details" and first.gate             # the expert's first page
+        first = next(p for p in pages if p.title == "Car Details")
+        assert first.gate                        # the car's details open the rest of the form
         assert [s.title for s in pages[0].sections.order_by("order")] == [
             "Expert Comments", "Additional Details", "Key Checks"]
         mine = ["expert_comments", "manufacturing_date", "price_estimate"] + [
             f"key_check_{n}_{x}" for n in range(1, 6) for x in ("label", "value")]
         if key == "used_car":             # its own Ops-only page of service history comes next
-            assert pages[1].title == "Service History Details" and pages[2].gate
+            assert pages[1].title == "Service History Details"
             mine += ["last_service_date", "total_services", "service_history_analysis"]
         for stage in STAGES:
             levels = levels_for(v, "expert", stage)
@@ -242,70 +242,80 @@ def test_names_answers_and_colours_follow_the_customer_review(admin):
         plain = {x.label for x in f.values() if x.type in ("single_choice", "multi_choice")
                  and not x.config["options"][0].get("tone")}
         assert plain <= {"Car Company", "Car Registered State", "Fuel Type", "Transmission Type",
-                         "CNG Fitting", "Tyre Type", "Rim Type"}, plain
+                         "CNG Fitting", "Tyre Type", "Rim Type",
+                         "Inspection 45 Minutes Delayed?", "Payment Mode"}, plain
         for x in f.values():                # a rule only names answers its question still has
-            for ref in re.findall(r'"inspection\.([a-z0-9_]+)"', json.dumps(x.show_if or {})):
-                keys = {o["key"] for o in f[ref].config.get("options", [])}
-                named = set(re.findall(r'"([a-z0-9_]+)"', json.dumps(x.show_if))) - {
-                    "var", "in", "or", "some", "and", "inspection", ref,
-                    "used_car", "pdi", "ev"}                # the inspection type, not an answer
-                if keys:
-                    assert {n for n in named if "." not in n} <= keys | {""}, (x.label, named)
+            refs = re.findall(r'"inspection\.([a-z0-9_]+)"', json.dumps(x.show_if or {}))
+            keys = {o["key"] for ref in refs for o in f[ref].config.get("options", [])}
+            named = set(re.findall(r'"([a-z0-9_]+)"', json.dumps(x.show_if or {}))) - {
+                "var", "in", "or", "some", "and", "inspection", *refs,
+                "used_car", "pdi", "ev"}                    # the inspection type, not an answer
+            if keys:
+                assert {n for n in named if "." not in n} <= keys | {""}, (x.label, named)
 
 
-def test_a_shared_section_never_depends_on_a_question_outside_it():
+def test_a_shared_section_never_depends_on_a_question_outside_it(admin):
     from apps.forms.library import check_self_contained, validate_section_definition
 
-    lib = forms.library()
+    lib = forms.library(admin)
     for item in lib["sections"].values():
         check_self_contained("section", validate_section_definition(item["definition"]))
     for item in lib["fields"].values():
         check_self_contained("field", item["definition"])
 
 
-def test_a_late_start_has_its_own_page_after_check_in_with_the_wrap_ups_payment(admin):
-    """Owner, 2026-11-26: "Inspection 45 Minutes Delayed?" is a page of its own; on Yes the
-    payment is taken as on the wrap-up."""
+def test_a_late_start_is_a_library_page_of_every_inspection_form_after_ops_pages(admin):
+    """Owner, 2026-11-26: "Inspection Delay" is a page of the main form (one library section),
+    after Additional Checks and before Car Details; on Yes the payment is taken as on the
+    wrap-up. The check-in keeps only selfie, place and time."""
     from django.utils import timezone
 
     from apps.forms.models import FormAsset, Page
     from apps.forms.rules import evaluate_form, spec_from_version
 
     put_all(admin)
-    v = Form.objects.get(type="start").versions.get(status="published")
-    pages = list(Page.objects.filter(version=v).order_by("order"))
-    assert [(p.title, p.gate) for p in pages] == [("Check-in", True), ("Inspection Delay", True)]
-    start = live_fields("start")
-    assert {k for k, f in start.items() if f.section.page_id == pages[0].id} == {
-        "selfie", "checkin_gps", "checkin_time"}
-    assert start["amount"].label == "Amount (Pending + 500)"
-    assert start["amount"].type == "number" and start["amount"].config == {"min": 500}
-    assert [o["label"] for o in start["payment_mode"].config["options"]] == ["Cash", "UPI"]
-    assert start["pay_qr"].config["asset"] == str(FormAsset.objects.get(name="Payment QR").id)
-    spec, today = spec_from_version(v), timezone.localdate().isoformat()
-    paying = ("amount", "payment_mode", "pay_qr", "payment_screenshot")
+    assert set(live_fields("start")) == {"selfie", "checkin_gps", "checkin_time"}
+    paying = ("delay_amount", "delay_payment_mode", "delay_pay_qr", "delay_payment_screenshot")
+    for key in ("pdi", "used_car", "ev"):
+        v = Form.objects.get(key=key).versions.get(status="published")
+        titles = [p.title for p in Page.objects.filter(version=v).order_by("order")]
+        at = titles.index("Inspection Delay")
+        assert titles[at - 1] == ("Service History Details" if key == "used_car"
+                                  else "Additional Checks")
+        assert titles[at + 1] == "Car Details"
+        mine = live_fields(key)
+        sec = mine["inspection_45_minutes_delayed"].section
+        assert sec.library_item is not None and not sec.access
+        assert mine["delay_amount"].label == "Amount (Pending + 500)"
+        assert mine["delay_amount"].type == "number" and mine["delay_amount"].config == {
+            "min": 500}
+        assert [o["label"] for o in mine["delay_payment_mode"].config["options"]] == [
+            "Cash", "UPI"]
+        assert mine["delay_pay_qr"].config["asset"] == str(
+            FormAsset.objects.get(name="Payment QR").id)
+        spec, today = spec_from_version(v), timezone.localdate().isoformat()
 
-    def shown(**answers) -> set[str]:
-        r = evaluate_form(spec, {"start": answers}, today)
-        return {k for k in paying if r.visible[k]}
+        def shown(spec=spec, key=key, today=today, **answers) -> set[str]:
+            r = evaluate_form(spec, {"booking": {"inspection_type": key},
+                                     "inspection": answers}, today)
+            return {k for k in paying if r.visible[k]}
 
-    assert shown(inspection_45_minutes_delayed="no") == set()
-    assert shown(inspection_45_minutes_delayed="yes") == {"amount", "payment_mode"}
-    assert shown(inspection_45_minutes_delayed="yes", payment_mode="cash") == {
-        "amount", "payment_mode"}
-    assert shown(inspection_45_minutes_delayed="yes", payment_mode="upi") == set(paying)
-    for key in ("pdi", "used_car", "ev"):               # the built-in chassis number is scanned
-        assert live_fields(key)["chassis_no"].config.get("scan") is True
+        assert shown(inspection_45_minutes_delayed="no") == set()
+        assert shown(inspection_45_minutes_delayed="yes") == set(paying[:2])
+        assert shown(inspection_45_minutes_delayed="yes", delay_payment_mode="cash") == set(
+            paying[:2])
+        assert shown(inspection_45_minutes_delayed="yes", delay_payment_mode="upi") == set(
+            paying)
+        # the built-in chassis number is scanned
+        assert mine["chassis_no"].config.get("scan") is True
         if key != "ev":
-            assert live_fields(key)["engine_number"].config.get("scan") is None
+            assert mine["engine_number"].config.get("scan") is None
 
 
 def test_system_fields_take_clappias_place_and_rules_point_at_our_keys(admin):
     put_all(admin)
     start, end, booking = live_fields("start"), live_fields("end"), live_fields("booking")
     assert start["selfie"].label == "Your photo with car's number plate"
-    assert start["amount"].show_if == {"==": [{"var": "start.inspection_45_minutes_delayed"},
-                                              "yes"]}
     assert [o["label"] for o in end["payment_mode"].config["options"]] == ["Cash", "UPI"]
     from apps.forms.models import FormAsset
 

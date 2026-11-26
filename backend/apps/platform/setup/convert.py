@@ -76,31 +76,43 @@ def booking() -> dict:
     return spec
 
 
-DELAY_PAGE = "Inspection Delay"
+LATE = ("inspection_45_minutes_delayed", "amount", "payment_mode", "payment_screenshot")
 
 
 def start() -> dict:
-    """The check-in (selfie, place, time), then a page of its own for a late start: "Inspection
-    45 Minutes Delayed?" and, on Yes, the payment taken there, asked as on the wrap-up (owner,
-    2026-11-26). Both pages are finished before the inspection opens."""
+    """The check-in: selfie, place, time. Clappia's late-start question and its payment are a
+    page of the inspection forms (delay(), owner 2026-11-26)."""
     spec = clappia.convert("new_car_3_0", ns="start", only={"Expert Details"},
                            system=START_SYSTEM)
-    fields = {f["key"]: f for p in spec["pages"] for s in p["sections"] for f in s["fields"]}
-    late = {"==": [{"var": "start.inspection_45_minutes_delayed"}, "yes"]}
-    by_upi = {"and": [late, {"==": [{"var": "start.payment_mode"}, "upi"]}]}
-    asked = fields.pop("inspection_45_minutes_delayed")
-    amount = {**fields.pop("amount"), "label": "Amount (Pending + 500)", "show_if": late}
-    mode = {**fields.pop("payment_mode"), "show_if": late, "config": {"options": [
-        {"key": "cash", "label": "Cash"}, {"key": "upi", "label": "UPI"}]}}
-    qr = {"key": "pay_qr", "label": "CarCID QR Code", "type": "image",
-          "config": {"asset": "@pay_qr"}, "required": False, "show_if": by_upi}
-    shot = {**fields.pop("payment_screenshot"), "show_if": by_upi}
-    spec["pages"] = [
-        {"title": "Check-in", "gate": True,
-         "sections": [{"title": "Check-in", "fields": list(fields.values())}]},
-        {"title": DELAY_PAGE, "gate": True,
-         "sections": [{"title": DELAY_PAGE, "fields": [asked, amount, mode, qr, shot]}]}]
+    for p in spec["pages"]:
+        p["title"], p["gate"] = "Check-in", True
+        for s in p["sections"]:
+            s["title"] = "Check-in"
+            s["fields"] = [f for f in s["fields"] if f["key"] not in LATE]
     return spec
+
+
+def delay() -> list[dict]:
+    """The questions of the "Inspection Delay" library section: "Inspection 45 Minutes Delayed?"
+    and, on Yes, the payment taken there, asked as on the wrap-up (owner, 2026-11-26)."""
+    spec = clappia.convert("new_car_3_0", only={"Expert Details"}, system=START_SYSTEM)
+    fields = {f["key"]: {k: v for k, v in f.items() if k != "clappia"}
+              for p in spec["pages"] for s in p["sections"] for f in s["fields"]}
+    late = {"==": [{"var": "inspection.inspection_45_minutes_delayed"}, "yes"]}
+    by_upi = {"and": [late, {"==": [{"var": "inspection.delay_payment_mode"}, "upi"]}]}
+    return [
+        # plain answers: a late start is not an issue of the car
+        {**fields["inspection_45_minutes_delayed"], "config": {"options": [
+            {"key": "no", "label": "No"}, {"key": "yes", "label": "Yes"}]}},
+        {**fields["amount"], "key": "delay_amount", "label": "Amount (Pending + 500)",
+         "show_if": late},
+        {**fields["payment_mode"], "key": "delay_payment_mode", "show_if": late,
+         "config": {"options": [{"key": "cash", "label": "Cash"},
+                                {"key": "upi", "label": "UPI"}]}},
+        {"key": "delay_pay_qr", "label": "CarCID QR Code", "type": "image",
+         "config": {"asset": "@pay_qr"}, "required": False, "helper_text": "",
+         "show_if": by_upi},
+        {**fields["payment_screenshot"], "key": "delay_payment_screenshot", "show_if": by_upi}]
 
 
 def end() -> dict:

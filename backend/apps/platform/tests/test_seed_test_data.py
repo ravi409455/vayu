@@ -87,7 +87,7 @@ def test_it_fills_every_flow(settings, s3):  # noqa: F811
     for done in Booking.objects.filter(stage="completed"):
         src = context.Source(done, done.counted_inspection(), revision=1, token="t")
         counts.setdefault(done.inspection_type, set()).add(src.values()["sys"]["points"])
-    assert counts == {"pdi": {"334"}, "used_car": {"348"}, "ev": {"301"}}, counts
+    assert counts == {"pdi": {"335"}, "used_car": {"349"}, "ev": {"302"}}, counts
     # the expert's own summary text is never printed (as in Clappia): only Ops' comment is
     assert "Expert comments" in named and "Minor issues noted" not in named
     assert "Expert comments" not in plain and "Minor issues noted" not in plain
