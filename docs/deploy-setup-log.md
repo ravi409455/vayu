@@ -13,7 +13,7 @@ Status: ✅ done · 🔄 in progress · ⏳ not started
 |---|---|---|
 | 0 | Safety first: secrets home, 2-step login, SSH key | ✅ 2026-11-26 |
 | 1 | Code changes (PR 27) | ✅ written, waiting for merge |
-| 2 | Accounts and dashboards | 🔄 |
+| 2 | Accounts and dashboards | ✅ 2026-11-26 (2.5c, the Firebase key restriction, waits for the staging app) |
 | 3 | Staging server setup | ⏳ |
 | 4 | Deploy pipeline | ⏳ |
 | 5 | Backups and alerts | ⏳ |
@@ -123,7 +123,7 @@ Branch `deploy/phase-1`, PR https://github.com/ravi409455/vayu/pull/27.
 
 ---
 
-## Phase 2 · Accounts and dashboards 🔄
+## Phase 2 · Accounts and dashboards ✅
 
 ### Decisions taken on 2026-11-26
 - **Staging is on demand.** A switched-off droplet is still billed, so staging lives as a
@@ -288,7 +288,44 @@ Organisation slug **`car-cid`** (`https://car-cid.sentry.io`; not a secret).
    Checked with **Send Test Notification**.
    If `production` was not offered in the environment list (no production event yet), set it
    once the first production error has arrived.
-### 2.7 · GitHub: branch rules, environments, fork approval ⏳
+
+### 2.7 · GitHub: branch rules, environments, fork approval ✅
+github.com/ravi409455/vayu → Settings.
+
+**Ruleset `main protect`** (Rules → Rulesets), active on the default branch, empty bypass list:
+
+| Rule | Setting | Why |
+|---|---|---|
+| Restrict deletions | on | `main` can't be deleted |
+| Block force pushes | on | history can't be rewritten |
+| Require status checks | `backend`, `backend-gates`, `web`, `android`, `docker`, `e2e`; branch must be up to date | nothing red reaches `main` (which deploys to staging by itself) |
+| Require a pull request | **off** (owner's choice, 2026-11-26) | |
+| Restrict updates | **off** | ⚠️ on with an empty bypass list, nobody can change `main` at all |
+
+Effect: a direct push to `main` is refused (its new commit has no green checks yet); changes
+arrive by merging a PR whose checks passed (squash).
+
+**Environments** (Environments):
+
+| Environment | Deployment branches | Protection |
+|---|---|---|
+| `staging` | `main` only | none: deploys by itself |
+| `production` | `main` only | **Required reviewers: `ravi409455`** (the Approve button); self-review allowed. Saved with "Save protection rules" (a separate button). |
+
+**Outside pull requests** (Actions → General): "Require approval for all external contributors"
+(the repo is public: a stranger's PR runs no workflow until the owner looks).
+
+**Web build settings** (Secrets and variables → Actions):
+
+| Kind | Name | Value from |
+|---|---|---|
+| Variable | `SENTRY_ORG` | `car-cid` |
+| Variable | `VITE_SENTRY_DSN` | Phase → `vayu-owner` → `SENTRY_DSN_WEB` (every browser sees it; not a secret) |
+| Secret | `SENTRY_AUTH_TOKEN` | Phase → `vayu-owner` → `SENTRY_AUTH_TOKEN` |
+
+Checked from the GitHub API: ruleset rules, required checks, reviewer, fork policy, variables and
+secret names.
+Server SSH secrets per environment come in Phase 3 / 4.
 
 ---
 
