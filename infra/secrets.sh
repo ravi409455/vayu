@@ -10,6 +10,7 @@
 # No .phase file: nothing is fetched and the env file is used as it is.
 # Phase unreachable: the last good env file stays (a warning); with no env file yet, it stops.
 set -euo pipefail
+umask 077                         # every file this writes is readable by its owner only
 
 VAYU_DIR=${VAYU_DIR:-/srv/vayu}
 cd "$VAYU_DIR"
@@ -28,10 +29,14 @@ case "$ENV_NAME" in
 esac
 
 # the token goes to the container through the environment, never on a command line (ps shows those)
+ERR=$(mktemp)                     # a private file, not a fixed name in /tmp
+trap 'rm -f "$ERR"' EXIT
 if ! JSON=$(PHASE_SERVICE_TOKEN=$(conf PHASE_SERVICE_TOKEN) docker run --rm -e PHASE_SERVICE_TOKEN \
-    "$PHASE_CLI" secrets export --app vayu --env "$ENV_NAME" --format json 2>/tmp/phase-err); then
-  [[ -f $OUT ]] || die "could not fetch from Phase: $(head -c 300 /tmp/phase-err)"
-  echo "warning: could not fetch from Phase ($(head -c 200 /tmp/phase-err)); keeping the current $OUT" >&2
+    "$PHASE_CLI" secrets export --app vayu --env "$ENV_NAME" --format json 2>"$ERR"); then
+  # Phase's message, one line, any token in it blanked out
+  why=$(head -c 200 "$ERR" | tr '\n' ' ' | sed -E 's/pss_[A-Za-z0-9_:.-]+/[token]/g')
+  [[ -f $OUT ]] || die "could not fetch from Phase: $why"
+  echo "warning: could not fetch from Phase ($why); keeping the current $OUT" >&2
   exit 0
 fi
 
@@ -50,12 +55,21 @@ missing = [k for k in need if not str(data.get(k, "")).strip()]
 if missing:
     sys.exit("error: missing in Phase: " + ", ".join(missing) + " (nothing was changed)")
 
+def write_private(path: str, text: str) -> None:
+    """Born readable by the owner only (no moment with wider rights), never through a symlink."""
+    if os.path.lexists(path):
+        os.unlink(path)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+
+
 # the Firebase key is a whole JSON file: written as a file, not an env line
-firebase = json.loads(data.pop("FIREBASE_SERVICE_ACCOUNT_JSON"))
+try:
+    firebase = json.loads(data.pop("FIREBASE_SERVICE_ACCOUNT_JSON"))
+except ValueError:
+    sys.exit("error: FIREBASE_SERVICE_ACCOUNT_JSON in Phase is not valid JSON (nothing was changed)")
 fb_path = "secrets/firebase-service-account.json"
-with open(fb_path + ".new", "w") as f:
-    os.chmod(fb_path + ".new", 0o600)
-    json.dump(firebase, f)
 data["FIREBASE_JSON"] = os.path.abspath(fb_path)
 data.setdefault("FIREBASE_CREDENTIALS_FILE", "/run/secrets/firebase-service-account.json")
 
@@ -70,9 +84,9 @@ for key in sorted(data):
     # (no $ expansion, no # comments)
     ok = re.fullmatch(r"[A-Za-z0-9_./:@,+=-]*", value)
     lines.append(f"{key}={value}" if ok else f"{key}='{value}'")
-with open(out + ".new", "w") as f:
-    os.chmod(out + ".new", 0o600)
-    f.write("\n".join(lines) + "\n")
+# every check passed: only now write, each file in full, then swap it in
+write_private(fb_path + ".new", json.dumps(firebase))
+write_private(out + ".new", "\n".join(lines) + "\n")
 os.replace(fb_path + ".new", fb_path)
 os.replace(out + ".new", out)
 print(f"settings: {len(data)} values from Phase -> {out}, Firebase key -> {fb_path}")
