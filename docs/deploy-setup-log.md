@@ -249,12 +249,14 @@ list; nothing uses it. Done, and its 5 `R2_*` lines were removed from `backend/.
 ### 2.5 · Firebase: staging app, production key, API key restriction 🔄
 Firebase project `vayu-8bb7a` (console.firebase.google.com).
 
-**2.5a · The "Vayu Staging" app** ⏳ — Project settings (gear) → General → **Add app** → Android:
+**2.5a · The "Vayu Staging" app** ✅ — Project settings (gear) → General → **Add app** → Android:
 package name `in.carcid.vayu.staging`, nickname `Vayu Staging` → Register → **download
 `google-services.json`** (it now lists both apps; not a secret) → given to Claude, who puts it in
 `android/app/` (PR 27). Without it, `./gradlew assembleStaging` fails.
+Checked: the new file lists `in.carcid.vayu` (entry unchanged) and `in.carcid.vayu.staging`;
+`assembleStaging` builds.
 
-**2.5b · Production's own server key** ⏳ — Project settings → **Service accounts** → **Generate
+**2.5b · Production's own server key** ✅ — Project settings → **Service accounts** → **Generate
 new private key** → the JSON goes straight into Phase → `vayu` → Production →
 `FIREBASE_SERVICE_ACCOUNT_JSON`, then the downloaded file is deleted. Staging keeps the existing
 key (already in Phase, step 2 of Phase 0), so production shares no key with staging or the Mac.
