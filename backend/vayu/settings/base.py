@@ -2,6 +2,7 @@
 import os
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -55,7 +56,8 @@ TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "APP
 ROOT_URLCONF = "vayu.urls"
 WSGI_APPLICATION = "vayu.wsgi.application"
 
-DATABASES = {
+# typed: the OPTIONS dict mixes value types, and DATABASES["default"]["NAME"] must type-check
+DATABASES: dict[str, dict[str, Any]] = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": env("DB_NAME"),
