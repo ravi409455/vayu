@@ -62,8 +62,9 @@ def test_it_fills_every_flow(settings, s3):  # noqa: F811
     def report_text(ref: str) -> str:
         b = Booking.objects.get(booking_id=ref)
         insp = b.counted_inspection()
+        assert insp is not None
         template = published_template(b, insp)
-        assert insp is not None and template is not None
+        assert template is not None
         pdf, _ = build_pdf(b, insp, template, "tok", 1)
         return "\n".join(p.extract_text() for p in pypdf.PdfReader(io.BytesIO(pdf)).pages)
 
@@ -89,9 +90,9 @@ def test_it_fills_every_flow(settings, s3):  # noqa: F811
 
     counts: dict[str, set[str]] = {}
     for done in Booking.objects.filter(stage="completed"):
-        counted = done.counted_inspection()
-        assert counted is not None
-        src = context.Source(done, counted, revision=1, token="t")
+        made = done.counted_inspection()
+        assert made is not None
+        src = context.Source(done, made, revision=1, token="t")
         counts.setdefault(done.inspection_type, set()).add(src.values()["sys"]["points"])
     assert counts == {"pdi": {"335"}, "used_car": {"349"}, "ev": {"302"}}, counts
     # the expert's own summary text is never printed (as in Clappia): only Ops' comment is

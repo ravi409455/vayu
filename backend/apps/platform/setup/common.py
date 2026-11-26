@@ -445,15 +445,14 @@ class Sharing:
             if name == "Exterior Body" and n in GAUGE:
                 new.append((f"{f['label']} Paint Gauge Reading", "photo", 2))
             for label, kind, more in new:
-                key = clappia.slug(label)
-                q = {"key": key, "label": label, "type": kind, "required": True,
+                q = {"key": clappia.slug(label), "label": label, "type": kind, "required": True,
                      "helper_text": "", "config": (
                          {"max_count": more, "capture": "camera"} if kind == "photo"
                          else more if kind == "number"
                          else {"options": [{**self.pool[x], "label": x} for x in more]})}
-                if key in taken:
-                    raise ValueError(f"{name}: the key {key} is taken")
-                taken.add(key)
+                if q["key"] in taken:
+                    raise ValueError(f"{name}: the key {q['key']} is taken")
+                taken.add(str(q["key"]))
                 out.append((f, q))
         return out
 

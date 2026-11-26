@@ -242,7 +242,7 @@ def definition(version, form_key: str, logo: str, watermark: str) -> dict:
                 and sec.title not in split_somewhere)
 
     car = by_title.get("Car Details")
-    kv_rows: list[tuple[str, dict, dict | None]] = [
+    kv_rows: list[tuple[str, dict[str, str], dict | None]] = [
         ("Booking ID", {"field": "booking.booking_id"}, None)]
     if car is not None:
         # chassis first; not "Car Company" (the Car row names it) nor the variant (it is part of
