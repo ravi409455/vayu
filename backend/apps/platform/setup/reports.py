@@ -20,6 +20,7 @@ TWO_PER_ROW = ("exterior", "body frame", "engine", "electrical", "tyres")
 # the Ops-only pages (common.py): never a page of checks, each prints in its own place
 OPS_COMMENTS, OPS_CHECKS, OPS_DETAILS = "Expert Comments", "Key Checks", "Additional Details"
 SERVICE = "Service History Details"
+DELAY = "Inspection Delay"        # a late start and its payment: ours, never the customer's
 VARIANT = "Car Variant"
 # what an empty service-history answer prints (Clappia's starting values)
 SERVICE_EMPTY = {"indication_of_odometer_rollback": "Not able to check", "engine_work_done": "No",
@@ -310,7 +311,7 @@ def definition(version, form_key: str, logo: str, watermark: str) -> dict:
     pages += _together([_section_page(sec, page, kids(sec.title), same_everywhere(sec))
                         for sec, page in sections
                         if sec.title not in (*COVER, PICTURES, FINAL, RATINGS, OPS_COMMENTS,
-                                             OPS_CHECKS, OPS_DETAILS, SERVICE, *parent)])
+                                             OPS_CHECKS, OPS_DETAILS, SERVICE, DELAY, *parent)])
     if pics is not None:
         # the overview photos are one shared part; a form's own extra pictures follow them
         more = [f"inspection.{f.key}" for sec, _ in sections for f in sec.fields.order_by("order")
