@@ -9,7 +9,7 @@ let sdk: Sdk | null = null;
 let person: number | null = null;
 
 /** No query string, and no report or ZIP token: on the customer pages the secret is in the path
- *  (/verify/<token>[/<link>], /zip/<token>, /api/v1/verify/<token>). */
+ *  (/report/verify/<token>[/<link>], /zip/<token>, /api/v1/verify/<token>). */
 export const stripQuery = (url: string) => url.replace(/[?#].*$/, "").replace(/\/(verify|zip)\/[^/]+(\/[^/]+)?/, "/$1/[token]");
 
 /** What leaves for Sentry: the error and where it happened, never what people typed or the server sent. */
@@ -31,12 +31,20 @@ export function scrubCrumb(b: Breadcrumb): Breadcrumb | null {
   return b;
 }
 
+/** One web build serves staging and production, so the label comes from the address it is opened on. */
+export function sentryEnvironment(host = location.hostname): string {
+  const set = import.meta.env.VITE_SENTRY_ENV as string | undefined;
+  if (set) return set;
+  if (!import.meta.env.PROD) return import.meta.env.MODE;
+  return host.includes("staging") ? "staging" : "production";
+}
+
 export async function startMonitoring(dsn = import.meta.env.VITE_SENTRY_DSN as string | undefined): Promise<void> {
   if (!dsn) return;
   const S = await import("@sentry/react");
   S.init({
     dsn,
-    environment: (import.meta.env.VITE_SENTRY_ENV as string | undefined) ?? import.meta.env.MODE,
+    environment: sentryEnvironment(),
     release: import.meta.env.VITE_RELEASE as string | undefined,
     // collect nothing about people or requests; scrub() and scrubCrumb() check again before sending
     dataCollection: { userInfo: false, cookies: false, httpHeaders: false, httpBodies: [], urlQueryParams: false },

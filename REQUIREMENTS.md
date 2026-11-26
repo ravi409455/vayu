@@ -202,7 +202,7 @@ forms at the end of the day; the app keeps its generic nature").
 - **Backend:** Django + DRF, Postgres, Celery + Redis (PDF rendering with WeasyPrint, webhooks, ZIPs, media processing, push).
 - **Web:** React. **Android:** Kotlin/Compose. Push via Firebase Cloud Messaging.
 - **Hosting:** one **DigitalOcean Bangalore** VPS (**4 vCPU / 8 GB**) running Docker, with **Cloudflare R2** for media, PDFs and ZIPs.
-- **Domains:** `app.carcid.in` (web + API at `/api/v1`), `verify.carcid.in` (QR page), `staging.carcid.in`.
+- **Domains:** `vayu.carcid.in` (web + API at `/api/v1`, QR page at `/report/verify/<token>`), `vayu-staging.carcid.in`.
 - **APK** is served from a logged-in download page on the web app (latest build in R2). The in-app updater checks the same place.
 - **Staging server** (separate VPS + bucket) is **also the form-authoring environment**, so it needs backups too.
 - **Error tracking** for app, web and server.
@@ -235,7 +235,7 @@ Admins can change these in the builder; they're the launch seed and the test dat
 - Zero answers lost when the app is killed; zero media lost before checksum verification.
 
 ## 11b. Setup checklist (you create, under the company account)
-DigitalOcean (prod + staging droplets) · Cloudflare R2 (prod + staging buckets, **CORS allowing app/staging origins**) · GitHub repo · Firebase project (FCM) · Sentry (3 projects: server, web, android) · DNS records for app/verify/staging.carcid.in · Android signing keystore, backed up offline.
+DigitalOcean (prod + staging droplets) · Cloudflare R2 (prod + staging buckets, **CORS allowing app/staging origins**) · GitHub repo · Firebase project (FCM) · Sentry (3 projects: server, web, android) · DNS records for vayu / vayu-staging.carcid.in · Android signing keystore, backed up offline.
 
 ## 12. Accepted risks
 - **3 months, solo, at a scope estimated at 5–6 months:** very likely to slip, and the offline edge cases and PDF designer are where shortcuts would hurt correctness.

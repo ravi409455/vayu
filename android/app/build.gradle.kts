@@ -35,6 +35,7 @@ android {
         // release builds set these: -Pvayu.versionCode=2 -Pvayu.versionName=0.2.0
         versionCode = (project.findProperty("vayu.versionCode") as String?)?.toInt() ?: 1
         versionName = (project.findProperty("vayu.versionName") as String?) ?: "0.1.0"
+        manifestPlaceholders["appLabel"] = "Vayu"
     }
 
     // crash reports: the Sentry DSN comes from -Pvayu.sentryDsn or SENTRY_DSN_ANDROID (never in git);
@@ -65,10 +66,20 @@ android {
         }
         release {
             manifestPlaceholders["cleartext"] = "false"
-            buildConfigField("String", "API_URL", "\"${apiUrl ?: "https://app.carcid.in/api/v1/"}\"")
+            buildConfigField("String", "API_URL", "\"${apiUrl ?: "https://vayu.carcid.in/api/v1/"}\"")
             isMinifyEnabled = true
             if (signing != null) signingConfig = signingConfigs.getByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+        // "Vayu Staging" (./gradlew assembleStaging): installs NEXT TO the real app, talks to the
+        // staging server, has a blue icon, signed with the same key. Firebase must know
+        // in.carcid.vayu.staging (google-services.json lists both apps; docs/plan-deploy.md 2.5).
+        create("staging") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".staging"
+            matchingFallbacks += "release"
+            manifestPlaceholders["appLabel"] = "Vayu Staging"
+            buildConfigField("String", "API_URL", "\"${apiUrl ?: "https://vayu-staging.carcid.in/api/v1/"}\"")
         }
     }
     compileOptions {
@@ -125,7 +136,7 @@ dependencies {
 
 // A release build made here must be signed with the real key: without it, stop (an unsigned or
 // wrongly signed APK could never update phones). CI builds it unsigned only to check it compiles.
-tasks.matching { it.name == "assembleRelease" }.configureEach {
+tasks.matching { it.name == "assembleRelease" || it.name == "assembleStaging" }.configureEach {
     doFirst {
         if (System.getenv("CI") == null && !project.android.signingConfigs.names.contains("release"))
             throw GradleException("Release signing key not found. Put keystore.properties in ~/vayu-keys " +
@@ -180,6 +191,7 @@ sentry {
 // dependency), so the obvious `./gradlew test` is green instead of 48 red release tests.
 androidComponents {
     beforeVariants(selector().withBuildType("release")) { it.hostTests.forEach { (_, t) -> t.enable = false } }
+    beforeVariants(selector().withBuildType("staging")) { it.hostTests.forEach { (_, t) -> t.enable = false } }
 }
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
