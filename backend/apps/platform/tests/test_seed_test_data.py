@@ -42,6 +42,56 @@ def test_it_fills_every_flow(settings, s3):  # noqa: F811
     waiting = [missing_files(b) for b in Booking.objects.filter(stage="submitted")]
     assert any(rows and not any(r["required"] for r in rows) for rows in waiting)  # can finish
     assert any(any(r["required"] for r in rows) for rows in waiting)    # needs an upload first
+    # a rule that looks at the booking counts here too: a Used Car's body frame photo is required
+    from apps.media.models import MediaAsset
+
+    used = next(b for b in Booking.objects.filter(stage="submitted", inspection_type="used_car"))
+    frame = used.counted_inspection().answers["inspection"]["driver_side_a_pillar_image"]
+    MediaAsset.objects.filter(id__in=frame).update(status="uploading")
+    row = next(r for r in missing_files(used) if r["key"] == "driver_side_a_pillar_image")
+    assert row["required"] is True
+    # Ops' own key checks print in a table of their own, only on a report that has some
+    import io
+
+    import pypdf
+
+    from apps.reports.tasks import build_pdf, published_template
+
+    def report_text(ref: str) -> str:
+        b = Booking.objects.get(booking_id=ref)
+        insp = b.counted_inspection()
+        pdf, _ = build_pdf(b, insp, published_template(b, insp), "tok", 1)
+        return "\n".join(p.extract_text() for p in pypdf.PdfReader(io.BytesIO(pdf)).pages)
+
+    named = report_text("TST-1001")
+    assert "Additional key checks" in named and "Service history" in named
+    assert "Verified, 3 services" in named and "Clean car overall" in named
+    assert "Key Check 3" not in named                       # an unnamed pair prints nothing
+    plain = report_text("TST-1009")
+    assert "Additional key checks" not in plain and "Key Check 1" not in plain
+    assert "Mfg. Date" in named and "March 2026" in named            # on the cover (PDI, EV)
+    used_report = report_text("TST-1002")
+    assert "Estimated Price" in used_report and "12,50,000" in used_report
+    assert "Service history" in used_report and "36,400 km" in used_report
+    assert "Not able to check" in used_report           # an empty answer prints its fallback
+    assert "Mfg. Date" not in used_report and "Estimated Price" not in named
+    # the cover counts everything the expert recorded; "Not able to check" has no tile or list
+    for text in (named, plain, used_report):
+        cover = text.upper().split("DOCUMENTS")[0]            # the table headings print in capitals
+        assert "CHECKPOINTS INSPECTED" in cover and "CHECKS DONE" not in cover
+        assert "NOT ABLE TO CHECK" not in cover and "Not able to check:" not in text
+    # the count is the form's predefined checkpoints: the same on every inspection of a type
+    from apps.reports import context
+
+    counts: dict[str, set[str]] = {}
+    for done in Booking.objects.filter(stage="completed"):
+        src = context.Source(done, done.counted_inspection(), revision=1, token="t")
+        counts.setdefault(done.inspection_type, set()).add(src.values()["sys"]["points"])
+    assert counts == {"pdi": {"334"}, "used_car": {"348"}, "ev": {"301"}}, counts
+    # the expert's own summary text is never printed (as in Clappia): only Ops' comment is
+    assert "Expert comments" in named and "Minor issues noted" not in named
+    assert "Expert comments" not in plain and "Minor issues noted" not in plain
+    assert "Photos of Issues" in named or "Photos of Issues" in plain       # its photos still are
     # a second run on the same (test-made) data is allowed and starts clean
     call_command("seed_test_data", confirm="staging-1", password=PW)
 

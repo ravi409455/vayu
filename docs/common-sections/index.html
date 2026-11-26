@@ -1,0 +1,313 @@
+<title>Vayu Common Sections Plan</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* layout: a review document. Summary numbers, one matrix of every section against the three
+   forms, then drill-downs (each form, the library, shared fields, decisions still open). */
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --fg: #1b2230; --muted: #5d6676; --line: #dfe3ea;
+  --all: #0f766e; --all-bg: #d9f2ee;        /* library section used by all three forms */
+  --two: #8a5a00; --two-bg: #fbecc8;        /* library section used by PDI + Used Car */
+  --fld: #2b55c7; --fld-bg: #dfe7fb;        /* single shared field */
+  --own: #4b5565; --own-bg: #e9ecf1;        /* the form's own */
+  --ask: #b3261e; --ask-bg: #fbe0dd;        /* decision still open */
+  --new: #6b3fa0; --new-bg: #ece2f8;        /* newly asked on this form */
+  --head: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12151b; --card: #1a1f28; --fg: #e8ebf1; --muted: #9aa3b2; --line: #2c3340;
+  --all: #5fd3c6; --all-bg: #123a36; --two: #f0c060; --two-bg: #40300a; --fld: #9db7ff; --fld-bg: #1c2b55;
+  --own: #b8c0cd; --own-bg: #2a303b; --ask: #ff9a90; --ask-bg: #4a1c18; --new: #cdb0f5; --new-bg: #33224d;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12151b; --card: #1a1f28; --fg: #e8ebf1; --muted: #9aa3b2; --line: #2c3340;
+  --all: #5fd3c6; --all-bg: #123a36; --two: #f0c060; --two-bg: #40300a; --fld: #9db7ff; --fld-bg: #1c2b55;
+  --own: #b8c0cd; --own-bg: #2a303b; --ask: #ff9a90; --ask-bg: #4a1c18; --new: #cdb0f5; --new-bg: #33224d;
+  color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--body); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 28px; }
+h1, h2, h3 { font-family: var(--head); text-wrap: balance; margin: 0; }
+h1 { font-size: 30px; font-weight: 700; letter-spacing: -.01em; }
+h2 { font-size: 21px; font-weight: 600; }
+h3 { font-size: 16px; font-weight: 600; }
+p { margin: 0; max-width: 70ch; }
+.lead { color: var(--muted); }
+section { display: flex; flex-direction: column; gap: 12px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.tile { padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
+.tile b { font: 700 30px/1.1 var(--head); font-variant-numeric: tabular-nums; }
+.tile span { color: var(--muted); font-size: 13px; }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.t-all { color: var(--all); background: var(--all-bg); } .t-two { color: var(--two); background: var(--two-bg); }
+.t-fld { color: var(--fld); background: var(--fld-bg); } .t-own { color: var(--own); background: var(--own-bg); }
+.t-ph { color: var(--fld); background: var(--fld-bg); } .t-ask { color: var(--ask); background: var(--ask-bg); } .t-ok { color: var(--all); background: var(--all-bg); } .t-new { color: var(--new); background: var(--new-bg); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+.legend div { display: flex; gap: 6px; align-items: center; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+td.n, th.n { text-align: center; font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: 0; }
+tr.sub td:first-child { padding-left: 30px; }
+.dot { display: inline-block; min-width: 34px; padding: 1px 6px; border-radius: 6px; font-weight: 600; }
+.none { color: var(--line); }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
+.form { padding: 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.bar { display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: var(--own-bg); }
+.bar i { display: block; height: 100%; }
+.page { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--fg); margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.chg summary .ct { font-weight: 700; color: var(--fg); min-width: 28px; text-align: right; }
+.chg ul.f li { display: block; }
+details { border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+details.k-all { border-left: 4px solid var(--all); } details.k-two { border-left: 4px solid var(--two); }
+details.k-own { border-left: 4px solid var(--own); }
+summary { cursor: pointer; padding: 8px 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+summary:focus-visible, button:focus-visible { outline: 2px solid var(--fld); outline-offset: 2px; }
+summary .nm { font-weight: 600; flex: 1 1 140px; min-width: 0; }
+summary .ct { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+ul.f { list-style: none; margin: 0; padding: 4px 10px 10px; display: flex; flex-direction: column; gap: 3px; }
+ul.f li { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 13.5px; padding: 2px 0; border-top: 1px dashed var(--line); }
+ul.f small { color: var(--muted); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 10px; align-items: start; }
+.rules { padding: 14px 18px; } .rules ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 80ch; }
+.opt { display: inline-block; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin: 1px 2px 1px 0; font-size: 12.5px; }
+.by { display: grid; grid-template-columns: 80px 1fr; gap: 2px 10px; font-size: 13.5px; }
+.by b { color: var(--muted); font-weight: 600; }
+.confl { padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; }
+button { font: 600 13px var(--body); padding: 5px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+</style>
+
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <h1>Common sections plan</h1>
+    <p class="lead">How the PDI, Used Car and EV inspection forms are rebuilt from shared parts in the Vayu library. Built on the branch <code>feat/common-sections</code> and tested on a scratch copy; not yet on the local app. Everything on this page is read from the real form files. Numbers count questions (fields).</p>
+  </header>
+
+  <section>
+    <div class="tiles" id="tiles"></div>
+    <div class="legend">
+      <div><span class="tag t-all">Library · all 3</span> one master section used by PDI, Used Car and EV</div>
+      <div><span class="tag t-two">Library · PDI + Used</span> one master section for the two fuel-car forms</div>
+      <div><span class="tag t-fld">Shared field</span> single question linked from the library</div>
+      <div><span class="tag t-all">Built-in · all 3</span> Chassis Number: part of every Vayu inspection form, same in all three</div>
+      <div><span class="tag t-own">Own</span> belongs to that one form</div>
+      <div><span class="tag t-ph">During test drive</span> the section sits on that test-drive page of the form</div>
+      <div><span class="tag t-new">Ops only</span> hidden from the expert at every stage; Ops and Admin fill it</div>
+      <div><span class="tag t-ok">Decided</span> the apps disagreed; the winner is chosen</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Every section, against the three forms</h2>
+    <p class="lead">A number means that form has the section, with that many questions. A blue tag under it says the section is on a test-drive page of that form (before, during or after), as in Clappia. Indented rows are the small sections split off from the one above; in the PDF they print on the parent's page under its heading.</p>
+    <div class="card scroll"><table id="matrix"></table></div>
+  </section>
+
+  <section>
+    <h2>Before and after, per form</h2>
+    <p class="lead">Each form as it was before shared sections, against how it is built now. "Unchanged" means the same question, name, answers and asking rule, in the same section. Open a line to see every item.</p>
+    <div class="cols" id="changes"></div>
+  </section>
+
+  <section>
+    <h2>Each form, top to bottom</h2>
+    <p class="lead">The order the expert will see. Open a section to see its questions.</p>
+    <div class="cols" id="forms"></div>
+  </section>
+
+  <section>
+    <h2>The library: master sections</h2>
+    <p class="lead">Each is kept once in the library and locked inside the forms that use it. Edit it once, every form gets it.</p>
+    <div class="grid2" id="library"></div>
+  </section>
+
+  <section>
+    <h2>The library: shared fields</h2>
+    <p class="lead">Single questions that match between forms whose sections stay separate (Engine, Car Documents). A photo that is asked only when its check finds a problem cannot be shared on its own, so those stay with each form.</p>
+    <div class="card scroll"><table id="fields"></table></div>
+  </section>
+
+  <section>
+    <h2>Decisions made</h2>
+    <p class="lead">Where the Clappia apps disagreed, one winner was needed. "Your choice" are the ones you picked in the pop-ups on 26 November. "Style rule" are typing-only differences settled by the one writing style you approved; tell me if any should change.</p>
+    <div class="btns" id="cbtns"></div>
+    <div class="grid2" id="conflicts"></div>
+  </section>
+
+  <section>
+    <h2>What changes for the expert</h2>
+    <div class="card rules"><ol>
+      <li><b>A new first page for Ops, "Additional Checks".</b> The expert never sees it. It has "Expert Comments" (one text box; when filled, the report prints it as the expert comment in place of the expert's own text) and "Key Checks" (five pairs: a label and its value, both typed by Ops). In the report the named pairs print in their own table, "Additional key checks"; a pair with no label prints nothing, and with no labels at all the table and its heading are left out. These replace the fixed "Key check 1–4" entries, where Ops could not set the name.</li>
+      <li><b>Customer-view review (27 November).</b> A label names the part and the answer says the result: about 40 checks are renamed (for example "De fogger Rear Vent Working: Ok" is now "Rear Defogger Vent: Working"; "Smoke Emission: Ok" is "Exhaust Smoke: Not Present"; "Check Gear Box / Transmission Shifting" is "Gear Shifting"). Workshop words stay. See "Renamed" and "Answer list changed" under "Before and after".</li>
+      <li><b>Every check has its colours.</b> The 15 seat checks (condition, belt, adjustment, third row) are green when fine and red, counted as an issue, when not. Battery State and Generator / Alternator State are coloured; a CNG kit fitted outside prints amber.</li>
+      <li><b>Readings.</b> AC temperatures show °C. Each tyre has a "Tread Depth (mm)" number beside Good / Average / Bad.</li>
+      <li><b>Report layout.</b> Key checks come before Issues found. No row of Issues found is highlighted. OBD Scan shares a page with Battery and Charging, and Axle with Transmission and Clutch Pedal. Photo captions drop "Image / Photo / Photos". The "Equipments" section is "Tool Kit"; the rating reads "Tyres".</li>
+      <li><b>Key Checks are now only these:</b> Tyre Manufacturing Year (starts as "2026"), Scratches And Dents, Repainted Panels and Rusting in Body (each starts as "Not Found") on all three forms, plus Accidental History on Used Car. Ops type them on the booking.</li>
+      <li><b>"Additional Details" on the Additional Checks page.</b> One shared Ops-only section between Expert Comments and Key Checks: "Manufacturing Date" shows on PDI and EV and prints on the cover; "Price Estimate" shows on Used Car and prints on its cover beside Documents as "Estimated Price".</li>
+      <li><b>Used Car has an Ops-only "Service History Details" page</b> right after Additional Checks: Last Service Date, Accidental History Reported, Total Services, Indication of Odometer Rollback, Engine work done, Transmission work done, Last Odometer Reading and Service History Analysis. It prints as its own "Service history" page after Car pictures; an answer left empty prints Clappia's starting value (NA, No, Not able to check).</li>
+      <li><b>The cover shows "Issues found" and "Checkpoints inspected".</b> The second counts everything the expert recorded on the car (checks, readings, facts, photos, videos), not what only Ops fill. "Not able to check" no longer has a tile on the cover or a list on the Issues found page; such an answer shows only in its own section's table.</li>
+      <li><b>Cover details use short names</b> in the report only (for example "Odometer Reading" for "Car KM Current Reading"), so each row keeps to one line. The form's own labels are unchanged.</li>
+      <li><b>"Body Frame Accidental Checklist" is now just "Body Frame"</b> in the forms and the reports.</li>
+      <li><b>Body frame photos follow the inspection type.</b> Body Frame is one shared section. On Used Car its 19 photos are always asked. On PDI and EV a photo appears, and is then required, only when its check finds a problem.</li>
+      <li><b>Paint gauge reading photos.</b> Eleven in Exterior Body on all three forms, each right after its part's check: the four doors, bonnet, roof, tail gate, two front fenders and two rear quarter panels. Always required, camera only, one needed and two allowed. They print on the Exterior Body page.</li>
+      <li><b>Gear Shifting Panel photo</b> right after Transmission Type, on PDI and Used Car. Required; prints on the Car pictures page.</li>
+      <li><b>Wipers:</b> "Wiper Washer Spray" (Working / Not Working) and "Rear Wiper" (with Not Applicable) follow "Wiper" on all three forms.</li>
+      <li><b>Small fixes:</b> the front indicator working checks are "Front Indicator Light"; Passenger Side View Mirror Housing has "Damaged"; "Running Board Board" and "Back PassengerSide / DriverSide" are corrected.</li>
+      <li><b>Things only Used Car asks today are asked on all three:</b> 4 shocker photos, AC video at max fan, axle rotating video, glass serial number photos, the Chassis Remark and the Radiator Core Support Remark.</li>
+      <li><b>Radiator Core Support stays on all three forms</b>, EV included, inside the Body Frame master.</li>
+      <li><b>Chassis Remark now works.</b> In Clappia it was set to appear on Radiator Core Support answers that check does not have, so it never showed. It now appears when "Match Chassis No Plate with the Real Body" is Not Matching.</li>
+      <li><b>CNG stays each form's own section</b> (PDI, Used Car). It is shown only when Fuel Type includes CNG, and a library section may not depend on a question outside itself. Its three plain questions are shared fields.</li>
+      <li><b>Test-drive pages are as in Clappia.</b> Used Car: Before test drive (Engine), During test drive (Transmission and Clutch Pedal, Axle, Brakes and Steering), After test drive (Engine, Brakes). PDI and EV have no test drive: Clappia's leftover "During Test Drive" marking on their Axle section is dropped, and Axle is a normal page there with all its questions. The blue tags show the phases in the table and in each form.</li>
+      <li><b>The PDF keeps today's pages.</b> Split-off questions print on their old section's page. Only pages identical in all three reports are shared parts: Verify, Disclaimer, Car pictures, and the Tyres, Brakes, Brakes and Steering, Axle, Suspension, Air Conditioning and Equipments pages.</li>
+      <li><b>Small new sections appear</b> next to their parent: Engine and Fuel Details, Fuel Filler Flap, Ignition and Fuel Controls, Engine Warning Lights, Engine, Exhaust and Fuel Tank (PDI + Used Car); Charger Flap, Start and Charging Controls, Charging Warning Light, Underbody Cables (EV); Registration Details, Odometer After Test Drive (Used Car).</li>
+      <li><b>Chassis Number is common to all three.</b> It is Vayu's built-in field: every inspection form has it, with the same name and type, and it cannot be removed. Because it is built in rather than kept in the library, it sits in a one-question section right after Car Details in each form.</li>
+      <li><b>EV's Bonnet Open photo</b> moves from Car Images into Battery, Charger and Hood.</li>
+      <li><b>Answer lists change slightly</b> where the apps disagreed, e.g. Stepney Tyre Shape gains "Not Applicable", windows lose "Not Applicable" on Used Car, the company list has all 25 everywhere. Every one is in "Decisions made" above.</li>
+      <li><b>Unchanged:</b> Engine (PDI one section, Used Car before / after test drive), Car Documents, Ratings, EV battery sections, booking, check-in and wrap-up.</li>
+    </ol></div>
+  </section>
+</div>
+
+<script>
+const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const KT = { master3: ["t-all", "Library · all 3", "k-all"], master2: ["t-two", "Library · PDI + Used", "k-two"],
+             own: ["t-own", "Own", "k-own"], builtin: ["t-all", "Built-in · all 3", "k-all"] };
+const TYPE = { single_choice: "choice", multi_choice: "multi-choice", short_text: "text", long_text: "long text" };
+const FORMS = ["PDI", "Used Car", "EV"];
+const phase = page => /^test drive$/i.test(page) ? "During test drive" : page;
+
+function fieldLi(f) {
+  const tags = [];
+  if (f.where === "shared field") tags.push('<span class="tag t-fld">Shared field</span>');
+  if (f.new) tags.push('<span class="tag t-new">New here</span>');
+  if ((f.pending || []).length) tags.push('<span class="tag t-ask">Decide ' + f.pending.join(" + ") + "</span>");
+  const o = (f.options || []).length ? ' <small>' + f.options.map(esc).join(" · ") + "</small>" : "";
+  return "<li><span>" + esc(f.label) + "</span> <small>" + (TYPE[f.type] || f.type) + "</small> " + tags.join(" ") + o + "</li>";
+}
+
+fetch("plan.json").then(r => r.json()).then(d => {
+  const lib = d.library, all3 = lib.filter(l => l.forms.length === 3), two = lib.filter(l => l.forms.length === 2);
+  const sum = a => a.reduce((n, l) => n + l.fields.length, 0);
+  const own = FORMS.map(n => d.forms[n].filter(s => s.kind === "own"));
+  const tiles = [
+    [lib.length, "library sections (" + all3.length + " for all three, " + two.length + " for PDI + Used Car)"],
+    [sum(lib), "questions kept once in those sections"],
+    [d.shared_fields.length, "single shared fields"],
+    [own.reduce((n, o) => n + o.length, 0), "sections that stay a form's own (PDI " + own[0].length + ", Used Car " + own[1].length + ", EV " + own[2].length + ")"],
+    [d.conflicts.length, "differences between the apps settled (" + d.conflicts.filter(c => c.how === "your choice").length + " by you, " + d.conflicts.filter(c => c.how !== "your choice").length + " by the style rule), 0 waiting"]];
+  tiles.forEach(([n, t]) => document.getElementById("tiles").append(el("div", "card tile", "<b>" + n + "</b><span>" + esc(t) + "</span>")));
+
+  // matrix: library sections in PDI/Used order with their split-offs under the parent, then own-only ones
+  const rows = [], seen = new Set();
+  const order = [];
+  FORMS.forEach(n => d.forms[n].forEach(s => { if (!order.includes(s.name)) order.push(s.name); }));
+  const info = name => { const o = {}; let kind = "own", parent = null;
+    const pg = {};
+    FORMS.forEach(n => { const s = d.forms[n].find(x => x.name === name); if (s) { o[n] = s.fields.length; parent = s.parent; if (s.kind !== "own") kind = s.kind;
+      if (/test drive/i.test(s.page)) pg[n] = phase(s.page); } });
+    return { name, o, kind, parent, pg }; };
+  const infos = order.map(info);
+  infos.filter(i => !i.parent).forEach(p => { rows.push(p); infos.filter(c => c.parent === p.name).forEach(c => rows.push(c)); });
+  infos.filter(i => i.parent && !rows.includes(i)).forEach(i => rows.push(i));
+  const m = document.getElementById("matrix");
+  m.innerHTML = "<thead><tr><th>Section</th><th>Where it lives</th>" + FORMS.map(f => '<th class="n">' + f + "</th>").join("") + "</tr></thead>";
+  const tb = el("tbody");
+  rows.forEach(r => {
+    const [cls, txt] = KT[r.kind];
+    const only = r.kind === "own" && Object.keys(r.o).length === 1 ? " · " + Object.keys(r.o)[0] + " only" : (r.kind === "own" ? " · each form its own" : "");
+    tb.append(el("tr", r.parent ? "sub" : "", "<td>" + esc(r.name) + "</td><td><span class='tag " + cls + "'>" + txt + "</span><small style='color:var(--muted)'>" + only + "</small></td>" +
+      FORMS.map(f => '<td class="n">' + (r.o[f] ? '<span class="dot ' + cls + '">' + r.o[f] + "</span>" + (r.pg[f] ? '<br><span class="tag t-ph">' + r.pg[f] + "</span>" : "") : '<span class="none">–</span>') + "</td>").join("")));
+  });
+  m.append(tb);
+
+  // each form
+  FORMS.forEach(n => {
+    const secs = d.forms[n], c = { master: 0, "shared field": 0, own: 0 };
+    secs.forEach(s => s.fields.forEach(f => { const w = f.where === "master" || f.where === "built-in" ? "master" : f.where === "shared field" ? "shared field" : "own"; c[w]++; }));
+    const tot = c.master + c["shared field"] + c.own;
+    const box = el("div", "card form");
+    box.append(el("h3", "", n + ' <small style="font:400 13px var(--body);color:var(--muted)">' + secs.length + " sections · " + tot + " questions</small>"));
+    box.append(el("div", "bar", '<i style="width:' + c.master / tot * 100 + '%;background:var(--all)"></i><i style="width:' + c["shared field"] / tot * 100 + '%;background:var(--fld)"></i>'));
+    box.append(el("div", "legend", "<div>" + c.master + " common (library sections + Chassis Number)</div><div>" + c["shared field"] + " shared fields</div><div>" + c.own + " own</div>"));
+    let page = null, pn = 0;
+    secs.forEach(s => {
+      if (s.page !== page) { page = s.page; box.append(el("div", "page", "Page " + (++pn) + " · " + esc(page))); }
+      const [cls, txt, k] = KT[s.kind];
+      const dt = el("details", k);
+      const ph = (/test drive/i.test(s.page) && !/test drive/i.test(s.name) ? ' <span class="tag t-ph">' + phase(s.page) + "</span>" : "") + (s.ops ? ' <span class="tag t-new">Ops only</span>' : "");
+      dt.append(el("summary", "", '<span class="nm">' + esc(s.name) + ph + '</span><span class="tag ' + cls + '">' + txt + '</span><span class="ct">' + s.fields.length + "</span>"));
+      dt.append(el("ul", "f", s.fields.map(fieldLi).join("")));
+      box.append(dt);
+    });
+    document.getElementById("forms").append(box);
+  });
+
+  // before and after
+  FORMS.forEach(n => {
+    const c = d.changes[n], box = el("div", "card form chg");
+    box.append(el("h3", "", n + ' <small style="font:400 13px var(--body);color:var(--muted)">' + c.before + " questions before · " + c.after + " now</small>"));
+    const moved = Object.entries(c.moved);
+    const lines = [
+      ["Unchanged", c.same, null, "k-all"],
+      ["Added", c.added.length, c.added.map(a => "<li><b>" + esc(a.label) + "</b> <small>in " + esc(a.section) + " · asked " + a.when + "</small></li>"), "k-two"],
+      ["Removed", c.removed.length, c.removed.map(a => "<li><b>" + esc(a.label) + "</b> <small>was in " + esc(a.section) + "</small></li>"), "k-own"],
+      ["Renamed", c.renamed.length, c.renamed.map(a => "<li>" + esc(a.from) + " → <b>" + esc(a.to) + "</b> <small>" + esc(a.section) + "</small></li>"), "k-own"],
+      ["Answer list changed", c.answers.length, c.answers.map(a => "<li><b>" + esc(a.label) + "</b> <small>" + esc(a.section) + "</small><br>" +
+        (a.added.length ? '<span class="tag t-ok">+ ' + a.added.map(esc).join(", ") + "</span> " : "") + (a.removed.length ? '<span class="tag t-ask">− ' + a.removed.map(esc).join(", ") + "</span>" : "") +
+        (a.reordered && !a.added.length ? "<small>same answers, new order</small>" : "") + "</li>"), "k-own"],
+      ["Asked differently", c.asked.length, c.asked.map(a => "<li><b>" + esc(a.label) + "</b> <small>" + esc(a.section) + "</small><br><small>" + a.from + " → </small>" + a.to + "</li>"), "k-own"],
+      ["Moved to a new small section (same question)", moved.reduce((x, m) => x + m[1].length, 0), moved.map(([k, v]) => "<li><b>" + esc(k) + "</b><br><small>" + v.map(esc).join(" · ") + "</small></li>"), "k-own"]];
+    lines.forEach(([t, num, items, k]) => {
+      const dt = el("details", k);
+      dt.append(el("summary", "", '<span class="nm">' + t + '</span><span class="ct">' + num + "</span>"));
+      if (items && items.length) dt.append(el("ul", "f", items.join("")));
+      box.append(dt);
+    });
+    document.getElementById("changes").append(box);
+  });
+
+  // library
+  lib.forEach(l => {
+    const k = l.forms.length === 3 ? "master3" : "master2", [cls, txt, kk] = KT[k];
+    const pend = l.fields.filter(f => f.pending.length).length;
+    const dt = el("details", kk);
+    dt.append(el("summary", "", '<span class="nm">' + esc(l.name) + (l.ops ? ' <span class="tag t-new">Ops only</span>' : "") + (l.parent ? ' <small style="font-weight:400;color:var(--muted)">with ' + esc(l.parent) + "</small>" : "") + '</span><span class="tag ' + cls + '">' + txt + "</span>" +
+      (pend ? '<span class="tag t-ask">' + pend + " to decide</span>" : "") + '<span class="ct">' + l.fields.length + "</span>"));
+    dt.append(el("ul", "f", l.fields.map(f => fieldLi({ ...f, new: false }) .replace("</li>", (f.new_for.length ? ' <span class="tag t-new">New on ' + f.new_for.join(", ") + "</span>" : "") + "</li>")).join("")));
+    document.getElementById("library").append(dt);
+  });
+
+  // shared fields
+  const ft = document.getElementById("fields");
+  ft.innerHTML = "<thead><tr><th>Question</th><th>Kind</th><th>Used in</th><th>Forms</th><th></th></tr></thead><tbody>" +
+    d.shared_fields.map(f => "<tr><td>" + esc(f.label) + "</td><td>" + (TYPE[f.type] || f.type) + "</td><td>" + esc(f.group) + "</td><td>" + f.forms.join(", ") + "</td><td>" +
+      (f.pending.length ? '<span class="tag t-ask">Decide ' + f.pending.join(" + ") + "</span>" : "") + "</td></tr>").join("") + "</tbody>";
+
+  // conflicts
+  const kinds = ["All", ...new Set(d.conflicts.map(c => c.how))];
+  const cb = document.getElementById("cbtns"), cw = document.getElementById("conflicts");
+  const draw = kind => { cw.innerHTML = "";
+    d.conflicts.filter(c => kind === "All" || c.how === kind).forEach((c, i) => {
+      const vals = Object.entries(c.by);
+      const common = Array.isArray(vals[0][1]) ? vals[0][1].filter(o => vals.every(v => v[1].includes(o))) : [];
+      const show = v => Array.isArray(v) ? v.map(o => '<span class="opt"' + (common.includes(o) ? "" : ' style="border-color:var(--ask);color:var(--ask)"') + ">" + esc(o) + "</span>").join("") : esc(v);
+      const body = vals.map(([f, v]) => "<b>" + f + "</b><span>" + show(v) + "</span>").join("");
+      const fin = Array.isArray(c.final) ? c.final.map(o => '<span class="opt" style="border-color:var(--all);color:var(--all)">' + esc(o) + "</span>").join("") : "<strong>" + esc(c.final) + "</strong>";
+      cw.append(el("div", "card confl", '<div><span class="tag t-ok">' + c.kind + " · " + c.how + '</span> <b>' + esc(c.label) + '</b> <small style="color:var(--muted)">' + esc(c.section) + '</small></div><div class="by">' + body +
+        '<b style="color:var(--all)">Final</b><span>' + fin + "</span></div>"));
+    }); };
+  kinds.forEach((k, i) => { const b = el("button", "", k + " (" + (k === "All" ? d.conflicts.length : d.conflicts.filter(c => c.how === k).length) + ")");
+    b.id = "ck-" + i; b.setAttribute("aria-pressed", i === 0);
+    b.onclick = () => { cb.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); draw(k); };
+    cb.append(b); });
+  draw("All");
+});
+</script>

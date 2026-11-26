@@ -41,3 +41,9 @@ def end(admin) -> dict:
 
 def inspection(form_key: str) -> tuple[dict, dict]:
     return load(form_key)
+
+
+def library() -> dict:
+    """The library sections and fields the inspection forms are built on (setup/common.py)."""
+    data = json.loads((FROZEN / "library.json").read_text())
+    return {"sections": data["sections"], "fields": data["fields"]}

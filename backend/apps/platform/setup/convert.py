@@ -39,14 +39,14 @@ INSPECTION_SYSTEM = {"chassis_nu": {"key": "chassis_no", "type": "short_text"}}
 # Ops-typed ratings on Clappia's "Report First Page" → our rating categories (the sections whose
 # defects lower each one, from that app's own sections)
 CATEGORIES = {
-    "pdi": [("exterior", "Exterior", ["Exterior Body", "Body Frame Accidental Checklist"]),
+    "pdi": [("exterior", "Exterior", ["Exterior Body", "Body Frame"]),
             ("ac", "AC", ["Air Conditioning"]),
             ("electronics", "Electronics", ["Electrical and Interior", "Warning Lights"]),
             ("engine", "Engine", ["Engine", "Battery and Charging", "CNG", "OBD Scan",
                                   "Transmission and Clutch Pedal"]),
-            ("tires", "Tires", ["Tyres", "Brakes", "Brakes and Steering", "Axle", "Suspension",
+            ("tires", "Tyres", ["Tyres", "Brakes", "Brakes and Steering", "Axle", "Suspension",
                                 "UnderBody"])],
-    "used_car": [("exterior", "Exterior", ["Exterior Body", "Body Frame Accidental Checklist"]),
+    "used_car": [("exterior", "Exterior", ["Exterior Body", "Body Frame"]),
                  ("ac", "AC", ["Air Conditioning"]),
                  ("drive_train", "Drive Train", ["Transmission and Clutch Pedal", "Axle",
                                                  "Brakes and Steering", "Brakes", "Suspension"]),
@@ -54,12 +54,12 @@ CATEGORIES = {
                                        "Engine (after test drive)", "Battery and Charging",
                                        "CNG", "OBD Scan", "Electrical and Interior",
                                        "Warning Lights"]),
-                 ("tires", "Tires", ["Tyres", "UnderBody"])],
-    "ev": [("exterior", "Exterior", ["Exterior Body", "Body Frame Accidental Checklist"]),
+                 ("tires", "Tyres", ["Tyres", "UnderBody"])],
+    "ev": [("exterior", "Exterior", ["Exterior Body", "Body Frame"]),
            ("ac", "AC", ["Air Conditioning"]),
            ("electronics", "Electronics", ["Electrical and Interior", "Warning Lights"]),
            ("battery", "Battery", ["Battery, Charger and Hood", "Auxiliary Battery"]),
-           ("tires", "Tires", ["Tyres", "Brakes", "Brakes and Steering", "Axle", "Suspension",
+           ("tires", "Tyres", ["Tyres", "Brakes", "Brakes and Steering", "Axle", "Suspension",
                                "UnderBody"])],
 }
 
@@ -115,10 +115,22 @@ def end() -> dict:
     return spec
 
 
+SECTION_NAMES = {"Body Frame Accidental Checklist": "Body Frame", "Equipments": "Tool Kit"}
+
+
 def inspection(form_key: str) -> tuple[dict, dict]:
     """(spec, version settings: Key Checks and rating config) of one inspection form."""
     app = dict((k, a) for k, _, _, a in INSPECTIONS)[form_key]
     spec = clappia.convert(app, system=INSPECTION_SYSTEM)
+    for page in spec["pages"]:            # our names for Clappia's sections (owner, 2026-11-26)
+        page["title"] = SECTION_NAMES.get(page["title"], page["title"])
+        for sec in page["sections"]:
+            sec["title"] = SECTION_NAMES.get(sec["title"], sec["title"])
+    if form_key != "used_car":      # only Used Car has a test drive (owner, 2026-11-26): the
+        # "During Test Drive" left on Axle in the PDI and EV apps is not a page of its own
+        spec["pages"] = [q for p in spec["pages"] for q in (
+            [{"title": s["title"], "sections": [s]} for s in p["sections"]]
+            if p["title"] in clappia.PHASE_PAGES.values() else [p])]
     spec["pages"][0]["gate"] = True             # the car's details come first
     titles = {s["title"] for p in spec["pages"] for s in p["sections"]}
     cats = [{"key": k, "label": lb, "sections": [t for t in secs if t in titles]}
@@ -129,36 +141,17 @@ def inspection(form_key: str) -> tuple[dict, dict]:
     return spec, {"key_checks": key_checks(app), "rating_config": {"categories": cats}}
 
 
+# the Key Checks Ops type on the booking (owner, 2026-11-26): these and no others
+KEY_CHECKS = [("Tyre Manufacturing Year", "2026"), ("Scratches And Dents", "Not Found"),
+              ("Repainted Panels", "Not Found"), ("Rusting in Body", "Not Found")]
+USED_CAR_CHECKS = [("Accidental History", "Not Found")]
+
+
 def key_checks(app: str) -> list[dict]:
-    """The app's Ops-only facts as our Key Checks (text, with Clappia's defaults): its "Key
-    Checks" section, plus the facts on "Report First Page" that are not ratings."""
-    data = clappia.load(app)
-    out: list[dict] = []
-    seen: set[str] = set()
-    for s in data["sections"]:
-        if s["title"] not in ("Report First Page", "Key Checks"):
-            continue
-        for f in s["fields"]:
-            label, st = " ".join(f["label"].split()), clappia.settings(f)
-            if f["kind"] in ("app-file", "app-formula") or "do not touch" in (
-                    f.get("desc") or "").lower():
-                continue
-            if s["title"] == "Report First Page" and f["kind"] != "ng:input:text":
-                continue                         # the Expert Rating word is our overall word
-            if s["title"] == "Report First Page" and "Minimum Value" in st:
-                continue                         # 1–5 ratings: our rating categories
-            if label.endswith("- Value"):
-                continue                         # KeyCheckN + its value: one text box here
-            key = clappia.slug(label)
-            if key in seen:
-                continue
-            seen.add(key)
-            default = st.get("Default value", "")
-            item = {"key": key, "label": label.replace("KeyCheck", "Key check "), "type": "text",
-                    "default": "" if default in ("NA", "null") else default}
-            if "Year" in label:
-                item["type"] = "number"
-            if "Date" in label:
-                item["type"] = "date"
-            out.append(item)
-    return out
+    """Our Key Checks of one app (text, typed by Ops, each with its starting value). What else
+    Clappia had under "Key Checks" / "Report First Page" lives elsewhere now: Ops' own named
+    checks, the manufacturing date, the price estimate and the service history are form fields
+    on Ops-only pages (common.py); the 1-5 ratings are our rating categories."""
+    items = (USED_CAR_CHECKS if app == "used_car_3_0" else []) + KEY_CHECKS
+    return [{"key": clappia.slug(label), "label": label, "type": "text", "default": default}
+            for label, default in items]

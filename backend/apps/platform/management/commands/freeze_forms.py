@@ -1,13 +1,13 @@
 """One time (local only): converts the Clappia read-out (apps/platform/setup/data) into our six form
-files (apps/platform/setup/frozen/*.json), with the agreed clean-ups and photo rules. After that the
-files are ours: edit them (or the forms in the builder), never re-run this over hand edits
-without reviewing the diff."""
+files and the library file (apps/platform/setup/frozen/*.json), with the agreed clean-ups, photo
+rules and shared sections. After that the files are ours: edit them (or the forms in the
+builder), never re-run this over hand edits without reviewing the diff."""
 import json
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.platform.setup import convert, forms
+from apps.platform.setup import common, convert, forms
 
 
 class Command(BaseCommand):
@@ -20,8 +20,18 @@ class Command(BaseCommand):
         out: dict[str, tuple[dict, dict]] = {
             "booking": (convert.booking(), {}), "start": (convert.start(), {}),
             "end": (convert.end(), {})}
-        for key, *_ in forms.INSPECTIONS:
-            out[key] = convert.inspection(key)
+        made = {key: convert.inspection(key) for key, *_ in forms.INSPECTIONS}
+        # what the three forms share goes to the library; the forms are rebuilt on it
+        library, shared, notes = common.share({k: spec for k, (spec, _) in made.items()})
+        for key, (spec, extra) in made.items():
+            for cat in extra["rating_config"]["categories"]:
+                cat["sections"] = common.with_children(cat["sections"], shared[key])
+            out[key] = ({**shared[key], "problems": spec.get("problems", [])}, extra)
+        (forms.FROZEN / "library.json").write_text(json.dumps(
+            {"made_from": "what the PDI, Used Car and EV forms share (setup/common.py)",
+             "notes": notes, **library}, indent=1, ensure_ascii=False) + "\n")
+        self.stdout.write(f"  library: {len(library['sections'])} sections, "
+                          f"{len(library['fields'])} fields")
         for name, (spec, extra) in out.items():
             notes = spec.pop("problems", [])
             spec.pop("app", None)
