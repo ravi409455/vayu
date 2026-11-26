@@ -36,7 +36,9 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
             /** A draft file that can't be read (a crash report in the app). */
             private val onDamaged: (File, Throwable) -> Unit = { _, _ -> },
             /** Send this phone's push token (WorkManager in the app, so it is retried). */
-            val sendPushToken: () -> Unit = {}) {
+            val sendPushToken: () -> Unit = {},
+            /** Expert files' copies outside the app (docs/plan-media-backup.md); null: none (tests). */
+            val backup: `in`.carcid.vayu.core.backup.BackupCopies? = null) {
     /** One person's own phone notices (reminders, photos not sending), shown in their bell. */
     fun localNotes(userId: Int) = `in`.carcid.vayu.core.alerts.LocalNotes(File(root, "notes-$userId.json"))
 
@@ -57,8 +59,37 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
 
     /** At app start: files no draft refers to (shots never confirmed, leftovers), for every person on this phone. */
     fun sweep() {
-        root.listFiles { f -> f.isDirectory && f.name.startsWith("drafts-") }.orEmpty()
-            .mapNotNull { it.name.removePrefix("drafts-").toIntOrNull() }.forEach { drafts(it).sweep() }
+        people().forEach { drafts(it).sweep() }
+        cleanBackups()
+    }
+
+    /** Everyone with drafts on this phone (the signed-in person and anyone signed out with unsent work). */
+    private fun people(): List<Int> = root.listFiles { f -> f.isDirectory && f.name.startsWith("drafts-") }.orEmpty()
+        .mapNotNull { it.name.removePrefix("drafts-").toIntOrNull() }
+
+    /**
+     * The backup copies' clean-up, from what every draft on this phone says of each file: the server
+     * has it (verified), will never take it (refused, the lead closed, or Ops finished it without the
+     * missing files, F-9), or still needs it.
+     */
+    fun cleanBackups() {
+        val backup = backup ?: return
+        val states = HashMap<String, `in`.carcid.vayu.core.backup.BackupCopies.State>()
+        var sure = true
+        for (id in people()) {
+            val store = drafts(id)
+            if (store.unreadable().isNotEmpty()) sure = false
+            val finished = runCatching { jobs(id).jobs() }.getOrDefault(emptyList()).filter { it.stage == "completed" }.map { it.id }.toSet()
+            for (d in store.all()) {
+                val closed = d.problemCode == `in`.carcid.vayu.core.draft.JOB_CLOSED || (d.submitSent && d.bookingId in finished)
+                for (f in d.files) states[f.id] = when {
+                    f.verified -> `in`.carcid.vayu.core.backup.BackupCopies.State.DONE
+                    f.refused || closed -> `in`.carcid.vayu.core.backup.BackupCopies.State.NEVER
+                    else -> `in`.carcid.vayu.core.backup.BackupCopies.State.WAITING
+                }
+            }
+        }
+        backup.clean(states, sure)
     }
 
     /** Ops' saved copies of what they last loaded (read-only offline). */
@@ -123,6 +154,7 @@ class Graph(val api: Api, val tokens: TokenStore, private val root: File,
      */
     suspend fun send(userId: Int): Boolean {
         val done = outbox(userId).run()
+        runCatching { cleanBackups() }                // files the server now has start their 2 days
         val (drafts, files) = drafts(userId).unsentCounts()
         try { api.heartbeat(drafts, files) } catch (e: ApiError) { if (e.code == "DEVICE_REVOKED") throw e }
         return done
@@ -170,7 +202,10 @@ class VayuApp : Application() {
             writer = java.util.concurrent.Executors.newSingleThreadExecutor(),
             // only that it happened and where in the code (beforeSend drops the text)
             onDamaged = { _, e -> io.sentry.Sentry.captureException(e) },
-            sendPushToken = { PushTokenWorker.enqueue(this) })
+            sendPushToken = { PushTokenWorker.enqueue(this) },
+            backup = `in`.carcid.vayu.core.backup.BackupCopies(
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS).resolve("Vayu"),
+                filesDir.resolve("backup-index.json"), System::currentTimeMillis, ::hasFileAccess))
     }
 }
 
@@ -244,3 +279,6 @@ fun scrubbed(e: io.sentry.SentryEvent): io.sentry.SentryEvent {
     e.exceptions?.forEach { it.value = null }
     return e
 }
+
+/** "All files access" is on: backup copies can be written outside the app (experts turn it on once). */
+fun hasFileAccess(): Boolean = android.os.Environment.isExternalStorageManager()

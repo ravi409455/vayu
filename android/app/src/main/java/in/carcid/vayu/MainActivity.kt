@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.core.content.edit
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.lifecycle.ViewModel
@@ -102,7 +105,9 @@ fun AppRoot(vm: AppViewModel) {
             is Screen.ChangePassword -> ChangePasswordScreen(s, vm::changePassword)
             is Screen.Home -> {
               AskForNotices()
-              if (s.me.role == "expert") {
+              if (s.me.role == "expert" && !fileAccessGiven(vm.graph.backup != null)) {
+                `in`.carcid.vayu.ui.expert.BackupAccessScreen()
+            } else if (s.me.role == "expert") {
                 val jobs by vm.jobs.state.collectAsState()
                 ExpertHome(s.me, jobs, vm.jobs.today(), vm::openProfile, { vm.jobs.sync(); vm.graph.kick() }, expertExtras(vm, s.me))
             } else {
@@ -146,7 +151,8 @@ private fun expertExtras(vm: AppViewModel, me: `in`.carcid.vayu.core.api.Me): Ex
     val jobs by vm.jobs.state.collectAsState()
     val bell by vm.bell.state.collectAsState()
     val opening by vm.opening.collectAsState()
-    return remember(tick, jobs, bell, opening) {
+    val found = vm.graph.backup?.found?.collectAsState()?.value
+    return remember(tick, jobs, bell, opening, found) {
         ExpertExtras(
             drafts = drafts.all().associateBy { it.bookingId },
             notices = vm.jobs.notices(),
@@ -159,19 +165,39 @@ private fun expertExtras(vm: AppViewModel, me: `in`.carcid.vayu.core.api.Me): Ex
                 // started on another phone: fetch the files the server already holds now, so they show
                 // before the expert retakes them (F-10: "0 of 1", then "2 of 1" after a new photo)
                 if (d.reconcile) vm.graph.kick()
-                InspectionEnv(InspectionModel(drafts, store, job.id, vm.jobs::now, vm.graph.kick, vm.jobs::verified), drafts, me.name.ifBlank { me.username },
+                InspectionEnv(InspectionModel(drafts, store, job.id, vm.jobs::now, vm.graph.kick, vm.jobs::verified, vm.graph.backup), drafts, me.name.ifBlank { me.username },
                     verified, vm.jobs::now, store::list, store.types(),
                     asset = { id -> loadAsset(ctx.cacheDir, id, vm.graph.api::formAsset) },
-                    opsChanges = vm.jobs.notices().filter { it.first == job.id }.map { it.second })
+                    opsChanges = vm.jobs.notices().filter { it.first == job.id }.map { it.second },
+                    backup = vm.graph.backup, fileAccess = ::hasFileAccess)
             },
-            onDiscard = { drafts.discard(it) },
+            onDiscard = { drafts.discard(it); vm.graph.backup?.dropBooking(it) },
             onClearSent = { drafts.clearSentCopies() },
             listed = jobs.jobs.map { it.id }.toSet(),
             onSend = { id -> InspectionModel(drafts, store, id, vm.jobs::now, vm.graph.kick).submit() },
-            onRemoveFile = { d, f -> InspectionModel(drafts, store, d.bookingId, vm.jobs::now, vm.graph.kick).removeFile(f.part, f.field, f.id) },
+            onRemoveFile = { d, f -> InspectionModel(drafts, store, d.bookingId, vm.jobs::now, vm.graph.kick, backup = vm.graph.backup).removeFile(f.part, f.field, f.id) },
             phones = jobs.jobs.associate { it.id to it.phone },
             bell = bell, onBell = vm.bell::refresh, onRead = vm.bell::read,
             opening = vm.opening.value, onOpened = { vm.opening.value = null },
+            found = found,
         )
     }
+}
+
+/**
+ * Experts turn on "All files access" once per install, for the backup copies (docs/plan-media-backup.md);
+ * until then the app shows only that screen. Turned off later, it only warns (the camera keeps
+ * working). [needed]: false where there are no backup copies (tests).
+ */
+@Composable
+private fun fileAccessGiven(needed: Boolean): Boolean {
+    if (!needed) return true
+    val ctx = LocalContext.current
+    val prefs = remember { ctx.getSharedPreferences("vayu.install", android.content.Context.MODE_PRIVATE) }
+    var given by remember { mutableStateOf(prefs.getBoolean("files_ok", false)) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        if (!given && hasFileAccess()) { prefs.edit { putBoolean("files_ok", true) }; given = true }
+        onPauseOrDispose {}
+    }
+    return given
 }

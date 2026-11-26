@@ -1,7 +1,7 @@
 # Plan: photos and work survive sign-out and uninstall (Android + small backend)
 
-Status: **server and Android part A built** (branch `feat/media-backup`, PR #25, draft: not merged
-until phone-tested); Android part B not built. Requirements, senior review, grill-me and screens closed (owner, 2026-11-26).
+Status: **server and Android parts A and B built** (branch `feat/media-backup`, PR #25, draft: not
+merged until phone-tested); the phone test is next. Requirements, senior review, grill-me and screens closed (owner, 2026-11-26).
 Server notes: the sign-in body (`install_id`) stays undocumented in `openapi.yaml` like
 `device_name` (documenting it clashes with the `Login` response schema name); the logout counts are
 documented (`LogoutCounts`).
