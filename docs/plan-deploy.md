@@ -480,10 +480,11 @@ Staging is "done" only when all of these pass. Each is a line in the runbook's c
    labelled `staging`, with readable code lines → the Slack alert arrives.
 6. **Security headers**: securityheaders.com and SSL Labs both grade **A** for the staging address.
    The CSP report shows nothing blocked during steps 1 and 2 → switch CSP from "report only" to enforced.
-7. **Load test**: the realistic test in `docs/plan-load-test.md` (owner's numbers: 50 experts,
-   5 Ops, 100 inspections and 200 bookings a day, external API at 100 calls/min, 15 webhooks per
-   booking), run at 1 vCPU / 2 GB, 2 vCPU / 2 GB and 2 vCPU / 4 GB. Production gets the cheapest
-   size that passes.
+7. **Load tests** (`docs/plan-load-test.md`), after checks 1–6 pass and PR 42 is merged:
+   **low-cost test** (the owner's real numbers for one hour on 1 vCPU / 2 GB, 2 vCPU / 2 GB and
+   2 vCPU / 4 GB) and **capacity test** (1× to 8× in 15-minute steps on the cheapest passing size
+   and 2 vCPU / 4 GB). Throwaway servers, scripted, cap $5. Production gets the cheapest size that
+   passes the low-cost test.
 8. **Backup and restore drill** passed (5.3).
 9. **Rollback** rehearsed (4.2).
 10. **Reboot test**: restart the droplet from the DigitalOcean dashboard → everything comes back
