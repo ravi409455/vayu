@@ -291,5 +291,6 @@ def delete(actor: Any, b: Booking) -> None:
     keys += [k for k in MediaZip.objects.filter(booking=b).values_list("key", flat=True) if k]
     audit.record(actor, "booking.delete", "booking", b.id, f"Deleted booking {b.booking_id}")
     events.emit("booking.deleted", booking=str(b.id), booking_id=b.booking_id)
+    activity.forget_values(b)
     b.delete()
     core_tasks.after_commit(lambda: delete_files.delay(keys))

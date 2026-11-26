@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activityText } from "./ActivityCard";
+import { activityDetails, activityText } from "./ActivityCard";
 
 describe("activity lines", () => {
   const by = { id: 1, name: "Priya", role: "ops" };
@@ -33,5 +33,37 @@ describe("activity lines", () => {
     expect(line({ kind: "report_shared", changes: { revision: 3, how: "check_link" } as never })).toBe(
       "Priya copied the report's check link",
     );
+  });
+});
+
+describe("what changed, on hover", () => {
+  const by = { id: 1, name: "Priya", role: "ops" };
+  const details = (r: Partial<Parameters<typeof activityDetails>[0]>) =>
+    activityDetails(
+      { at: "", kind: "edited", by, changes: {}, keys: [], ...r },
+      () => "Ravi",
+      (k) => ({ customer_phone: "Customer phone", "inspection.odometer": "Odometer" })[k] ?? k,
+      (k) => String(k).toUpperCase(),
+    );
+  it("lists each changed value as old → new", () => {
+    expect(details({ changes: { customer_phone: ["9800000000", "9700000000"] } })).toEqual(["Customer phone: 9800000000 → 9700000000"]);
+    expect(details({ kind: "inspection_edited", changes: { "inspection.odometer": [42000, 42100] } })).toEqual(["Odometer: 42000 → 42100"]);
+  });
+  it("says empty, Yes/No, joins lists and names people and types", () => {
+    expect(details({ changes: { note: [null, "Scratch"], ok: [false, true], colours: [["red"], ["red", "blue"]] } })).toEqual([
+      "note: empty → Scratch",
+      "ok: No → Yes",
+      "colours: red → red, blue",
+    ]);
+    expect(details({ kind: "changed", changes: { assigned_expert: [4, 5], inspection_type: ["pdi", "ev"] } })).toEqual([
+      "assigned_expert: Ravi → Ravi",
+      "inspection_type: PDI → EV",
+    ]);
+    expect(details({ kind: "changed", changes: { assigned_expert: [null, 5] } })).toEqual([]); // the line says it
+  });
+  it("leaves out what the line already says and rows with no values", () => {
+    expect(details({ kind: "changed", changes: { stage: ["assigned", "in_progress"] } })).toEqual([]);
+    expect(details({ kind: "key_checks_changed", changes: { "check.a": ["x", "y"] } })).toEqual([]);
+    expect(details({ keys: ["customer_name"] })).toEqual([]); // an old row: only the field name was kept
   });
 });

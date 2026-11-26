@@ -1656,6 +1656,20 @@ button.sm {
 .timeline li.edit::before {
   background: var(--warn);
 }
+.timeline .tip {
+  display: inline;
+}
+.activity-line {
+  cursor: help;
+  text-decoration: underline dotted var(--faint);
+  text-underline-offset: 3px;
+}
+.activity-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
 .banner {
   border-radius: 10px;
   padding: 10px 14px;
