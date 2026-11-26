@@ -454,6 +454,13 @@ class OpsFlowTest {
         shot("ops_review")
         compose.onNodeWithText("Reset to automatic").performClick()
         compose.onNodeWithContentDescription("Fuel and gearbox").performTextInput("Diesel · ")
+        // the unsaved note reads on one line above Undo / Save (it was squeezed to a letter a line)
+        val note = compose.onNode(hasText("not saved", substring = true)).fetchSemanticsNode()
+        val layout = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        note.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(layout)
+        assertEquals(1, layout.single().lineCount)
+        assertTrue(note.size.width > note.size.height * 4)
+        shot("ops_review_unsaved")
         compose.onNodeWithText("Save").performClick()
         compose.waitUntil(5_000) { server.bodiesOf("PATCH inspections/aaaaaaaa-0000-0000-0000-000000000001/overrides").isNotEmpty() }
         val body = Json.parseToJsonElement(server.bodiesOf("PATCH inspections/aaaaaaaa-0000-0000-0000-000000000001/overrides").single()).jsonObject
