@@ -77,7 +77,8 @@ android {
     }
     buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
-    // lint runs in CI; known false positives and old warnings live in the baseline (new ones fail)
+    // lint runs in CI; known false positives and old warnings live in the baseline. A new error fails
+    // the build; a new warning is reported but does not (regenerate: ./gradlew updateLintBaseline)
     lint {
         baseline = file("lint-baseline.xml")
         abortOnError = true

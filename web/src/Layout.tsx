@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { useAuth } from "./auth";
 import { loadJSON, saveJSON } from "./lib/store";
 import { useNeeds } from "./lib/problems";
@@ -126,7 +127,10 @@ export function Layout() {
         <div className="body">
           <TopBar />
           <main className="main" id="main" tabIndex={-1}>
-            <Outlet />
+            {/* a page that crashes keeps the menu; going to another page clears it */}
+            <ErrorBoundary key={pathname}>
+              <Outlet />
+            </ErrorBoundary>
           </main>
         </div>
       </div>

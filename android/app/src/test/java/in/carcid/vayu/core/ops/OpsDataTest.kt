@@ -30,6 +30,17 @@ class OpsDataTest {
         assertNotNull(data.saved("bookings?search=5"))
     }
 
+    /** N-2: Today, a day's bookings and the users read every page, not the first 50. */
+    @Test fun aWholeListReadsEveryPage() = runTest {
+        val data = OpsData(Api(server.url, MemoryTokenStore().apply { save("A", "R") }), Files.createTempDirectory("ops").toFile())
+        server.on("GET users", """{"count":3,"next":"http://x/api/v1/users?page=2","results":[{"id":1},{"id":2}]}""")
+        server.onQuery("GET users", "page=2", """{"count":3,"next":null,"results":[{"id":3}]}""")
+        val all = data.load(allPages("users")).data
+        assertEquals(listOf(1, 2, 3), all.rows().map { it["id"].toString().toInt() })
+        assertEquals(listOf("page_size=200", "page_size=200&page=2"), server.queries.toList())
+        assertEquals(3, data.saved(allPages("users"))!!.data.rows().size)              // kept whole for offline
+    }
+
     /** R-11: the report reply is decoded once, into a typed model, in the data layer. */
     @Test fun theReportReplyIsReadIntoATypedModel() {
         val r = Report.from(kotlinx.serialization.json.Json.parseToJsonElement("""{"revision":3,"status":"ready","updating":false,

@@ -61,6 +61,11 @@ class JobsModel(
                     unreachable(e) -> show(offline = true)
                     else -> show(offline = false, error = e.message)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // a full phone can't save the new list (N-3): never a crash; the last saved copy stays
+                show(offline = false, error = "The phone's storage is full, so the new leads couldn't be saved. Free up space and refresh.")
             }
         }
     }

@@ -19,7 +19,8 @@ class CodedError(APIException):
 
 
 def fail(code: str, message: str, status: int = 400, **extra: Any) -> CodedError:
-    """The one way to make a coded API error, e.g.
+    """Makes a coded API error (the same as `CodedError(...)`, which older code still calls
+    directly; both are read by the error-code table), e.g.
     `raise fail("STALE_BOOKING", "Someone changed this booking.", 409, row_version=3)`.
     The code must be listed in docs/error-codes.md (a test checks)."""
     return CodedError(code, message, status, **extra)

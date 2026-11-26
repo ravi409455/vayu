@@ -32,11 +32,15 @@ class OpsData(val api: Api, private val dir: File, private val clock: () -> Long
         return File(dir, "$h.json")
     }
 
-    /** Fresh when possible; the saved copy when the server can't be reached. Throws if neither. */
+    /** Fresh when possible; the saved copy when the server can't be reached. Throws if neither.
+     *  A path made with [allPages] reads every page (the server pages at 50). */
     suspend fun load(path: String): Loaded = try {
-        val data = api.get(path)
-        writeAtomically(fileOf(path), buildJsonObject { put("at", JsonPrimitive(clock())); put("data", data) }.toString().toByteArray())
-        trim()
+        val data = if (ALL_PAGES in path) everyPage(path) else api.get(path)
+        // a full phone only loses the offline copy: the fresh answer is still shown (N-3)
+        runCatching {
+            writeAtomically(fileOf(path), buildJsonObject { put("at", JsonPrimitive(clock())); put("data", data) }.toString().toByteArray())
+            trim()
+        }
         Loaded(data, false, clock())
     } catch (e: ApiError) {
         if (e.code != ApiError.NETWORK && e.status < 500) throw e
@@ -54,11 +58,29 @@ class OpsData(val api: Api, private val dir: File, private val clock: () -> Long
 
     fun clear() { dir.listFiles()?.forEach { it.delete() } }
 
+    /** Follows the server's pages to the end, as one {count, results} (H-14 on the phone, N-2). */
+    private suspend fun everyPage(path: String): JsonElement {
+        val out = mutableListOf<JsonElement>()
+        for (page in 1..MAX_PAGES) {
+            val r = api.get(if (page == 1) path else "$path&page=$page")
+            if (r !is JsonObject) return r
+            out += (r["results"] as? JsonArray).orEmpty()
+            if (r["next"] == null || r["next"] is kotlinx.serialization.json.JsonNull) break
+        }
+        return buildJsonObject { put("count", JsonPrimitive(out.size)); put("results", JsonArray(out)) }
+    }
+
     private fun trim() {
         val files = dir.listFiles { f -> f.name.endsWith(".json") }.orEmpty()
         if (files.size > keep) files.sortedBy { it.lastModified() }.take(files.size - keep).forEach { it.delete() }
     }
 }
+
+private const val ALL_PAGES = "page_size=200"
+private const val MAX_PAGES = 40     // ponytail: 8000 rows; lists past that need paging on screen
+
+/** [path] read whole: every page, 200 at a time (Today, a day's bookings, the users). */
+fun allPages(path: String) = path + (if ('?' in path) "&" else "?") + ALL_PAGES
 
 /** A list the API returns bare, as a page ({count, results}) or as {rows} (dashboards). */
 fun JsonElement.rows(): List<JsonObject> = when (this) {

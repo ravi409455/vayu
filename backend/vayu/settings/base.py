@@ -90,7 +90,8 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 50,
     # abuse limits per client IP (views opt in with throttle_scope); counters live in Redis so
     # every gunicorn worker shares them
-    "DEFAULT_THROTTLE_RATES": {"login": "20/min", "public": "60/min", "avatar": "20/hour"},
+    "DEFAULT_THROTTLE_RATES": {"login": "20/min", "refresh": "120/min", "public": "60/min",
+                                "avatar": "20/hour"},
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
         "apps.accounts.permissions.PasswordChangeNotRequired",
@@ -146,6 +147,7 @@ CELERY_BEAT_SCHEDULE = {
     "sweep-reports": {"task": "apps.reports.tasks.sweep_reports", "schedule": 300.0},
     "purge-media": {"task": "apps.media.tasks.purge_expired", "schedule": 3600.0},
     "stuck-uploads": {"task": "apps.media.tasks.flag_stuck_uploads", "schedule": 3600.0},
+    "recheck-uploads": {"task": "apps.media.tasks.recheck_uploads", "schedule": 900.0},
     "late-starts": {"task": "apps.notify.tasks.late_starts", "schedule": 300.0},
 }
 

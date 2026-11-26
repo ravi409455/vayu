@@ -8,6 +8,8 @@ import okhttp3.mockwebserver.RecordedRequest
 /** A fake Vayu API that answers by route ("POST auth/login"), so tests don't depend on request order. */
 class FakeServer {
     private val routes = mutableMapOf<String, MockResponse>()
+    /** Answers that also depend on the query ("page=2"): checked before [routes]. */
+    private val byQuery = mutableListOf<Triple<String, String, MockResponse>>()
     /** Every request received: route and body. */
     val requests = java.util.concurrent.CopyOnWriteArrayList<Pair<String, String>>()
     /** Every query string received ("date_from=…&stage=…"), to check filters. */
@@ -18,7 +20,10 @@ class FakeServer {
                 val path = request.requestUrl!!.encodedPath.removePrefix("/api/v1/")
                 requests.add("${request.method} $path" to request.body.readUtf8())
                 request.requestUrl!!.encodedQuery?.let { queries.add(java.net.URLDecoder.decode(it, "UTF-8")) }
-                return synchronized(routes) { routes["${request.method} $path"] }
+                val query = request.requestUrl!!.encodedQuery.orEmpty()
+                return synchronized(routes) {
+                    byQuery.lastOrNull { it.first == "${request.method} $path" && it.second in query }?.third
+                        ?: routes["${request.method} $path"] }
                     ?: MockResponse().setResponseCode(404).setBody("""{"code":"NOT_FOUND","detail":"no route"}""")
             }
         }
@@ -29,6 +34,11 @@ class FakeServer {
     /** Answer [route] with [body] from now on (replaces any earlier answer). */
     fun on(route: String, body: String, code: Int = 200, headers: Map<String, String> = emptyMap()) = synchronized(routes) {
         routes[route] = MockResponse().setResponseCode(code).setBody(body).apply { headers.forEach { (k, v) -> setHeader(k, v) } }
+    }
+
+    /** Answer [route] with [body] when its query contains [part] (e.g. "page=2"). */
+    fun onQuery(route: String, part: String, body: String) = synchronized(routes) {
+        byQuery += Triple(route, part, MockResponse().setResponseCode(200).setBody(body))
     }
 
     /** A full URL on this server outside the API (signed storage URLs). */

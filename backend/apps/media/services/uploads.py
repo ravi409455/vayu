@@ -68,9 +68,11 @@ def initiate(request: Any, data: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     # offline before it was cancelled, or before Ops moved it and the other expert finished):
     # never anything added to an inspection already submitted
     closed = booking.stage == "cancelled" or (booking.stage == "completed" and not manager)
-    if closed and (manager or booking.inspections.filter(
-            expert=user, status__in=("submitted", "superseded")).exists()):
-        raise fail("BOOKING_CLOSED", f"A {booking.stage} {word(user)} takes no new files.", 409)
+    closed = closed and (manager or booking.inspections.filter(
+        expert=user, status__in=("submitted", "superseded")).exists())
+    refusal = fail("BOOKING_CLOSED", f"A {booking.stage} {word(user)} takes no new files.", 409)
+    if closed and booking.stage == "cancelled":
+        raise refusal
     kind, ctype = data.get("kind"), data.get("content_type")
     size, sha = data.get("size"), data.get("sha256")
     if kind not in KINDS:
@@ -100,7 +102,11 @@ def initiate(request: Any, data: dict[str, Any]) -> tuple[dict[str, Any], bool]:
                 existing.key, existing.content_type)
             existing.sha256, existing.size = sha, size
             existing.save()
+        # a file the expert registered before Ops finished: its bytes may still come (the phone
+        # asks again before each send), and are added to the booking (N-1)
         return _body(existing, existing.status == "pending"), False
+    if closed:
+        raise refusal
     field = field_for(booking, data.get("field_key", ""))
     if field.type != kind:
         raise fail("WRONG_KIND", f"'{field.key}' takes {field.type}, not {kind}.")

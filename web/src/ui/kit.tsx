@@ -48,6 +48,10 @@ export function Modal({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const head = useId();
+  const shelf = useContext(Shelf);
+  const { register } = shelf;
+  useEffect(() => register(head), [register, head]);
+  const top = shelf.open[shelf.open.length - 1] === head;
   const close = useRef(onClose);
   close.current = onClose;
   useEffect(() => {
@@ -81,6 +85,7 @@ export function Modal({
         {children}
         <div className="actions">{actions ?? <button onClick={onClose}>Close</button>}</div>
       </div>
+      {top && shelf.t?.bad && <Toast key={shelf.t.msg + shelf.t.bad} msg={shelf.t.msg} bad={shelf.t.bad} onClose={shelf.close} />}
     </dialog>
   );
 }
@@ -134,9 +139,20 @@ export function Confirm({
 }
 
 type ToastCtx = { say: (msg: string, bad?: boolean) => void; fail: (e: unknown) => void };
+type Shown = { msg: string; bad: boolean } | null;
+/** The toast on show and the open dialogs (top last): a modal dialog makes everything outside it
+ *  inert, so while one is open the top dialog shows an error toast itself, where it can be closed
+ *  and is read out (N10). Good news needs neither and stays where it is. */
+const Shelf = createContext<{ t: Shown; close: () => void; open: string[]; register: (id: string) => () => void }>({
+  t: null,
+  close: () => {},
+  open: [],
+  register: () => () => {},
+});
 const Toasts = createContext<ToastCtx>({ say: () => {}, fail: () => {} });
 export const useToast = () => useContext(Toasts);
 /** Good news fades after 4 s; an error stays (and is announced at once) until it is closed. */
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [t, setT] = useState<{ msg: string; bad: boolean } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
@@ -146,10 +162,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     if (!bad) timer.current = setTimeout(() => setT(null), 4000);
   }, []);
   const fail = useCallback((e: unknown) => say(explain(e), true), [say]);
+  const close = useCallback(() => setT(null), []);
+  const [open, setOpen] = useState<string[]>([]);
+  const register = useCallback((id: string) => {
+    setOpen((o) => [...o, id]);
+    return () => setOpen((o) => o.filter((x) => x !== id));
+  }, []);
   return (
     <Toasts.Provider value={{ say, fail }}>
-      {children}
-      {t && <Toast key={t.msg + t.bad} msg={t.msg} bad={t.bad} onClose={() => setT(null)} />}
+      <Shelf.Provider value={{ t, close, open, register }}>
+        {children}
+        {t && (open.length === 0 || !t.bad) && <Toast key={t.msg + t.bad} msg={t.msg} bad={t.bad} onClose={close} />}
+      </Shelf.Provider>
     </Toasts.Provider>
   );
 }

@@ -42,6 +42,20 @@ def _pinned_form(version, role):
     return submissions.form_for_role(version, role, "in_progress") if version else None
 
 
+def _when(raw):
+    """The phone's start time: a date-time without a zone is read in the server's zone; an
+    impossible one is a 400, never a 500 the phone retries for ever."""
+    if not isinstance(raw, str):
+        return None
+    try:
+        at = parse_datetime(raw)
+    except ValueError:                      # looks like one, but e.g. month 13
+        raise fail("INVALID", "client_started_at is not a real date-time.") from None
+    if at is None:
+        return None
+    return at if timezone.is_aware(at) else timezone.make_aware(at)
+
+
 class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
                      mixins.UpdateModelMixin, mixins.DestroyModelMixin, viewsets.GenericViewSet):
     serializer_class = BookingSerializer
@@ -242,7 +256,7 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
         started = request.data.get("client_started_at")
         b, insp = submissions.start(
             request.user, self.get_object(), self._uuid("client_uuid"),
-            parse_datetime(started) if isinstance(started, str) else None,
+            _when(started),
             request.data.get("inspection_type"), app_version, request.data.get("start_answers"),
             {part: request.data.get(key) for part, key in (
                 ("inspection", "form_version"), ("start", "start_version"),

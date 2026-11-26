@@ -47,7 +47,7 @@ class ApiKeyScheme(OpenApiAuthenticationExtension):
                 "description": "`Api-Key vk_...` (or the X-API-Key header)."}
 
 
-def obj(name: str, **fields):
+def obj(name: str, /, **fields):
     """A named response body for the OpenAPI file: {field: serializer field}."""
     from drf_spectacular.utils import inline_serializer
 

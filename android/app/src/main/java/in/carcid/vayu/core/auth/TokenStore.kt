@@ -55,8 +55,13 @@ class KeystoreSealer(private val alias: String = "vayu.tokens") : Sealer {
  * app saved in plain text are moved over on the first start, so nobody is signed out by the update
  * (an expert offline must stay signed in). If the phone's key fails, tokens stay as they were.
  */
-class PrefsTokenStore(context: Context, private val sealer: Sealer = KeystoreSealer()) : TokenStore {
+class PrefsTokenStore(context: Context, private val sealer: Sealer = KeystoreSealer(),
+                      /** The phone's key failed, so tokens are kept unsealed: told once (a crash report in the app). */
+                      private val onPlain: (Throwable) -> Unit = {}) : TokenStore {
     private val prefs = context.getSharedPreferences("vayu.auth", Context.MODE_PRIVATE)
+    /** Opened tokens, so a request does not unseal them every time (N-9). */
+    private val opened = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private var told = false
 
     init {
         val old = listOf("access", "refresh").mapNotNull { k -> prefs.getString(k, null)?.let { k to it } }
@@ -65,19 +70,22 @@ class PrefsTokenStore(context: Context, private val sealer: Sealer = KeystoreSea
         }
     }
 
-    private fun read(k: String): String? =
-        prefs.getString("$k.s", null)?.let { runCatching { sealer.open(it) }.getOrNull() } ?: prefs.getString(k, null)
+    private fun read(k: String): String? = opened[k] ?: (prefs.getString("$k.s", null)?.let { runCatching { sealer.open(it) }.getOrNull() }
+        ?: prefs.getString(k, null))?.also { opened[k] = it }
 
     override fun access() = read("access")
     override fun refresh() = read("refresh")
     override fun save(access: String, refresh: String) {
-        val sealed = runCatching { sealer.seal(access) to sealer.seal(refresh) }.getOrNull()
+        val tried = runCatching { sealer.seal(access) to sealer.seal(refresh) }
+        tried.exceptionOrNull()?.let { if (!told) { told = true; onPlain(it) } }
+        val sealed = tried.getOrNull()
+        opened["access"] = access; opened["refresh"] = refresh
         prefs.edit().apply {
             if (sealed != null) putString("access.s", sealed.first).putString("refresh.s", sealed.second).remove("access").remove("refresh")
             else putString("access", access).putString("refresh", refresh).remove("access.s").remove("refresh.s")
         }.apply()
     }
-    override fun clear() { prefs.edit().clear().apply() }
+    override fun clear() { opened.clear(); prefs.edit().clear().apply() }
     override fun me(): Map<String, String>? = prefs.getString("me.username", null)?.let {
         listOf("id", "username", "name", "role", "theme", "must_change", "theme_pending", "perms").associateWith { k -> prefs.getString("me.$k", "")!! }
     }

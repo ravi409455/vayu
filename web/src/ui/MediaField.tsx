@@ -31,6 +31,10 @@ export function MediaField({
   useUploads(p.bookingId); // re-render as the files' uploads move on
   const input = useRef<HTMLInputElement>(null);
   const cam = useRef<HTMLInputElement>(null);
+  // the answer as it is now: a second pick started before the first finished must add to it, not to
+  // the list both picks saw when they began
+  const latest = useRef(ids);
+  latest.current = ids;
   const [err, setErr] = useState("");
   const [camera, setCamera] = useState(false);
   const accept = f.type === "photo" || f.type === "signature" ? "image/*" : f.type === "video" ? "video/*" : "image/*,application/pdf";
@@ -40,11 +44,10 @@ export function MediaField({
   async function pick(files: FileList | File[] | null, source: "camera" | "gallery") {
     if (!files) return;
     setErr("");
-    let next = [...ids];
     for (const file of Array.from(files).slice(0, Math.max(0, max - ids.length))) {
       try {
         const id = p.preview
-          ? `preview-${Date.now()}-${next.length}`
+          ? `preview-${Date.now()}-${latest.current.length}`
           : await addFile({
               bookingId: p.bookingId!,
               fieldKey: f.key,
@@ -54,7 +57,8 @@ export function MediaField({
               source,
               keepOffline: true,
             });
-        next = single ? [id] : [...next, id];
+        const next = single ? [id] : [...latest.current, id];
+        latest.current = next;
         onChange(single ? id : next);
       } catch (e) {
         setErr(

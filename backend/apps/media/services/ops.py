@@ -54,7 +54,7 @@ def check_ops_upload(booking: Booking, field: Field, user: Any) -> None:
 
 def attach(request: Request, new: MediaAsset, replaces: Any=None) -> None:
     """Ops put a file they uploaded into the submitted inspection: in place of `replaces` (kept as
-    history, Admin can still open it) or added to the field. The report is rebuilt."""
+    history, Admin can still open it) or added to the field. The report is marked out of date."""
     from apps.scoring import service as scoring
 
     user = request.user
@@ -101,7 +101,7 @@ def attach(request: Request, new: MediaAsset, replaces: Any=None) -> None:
                      {"media": [str(old.id) if old else None, str(new.id)]},
                      keys=[f"{part}.{field.key}"], inspection=insp)
         events.emit("inspection.updated", booking=str(booking.id), inspection=str(insp.id),
-                    keys=[field.key])                     # the report is made again (handlers)
+                    keys=[field.key])                     # the report: out of date (handlers)
     check_completion(booking.id)     # a submitted booking now also waits for this file
 
 

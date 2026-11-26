@@ -42,7 +42,7 @@ class OpsModel(private val data: OpsData, me: Me, private val today: () -> Local
 
     /** Load again; [asked]: the person pressed Refresh (names are fetched again, and the result is said). */
     fun reload(asked: Boolean = false) {
-        _tick.value++
+        val mine = ++_tick.value
         job?.cancel()
         // on IO: it only writes StateFlows, so it never waits for the main thread
         job = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -57,7 +57,7 @@ class OpsModel(private val data: OpsData, me: Me, private val today: () -> Local
                     val online = try { data.api.get("problems/reports"); true } catch (e: ApiError) { false }
                     say(if (online) "Updated." else "No signal. Showing what was saved; changes need signal.")
                 }
-            } finally { _refreshing.value = false }
+            } finally { if (_tick.value == mine) _refreshing.value = false }   // a newer reload still runs (N-12)
         }
     }
 

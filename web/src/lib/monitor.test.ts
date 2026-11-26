@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { report, scrub, scrubCrumb, startMonitoring } from "./monitor";
+import { report, scrub, scrubCrumb, startMonitoring, stripQuery } from "./monitor";
 
 describe("web errors to Sentry (R-36, F-235)", () => {
   it("is off without a DSN: nothing loads, nothing is sent", async () => {
@@ -52,5 +52,19 @@ describe("web errors to Sentry (R-36, F-235)", () => {
       }),
     );
     vi.doUnmock("@sentry/react");
+  });
+  it("masks the report and ZIP tokens in customer page paths (N11)", () => {
+    expect(stripQuery("https://verify.carcid.in/verify/abcDEF_123")).toBe("https://verify.carcid.in/verify/[token]");
+    expect(stripQuery("/verify/abc/photos?x=1")).toBe("/verify/[token]");
+    expect(stripQuery("/api/v1/verify/abc")).toBe("/api/v1/verify/[token]");
+    expect(stripQuery("/zip/tok")).toBe("/zip/[token]");
+    expect(stripQuery("/booking/1")).toBe("/booking/1");
+    const e = scrub({
+      type: undefined,
+      transaction: "/verify/secret",
+      exception: { values: [{ type: "ApiError", value: "Kavya's booking SA1 was changed" }] },
+    } as never);
+    expect(e.transaction).toBe("/verify/[token]");
+    expect(e.exception?.values?.[0]?.value).toBe("ApiError");
   });
 });

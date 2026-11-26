@@ -3,6 +3,7 @@ import io
 import uuid
 
 import pytest
+from django.utils import timezone
 from PIL import Image
 
 from apps.bookings.models import Booking
@@ -699,9 +700,35 @@ def test_verifying_twice_is_safe_and_never_rewrites_the_original(job, settings):
     data = jpeg(4000, 3000)
     a = MediaAsset.objects.get(pk=upload(env.expert, b["id"], data, settings).json()["id"])
     assert verify_asset(str(a.id)) == "verified"                    # a second run: nothing done
-    MediaAsset.objects.filter(pk=a.pk).update(status="verifying")   # a run in progress
+    MediaAsset.objects.filter(pk=a.pk).update(status="verifying",    # a run in progress
+                                              verify_started_at=timezone.now())
     assert verify_asset(str(a.id)) == "verifying"
     assert storage.read(a.key) == data
+
+
+def test_a_check_killed_mid_way_or_lost_is_run_again_by_the_sweep(job, settings):
+    from datetime import timedelta
+    from unittest import mock
+
+    from apps.media.tasks import WAITING, recheck_uploads, verify_asset
+
+    env, b = job
+    a = MediaAsset.objects.get(pk=upload(env.expert, b["id"], jpeg(), settings).json()["id"])
+    long_ago = timezone.now() - timedelta(seconds=settings.CELERY_TASK_TIME_LIMIT + 61)
+    old = timezone.now() - WAITING - timedelta(seconds=1)
+    with mock.patch("apps.media.tasks.verify_asset.delay") as again:
+        MediaAsset.objects.filter(pk=a.pk).update(status="verifying",
+                                                  verify_started_at=timezone.now())
+        assert recheck_uploads() == 0                                  # still running
+        MediaAsset.objects.filter(pk=a.pk).update(status="uploaded", created_at=old,
+                                                  verify_started_at=None)
+        assert recheck_uploads() == 1                                  # its check was lost
+        MediaAsset.objects.filter(pk=a.pk).update(verify_started_at=timezone.now())
+        assert recheck_uploads() == 0                          # a storage error, just now
+        MediaAsset.objects.filter(pk=a.pk).update(status="verifying", verify_started_at=long_ago)
+        assert recheck_uploads() == 1                                  # killed (a deploy)
+    assert again.call_count == 2
+    assert verify_asset(str(a.id)) == "verified"
 
 
 def test_a_storage_error_while_verifying_leaves_the_file_to_be_checked_again(job, settings):

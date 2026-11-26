@@ -20,7 +20,8 @@ CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 REST_FRAMEWORK = {**REST_FRAMEWORK,  # noqa: F405
-                  "DEFAULT_THROTTLE_RATES": {"login": "100000/min", "public": "100000/min",
+                  "DEFAULT_THROTTLE_RATES": {"login": "100000/min", "refresh": "100000/min",
+                                           "public": "100000/min",
                                            "avatar": "100000/min"}}
 WEBHOOK_ALLOW_HTTP = True
 WEBHOOK_RETRY_SECONDS = [60, 300, 1800, 7200, 21600, 43200]

@@ -71,7 +71,7 @@ const clearJobs = () => tx("readwrite", (s) => s.clear());
 
 /** What this browser holds that the server does not have yet: inspection drafts and files not sent
  *  (or not checked) yet. Sign-out warns about these first (REQUIREMENTS §6). */
-const WORK = ["vayu:draft:", "vayu:job:"];
+const WORK = ["vayu:draft:", "vayu:job:", "vayu:deletes"];
 const workKeys = (): string[] => {
   if (!hasLS()) return [];
   try {

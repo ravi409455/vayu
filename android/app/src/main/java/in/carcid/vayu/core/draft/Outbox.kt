@@ -5,6 +5,7 @@ import `in`.carcid.vayu.core.s
 
 import `in`.carcid.vayu.core.api.Api
 import `in`.carcid.vayu.core.api.ApiError
+import `in`.carcid.vayu.core.api.answerErrors
 import `in`.carcid.vayu.core.forms.Filled
 import `in`.carcid.vayu.core.forms.PARTS
 import `in`.carcid.vayu.core.rules.JsonLogic
@@ -57,6 +58,9 @@ class Outbox(
             } catch (e: ApiError) {
                 if (e.code == "DEVICE_REVOKED") throw e
                 if (transient(e)) return false
+                // refused for good (e.g. "files from before" for a lead deleted or moved away): said on the
+                // draft, a closed lead offers Discard; never dropped without a word (N-5)
+                note(d.bookingId, e)
             } catch (e: Exception) {
                 // a bug or a damaged reply: this draft says so and the rest goes on
                 drafts.update(d.bookingId) { it.copy(problem = "Something went wrong sending this. It will be tried again.") }
@@ -219,7 +223,7 @@ class Outbox(
         } catch (e: ApiError) {
             if (transient(e)) throw e
             if (closed(e)) { note(id, e); return }
-            val errors = (e.extra["errors"] as? JsonObject).orEmpty().mapValues { (it.value as? JsonPrimitive)?.contentOrNull ?: "" }
+            val errors = e.answerErrors()
             drafts.update(id) { it.copy(problem = if (errors.isEmpty()) e.message else "The check-in was refused. Fix the answers marked in red.",
                 problemCode = e.code, fieldErrors = it.fieldErrors + errors, startedAt = if (errors.isEmpty()) it.startedAt else null) }
         }
@@ -243,10 +247,10 @@ class Outbox(
             // stays and the code keeps this copy off the tidy-up (it may differ from the server's)
             if (e.code == ALREADY_SUBMITTED) {
                 drafts.update(id) { it.copy(submitSent = true, problem = "This lead was already submitted from your account; Ops can edit it on the web.",
-                    problemCode = ALREADY_SUBMITTED, fieldErrors = emptyMap()) }
+                    problemCode = ALREADY_SUBMITTED, fieldErrors = emptyMap(), problemAt = java.time.Instant.now().toString()) }
                 return
             }
-            val errors = (e.extra["errors"] as? JsonObject).orEmpty().mapValues { (it.value as? JsonPrimitive)?.contentOrNull ?: "" }
+            val errors = e.answerErrors()
             if (e.code == "INVALID_ANSWERS" || e.code == "FIELD_ACCESS") drafts.update(id) {
                 // back to the expert: the answers open again with the refused ones marked
                 it.copy(submittedAt = null, problemCode = e.code, fieldErrors = errors,
@@ -261,7 +265,9 @@ class Outbox(
                 send(id, f)
             } catch (e: ApiError) {
                 if (transient(e)) throw e
-                mark(id, f.id) { it.copy(error = e.message) }
+                // refused for good, e.g. the booking was cancelled (or a new file after Ops finished):
+                // retrying can't help, so it stops blocking sign-out and the expert can remove it (N-1)
+                mark(id, f.id) { it.copy(error = e.message, refused = true) }
             }
         }
     }

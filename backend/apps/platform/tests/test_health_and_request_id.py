@@ -12,6 +12,9 @@ pytestmark = pytest.mark.django_db
 @pytest.fixture(autouse=True)
 def _up():
     """The file store and a worker answer, unless a test says otherwise."""
+    from django.core.cache import cache
+
+    cache.delete("health:slow")
     with mock.patch("apps.media.storage.client"), \
             mock.patch("apps.platform.views.workers_alive", return_value=True):
         yield
@@ -64,11 +67,32 @@ def test_request_id_from_client_is_sanitised(client):
 
 def test_health_503_when_the_file_store_or_the_workers_are_down(client):
     """F-210: the API answering is not enough."""
+    from django.core.cache import cache
+
     with mock.patch("apps.media.storage.client") as c:
         c.return_value.head_bucket.side_effect = OSError("R2 down")
         assert client.get("/api/v1/health").status_code == 503
+    cache.delete("health:slow")
     with mock.patch("apps.platform.views.workers_alive", return_value=False):
         assert client.get("/api/v1/health").status_code == 503
+
+
+def test_the_slow_checks_are_kept_for_a_while(client):
+    """Anyone may call /health: the storage and worker pings run at most every 30 s."""
+    with mock.patch("apps.platform.views.workers_alive", return_value=True) as ping:
+        assert client.get("/api/v1/health").status_code == 200
+        assert client.get("/api/v1/health").status_code == 200
+    assert ping.call_count == 1
+
+
+def test_a_push_credential_that_is_set_but_missing_is_reported(client, settings, tmp_path):
+    settings.FCM_CREDENTIALS = str(tmp_path / "missing.json")
+    assert client.get("/api/v1/health").status_code == 503
+    from django.core.cache import cache
+
+    cache.delete("health:slow")
+    (tmp_path / "missing.json").write_text("{}")
+    assert client.get("/api/v1/health").status_code == 200
 
 
 def test_workers_alive_asks_celery_and_never_raises():

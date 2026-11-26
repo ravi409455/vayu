@@ -16,11 +16,22 @@ import kotlinx.serialization.json.JsonObject
  */
 class OpsActions(private val data: OpsData, private val scope: CoroutineScope,
                  private val refresh: () -> Unit, private val say: (String) -> Unit) {
+    /** Changes on their way, by "METHOD path": a second tap while one is sent never sends it twice (N-7). */
+    private val sending = java.util.concurrent.ConcurrentHashMap<String, Job>()
+
     fun send(method: String, path: String, body: JsonObject? = null, done: String? = null,
-             refused: (ApiError) -> Unit = { say(it.message) }, ok: (JsonElement) -> Unit = {}): Job = scope.launch {
-        try {
-            val r = data.act(method, path, body)
-            done?.let(say); refresh(); ok(r)
-        } catch (e: ApiError) { refused(e) }
+             refused: (ApiError) -> Unit = { say(it.message) }, ok: (JsonElement) -> Unit = {}): Job {
+        val key = "$method $path"
+        sending[key]?.takeIf { it.isActive }?.let { return it }
+        val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+            try {
+                val r = data.act(method, path, body)
+                done?.let(say); refresh(); ok(r)
+            } catch (e: ApiError) { refused(e) }
+        }
+        sending[key] = job
+        job.invokeOnCompletion { sending.remove(key, job) }
+        job.start()
+        return job
     }
 }

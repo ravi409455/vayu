@@ -17,6 +17,21 @@ class GraphTest {
 
     @After fun stop() = server.stop()
 
+    @Test fun aNewPersonSigningInRemovesWhatAnEarlierOneLeftUnlessItIsUnsent() {
+        // N-8: person 3's session ended by itself; person 4 signs in on the same phone
+        val root = java.nio.file.Files.createTempDirectory("vayu").toFile()
+        val graph = testGraph(server, MemoryTokenStore().apply { save("A", "R") }, root)
+        java.io.File(root, "ops-3").apply { mkdirs(); resolve("a.json").writeText("{}") }
+        graph.jobs(3).apply(`in`.carcid.vayu.core.sync.payload(`in`.carcid.vayu.core.sync.job(BOOKING)), 0)
+        graph.drafts(5).save(Draft(BOOKING, "DEMO-2", "Arjun", mapOf("inspection" to 7), "pdi"))   // 5 has unsent work
+        graph.jobs(5).apply(`in`.carcid.vayu.core.sync.payload(`in`.carcid.vayu.core.sync.job(BOOKING)), 0)
+        graph.forgetOthers(4)
+        assertTrue(!java.io.File(root, "ops-3").exists())
+        assertTrue(graph.jobs(3).jobs().isEmpty())
+        assertEquals(1, graph.jobs(5).jobs().size)                              // kept for their unsent draft
+        assertEquals(1, graph.drafts(5).all().size)
+    }
+
     @Test fun afterSendingTheServerHearsWhatIsLeft() = runBlocking {
         server.on("POST devices/heartbeat", """{"min_app_version":1}""")
         graph.drafts(3).save(Draft(BOOKING, "DEMO-2", "Arjun", mapOf("inspection" to 7), "pdi"))   // not submitted yet
@@ -36,6 +51,16 @@ class GraphTest {
         assertTrue("kept a while: it may differ from the server's copy", graph.drafts(3).get(BOOKING) != null)
         graph.prune(3, now = sent.plus(java.time.Duration.ofDays(8)))
         assertEquals("but not for ever", null, graph.drafts(3).get(BOOKING))
+    }
+
+    /** N-10: work sent offline long after its submit gets its 7 days from when the server said so. */
+    @Test fun theWeekCountsFromTheRefusalNotFromTheSubmit() {
+        graph.jobs(3).apply(`in`.carcid.vayu.core.sync.payload(`in`.carcid.vayu.core.sync.job(BOOKING, stage = "completed")), 0)
+        val refused = java.time.Instant.parse("2026-11-24T10:00:00Z")
+        graph.drafts(3).save(Draft(BOOKING, "DEMO-2", "Arjun", mapOf("inspection" to 7), "pdi", submitSent = true,
+            submittedAt = "2026-11-10T15:30:00+05:30", problemCode = "ALREADY_SUBMITTED", problemAt = refused.toString()))
+        graph.prune(3, now = refused.plus(java.time.Duration.ofDays(1)))
+        assertTrue(graph.drafts(3).get(BOOKING) != null)
     }
 
     @Test fun formsOfDraftsAreKeptWhenTheServerSignsThePersonOut() {

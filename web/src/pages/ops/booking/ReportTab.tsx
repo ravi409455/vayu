@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, RefreshCw } from "lucide-react";
 import { api, ApiError } from "../../../api/client";
@@ -6,7 +7,8 @@ import { keys } from "../../../api/keys";
 import type { Booking } from "../../../api/types";
 import { useAuth } from "../../../auth";
 import { fmtStamp } from "../../../lib/format";
-import { Empty, Pill, useToast } from "../../../ui/kit";
+import { reportError } from "../../../lib/problems";
+import { Empty, LoadError, Pill, useToast } from "../../../ui/kit";
 import { PdfPreview } from "./PdfPreview";
 import type { Activity } from "./parts";
 
@@ -25,13 +27,21 @@ type ReportInfo = {
   regenerate?: { allowed: boolean; reason: string | null };
 };
 
+/** After Regenerate: keep looking until a new revision shows (the worker may not have started yet),
+ *  for at most two minutes. */
+export type Waiting = { revision: number | null; until: number };
+
 /** The booking's report (null: none yet). While it is being made, look every few seconds. */
-export function useReport(bookingId: string, enabled = true) {
+export function useReport(bookingId: string, enabled = true, waiting: Waiting | null = null) {
   return useQuery({
     queryKey: keys.bookingPart(bookingId, "report"),
     retry: false,
     enabled,
-    refetchInterval: (x) => (x.state.data?.updating ? 3000 : false),
+    refetchInterval: (x) => {
+      const d = x.state.data;
+      if (d?.updating) return 3000;
+      return waiting && Date.now() < waiting.until && (d?.revision ?? null) === waiting.revision ? 3000 : false;
+    },
     queryFn: async () => {
       try {
         return await api<ReportInfo>(`bookings/${bookingId}/report`);
@@ -50,13 +60,17 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
   const { say, fail } = useToast();
   const refresh = useRefresh();
   const { can } = useAuth();
-  const q = useReport(booking.id);
+  const [waiting, setWaiting] = useState<Waiting | null>(null);
+  const q = useReport(booking.id, can("reports.view"), waiting);
   const r = q.data;
+  // a new revision arrived: nothing left to wait for
+  const watching = !!waiting && Date.now() < waiting.until && (r?.revision ?? null) === waiting.revision;
   const regen = useMutation({
     // one press, one request: the button is off while it runs
     mutationFn: () => api(`bookings/${booking.id}/report/regenerate`, { body: {} }),
     onSuccess: () => {
       say("Making the new PDF. It shows here by itself.");
+      setWaiting({ revision: r?.revision ?? null, until: Date.now() + 120_000 });
       void q.refetch();
       void refresh(keys.problems());
     },
@@ -66,6 +80,11 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
     },
   });
   const why = r?.regenerate && !r.regenerate.allowed ? (r.regenerate.reason ?? "") : "";
+  const busy = regen.isPending || !!r?.updating || watching;
+  // no report at all (its first render was lost or had no layout): Ops can make it from here
+  const firstMissing = q.isSuccess && !r && booking.stage === "completed" && !booking.conflict;
+  if (q.isError) return <LoadError error={q.error} what="report" onRetry={q.refetch} />;
+  if (q.isPending && can("reports.view")) return <p className="muted pad">Loading…</p>;
   const passedOn = activity.filter((a) => a.kind === "report_downloaded" || a.kind === "report_shared");
   async function copyCheckLink() {
     try {
@@ -90,7 +109,7 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
         {r && (
           <>
             <Pill tone={r.updating ? "warn" : r.status === "ready" ? "ok" : r.status === "failed" ? "bad" : "warn"}>
-              {r.updating ? "Updating…" : r.status === "ready" ? "Ready" : r.status}
+              {r.updating ? "Updating…" : r.status === "ready" ? "Ready" : r.status === "failed" ? "Failed" : "Being made"}
             </Pill>
             {r.out_of_date && !r.updating && <Pill tone="warn">Out of date</Pill>}
             <span className="muted small">
@@ -99,15 +118,15 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
           </>
         )}
         <span className="grow" />
-        {r && can("submissions.edit") && (
+        {(r || firstMissing) && can("submissions.edit") && (
           <button
-            disabled={regen.isPending || !!why || r.updating}
+            disabled={busy || !!why}
             title={why || undefined}
             onClick={() => {
               if (!regen.isPending) regen.mutate();
             }}
           >
-            <RefreshCw size={15} aria-hidden /> {regen.isPending || r.updating ? "Making…" : "Regenerate"}
+            <RefreshCw size={15} aria-hidden /> {busy ? "Making…" : r ? "Regenerate" : "Make the PDF"}
           </button>
         )}
         {r?.verify_url && r.status === "ready" && <button onClick={() => void copyCheckLink()}>Copy check link</button>}
@@ -122,13 +141,18 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
           </a>
         )}
       </div>
-      {r?.updating && <p className="muted small">The new PDF is being made. This page shows it by itself.</p>}
-      {r?.out_of_date && !r.updating && (
+      {(r?.updating || watching) && <p className="muted small">The new PDF is being made. This page shows it by itself.</p>}
+      {r?.out_of_date && !busy && (
         <div className="banner warn">Out of date: changes since this PDF. Press Regenerate when you are done to make a new one.</div>
       )}
       {r && why && can("submissions.edit") && <p className="muted small">Regenerate is off: {why}</p>}
-      {r?.error && !r.updating && <div className="banner bad">Problem: {r.error}. It is tried again by itself.</div>}
-      {!r && <Empty title="No report yet">It is made automatically when the booking is Completed.</Empty>}
+      {r?.error && !r.updating && <div className="banner bad">Problem: {reportError(r.error)}. It is tried again by itself.</div>}
+      {!r && !firstMissing && <Empty title="No report yet">It is made automatically when the booking is Completed.</Empty>}
+      {!r && firstMissing && (
+        <Empty title="No report yet">
+          This booking is Completed but its PDF was not made{busy ? "" : ". Press Make the PDF to make it now"}.
+        </Empty>
+      )}
       {r?.preview_url && <PdfPreview url={r.preview_url} />}
       {r && (
         <section className="card" aria-label="Downloads and shares" style={{ marginTop: 14 }}>

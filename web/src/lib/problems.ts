@@ -15,11 +15,20 @@ export type Stuck = {
   expert: string;
   created_at: string;
 };
+/** Why the last render failed, in words (the server sends a code). */
+export const REPORT_ERROR: Record<string, string> = {
+  render_failed: "the PDF could not be made",
+  timeout: "making it took too long",
+  storage_failed: "it could not be saved",
+};
+export const reportError = (code: string) => REPORT_ERROR[code] ?? "it could not be made";
+const upperFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 export type PdfProblem = { booking: string; booking_id: string; status: string; error: string };
 /** A report something changed under since it was made (Ops press Regenerate, F-219). */
 export type StaleReport = { booking: string; booking_id: string; since: string };
 /** One row of problems/reports: a failed or stuck render, or a PDF that changed under itself. */
-type ReportRow = PdfProblem & { problem: "failed" | "stuck" | "out_of_date"; out_of_date_since: string | null };
+type ReportRow = PdfProblem & { problem: "failed" | "stuck" | "out_of_date" | "missing"; out_of_date_since: string | null };
 
 /** problems/reports, failed and out of date apart. */
 export function reportProblems(rows: ReportRow[] | undefined): { failed: PdfProblem[]; outOfDate: StaleReport[] } {
@@ -93,10 +102,8 @@ export function useProblems() {
     unverified: unverified.data?.results ?? [],
   };
   // a page shows the first 50; the number is the server's count
-  const beyond = [conflicts, types, late, quick, unverified].reduce(
-    (n, q) => n + Math.max(0, (q.data?.count ?? 0) - (q.data?.results.length ?? 0)),
-    0,
-  );
+  // unverified times are listed for the week but never counted: there is nothing to do about them (L-1)
+  const beyond = [conflicts, types, late, quick].reduce((n, q) => n + Math.max(0, (q.data?.count ?? 0) - (q.data?.results.length ?? 0)), 0);
   return {
     ...lists,
     beyond,
@@ -108,7 +115,6 @@ export function useProblems() {
       lists.types.length +
       lists.late.length +
       lists.quick.length +
-      lists.unverified.length +
       beyond,
     loading: stuck.isLoading || pdf.isLoading || conflicts.isLoading || types.isLoading,
     error: [stuck, pdf, conflicts, types, late, quick, unverified].find((q) => q.isError)?.error ?? null,
@@ -191,15 +197,27 @@ export function useNeeds(): { needs: Need[]; total: number; loading: boolean; er
       action: "Regenerate",
       at: r.since || undefined,
     })),
-    ...p.pdf.map((r) => ({
-      key: `p${r.booking}`,
-      kind: "report" as const,
-      tone: "bad" as const,
-      title: `Report failed: ${r.booking_id}`,
-      meta: r.error ? `${r.error}; it is tried again by itself` : "It is tried again by itself",
-      to: `/booking/${r.booking}`,
-      action: "Open",
-    })),
+    ...p.pdf.map((r) =>
+      r.status === "missing"
+        ? {
+            key: `p${r.booking}`,
+            kind: "report" as const,
+            tone: "bad" as const,
+            title: `No report: ${r.booking_id}`,
+            meta: "Completed, but its PDF was not made. Open it and press Make the PDF",
+            to: `/booking/${r.booking}`,
+            action: "Open",
+          }
+        : {
+            key: `p${r.booking}`,
+            kind: "report" as const,
+            tone: "bad" as const,
+            title: `Report failed: ${r.booking_id}`,
+            meta: r.error ? `${upperFirst(reportError(r.error))}; it is tried again by itself` : "It is tried again by itself",
+            to: `/booking/${r.booking}`,
+            action: "Open",
+          },
+    ),
     ...(["late", "quick"] as const).flatMap((flag) =>
       p[flag].map((b) => ({
         key: `${flag}${b.id}`,
@@ -233,7 +251,7 @@ export function useNeeds(): { needs: Need[]; total: number; loading: boolean; er
   const extra = p.beyond + Math.max(0, (open.data?.count ?? 0) - (open.data?.results.length ?? 0));
   return {
     needs,
-    total: needs.length + extra,
+    total: needs.filter((n) => n.kind !== "unverified").length + extra, // unverified times: listed, not counted (L-1)
     loading: p.loading || open.isLoading,
     error: p.error ?? (open.isError ? open.error : null),
     refetch: () => Promise.all([p.refetch(), open.refetch()]),

@@ -30,7 +30,7 @@ afterEach(() => vi.restoreAllMocks());
 describe("one hook builds the fields of all forms (F-030)", () => {
   const serve = () =>
     vi.spyOn(globalThis, "fetch").mockImplementation(async (u) => {
-      const url = String(u);
+      const url = String(u).split("?")[0]!;
       if (url.endsWith("/forms")) return json(forms);
       return json(versions[url.split("/").pop()!]);
     });

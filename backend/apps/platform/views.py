@@ -55,6 +55,35 @@ def workers_alive() -> bool:
         return False
 
 
+SLOW_CHECKS_FOR = 30      # seconds: anyone may call /health, the storage and worker pings cost
+
+
+def slow_checks() -> dict:
+    """The file store, the background workers and the push credential (F-210, H-3): a dead one
+    stops uploads, reports, webhooks or pushes while the API still answers. Kept for a while, so
+    a busy caller never ties up a web worker for the worker ping's full second."""
+    from django.core.cache import cache
+
+    found = cache.get("health:slow")
+    if found is not None:
+        return found
+    found = {}
+    try:
+        from apps.media import storage
+
+        storage.client().head_bucket(Bucket=settings.S3_BUCKET)
+        found["storage"] = "ok"
+    except Exception:  # noqa: BLE001
+        found["storage"] = "down"
+    found["workers"] = "ok" if workers_alive() else "down"
+    if settings.FCM_CREDENTIALS:          # set but missing: every push fails
+        from pathlib import Path
+
+        found["push"] = "ok" if Path(settings.FCM_CREDENTIALS).is_file() else "down"
+    cache.set("health:slow", found, SLOW_CHECKS_FOR)
+    return found
+
+
 class HealthView(APIView):
     authentication_classes: list = []
     permission_classes = [AllowAny]
@@ -70,16 +99,7 @@ class HealthView(APIView):
             redis_client().ping()
         except Exception:  # noqa: BLE001
             status["redis"] = "down"
-        # the file store and the background workers too (F-210): a dead one stops uploads,
-        # reports and webhooks while the API still answers
-        try:
-            from apps.media import storage
-
-            storage.client().head_bucket(Bucket=settings.S3_BUCKET)
-            status["storage"] = "ok"
-        except Exception:  # noqa: BLE001
-            status["storage"] = "down"
-        status["workers"] = "ok" if workers_alive() else "down"
+        status.update(slow_checks())
         healthy = all(v == "ok" for v in status.values())
         # Dependency detail goes to the logs only, and only when something is down (a probe every
         # few seconds would otherwise fill the logs, F-231); the public body stays bare.

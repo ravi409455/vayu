@@ -66,7 +66,8 @@ fun UploadsScreen(me: Me, extras: ExpertExtras, onProfile: () -> Unit, onJobs: (
     if (storage) { StorageScreen(extras.storage, onBack = { storage = false }, say = say); return }
     var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     var openId by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
-    val pending = extras.drafts.values.filter { it.unsent }.sortedBy { it.code }.map { d -> d to d.files.filter { !it.verified } }
+    // a file the server refused for good no longer blocks sign-out, but stays listed until removed
+    val pending = extras.drafts.values.filter { it.unsent || it.files.any { f -> f.refused } }.sortedBy { it.code }.map { d -> d to d.files.filter { !it.verified } }
     val count = pending.sumOf { it.second.size }
     // one booking's files on their own screen
     pending.firstOrNull { it.first.bookingId == openId }?.let { (d, files) ->

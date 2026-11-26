@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.ui.ops
 
+import `in`.carcid.vayu.core.ops.allPages
 import `in`.carcid.vayu.core.ops.ReportProblem
 import `in`.carcid.vayu.core.ops.StuckUpload
 import `in`.carcid.vayu.core.api.initials
@@ -76,7 +77,7 @@ import java.util.Locale
 fun TodayScreen(env: OpsEnv, needs: Int, onBell: () -> Unit, onProfile: () -> Unit, onOpen: (String) -> Unit, onAssign: (Bk) -> Unit,
                 bottomBar: @Composable () -> Unit) {
     val t = env.today()
-    val day = rememberLoad(env, "bookings?date_from=$t&date_to=$t&order=schedule")
+    val day = rememberLoad(env, allPages("bookings?date_from=$t&date_to=$t&order=schedule"))
     val all = day.value?.data?.rows().orEmpty().map(::Bk).filter { it.stage != "cancelled" }
     var open by rememberSaveable { mutableStateOf(setOf<Int>()) }
     var stages by rememberSaveable { mutableStateOf(setOf<String>()) }  // the Status chip: empty = every status
@@ -359,8 +360,10 @@ suspend fun loadNeeds(env: OpsEnv): List<Need>? {
                 Need("p" + it.booking, it.booking, Tone.WARN, "Report out of date for ${it.bookingId}",
                     listOfNotNull(it.outOfDateSince?.takeIf { v -> v.isNotBlank() }?.let { v -> "Since ${whenStamp(v, t).replaceFirstChar { c -> c.lowercase() }}" },
                         "Regenerate it when you're done").joinToString(" · "), "Reports")
+            else if (it.problem == "missing") Need("p" + it.booking, it.booking, Tone.BAD, "No report for ${it.bookingId}",
+                "Completed, but its PDF was not made · open it and tap Make the PDF", "Reports")
             else Need("p" + it.booking, it.booking, Tone.BAD, "Report failed for ${it.bookingId}",
-                it.error.ifBlank { "It is tried again by itself" }, "Reports") } +
+                if (it.error.isBlank()) "It is tried again by itself" else "${reportError(it.error)} It is tried again by itself", "Reports") } +
         ty.map(::Bk).map { Need("t" + it.id, it.id, Tone.WARN, "Your type change wasn't applied", "${it.code} · ${it.typeRejected?.let(env.labels::typeRejected) ?: "The expert started another type"}", "Type changes") } +
         timing(lt, "late", "Started late") + timing(qk, "quick", "Too quick") +
         uv.map(::Bk).filter { it.unverifiedTime }.map { Need("u" + it.id, it.id, Tone.WARN, "${it.code}: time not verified",

@@ -142,6 +142,7 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
             "perms" to me.permissions.joinToString(",")))
         if (me.mustChangePassword) { _screen.value = Screen.ChangePassword(); return }
         lastPassword = ""                             // only kept for a required password change
+        graph.forgetOthers(me.id)                     // another person's leftovers on this phone (N-8)
         _screen.value = Screen.Home(me)
         tokens.pendingLogout()?.let { old -> viewModelScope.launch { if (api.endOld(old)) tokens.setPendingLogout(null) } }
         if (me.role == "expert") jobs.open(me.id, offline = false)

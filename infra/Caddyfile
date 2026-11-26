@@ -1,3 +1,32 @@
+# The web app and the API on APP_HOST; the customer check page (QR on every report) on VERIFY_HOST.
+(api_and_web) {
+	encode gzip
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+	handle {
+		root * /srv
+		# hashed bundles never change; index.html is always fresh so a release shows at once
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@page not path /assets/*
+		header @page Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}
+
 {$APP_HOST} {
-	reverse_proxy api:8000
+	import api_and_web
+}
+
+{$VERIFY_HOST} {
+	# the QR prints VERIFY_BASE_URL/<token> (photos: /<token>/<link>); the web app's pages are
+	# /verify/<token>[/<link>]
+	@printed {
+		path_regexp ^/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)?$
+		not path /verify /verify/* /zip/* /assets/* /api/*
+	}
+	redir @printed /verify{uri} 302
+	import api_and_web
 }
