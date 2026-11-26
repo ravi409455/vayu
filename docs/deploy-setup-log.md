@@ -553,7 +553,20 @@ the person's ⋯ menu → **Sign out of every device**), or `revoke_devices` on 
 
 ---
 
-## Phase 4 · Deploy pipeline ⏳
+## Phase 4 · Deploy pipeline 🔄
+
+### 4.1 · A code release was skipped, and the fix 🔄 (2026-11-26)
+After PR 42 (code) and PR 37 (docs) merged a few minutes apart, staging still ran `35fdec9`:
+1. PR 42 merged → `main`'s CI started for `cc40087`.
+2. PR 37 merged → CI on `main` cancels the older run when a newer merge arrives (added by PR 42
+   itself), so `cc40087` never finished CI and never deployed.
+3. The deploy for PR 37 compared it only with the commit before it, saw "docs only", and skipped
+   building and deploying.
+Fix (PR "deploy every merge"): no docs-only shortcut. Every merge to `main` builds and deploys
+(docs-only: a cached build and a 10-20 s restart of staging). A hand-started run (Actions →
+deploy → Run workflow) builds its images too, so it works for any commit on `main`.
+How to notice next time: `ssh deploy@<staging> cat /srv/vayu/.deployed` should equal the newest
+commit on `main` after each deploy run.
 ## Phase 5 · Backups and alerts 🔄
 
 ### 5.1 · Watching the server's resources (owner asked 2026-11-26)

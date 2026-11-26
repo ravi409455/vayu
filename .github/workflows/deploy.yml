@@ -4,7 +4,7 @@ name: deploy
 #   staging deploys by itself → production waits for the owner's Approve (environment
 #   "production" has a required reviewer) and deploys the SAME images.
 # Rollback: Actions → deploy → Run workflow → the commit id to go back to (its images already exist).
-# A merge that changes only Markdown or docs/ builds and deploys nothing.
+# Every merge to main builds and deploys (docs-only too: a shortcut once skipped a code release).
 # Never runs for pull requests: only after CI on a push to main, or by hand.
 on:
   workflow_run:
@@ -40,19 +40,14 @@ jobs:
         id: what
         env:
           EVENT: ${{ github.event_name }}
+        # Every merge builds and deploys, docs-only ones too. A "docs only, skip" shortcut once
+        # skipped a code release: CI on main cancels an older run when a newer merge arrives, so the
+        # code merge never deployed and the docs merge after it deployed nothing. A docs merge costs
+        # a cached build and a 10-20 s restart of staging. A hand-started run builds as well (same
+        # commit, same images; cheap when they exist, needed when they don't).
         run: |
-          sha=$(git rev-parse HEAD)
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          if [ "$EVENT" = workflow_dispatch ]; then
-            echo "deploy=true" >> "$GITHUB_OUTPUT"; echo "build=false" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          # PRs are squash-merged: one commit per merge, so HEAD~1..HEAD is the whole change
-          if git diff --name-only HEAD~1 HEAD | grep -qvE '(\.md$|^docs/)'; then
-            echo "deploy=true" >> "$GITHUB_OUTPUT"; echo "build=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Docs only: nothing to build or deploy."
-            echo "deploy=false" >> "$GITHUB_OUTPUT"; echo "build=false" >> "$GITHUB_OUTPUT"
-          fi
+          { echo "sha=$(git rev-parse HEAD)"; echo "deploy=true"; echo "build=true"; } >> "$GITHUB_OUTPUT"
+          echo "event: $EVENT"
       - if: steps.what.outputs.build == 'true'
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - if: steps.what.outputs.build == 'true'

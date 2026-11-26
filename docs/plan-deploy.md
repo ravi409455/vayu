@@ -363,8 +363,8 @@ works because this server's kind is `test`.
 ### How a release travels
 1. A PR merges to `main`. CI runs (as today).
 2. **Build once**: the API image and the web image are built and stored in GitHub's image store
-   (GHCR), labelled with the commit id, for example `abc1234`. A merge that only changes `docs/`
-   builds and deploys nothing.
+   (GHCR), labelled with the commit id, for example `abc1234`. Every merge builds and deploys,
+   docs-only ones too (a "docs only, skip" shortcut once skipped a code release; see the setup log).
 3. **Staging deploys by itself**: the workflow logs in to staging as `deploy`, pulls images
    `abc1234`, runs database migrations, restarts the services, waits for the health page to say
    ok. If health fails, it puts the previous images back and the run goes red (Slack alert).
