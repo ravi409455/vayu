@@ -4,10 +4,11 @@ the laptop: the runner pipes it from the staging server to the test server throu
 
     cloud_env.py <host> <server name> [KEY=VALUE ...]   (the size's worker settings)
 
-Kept from staging: the file bucket and its key, the Firebase key, the content rules. Changed: the
-address, the server's name and kind (test), Sentry off (a dummy address; the test counts errors
-itself), a fresh database password and secret key, no backup keys and no heartbeats (they would
-mix the throwaway into staging's backups and alerts)."""
+Only an allowlist comes from staging (KEEP: the file bucket and its key, the Firebase key, the
+content rules, database and user names, two app limits). Set here: the address, the server's name
+and kind (test), Sentry off (a dummy address; the test counts errors itself), a fresh database
+password and secret key. Everything else (backup keys, heartbeats, tester passwords, anything added
+to staging later) is left out."""
 import re
 import secrets
 import sys
@@ -28,9 +29,12 @@ for must in ("S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "FIREBASE_
     if not env.get(must):
         sys.exit(f"cloud_env: staging's settings have no {must}")
 
-for key in list(env):                    # nothing that ties the throwaway to staging's routines
-    if key.startswith("BACKUP_") or key.endswith("_HEARTBEAT_URL") or key == "STAGING_TESTER_PASSWORD":
-        del env[key]
+# an allowlist: only these come from staging; everything else is set below or left out (a new
+# staging setting never reaches a throwaway by accident)
+KEEP = {"S3_BUCKET", "S3_ENDPOINT_URL", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_REGION",
+        "FIREBASE_JSON", "FIREBASE_CREDENTIALS_FILE", "CSP_HEADER", "DB_NAME", "DB_USER",
+        "MIN_APP_VERSION", "STUCK_UPLOAD_HOURS"}
+env = {k: v for k, v in env.items() if k in KEEP}
 env.update({
     "VAYU_SERVER_KIND": "test", "VAYU_SERVER_NAME": name,
     "APP_HOST": host, "ALLOWED_HOSTS": host, "CSRF_TRUSTED_ORIGINS": f"https://{host}",

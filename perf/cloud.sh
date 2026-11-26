@@ -3,7 +3,7 @@
 # doctl signed in and the owner's SSH key. Spend is capped (LT_CAP, default $5).
 #
 #   perf/cloud.sh up <small|mid|base>   create a test server of that size (and the load server)
-#   perf/cloud.sh prepare               cut it off from staging, deploy main, make the test data
+#   perf/cloud.sh prepare <lowcost|capacity>  cut it off from staging, deploy main, make the data
 #   perf/cloud.sh run <lowcost|capacity> run the load script there, collect the results
 #   perf/cloud.sh down [all]            delete the test files, destroy the test server ("all": the
 #                                       load server too)
@@ -96,7 +96,18 @@ ours() {   # ours <id>: true only for a droplet this script made (name lt-*, tag
 }
 
 ip_of() { st field "$1" ip; }
-on() { local who=$1; shift; ssh "${SSH_OPTS[@]}" "$who" "$@"; }
+# the throwaways' host keys live in their own file (trusted when first seen, right after we made
+# the droplet; secrets go only after verify_ip); staging is reached with the laptop's usual file
+on() { local who=$1; shift; ssh "${SSH_OPTS[@]}" -o UserKnownHostsFile="$STATE_DIR/known_hosts" "$who" "$@"; }
+on_staging() { local who=$1; shift; ssh "${SSH_OPTS[@]}" "$who" "$@"; }
+
+verify_ip() {   # verify_ip <role>: the address we are about to send secrets to is still our droplet
+  local id ip now
+  id=$(st field "$1" id); ip=$(ip_of "$1")
+  ours "$id" || die "droplet $id is not ours: stopped"
+  now=$(doctl compute droplet get "$id" --format PublicIPv4 --no-header)
+  [[ "$now" == "$ip" ]] || die "droplet $id is at $now, not $ip: stopped before sending secrets"
+}
 
 # ---------------------------------------------------------------- create
 
@@ -118,8 +129,8 @@ make_droplet() {   # make_droplet <role> <name> <size-slug> <price> [user-data f
   local fw; fw=$(doctl compute firewall list --format ID,Name --no-header | awk '$2 == "vayu-web" {print $1}')
   [[ -n "$fw" ]] && doctl compute firewall add-droplets "$fw" --droplet-ids "$id"
   say "$name is $ip; waiting for SSH"
-  ssh-keygen -R "$ip" >/dev/null 2>&1 || true
-  until ssh "${SSH_OPTS[@]}" -o StrictHostKeyChecking=accept-new "root@$ip" true 2>/dev/null; do sleep 5; done
+  ssh-keygen -R "$ip" -f "$STATE_DIR/known_hosts" >/dev/null 2>&1 || true
+  until on "root@$ip" -o StrictHostKeyChecking=accept-new true 2>/dev/null; do sleep 5; done
 }
 
 cmd_up() {
@@ -135,8 +146,24 @@ cmd_up() {
 
 # ---------------------------------------------------------------- prepare the test server
 
+# The load script's interface (the "local load" session's perf/loadtest.py, kept stable):
+#   locust -f perf/loadtest.py, env LT_DATA LT_OUT LT_MULT; 58 users per 1× (50 phones, 5 Ops,
+#   3 external-system users), signing in at 0.3 a second (the 20-a-minute limit); the measured
+#   window of a 90-minute run is minutes 25-85 (perf/report.py --from-min 25 --minutes 60).
+# Its clock starts when every user has signed in; the report measures from that clock.
+# Capacity: one run per step k (58k users), measured for 15 minutes from its minute 25.
+CAP_STEPS=(1 2 3 4 6 8)
+signin_min() { python3 -c "import math; print(math.ceil(58 * $1 / 0.3 / 60))"; }
+run_min() { echo $(( $(signin_min "$1") + 25 + $2 + 2 )); }   # run_min <k> <measured minutes>
+
 cmd_prepare() {
-  local size ip host staging sha
+  local plan=${1:-} size ip host staging sha today
+  case "$plan" in
+    lowcost) today=14 ;;      # one inspection every 400 s over 90 minutes
+    capacity)                 # 9k an hour over each step's run
+      today=$(python3 -c "print(sum(round(9 * k * (25 + 15 + 2) / 60) for k in (${CAP_STEPS[*]// /,})) + 10)") ;;
+    *) die "prepare lowcost or prepare capacity" ;;
+  esac
   [[ -f "$STATE_DIR/size" ]] || die "no test server: up first"
   size=$(cat "$STATE_DIR/size"); ip=$(ip_of sut); [[ -n "$ip" ]] || die "no test server: up first"
   host="lt.$ip.sslip.io"
@@ -151,13 +178,16 @@ cmd_prepare() {
   { cat "$ROOT/infra/bootstrap.sh"; echo 'systemctl disable --now vayu-backup.timer'; } \
     | on "root@$ip" 'bash -s' >/dev/null
 
-  say "settings: staging's, changed for the test (copied server to server)"
+  say "settings: an allowlist of staging's, with the test's changes (server to server)"
+  verify_ip sut
   local rest sizes; read -r _ _ rest <<<"$(size_info "$size")"; read -ra sizes <<<"$rest"
-  ssh "${SSH_OPTS[@]}" "deploy@$staging" 'cat /srv/vayu/.env.staging' \
+  on_staging "deploy@$staging" 'cat /srv/vayu/.env.staging' \
     | python3 "$ROOT/perf/cloud_env.py" "$host" "lt-$size" "${sizes[@]}" \
-    | ssh "${SSH_OPTS[@]}" "deploy@$ip" 'umask 077; cat > /srv/vayu/.env.staging'
-  ssh "${SSH_OPTS[@]}" "deploy@$staging" 'cat /srv/vayu/secrets/firebase-service-account.json' \
-    | ssh "${SSH_OPTS[@]}" "deploy@$ip" 'umask 077; mkdir -p /srv/vayu/secrets; cat > /srv/vayu/secrets/firebase-service-account.json'
+    | on "deploy@$ip" 'umask 077; cat > /srv/vayu/.env.staging'
+  # the Firebase key: pushes go to Firebase for real, to fake device tokens (owner's choice);
+  # only to this throwaway, destroyed after the run
+  on_staging "deploy@$staging" 'cat /srv/vayu/secrets/firebase-service-account.json' \
+    | on "deploy@$ip" 'umask 077; mkdir -p /srv/vayu/secrets; cat > /srv/vayu/secrets/firebase-service-account.json'
   on "deploy@$ip" 'rm -f /srv/vayu/.phase'   # never fetch staging's settings from Phase here
 
   say "deploy main ${sha:0:7}"
@@ -165,79 +195,110 @@ cmd_prepare() {
   on "deploy@$ip" 'cd /srv/vayu && source infra/lib.sh && VAYU_TAG=$(cat .deployed) compose exec -T api python manage.py help loadtest_prepare >/dev/null' \
     || die "this main has no loadtest_prepare yet: merge the load-test code first"
 
-  say "forms and an Admin (setup_platform), then the test data (loadtest_prepare)"
+  say "forms and an Admin (setup_platform), then the test data (loadtest_prepare, $today leads)"
   # random, used only on this throwaway (destroyed after the run)
-  local pw admin_pw
+  local pw admin_pw load
   pw=$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')
   admin_pw=$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')
-  local load; load=$(ip_of load)
+  load=$(ip_of load)
   on "deploy@$ip" "cd /srv/vayu && source infra/lib.sh && export VAYU_TAG=\$(cat .deployed) &&
-    printf 'username,name,role,phone,password\nlt-admin,LT Admin,admin,9700000000,$admin_pw\n' > /tmp/staff.csv &&
+    (umask 077; printf 'username,name,role,phone,password\nlt-admin,LT Admin,admin,9700000000,$admin_pw\n' > /tmp/staff.csv) &&
     compose cp /tmp/staff.csv api:/tmp/staff.csv && rm /tmp/staff.csv &&
     compose exec -T api python manage.py setup_platform --users /tmp/staff.csv >/dev/null &&
+    compose exec -T api rm -f /tmp/staff.csv /tmp/staff.csv.passwords &&
     compose exec -T api python manage.py loadtest_prepare --password '$pw' \
-      --receiver https://hooks.$load.sslip.io --out /tmp/lt.json --experts 400 --ops 40 \
-      --test-form &&
-    compose cp api:/tmp/lt.json /tmp/lt.json"
-  # the test data goes to the load server (it holds logins and the API key: owner-only files)
+      --receiver https://hooks.$load.sslip.io --out /tmp/lt.json \
+      --experts 400 --ops 40 --history-days 90 --per-day 200 --inspected-per-day 100 \
+      --today $today --test-form &&
+    compose cp api:/tmp/lt.json /tmp/lt.json && compose exec -T api rm -f /tmp/lt.json"
+  # the test data (logins, API key) goes straight to the load server, owner-only
+  verify_ip load
   on "deploy@$ip" 'cat /tmp/lt.json && rm -f /tmp/lt.json' \
     | on "root@$load" 'umask 077; mkdir -p /lt; cat > /lt/data.json'
-  echo "$host" > "$STATE_DIR/host"
+  echo "$host" > "$STATE_DIR/host"; echo "$plan" > "$STATE_DIR/plan"
   say "ready: https://$host (test server), https://hooks.$load.sslip.io (receiver)"
 }
 
 # ---------------------------------------------------------------- run
 
+run_one() {   # run_one <dir name> <k> <measured minutes>: one run of the load script
+  local name=$1 k=$2 measured=$3 minutes from=25 ip load host
+  minutes=$(run_min "$k" "$measured")
+  ip=$(ip_of sut); load=$(ip_of load); host=$(cat "$STATE_DIR/host")
+  say "${k}x: $((58 * k)) users, ${minutes} min, measured from minute $from"
+  on "root@$load" "docker rm -f lt-receiver lt-locust >/dev/null 2>&1 || true
+    mkdir -p /lt/out/$name
+    docker run -d --name lt-receiver --network lt -v /lt:/lt python:3.12-slim \
+      python3 /lt/perf/receiver.py --port 9300 --out /lt/out/$name/webhooks.csv >/dev/null"
+  on "deploy@$ip" "nohup bash /tmp/sample.sh /tmp/stats-$name.csv >/dev/null 2>&1 & echo \$! > /tmp/sample.pid"
+  on "root@$load" "docker run --rm --name lt-locust --network host -v /lt:/lt -w /lt \
+      -e LT_DATA=/lt/data.json -e LT_OUT=/lt/out/$name -e LT_MULT=$k \
+      python:3.12-slim sh -c 'pip install -q locust pillow requests >/dev/null 2>&1 &&
+        locust -f /lt/perf/loadtest.py --headless --host https://$host \
+          -u $((58 * k)) -r 0.3 --run-time ${minutes}m --only-summary > /lt/out/$name/locust.log 2>&1'" \
+    || say "the load script ended with an error (results still collected)"
+  sleep 60                                         # the last files' checks and PDFs
+  on "deploy@$ip" 'kill "$(cat /tmp/sample.pid)" 2>/dev/null; true'
+  local out="$RUN_DIR/$name"; mkdir -p "$out"
+  on "root@$load" "tar -C /lt/out/$name -czf - ." | tar -C "$out" -xzf -
+  on "deploy@$ip" "cat /tmp/stats-$name.csv" > "$out/stats.csv" || true
+  # the server's own records, as perf/local/run.sh takes them (SQL through stdin: no size limit)
+  local ids bids
+  ids=$(cut -d, -f2 "$out/uploads.csv" 2>/dev/null | sed "s/.*/'&'/" | paste -sd, -)
+  bids=$(awk -F, '$3=="submitted"{print "'\''"$2"'\''"}' "$out/inspections.csv" 2>/dev/null | paste -sd, -)
+  [[ -n "$ids" ]] && echo "select id, extract(epoch from verified_at), status from media_mediaasset where id in ($ids)" \
+    | on "deploy@$ip" 'docker exec -i vayu-postgres-1 psql -U vayu -d vayu -At -F,' > "$out/verified.csv"
+  [[ -n "$bids" ]] && echo "select id, stage from bookings_booking where id in ($bids)" \
+    | on "deploy@$ip" 'docker exec -i vayu-postgres-1 psql -U vayu -d vayu -At -F,' > "$out/stages.csv"
+  on "deploy@$ip" 'docker inspect --format "{{.Name}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}" $(docker ps -aq)' > "$out/server-containers.txt" || true
+  on "deploy@$ip" 'journalctl -k --no-pager | grep -i "out of memory\|killed process" || true' > "$out/server-oom.txt" || true
+  local mem=2048; [[ "$(cat "$STATE_DIR/size")" == base ]] && mem=4096
+  python3 "$SRC/perf/report.py" "$out" --from-min "$from" --minutes "$measured" \
+    --memory-mb "$mem" > "$out/RESULTS.md" 2>&1 || say "report failed: see $out"
+  say "$name: $out/RESULTS.md"
+}
+
 cmd_run() {
-  local plan=$1 size ip load host out stamp
-  [[ "$plan" == lowcost || "$plan" == capacity ]] || die "run lowcost or run capacity"
+  local plan size ip load host stamp price hours
   [[ -f "$STATE_DIR/host" ]] || die "up and prepare first"
+  plan=$(cat "$STATE_DIR/plan"); [[ "${1:-$plan}" == "$plan" ]] || die "prepared for $plan, not $1"
   size=$(cat "$STATE_DIR/size"); ip=$(ip_of sut); load=$(ip_of load); host=$(cat "$STATE_DIR/host")
   [[ -n "$ip" && -n "$load" ]] || die "up and prepare first"
   read -r _ price _ <<<"$(size_info "$size")"
-  local hours=2; [[ "$plan" == capacity ]] && hours=3
+  hours=2; [[ "$plan" == capacity ]] && hours=6     # capacity: six runs of ~45-70 minutes
   check_budget "$(python3 -c "print($hours * ($price + $LOAD_PRICE))")"
-  stamp="$(date -u +%Y%m%d-%H%M)-$size-$plan"; out="$RESULTS/$stamp"; mkdir -p "$out"
+  stamp="$(date -u +%Y%m%d-%H%M)-$size-$plan"; RUN_DIR="$RESULTS/$stamp"; mkdir -p "$RUN_DIR"
 
   say "the load server: waiting for Docker, then perf/ from $SRC, receiver behind https"
+  [[ -f "$SRC/perf/loadtest.py" && -f "$SRC/perf/receiver.py" && -f "$SRC/perf/report.py" ]] \
+    || die "no perf/loadtest.py, receiver.py and report.py in $SRC (LT_SRC)"
   until on "root@$load" 'docker info >/dev/null 2>&1'; do sleep 10; done
-  [[ -f "$SRC/perf/loadtest.py" && -f "$SRC/perf/receiver.py" ]] || die "no perf/loadtest.py and perf/receiver.py in $SRC (LT_SRC)"
   tar -C "$SRC" -czf - perf | on "root@$load" 'rm -rf /lt/perf && tar -C /lt -xzf -'
-  on "root@$load" "docker rm -f lt-receiver lt-caddy lt-locust >/dev/null 2>&1 || true
-    mkdir -p /lt/out && docker network create lt >/dev/null 2>&1 || true
-    docker run -d --name lt-receiver --network lt -v /lt:/lt python:3.12-slim \
-      python3 /lt/perf/receiver.py --port 9300 --out /lt/out/webhooks.csv >/dev/null
+  on "deploy@$ip" 'cat > /tmp/sample.sh' < "$SRC/perf/local/sample.sh"
+  on "root@$load" "docker rm -f lt-caddy >/dev/null 2>&1 || true
+    docker network create lt >/dev/null 2>&1 || true
     printf 'hooks.$load.sslip.io {\n  reverse_proxy lt-receiver:9300\n}\n' > /lt/Caddyfile
     docker run -d --name lt-caddy --network lt -p 80:80 -p 443:443 -v /lt/Caddyfile:/etc/caddy/Caddyfile caddy:2-alpine >/dev/null"
 
-  say "server sampler (memory, load, containers, every 5 s)"
-  on "deploy@$ip" 'nohup sh -c "while :; do date -u +%FT%TZ; free -m | sed -n 2,3p; cat /proc/loadavg; docker stats --no-stream --format \"{{.Name}} {{.CPUPerc}} {{.MemUsage}}\"; echo; sleep 5; done" > /tmp/lt-metrics.log 2>&1 & echo $! > /tmp/lt-metrics.pid'
-
-  local steps=(1); local minutes=90
-  [[ "$plan" == capacity ]] && { steps=(1 2 3 4 6 8); minutes=15; }
-  for k in "${steps[@]}"; do
-    say "step ${k}x for ${minutes} min (results: $out)"
-    on "root@$load" "docker run --rm --name lt-locust --network host -v /lt:/lt -w /lt \
-      -e LT_DATA=/lt/data.json -e LT_OUT=/lt/out/step-$k -e LT_MULT=$k \
-      python:3.12-slim sh -c 'pip install -q locust pillow requests >/dev/null 2>&1 &&
-        mkdir -p /lt/out/step-$k && locust -f /lt/perf/loadtest.py --headless \
-        --host https://$host --run-time ${minutes}m --csv /lt/out/step-$k/locust \
-        -u \$((58 * $k)) -r 2'" || say "step ${k}x ended with an error (kept going to collect)"
-    if [[ "$plan" == capacity ]] && on "deploy@$ip" 'docker ps -a --format "{{.Names}} {{.Status}}" | grep -qi "oom\|restarting"'; then
-      say "a service was killed or is restarting: stopping the climb at ${k}x"; break
-    fi
-  done
-
-  say "collecting"
-  on "deploy@$ip" 'kill "$(cat /tmp/lt-metrics.pid)" 2>/dev/null; cat /tmp/lt-metrics.log' > "$out/server-metrics.log" || true
-  on "deploy@$ip" 'docker ps -a --format "{{.Names}} {{.Status}}"; docker inspect --format "{{.Name}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}" $(docker ps -aq)' > "$out/server-containers.txt" || true
-  on "deploy@$ip" 'journalctl -k --no-pager | grep -i "out of memory\|killed process" || true' > "$out/server-oom.txt" || true
-  on "root@$load" 'tar -C /lt -czf - out' | tar -C "$out" -xzf -
-  if [[ -f "$SRC/perf/report.py" ]]; then
-    python3 "$SRC/perf/report.py" "$out/out" > "$out/report.md" 2>&1 || say "report failed: see $out"
+  if [[ "$plan" == lowcost ]]; then
+    run_one lowcost 1 60
+  else
+    for k in "${CAP_STEPS[@]}"; do
+      run_one "step-${k}x" "$k" 15
+      if on "deploy@$ip" 'docker inspect --format "{{.State.OOMKilled}} {{.RestartCount}}" $(docker ps -q)' | grep -qv "^false 0$"; then
+        say "a service was killed or restarted at ${k}x: the climb stops here"; break
+      fi
+      if python3 - "$RUN_DIR/step-${k}x/requests.csv" <<'PY'
+import csv, sys
+rows = [r for r in csv.reader(open(sys.argv[1])) if r] if __import__("os").path.exists(sys.argv[1]) else []
+fails = sum(1 for r in rows if r[-1] == "0")           # the load script: 1 = ok, 0 = failed
+sys.exit(0 if rows and fails / len(rows) > 0.01 else 1)
+PY
+      then say "more than 1% of requests failed at ${k}x: the climb stops here"; break; fi
+    done
   fi
-  echo "{\"size\": \"$size\", \"plan\": \"$plan\", \"host\": \"$host\", \"spent_so_far\": $(spent_now)}" > "$out/run.json"
-  say "done: $out"
+  echo "{\"size\": \"$size\", \"plan\": \"$plan\", \"host\": \"$host\", \"spent_so_far\": $(spent_now)}" > "$RUN_DIR/run.json"
+  say "done: $RUN_DIR"
 }
 
 # ---------------------------------------------------------------- clean up and destroy
@@ -285,14 +346,14 @@ cmd_status() {
 
 cmd_lowcost() {
   for size in small mid base; do
-    cmd_up "$size"; cmd_prepare; cmd_run lowcost; cmd_down
+    cmd_up "$size"; cmd_prepare lowcost; cmd_run lowcost; cmd_down
   done
   cmd_down all
 }
 
 case "${1:-}" in
   up) cmd_up "${2:-}" ;;
-  prepare) cmd_prepare ;;
+  prepare) cmd_prepare "${2:-}" ;;
   run) cmd_run "${2:-}" ;;
   down) cmd_down "${2:-}" ;;
   cost) echo "spent so far: \$$(spent_now) of \$$CAP" ;;
