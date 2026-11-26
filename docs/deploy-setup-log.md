@@ -132,8 +132,12 @@ Branch `deploy/phase-1`, PR https://github.com/ravi409455/vayu/pull/27.
   (same size) or the alerts say so.
 - Cost: about **$43–46 a month** (≈ ₹4,300–4,900 with GST). Table in `docs/plan-deploy.md` §1.
 
-### 2.1 · Slack channel `#vayu-alerts` ⏳
-Slack → **+** next to Channels → Create channel → `vayu-alerts`. Needed in Phase 5 (alerts).
+### 2.1 · Slack channel `#vayu-alerts` ✅
+Slack (workspace "Car C.I.D") → **+** next to Channels → Create channel → `vayu-alerts`,
+**public** (so Sentry and Better Stack can post without an invite). Every alarm goes here.
+Checked: `#vayu-alerts` exists, public.
+Lesson: Sentry's "The resource vayu-alerts does not exist or has not been granted access" meant
+the channel had not been created yet. For a private channel the fix would be `/invite @Sentry`.
 
 ### 2.2 · DigitalOcean: staging server ✅
 The company's existing DigitalOcean account (it also runs other, unrelated servers; nothing here
@@ -263,15 +267,27 @@ key (already in Phase, step 2 of Phase 0), so production shares no key with stag
 
 **2.5c · Restrict the Firebase API key (R-32)** ⏳ — done once "Vayu Staging" is built, and checked
 in Phase 6 (a push still arrives).
-### 2.6 · Sentry: projects check, auth token, Slack alerts 🔄
-Organisation slug: **`car-cid`** (from `https://car-cid.sentry.io/`; not a secret). It goes in the
-GitHub variable `SENTRY_ORG` (Phase 4) and in `SENTRY_ORG` on the machine that builds the Android app.
 
-| Part | Status |
+### 2.6 · Sentry: projects, build token, Slack alert ✅
+Organisation slug **`car-cid`** (`https://car-cid.sentry.io`; not a secret).
+1. Projects: `vayu-server` (Django), `vayu-web` (React), `vayu-android` (Android).
+2. Build token: Settings → Developer Settings → **Organization Tokens** → `vayu-ci` → Phase →
+   `vayu-owner` → `SENTRY_AUTH_TOKEN`. The builds use it to upload source maps / R8 mappings, so
+   error reports show real file names and lines.
+3. Slack: Settings → Integrations → Slack → workspace "Car C.I.D" connected.
+4. **One alert for all three projects** (Monitors → Alerts → New Alert), named `vayu production errors`:
+
+| Part | Setting |
 |---|---|
-| 3 projects `vayu-server` (Django), `vayu-web` (React), `vayu-android` (Android) | ⏳ |
-| Token `vayu-ci` (Settings → Developer Settings → Organization Tokens) → Phase `vayu-owner` → `SENTRY_AUTH_TOKEN` | ⏳ |
-| Slack integration + 6 alert rules (per project: "new issue" and "seen > 20 times in 1 hour", environment `production`, → `#vayu-alerts` + email) | ⏳ |
+| Source | "Alert on all issues in selected projects": `vayu-server`, `vayu-web`, `vayu-android` (not "all projects": the org has other company projects) |
+| Filter issues | environment **production** only (staging tests never ping Slack) |
+| WHEN any of | **A new issue is created**; **An issue escalates** (Sentry's own spike detection) |
+| IF | Any event |
+| THEN | Slack message to "Car C.I.D" → `#vayu-alerts`; Notify Member → the owner (email) |
+
+   Checked with **Send Test Notification**.
+   If `production` was not offered in the environment list (no production event yet), set it
+   once the first production error has arrived.
 ### 2.7 · GitHub: branch rules, environments, fork approval ⏳
 
 ---
