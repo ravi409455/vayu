@@ -1220,8 +1220,10 @@ paths:
   /api/v1/bookings/{id}/activity:
     get:
       operationId: bookings_activity_retrieve
-      description: The booking's timeline, newest first (field keys hidden from this
-        person left out).
+      description: |-
+        The booking's timeline, newest first (field keys hidden from this person left out).
+        Every old / new value goes to the web only; the phone (signed in with a token) gets the
+        timeline as before.
       parameters:
       - in: path
         name: id
