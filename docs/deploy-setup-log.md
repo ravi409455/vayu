@@ -14,8 +14,8 @@ Status: ✅ done · 🔄 in progress · ⏳ not started
 | 0 | Safety first: secrets home, 2-step login, SSH key | ✅ 2026-11-26 |
 | 1 | Code changes (PR 27) | ✅ merged 2026-11-26 as `35fdec9` |
 | 2 | Accounts and dashboards | ✅ 2026-11-26 (2.5c, the Firebase key restriction, waits for the staging app) |
-| 3 | Staging server setup | 🔄 server ready, settings from Phase work; first deploy next |
-| 4 | Deploy pipeline | ⏳ |
+| 3 | Staging server setup | 🔄 first deploy live 2026-11-26; forms, staff and test data next |
+| 4 | Deploy pipeline | 🔄 merge → staging works; rollback not yet rehearsed |
 | 5 | Backups and alerts | ⏳ |
 | 6 | Prove staging | ⏳ |
 | 7 | Production | ⏳ |
@@ -439,6 +439,27 @@ What it took (lessons):
 
 ### Merged
 - PR 27 (Phase 1 code, settings from Phase, staging on demand) → `main` as `35fdec9`.
+- PR 18 (`docs/plan-deploy.md` and this log) → `main` as `2f1408a`. From now on this log changes
+  through a docs PR (the `main` ruleset refuses direct pushes).
+
+### 3.5 · First deploy ✅ (2026-11-26, automatic)
+Nobody touched the server: PR 27 merged → CI green on `main` → the deploy workflow built both
+images once (`ghcr.io/ravi409455/vayu-api` and `vayu-web`, tag = commit id) → logged in with the
+locked robot key → `deploy.sh` fetched the settings from Phase, ran the migrations, started
+everything, health ok. The run then waited for **Approve** on production: not approved (no
+production server yet), the run was cancelled. Until Phase 7, cancel that waiting step each time.
+
+Checked from outside:
+
+| Check | Result |
+|---|---|
+| `https://vayu-staging.carcid.in/` | 200 in 0.3 s |
+| `/api/v1/health` (database, Redis, R2 storage, workers, Firebase push) | `{"status":"ok"}` |
+| `/report/verify/<code>` | 200 |
+| https certificate | Let's Encrypt, valid to 2027-02-24, Caddy renews it by itself |
+| Headers | HSTS, nosniff, CSP report-only (staging, as planned) |
+| Services | api (healthy), worker, zip-worker, pdf-worker, beat, postgres (healthy), redis (healthy), caddy |
+| Live commit (`/srv/vayu/.deployed`) | `35fdec9` |
 
 ### Dependabot ✅ grouped (PR 30)
 Its first run opened 6 PRs at once (Actions and the Node image), each a full CI run, which queued
@@ -504,9 +525,9 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 
 | Item | When |
 |---|---|
-| First staging deploy: starts by itself when `main`'s CI passes; then check the site, health page, workers | next |
+| Forms, reports, staff and test data on staging (`setup_platform`, `seed_test_data`) | next |
 | Merge PR 30 (trim values; Dependabot grouped) | when its CI is green |
-| Merge PR 18 (this log and `docs/plan-deploy.md`): until then they exist only on the `docs/plan-deploy` branch | soon |
+| Every deploy run waits for production Approve: cancel it until production exists | until Phase 7 |
 | 2.5c Restrict the Firebase API key | once "Vayu Staging" is on a phone (Phase 6) |
 | Phase 5: Better Stack uptime and heartbeats (`BACKUP_HEARTBEAT_URL`, `WORKERS_HEARTBEAT_URL` into Phase), DigitalOcean alerts, first restore drill | after the first deploy |
 | Phase Production environment: the rest of its values (table above) | Phase 7 |
