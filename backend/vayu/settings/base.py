@@ -67,10 +67,10 @@ DATABASES: dict[str, dict[str, Any]] = {
         "PORT": env("DB_PORT", "5432"),
         # "require" for the managed database in production (it refuses plain connections)
         "OPTIONS": {"sslmode": env("DB_SSLMODE", "prefer")},
-        # keep a connection for a minute instead of one per request: fewer connections to the
-        # managed database (about 22 allowed on the smallest size) and no TLS handshake per request
-        "CONN_MAX_AGE": int(env("DB_CONN_MAX_AGE", "60")),
-        "CONN_HEALTH_CHECKS": True,
+        # one connection per request here; production keeps them (prod.py). Never on the
+        # development server: it starts a thread per request, so kept connections pile up until
+        # Postgres runs out (it hung the browser tests)
+        "CONN_MAX_AGE": 0,
     }
 }
 REDIS_URL = env("REDIS_URL")
