@@ -508,8 +508,9 @@ ssh deploy@<server> 'grep pdf-worker /srv/vayu/logs/resources-2026-11-26.log'   
 First sample on staging (filling test data): memory 1.5 / 3.9 GB, swap 0, disk 8%, busiest the API
 at 3.6% CPU.
 
-**b) DigitalOcean alerts ⏳ (owner)** Monitoring → Create alert policy, applied to the **tag
-`vayu-web`** (so production is covered too), sent by email and to Slack `#vayu-alerts`:
+**b) DigitalOcean alerts ✅** (2026-11-26, made with `doctl`: the dashboard menus had changed and
+"alert policy" was not found there). Applied to the **tag `vayu-web`** (production is covered
+too), sent to the DigitalOcean account's email:
 
 | Alert | Above | For |
 |---|---|---|
@@ -519,6 +520,15 @@ at 3.6% CPU.
 | Load (5 min average) | 3 (2 vCPU box) | 10 min |
 
 The graphs themselves (Droplet → **Graphs** / Insights) keep the history: they show when.
+How they were made (the email is read from the account, never typed):
+```bash
+E=$(doctl account get --format Email --no-header)
+doctl monitoring alert create --type v1/insights/droplet/cpu --compare GreaterThan --value 80 \
+  --window 10m --tags vayu-web --emails "$E" --description "vayu: CPU above 80% for 10 min"
+# … and memory_utilization_percent 85 / 10m, disk_utilization_percent 80 / 5m, load_5 3 / 10m
+doctl monitoring alert list          # check
+```
+Slack for these alerts: not yet (DigitalOcean needs a Slack incoming-webhook URL; optional).
 
 ## Phase 6 · Prove staging ⏳
 ## Phase 7 · Production ⏳
