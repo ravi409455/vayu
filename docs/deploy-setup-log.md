@@ -209,6 +209,38 @@ The short TTL lets a new IP reach everyone within 10 minutes; `infra/staging.sh 
 new IP each time and waits until DNS shows it.
 Checked: GoDaddy, Cloudflare (1.1.1.1) and Google (8.8.8.8) all answer `139.59.39.207`.
 
+**Changed 2026-11-27: the staging name moved to DigitalOcean's DNS** ✅ (so `infra/staging.sh` can
+point it itself when staging is re-made; GoDaddy's API is not open to small accounts).
+1. DigitalOcean → Networking → Domains: zone `vayu-staging.carcid.in`, record **A `@`** →
+   `139.59.39.207`, TTL 60 s (made with `doctl`, 2026-11-27).
+2. GoDaddy → carcid.in → DNS: the A record `vayu-staging` deleted; three records added:
+
+| Type | Name | Value | TTL |
+|---|---|---|---|
+| NS | `vayu-staging` | `ns1.digitalocean.com` | 1 hour |
+| NS | `vayu-staging` | `ns2.digitalocean.com` | 1 hour |
+| NS | `vayu-staging` | `ns3.digitalocean.com` | 1 hour |
+
+Everything else (the `vayu` production record, the company website, email) stays at GoDaddy.
+While staging is off the name points to `192.0.2.1` (the "off" marker the deploy workflow reads).
+Checked: GoDaddy answers with the 3 NS records; Cloudflare and Google answer `139.59.39.207` with
+DigitalOcean's 60 s TTL; `https://vayu-staging.carcid.in/api/v1/health` says ok.
+First real cycle (2026-11-27): `down` (marker → snapshot `vayu-staging-20261127-1614` → delete) and
+`up` (new IP `159.89.168.78`, name pointed, newest main `d64a196` deployed, health ok). It showed the
+new-SSH-key behaviour above; `up` now handles it.
+
+**Staging from GitHub (2026-11-27)** ⏳: Actions → **staging** → up / down / status
+(`.github/workflows/staging.yml`, runs `infra/staging.sh`). One-time setup:
+1. DigitalOcean → API → **Generate New Token** `vayu-staging-github`, **Custom Scopes** only:
+   droplet (create, read, update, delete), snapshot (read, delete), image (read), domain (read,
+   update), ssh_key (read), tag (create, read), actions (read), regions (read), sizes (read).
+   Saved in Phase `vayu-owner` → `DO_API_TOKEN_STAGING` and as GitHub secret `DO_API_TOKEN_STAGING`
+   (environment `staging`).
+2. Staging's fixed SSH key (ED25519): private half in GitHub secret `STAGING_HOST_KEY` (environment
+   `staging`) and Phase `vayu-owner` → `STAGING_HOST_KEY`; public half in `SSH_KNOWN_HOSTS`.
+   A server made from a snapshot would otherwise get new keys on its first boot; `up` hands it this
+   one (cloud-init user data) and refuses to deploy if the server shows another.
+
 ### 2.4a · R2 buckets and CORS ✅
 dash.cloudflare.com → R2 Object Storage. All buckets **private** (no public access, no custom domain):
 
@@ -402,7 +434,10 @@ Result, checked afterwards:
 - Code in `/srv/vayu` (from `main`); `/srv/vayu/secrets` readable by `deploy` only.
 - Nightly backup timer enabled (20:30 UTC = 02:00 IST).
 - The server's own SSH fingerprint: `SHA256:yOMBc1Z3D4XpkN6a7LGHAREreTlKmgOAAkrKZxQSjoQ` (the same
-  as at the first connection; it stays the same when staging is re-made from its snapshot).
+  as at the first connection). **Correction 2026-11-27:** it does NOT survive a snapshot: a server
+  made from one gets new keys on its first boot. `infra/staging.sh up` reads the new key and updates
+  the Mac's known_hosts and GitHub's `SSH_KNOWN_HOSTS` itself (re-made 2026-11-27: ED25519
+  `SHA256:TLSc0mqGF3rY3ZMVT2GQb/QTEwJY00Fk/PbXDmJTk9s`).
 
 ### 3.2 · GitHub robot key ✅
 A key pair made for GitHub Actions only. Its public half is in the server's
@@ -647,10 +682,10 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 ### Names and addresses (not secret)
 | What | Value |
 |---|---|
-| Staging | `https://vayu-staging.carcid.in` (droplet `vayu-staging`, BLR1, IP changes when re-made) |
+| Staging | `https://vayu-staging.carcid.in` (droplet `vayu-staging`, BLR1; IP and SSH key change when re-made, `infra/staging.sh up` handles both) |
 | Production | `https://vayu.carcid.in` (not created yet) |
 | Customer QR page | `https://<address>/report/verify/<code>` |
-| DNS | GoDaddy (`ns19/ns20.domaincontrol.com`) |
+| DNS | GoDaddy (`ns19/ns20.domaincontrol.com`); just `vayu-staging` is DigitalOcean DNS (`ns1-3.digitalocean.com`) |
 | Sentry | organisation `car-cid`; projects `vayu-server`, `vayu-web`, `vayu-android`; alert `vayu production errors` → `#vayu-alerts` |
 | Firebase | project `vayu-8bb7a`; apps `in.carcid.vayu`, `in.carcid.vayu.staging` |
 | DigitalOcean | firewall `vayu-web` (by tag), tags `vayu-web`, `vayu-staging`; SSH key `owner-mac` |
