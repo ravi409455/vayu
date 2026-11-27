@@ -21,7 +21,7 @@ Status: ✅ done · 🔄 in progress · ⏳ not started
 | 3 | Staging server setup | ✅ 2026-11-26: live, with test data |
 | 4 | Deploy pipeline | 🔄 merge → staging works; rollback not yet rehearsed |
 | 5 | Backups and alerts | ✅ 2026-11-27 on staging: DigitalOcean alerts, Better Stack (monitor, heartbeats, Slack), first restore drill. Production gets its own set in Phase 7 |
-| 6 | Prove staging | 🔄 push, update prompt, Sentry, down/up cycle done; left: rollback, security headers + CSP, reboot, load test |
+| 6 | Prove staging | 🔄 push, update prompt, Sentry, load test, down/up cycle done; left: rollback, security headers + CSP, reboot |
 | 7 | Production | ⏳ |
 
 Quick links: [Where everything lives](#where-everything-lives) · [Open items](#open-items)
@@ -695,6 +695,20 @@ staging were **equal** (1820 fields, 1768 media files, 208 booking activities, .
 `docs/runbook-new-server.md` §7. Next drill: first Monday of the month.
 
 ## Phase 6 · Prove staging 🔄
+
+### 6.7 · Load test ✅ (2026-11-27, owner + load-test session)
+Cloud run on throwaway servers (`perf/cloud.sh all`, PR 46/61, cost $1.06, real car photos; results
+kept on the Mac, `perf/results/20261127-1237-all`, not in git). At the test's 1× day:
+| Server | Screens p95 | PDF | CPU | Verdict |
+|---|---|---|---|---|
+| $12 (1 vCPU / 2 GB) | 3.7 s | 106-176 s | 102% | fails |
+| $18 (2 vCPU / 2 GB) | 0.45 s | 31 s | 81%, swap 0.6 GB | near pass |
+| $24 (2 vCPU / 4 GB, the plan's size) | 0.43 s | 31 s | 76%, no swap | near pass |
+Capacity: $24 and $18 both break at 3× (PDFs first). PDF time (~30 s) is per-core speed, not size.
+The owner's real day (20 experts, 5 Ops, 50 inspections) is well under the test's 1×.
+Open: a few 502s on `media/initiate` ($12 ×6, $24 ×2); the report's API p95 should leave uploads
+out; `loadtest_cleanup` too slow on 1M history rows; PR 61's stop-all treats a clean-up failure as a
+test failure.
 
 ### 6.11 · On-demand cycle ✅ (2026-11-27, by the owner)
 Staging taken down and brought back up (Actions → staging down / up, PR 63 and 64) during these
