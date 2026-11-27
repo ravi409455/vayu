@@ -618,7 +618,7 @@ After the security review of that change:
 - only merges to `main` write the build cache.
 How to notice next time: `ssh deploy@<staging> cat /srv/vayu/.deployed` should equal the newest
 commit on `main` after each deploy run.
-## Phase 5 · Backups and alerts 🔄
+## Phase 5 · Backups and alerts ✅
 
 ### 5.1 · Watching the server's resources (owner asked 2026-11-26)
 DigitalOcean alerts say **when** the server was busy. (A recorder of *which service* used what,
@@ -669,7 +669,7 @@ Tested:
   `.env.staging` and the worker container after a hand-started deploy).
 - `staging-backup`: **Up** ✅ after a backup run by hand (`ssh deploy@<staging> /srv/vayu/infra/backup.sh nightly`;
   the service runs as `deploy`, so no sudo). Only `nightly` backups ping; `predeploy-<sha>` ones do not.
-- Slack `#vayu-alerts` integration: ⏳ the owner is connecting it; check an incident arrives there.
+- Slack `#vayu-alerts` integration: connected by the owner; the staging incidents arrived there ✅.
 
 Lessons:
 - **A heartbeat stays "Pending" until its first ping, and a Pending heartbeat never alerts.** To
@@ -747,7 +747,6 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 | Every deploy run waits for production Approve: cancel it until production exists (after PR 42 it no longer blocks staging) | until Phase 7 |
 | Welcome pages (`/welcome/engineers`, `/welcome/ops`, public APK download; PR welcome-pages): open both on staging after the next deploy; on production in Phase 7, with an uptime monitor on `/welcome/engineers` | next deploy, Phase 7 |
 | 2.5c Restrict the Firebase API key | once "Vayu Staging" is on a phone (Phase 6) |
-| 5.2 Better Stack: check Slack `#vayu-alerts` gets an incident | next staging round |
 | 5.2 Better Stack for production: monitors on `/api/v1/health`, `/` and `/welcome/engineers`; heartbeats `prod-workers`, `prod-backup` → Phase `vayu` → Production; then delete the staging monitor and heartbeats and clear their two Phase Staging values | Phase 7 |
 | Phase Production environment: the rest of its values (table above) | Phase 7 |
 | Production server's Phase service account (`vayu-prod-server`, Production only) and robot key | Phase 7 |
