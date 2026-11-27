@@ -5,6 +5,9 @@
 #   perf/cloud.sh all            the whole test, in parallel (about 3½ hours):
 #                                  low-cost: $12, $18, $24 at the owner's numbers, 60 measured minutes
 #                                  capacity: $18 and $24, one continuous run 1× → 8× (15 min a step)
+#   perf/cloud.sh rehearse       every step of "all" for real, tiny numbers, before spending on it:
+#                                  one $12 low-cost and one $18 capacity server (1×, 2×, 1 min a
+#                                  step), 7 experts, 3 measured minutes; about $0.20, ~30 minutes
 #   perf/cloud.sh dbcheck <size> run D: the low-cost hour on one size against a temporary managed
 #                                Postgres (small, mid or base; about 2 hours)
 #   perf/cloud.sh status | cost  what is running | spend so far
@@ -31,6 +34,7 @@
 # runs, so the load-test commands must be merged and deployed to staging first.
 # shellcheck disable=SC2016,SC2029  # remote commands: $… must expand on the server, not here
 set -euo pipefail
+export COPYFILE_DISABLE=1   # macOS tar: no "._" metadata files in what goes to the servers
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SRC=${LT_SRC:-$ROOT}
@@ -83,28 +87,39 @@ role_port() {
 PACE=5
 WARM=$(( 2 * PACE ))
 CAP_STEPS="1,2,3,4,6,8"
+STEP_MIN=15            # measured minutes per capacity step
+MEASURE=60             # measured minutes of the low-cost run
+USERS=58               # simulated people at 1x (50 phones, 5 Ops, 3 external-system users)
+# the data each test server gets (the owner's numbers; the rehearsal shrinks them)
+DATA_ARGS() { echo "--experts $((50 * $1)) --ops $((5 * $1)) --history-days 90 --per-day 200 --inspected-per-day 100"; }
+if [[ "${1:-}" == rehearse ]]; then   # every real step, tiny numbers: about $0.20, ~30 minutes
+  ROLES=(lc-small cap-mid)            # one low-cost and one capacity server: both paths
+  LOAD_SIZE=s-2vcpu-4gb; LOAD_PRICE=0.03571
+  PACE=1; WARM=2; CAP_STEPS="1,2"; STEP_MIN=1; MEASURE=3; USERS=10
+  DATA_ARGS() { echo "--experts 7 --ops 2 --history-days 1 --per-day 4 --inspected-per-day 2"; }
+fi
 # real car photos (customer data: kept off git, copied only to the throwaway load servers);
 # without the folder, uploads use one made-up photo
 PHOTOS="${LT_PHOTOS:-$HOME/vayu-loadtest-photos}"
-signin_min() { python3 -c "import math; print(math.ceil(58 * $1 / 0.3 / 60))"; }
+signin_min() { python3 -c "import math; print(math.ceil($USERS * $1 / 0.3 / 60))"; }
 capacity_min() {   # the whole capacity run, minutes
   python3 -c "
 s = [float(x) for x in '$CAP_STEPS'.split(',')]
-m = 58 * s[0] / 0.3 / 60 + $WARM + 15
+m = $USERS * s[0] / 0.3 / 60 + $WARM + $STEP_MIN
 for a, b in zip(s, s[1:]):
-    m += 58 * (b - a) / 0.3 / 60 + $WARM + 15
+    m += $USERS * (b - a) / 0.3 / 60 + $WARM + $STEP_MIN
 print(int(m) + 1)"
 }
 leads() {   # leads <plan>: one inspection every 400 s at 1×, through the run (and a few spare)
   if [[ "$1" == lowcost ]]; then
-    python3 -c "import math; print(math.ceil(9 * ($WARM + 60 + 2) / 60) + 3)"
+    python3 -c "import math; print(math.ceil(9 * ($WARM + $MEASURE + 2) / 60) + 3)"
   else
     python3 -c "
 import math
 s = [float(x) for x in '$CAP_STEPS'.split(',')]
 n, prev = 0.0, 0.0
 for k in s:
-    n += 9 * k * (58 * (k - prev) / 0.3 / 60 + $WARM + 15) / 60
+    n += 9 * k * ($USERS * (k - prev) / 0.3 / 60 + $WARM + $STEP_MIN) / 60
     prev = k
 print(math.ceil(n * 1.1) + 5)"
   fi
@@ -287,8 +302,7 @@ prepare_sut() {   # prepare_sut <role>: bootstrap, settings, deploy, forms, the 
   on "deploy@$ip" "set -o pipefail && $RC
     c exec -T api python manage.py loadtest_prepare --password '$pw' \
       --receiver http://$(pip_of "$load"):$(role_port "$role") --out /tmp/lt.json --test-form \
-      --experts $((50 * k_max)) --ops $((5 * k_max)) --history-days 90 --per-day 200 \
-      --inspected-per-day 100 --today $(leads "$(role_plan "$role")") --unassigned | tail -1 &&
+      $(DATA_ARGS "$k_max") --today $(leads "$(role_plan "$role")") --unassigned | tail -1 &&
     c cp api:/tmp/lt.json /tmp/lt.json && c exec -T api rm -f /tmp/lt.json"
   # the logins' password and the API key go straight to the load server, owner-only
   verify_ip "$load"
@@ -303,11 +317,11 @@ run_sut() {   # run_sut <role> <results folder>: one run of the load script, the
   load_ip=$(ip_of "$(role_load "$role")"); port=$(role_port "$role")
   local minutes env_plan
   if [[ "$plan" == lowcost ]]; then
-    minutes=$(( $(signin_min 1) + WARM + 60 + 2 ))
+    minutes=$(( $(signin_min 1) + WARM + MEASURE + 2 ))
     env_plan="-e LT_MULT=1"
   else
     minutes=$(( $(capacity_min) + 10 ))       # the plan stops it; this is only a safety limit
-    env_plan="-e LT_STEPS=$CAP_STEPS -e LT_STEP_MINUTES=15"
+    env_plan="-e LT_STEPS=$CAP_STEPS -e LT_STEP_MINUTES=$STEP_MIN"
   fi
   local env_photos=""
   [[ -d "$PHOTOS" ]] && env_photos="-e LT_PHOTOS=/lt/photos"
@@ -316,7 +330,9 @@ run_sut() {   # run_sut <role> <results folder>: one run of the load script, the
     mkdir -p /lt/out/$role
     docker run -d --name lt-recv-$role -p $(pip_of "$(role_load "$role")"):$port:9300 -v /lt:/lt \
       python:3.12-slim python3 /lt/perf/receiver.py --port 9300 --out /lt/out/$role/webhooks.csv >/dev/null"
-  on "deploy@$ip" "mkdir -p /tmp/lt && nohup bash /tmp/sample.sh /tmp/lt/stats.csv >/dev/null 2>&1 & echo \$! > /tmp/sample.pid"
+  # only the sampler goes to the background, with no tie to this SSH session (a backgrounded
+  # "mkdir && nohup ..." kept the session open and the run waited forever: third cloud run)
+  on "deploy@$ip" "mkdir -p /tmp/lt; nohup bash /tmp/sample.sh /tmp/lt/stats.csv </dev/null >/dev/null 2>&1 & echo \$! > /tmp/sample.pid"
   # detached on the load server: a dropped connection or a sleeping laptop does not stop the run;
   # this side waits for it, reconnecting as often as it needs to
   on "root@$load_ip" "docker run -d --name lt-locust-$role --network host -v /lt:/lt -w /lt \
@@ -324,10 +340,17 @@ run_sut() {   # run_sut <role> <results folder>: one run of the load script, the
       -e LT_UPLOAD_MINUTES=$PACE -e LT_REVIEW_MINUTES=$PACE $env_plan $env_photos \
       python:3.12-slim sh -c 'pip install -q locust pillow requests >/dev/null 2>&1 &&
         locust -f /lt/perf/loadtest.py --headless --host https://$ip \
-          -u 58 -r 0.3 --run-time ${minutes}m --only-summary > /lt/out/$role/locust.log 2>&1'" >/dev/null
+          -u $USERS -r 0.3 --run-time ${minutes}m --exit-code-on-error 0 --only-summary > /lt/out/$role/locust.log 2>&1'" >/dev/null
   until on "root@$load_ip" "docker wait lt-locust-$role >/dev/null 2>&1; ! docker ps -q --filter name=lt-locust-$role | grep -q ." 2>/dev/null; do
     sleep 30
   done
+  # a crashed load script must fail the run, not pass as an empty result (third cloud run)
+  local code
+  code=$(on "root@$load_ip" "docker inspect -f '{{.State.ExitCode}}' lt-locust-$role" 2>/dev/null || echo missing)
+  if [[ "$code" != 0 ]]; then
+    on "root@$load_ip" "tail -20 /lt/out/$role/locust.log; docker logs --tail 20 lt-locust-$role" 2>&1 || true
+    die "$role: the load script stopped with an error ($code): see above"
+  fi
   sleep 60                                         # the last files' checks and PDFs
   on "deploy@$ip" 'kill "$(cat /tmp/sample.pid)" 2>/dev/null; true'
   mkdir -p "$out"
@@ -344,7 +367,7 @@ run_sut() {   # run_sut <role> <results folder>: one run of the load script, the
   local mem=2048 cpus=2
   case "$size" in small) cpus=1 ;; base) mem=4096 ;; esac
   if [[ "$plan" == lowcost ]]; then
-    python3 "$SRC/perf/report.py" "$out" --from-min "$WARM" --minutes 60 --memory-mb "$mem" \
+    python3 "$SRC/perf/report.py" "$out" --from-min "$WARM" --minutes "$MEASURE" --memory-mb "$mem" \
       --cpus "$cpus" > "$out/RESULTS.md" 2>&1 || say "$role: report failed"
   else
     awk -F, '$2=="step"{print $3}' "$out/run.csv" | while read -r k; do
@@ -452,9 +475,9 @@ cmd_all() {
     total=$(python3 -c "print($total + $hours * $price)")
   done
   check_budget "$(python3 -c "print($total + 3 * $LOAD_PRICE + 5 * $LOAD_PRICE)")"
-  droplet_room 7
-  local dir; dir="$RESULTS/$(date -u +%Y%m%d-%H%M)-all"; mkdir -p "$dir"
-  say "creating 5 test servers and 2 load servers (results: $dir)"
+  droplet_room $(( ${#ROLES[@]} + 2 ))
+  local dir; dir="$RESULTS/$(date -u +%Y%m%d-%H%M)-$1"; mkdir -p "$dir"
+  say "creating ${#ROLES[@]} test servers and 2 load servers (results: $dir)"
   for role in "${ROLES[@]}"; do
     local slug; read -r slug price _ <<<"$(size_info "$(role_size "$role")")"
     make_droplet "$role" "$slug" "$price"
@@ -506,15 +529,15 @@ cmd_status() {
 }
 
 # the long commands keep the Mac awake (caffeinate) for as long as they run
-if [[ "${1:-}" =~ ^(all|dbcheck)$ && -z "${LT_AWAKE:-}" ]] && command -v caffeinate >/dev/null; then
+if [[ "${1:-}" =~ ^(all|rehearse|dbcheck)$ && -z "${LT_AWAKE:-}" ]] && command -v caffeinate >/dev/null; then
   LT_AWAKE=1 exec caffeinate -i "$0" "$@"
 fi
 
 case "${1:-}" in
-  all) cmd_all ;;
+  all|rehearse) cmd_all "$1" ;;
   dbcheck) cmd_dbcheck "${2:-}" ;;
   down) cmd_down "${2:-}" ;;
   cost) echo "spent so far: \$$(spent_now) (warning above \$$CAP)" ;;
   status) cmd_status ;;
-  *) sed -n 2,16p "$0" ;;
+  *) sed -n 2,19p "$0" ;;
 esac

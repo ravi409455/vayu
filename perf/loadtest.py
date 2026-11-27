@@ -158,7 +158,7 @@ def _real_photos(folder: str) -> list[bytes]:
 
     out = []
     for name in sorted(os.listdir(folder)):
-        if not name.lower().endswith((".jpg", ".jpeg")):
+        if name.startswith(".") or not name.lower().endswith((".jpg", ".jpeg")):  # "._x.jpg": macOS
             continue
         img = ImageOps.exif_transpose(Image.open(os.path.join(folder, name))).convert("RGB")
         img.thumbnail((2048, 2048))
