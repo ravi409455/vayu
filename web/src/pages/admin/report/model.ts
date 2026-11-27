@@ -448,3 +448,19 @@ export function withoutTheme(d: Definition): Definition {
 function escape(t: string): string {
   return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+
+/** What the preview must draw again after an edit: nothing, one page (its place in `pages`), or
+ *  the whole report. One page only when that page alone changed: a change to the report's
+ *  settings (look, header, footer, paper), to the number or order of pages, or to several pages
+ *  at once redraws everything. So does a page with a contents list (it names the other pages). */
+export function previewPlan(before: Definition | null, after: Definition): number | "all" | null {
+  if (!before) return "all";
+  const rest = (d: Definition) => JSON.stringify({ ...d, pages: null });
+  if (rest(before) !== rest(after) || before.pages.length !== after.pages.length) return "all";
+  const changed = after.pages.flatMap((p, i) => (JSON.stringify(p) === JSON.stringify(before.pages[i]) ? [] : [i]));
+  if (changed.length === 0) return null;
+  if (changed.length > 1) return "all";
+  const one = changed[0]!;
+  const text = JSON.stringify(after.pages[one]) + JSON.stringify(before.pages[one]);
+  return text.includes('"type":"contents"') ? "all" : one;
+}

@@ -91,6 +91,26 @@ class Publish(APIView):
         return Response(_version_body(v))
 
 
+def _whole(v, low: int, high: int) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and low <= v <= high
+
+
+def _one_page(data, d: dict) -> tuple[int | None, tuple[int, int] | None]:
+    """The designer's quick preview: only_page (a template page's place in the definition), and
+    optionally first_page + total_pages so its sheets keep the whole report's page numbers."""
+    only = data.get("only_page")
+    if only is None:
+        return None, None
+    if not _whole(only, 0, len(d.get("pages", [])) - 1):
+        raise fail("INVALID_TEMPLATE", "only_page must be the place of one of the pages.")
+    first, total = data.get("first_page"), data.get("total_pages")
+    if first is None and total is None:
+        return only, None
+    if not (_whole(first, 1, 10_000) and _whole(total, 1, 10_000)):
+        raise fail("INVALID_TEMPLATE", "first_page and total_pages must be page numbers.")
+    return only, (first, total)
+
+
 class Preview(APIView):
     """Render this template version with a real booking's data (nothing is stored)."""
 
@@ -110,7 +130,9 @@ class Preview(APIView):
                 d = validate_definition(request.data["definition"])
             except ValueError as e:
                 raise fail("INVALID_TEMPLATE", str(e)) from e
-            pdf, name, layout, checks = tasks.preview(booking, insp, d)
+            only, numbering = _one_page(request.data, d)
+            pdf, name, layout, checks = tasks.preview(booking, insp, d, only=only,
+                                                      numbering=numbering)
             return Response({"filename": name, "pages": layout, "checks": checks,
                              "pdf": base64.b64encode(pdf).decode()})
         pdf, name = tasks.build_pdf(booking, insp, tv, "preview", 0, edge=480)

@@ -58,16 +58,27 @@ def build_pdf(booking: Booking, insp, tv: PdfTemplateVersion, token: str, revisi
     return render.render_pdf(html_text), definition.filename_for(d, values)
 
 
-def preview(booking: Booking, insp, definition_: dict, edge: int = 480):
+def preview(booking: Booking, insp, definition_: dict, edge: int = 480, *,
+            only: int | None = None, numbering: tuple[int, int] | None = None):
     """(pdf bytes, filename, layout, checks) of any definition for one booking: nothing is
-    stored."""
+    stored. Each sheet of the layout says which template page it belongs to ("section": its
+    place in the definition). only: draw that one template page (the designer's quick preview:
+    about 1 s, not 4); numbering: its first page number and the report's page count, from the
+    last whole draw. A page that does not show for this booking gives no sheets (pdf b"")."""
     definition_ = shared.resolve(definition_)
     src = context.Source(booking, insp, revision=0, token="preview")  # noqa: S106 - a label, not a secret
     pages = context.build(src, definition_)
+    if only is not None:
+        pages = [p for p in pages if p["at"] == only]
     values = src.values()
-    pdf, layout, checks = render.render_with_layout(render.render_html(pages, definition_, values,
-                                                               edge=edge))
-    return pdf, definition.filename_for(definition_, values), layout, checks
+    name = definition.filename_for(definition_, values)
+    if not pages:
+        return b"", name, [], []
+    pdf, layout, checks = render.render_with_layout(render.render_html(
+        pages, definition_, values, edge=edge, numbering=numbering if only is not None else None))
+    for sheet in layout:
+        sheet["section"] = pages[sheet["section"]]["at"] if sheet["section"] is not None else None
+    return pdf, name, layout, checks
 
 
 def page_count(pdf: bytes) -> int:

@@ -416,9 +416,9 @@ def build(src: Source, definition: dict) -> list[dict]:
     data = src.data()
     values = src.values()
     pages = []
-    for page in definition.get("pages", []):
+    for at, page in enumerate(definition.get("pages", [])):
         if truthy(page.get("show_if"), data):
             out = _resolve(src, page["parts"], data, values)
             if out:
-                pages.append({**page, "parts": out})
+                pages.append({**page, "parts": out, "at": at})     # at: its place in the template
     return pages
