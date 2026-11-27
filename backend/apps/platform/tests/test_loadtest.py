@@ -67,6 +67,26 @@ def test_test_form_prepare_and_cleanup(settings, s3, tmp_path, capsys):  # noqa:
     assert Integration.objects.filter(name__startswith="load test").count() == 20
     assert ApiKey.objects.filter(name="load test", revoked_at=None).count() == 1
 
+    # the server's records for a run, read through the app (works with a managed database too)
+    import io
+    import sys
+
+    from apps.media.models import MediaAsset
+
+    asset = MediaAsset.objects.filter(booking__booking_id__startswith="LT-").first()
+    assert asset is not None
+    booking = Booking.objects.get(id=data["today"][0]["id"])
+    capsys.readouterr()
+    for what, ident in (("files", asset.id), ("stages", booking.id)):
+        sys.stdin = io.StringIO(f"{ident}\n")
+        try:
+            call_command("loadtest_records", what)
+        finally:
+            sys.stdin = sys.__stdin__
+    rows = capsys.readouterr().out.splitlines()
+    assert rows[0].startswith(f"{asset.id},") and rows[0].endswith(f",{asset.status}")
+    assert rows[1] == f"{booking.id},{booking.stage}"
+
     capsys.readouterr()
     call_command("loadtest_cleanup")
     result = json.loads(capsys.readouterr().out)

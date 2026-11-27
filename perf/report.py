@@ -287,13 +287,25 @@ class Report:
                      f"{len(self.unchecked)} files unchecked, {len(not_done)} not completed, "
                      f"{len(failed)} failed")
 
+    def generator(self):
+        """A load server that ran out of CPU sends less than it should and times answers late:
+        then the run says nothing about the server under test."""
+        p = os.path.join(self.o.run, "locust.log")
+        text = open(p).read() if os.path.exists(p) else ""
+        hot = "CPU usage above" in text or "CPU usage exceeded" in text
+        self.verdict("load generator kept up (its CPU never maxed out)",
+                     None if not text else not hot,
+                     "its CPU maxed out: rerun on a bigger load server" if hot else
+                     ("ok" if text else "no locust.log"))
+
     def run(self):
         self.say(f"# Load test results ({self.minutes:.0f} min from minute "
                  f"{self.o.from_min:.0f}, {self.mult:g}x)\n")
         if self.cut:
             self.say(f"_The run ended before the {self.o.minutes:.0f} minutes asked: judged on "
                      f"the {self.minutes:.0f} it ran._\n")
-        for part in (self.load, self.requests, self.pdfs, self.uploads, self.webhooks,
+        for part in (self.generator, self.load, self.requests, self.pdfs, self.uploads,
+                     self.webhooks,
                      self.server, self.zero_loss):
             part()
         self.say("## Verdict\n\n| Check | Result | Measured |\n|---|---|---|")

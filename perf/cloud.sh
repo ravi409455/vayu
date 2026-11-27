@@ -131,22 +131,27 @@ verify_ip() {   # verify_ip <role>: the address we are about to send secrets to 
 # ---------------------------------------------------------------- create
 
 make_droplet() {   # make_droplet <role> <name> <size-slug> <price> [user-data file]
-  local role=$1 name=$2 slug=$3 price=$4 data=${5:-}
+  local role=$1 name=$2 slug=$3 price=$4 data=${5:-} pip
   if [[ -n "$(ip_of "$role")" ]]; then say "$role already up at $(ip_of "$role")"; return; fi
   local key; key=$(doctl compute ssh-key list --format ID,Name --no-header | awk -v k="$SSH_KEY_NAME" '$2 == k {print $1}')
   [[ -n "$key" ]] || die "no SSH key named $SSH_KEY_NAME in DigitalOcean"
   say "creating $name ($slug)"
-  # shellcheck disable=SC2054  # "ID,PublicIPv4" is one doctl value
+  # shellcheck disable=SC2054  # "ID,PublicIPv4,PrivateIPv4" is one doctl value
   local args=(--region "$REGION" --size "$slug" --image ubuntu-24-04-x64 --ssh-keys "$key"
-              --enable-monitoring --tag-names "$TAG" --wait --format ID,PublicIPv4 --no-header)
+              --enable-monitoring --tag-names "$TAG" --wait
+              --format ID,PublicIPv4,PrivateIPv4 --no-header)
   [[ -n "$data" ]] && args+=(--user-data-file "$data")
   local out id ip
   out=$(doctl compute droplet create "$name" "${args[@]}")
-  id=$(awk '{print $1}' <<<"$out"); ip=$(awk '{print $2}' <<<"$out")
-  st set "$role" "{\"id\": $id, \"name\": \"$name\", \"ip\": \"$ip\", \"size\": \"$slug\", \"price\": $price, \"created\": $(date +%s)}"
-  # the web firewall (22, 80, 443) by droplet id, not by tag: the vayu-web tag carries Slack alerts
-  local fw; fw=$(doctl compute firewall list --format ID,Name --no-header | awk '$2 == "vayu-web" {print $1}')
-  [[ -n "$fw" ]] && doctl compute firewall add-droplets "$fw" --droplet-ids "$id"
+  id=$(awk '{print $1}' <<<"$out"); ip=$(awk '{print $2}' <<<"$out"); pip=$(awk '{print $3}' <<<"$out")
+  st set "$role" "{\"id\": $id, \"name\": \"$name\", \"ip\": \"$ip\", \"pip\": \"$pip\", \"size\": \"$slug\", \"price\": $price, \"created\": $(date +%s)}"
+  # the test server gets the web firewall (22, 80, 443) by droplet id, not by tag (the vayu-web
+  # tag carries the Slack alerts). The load server has none: its receiver listens on the private
+  # network only, and a firewall would block the test server's webhooks to it.
+  if [[ "$role" == sut ]]; then
+    local fw; fw=$(doctl compute firewall list --format ID,Name --no-header | awk '$2 == "vayu-web" {print $1}')
+    [[ -n "$fw" ]] && doctl compute firewall add-droplets "$fw" --droplet-ids "$id"
+  fi
   say "$name is $ip; waiting for SSH"
   ssh-keygen -R "$ip" -f "$STATE_DIR/known_hosts" >/dev/null 2>&1 || true
   until on "root@$ip" -o StrictHostKeyChecking=accept-new true 2>/dev/null; do sleep 5; done
@@ -169,6 +174,9 @@ cmd_up() {   # cmd_up <size> [managed]
 
 # ---------------------------------------------------------------- prepare the test server
 
+# every compose command on the test server: the production file plus the load-test override
+RC='cd /srv/vayu && source infra/lib.sh && export VAYU_TAG=$(cat .deployed) && c() { compose -f perf/cloud-compose.yml "$@"; } &&'
+
 # How a run is timed (perf/loadtest.py): 58 users per 1× (50 phones, 5 Ops, 3 external-system
 # users) sign in at 0.3 a second (the real 20-a-minute limit); the clock starts when all have.
 # Minutes 0-55 of the clock are the warm-up: an inspection's files take 25 minutes, then Ops
@@ -185,11 +193,13 @@ cmd_prepare() {
   [[ "$plan" == lowcost || "$plan" == capacity ]] || die "prepare lowcost or prepare capacity"
   [[ -f "$STATE_DIR/size" ]] || die "no test server: up first"
   size=$(cat "$STATE_DIR/size"); ip=$(ip_of sut); [[ -n "$ip" ]] || die "no test server: up first"
-  host="lt.$ip.sslip.io"
+  host=$ip      # addressed by IP: Caddy makes its own certificate (no public CA, no DNS step)
   staging=$(doctl compute droplet list --tag-name "$STAGING_NAME" --format Name,PublicIPv4 --no-header \
     | awk -v n="$STAGING_NAME" '$1 == n {print $2}')
   [[ -n "$staging" ]] || die "staging is not running: its settings are copied from it"
-  sha=$(git -C "$ROOT" ls-remote origin refs/heads/main | awk '{print $1}')
+  # the commit staging runs: its images are built and known to start
+  sha=$(on_staging "deploy@$staging" 'cat /srv/vayu/.deployed')
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "could not read the commit staging runs"
 
   say "bootstrap (firewall, Docker, deploy user, code); root login is off after it"
   # in the same root session: no nightly backup on a throwaway (it would write into staging's
@@ -216,38 +226,47 @@ cmd_prepare() {
     | on "deploy@$ip" 'umask 077; mkdir -p /srv/vayu/secrets; cat > /srv/vayu/secrets/firebase-service-account.json'
   on "deploy@$ip" 'rm -f /srv/vayu/.phase'   # never fetch staging's settings from Phase here
 
-  say "deploy main ${sha:0:7}"
-  on "deploy@$ip" "bash /srv/vayu/infra/deploy.sh $sha"
-  on "deploy@$ip" 'cd /srv/vayu && source infra/lib.sh && VAYU_TAG=$(cat .deployed) compose exec -T api python manage.py help loadtest_prepare >/dev/null' \
-    || die "this main has no loadtest_prepare yet: merge the load-test code first"
+  say "deploy ${sha:0:7} (staging's commit) with the load-test settings"
+  on "deploy@$ip" "cd /srv/vayu && git fetch -q origin && git checkout -q --detach $sha && echo $sha > .deployed"
+  on "deploy@$ip" "$RC c pull -q && c up -d --no-build --remove-orphans" >/dev/null
+  local t=0
+  until curl -fsk --max-time 5 "https://$ip/api/v1/health" 2>/dev/null | grep -q '"ok"'; do
+    (( t += 10 )); (( t < 600 )) || die "the test server is not healthy after 10 minutes"
+    sleep 10
+  done
+  on "deploy@$ip" "$RC c exec -T api python manage.py help loadtest_prepare >/dev/null" \
+    || die "commit ${sha:0:7} has no loadtest_prepare: merge the load-test code and let staging deploy it"
 
   say "forms and an Admin (setup_platform)"
   local admin_pw; admin_pw=$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')
-  on "deploy@$ip" "cd /srv/vayu && source infra/lib.sh && export VAYU_TAG=\$(cat .deployed) &&
+  on "deploy@$ip" "$RC
     (umask 077; printf 'username,name,role,phone,password\nlt-admin,LT Admin,admin,9700000000,$admin_pw\n' > /tmp/staff.csv) &&
-    compose cp /tmp/staff.csv api:/tmp/staff.csv && rm /tmp/staff.csv &&
-    compose exec -T api python manage.py setup_platform --users /tmp/staff.csv >/dev/null &&
-    compose exec -T api rm -f /tmp/staff.csv /tmp/staff.csv.passwords"
+    c cp /tmp/staff.csv api:/tmp/staff.csv && rm /tmp/staff.csv &&
+    c exec -T api python manage.py setup_platform --users /tmp/staff.csv >/dev/null &&
+    c exec -T api rm -f /tmp/staff.csv /tmp/staff.csv.passwords"
   echo "$host" > "$STATE_DIR/host"
-  say "the test form, 3 months of history and the first data (loadtest_prepare)"
-  make_data 1 60
+  say "the test form and 3 months of history (loadtest_prepare; each run then makes its own leads)"
+  make_data 1 0 history
   echo "$plan" > "$STATE_DIR/plan"
-  say "ready: https://$host (test server), https://hooks.$load.sslip.io (receiver)"
+  say "ready: https://$host (test server), http://$(st field load pip):9300 (receiver, private)"
 }
 
 # The test data for one run (loadtest_prepare, safe to run again: the history is made once):
 # exactly 50k expert and 5k Ops logins, a new password and API key, and fresh leads for today
 # (each run's load script starts from the first lead; a lead already inspected cannot start again).
-make_data() {   # make_data <k> <measured minutes>
+make_data() {   # make_data <k> <measured minutes> [history]: "history" makes no leads
   local k=$1 measured=$2 ip load pw today
   ip=$(ip_of sut); load=$(ip_of load); today=$(leads "$k" "$measured")
+  [[ "${3:-}" == history ]] && today=0
   pw=$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')   # this throwaway only
-  on "deploy@$ip" "set -o pipefail && cd /srv/vayu && source infra/lib.sh && export VAYU_TAG=\$(cat .deployed) &&
-    compose exec -T api python manage.py loadtest_prepare --password '$pw' \
-      --receiver https://hooks.$load.sslip.io --out /tmp/lt.json --test-form \
+  # webhooks go to the receiver on the load server over the private network (plain http,
+  # allowed by the load-test settings only)
+  on "deploy@$ip" "set -o pipefail && $RC
+    c exec -T api python manage.py loadtest_prepare --password '$pw' \
+      --receiver http://$(st field load pip):9300 --out /tmp/lt.json --test-form \
       --experts $((50 * k)) --ops $((5 * k)) --history-days 90 --per-day 200 \
       --inspected-per-day 100 --today $today | tail -1 &&
-    compose cp api:/tmp/lt.json /tmp/lt.json && compose exec -T api rm -f /tmp/lt.json"
+    c cp api:/tmp/lt.json /tmp/lt.json && c exec -T api rm -f /tmp/lt.json"
   # the logins' password and the API key go straight to the load server, owner-only
   verify_ip load
   on "deploy@$ip" 'cat /tmp/lt.json && rm -f /tmp/lt.json' \
@@ -256,23 +275,29 @@ make_data() {   # make_data <k> <measured minutes>
 
 # ---------------------------------------------------------------- run
 
-run_one() {   # run_one <dir name> <k> <measured minutes> [fresh]: one run of the load script
+run_one() {   # run_one <dir name> <k> <measured minutes>: one run of the load script, with fresh
+              # data (logins for 50k experts and 5k Ops, a new API key, its own leads)
   local name=$1 k=$2 measured=$3 minutes from=$WARM ip load host
   minutes=$(run_min "$k" "$measured")
   ip=$(ip_of sut); load=$(ip_of load); host=$(cat "$STATE_DIR/host")
-  [[ "${4:-}" == fresh ]] && make_data "$k" "$measured"
+  make_data "$k" "$measured"
   say "${k}x: $((58 * k)) users, ${minutes} min, measured from minute $from"
   on "root@$load" "docker rm -f lt-receiver lt-locust >/dev/null 2>&1 || true
     mkdir -p /lt/out/$name
-    docker run -d --name lt-receiver --network lt -v /lt:/lt python:3.12-slim \
+    docker run -d --name lt-receiver -p $(st field load pip):9300:9300 -v /lt:/lt python:3.12-slim \
       python3 /lt/perf/receiver.py --port 9300 --out /lt/out/$name/webhooks.csv >/dev/null"
   on "deploy@$ip" "mkdir -p /tmp/lt-$name && nohup bash /tmp/sample.sh /tmp/lt-$name/stats.csv >/dev/null 2>&1 & echo \$! > /tmp/sample.pid"
-  on "root@$load" "docker run --rm --name lt-locust --network host -v /lt:/lt -w /lt \
-      -e LT_DATA=/lt/data.json -e LT_OUT=/lt/out/$name -e LT_MULT=$k \
+  # detached on the load server: a dropped connection or a sleeping laptop does not stop the run;
+  # this side waits for it, reconnecting as often as it needs to
+  on "root@$load" "docker run -d --name lt-locust --network host -v /lt:/lt -w /lt \
+      -e LT_DATA=/lt/data.json -e LT_OUT=/lt/out/$name -e LT_MULT=$k -e LT_TLS_VERIFY=0 \
       python:3.12-slim sh -c 'pip install -q locust pillow requests >/dev/null 2>&1 &&
         locust -f /lt/perf/loadtest.py --headless --host https://$host \
-          -u $((58 * k)) -r 0.3 --run-time ${minutes}m --only-summary > /lt/out/$name/locust.log 2>&1'" \
-    || say "the load script ended with an error (results still collected)"
+          -u $((58 * k)) -r 0.3 --run-time ${minutes}m --only-summary > /lt/out/$name/locust.log 2>&1'" >/dev/null
+  until on "root@$load" 'docker wait lt-locust >/dev/null 2>&1; ! docker ps -q --filter name=lt-locust | grep -q .' 2>/dev/null; do
+    sleep 30
+  done
+  on "root@$load" 'docker rm lt-locust >/dev/null 2>&1 || true'
   sleep 60                                         # the last files' checks and PDFs
   on "deploy@$ip" 'kill "$(cat /tmp/sample.pid)" 2>/dev/null; true'
   local out="$RUN_DIR/$name"; mkdir -p "$out"
@@ -280,13 +305,11 @@ run_one() {   # run_one <dir name> <k> <measured minutes> [fresh]: one run of th
   on "deploy@$ip" "cat /tmp/lt-$name/stats.csv" > "$out/stats.csv" || true
   on "deploy@$ip" "cat /tmp/lt-$name/host.csv" > "$out/host.csv" || true
   # the server's own records, as perf/local/run.sh takes them (SQL through stdin: no size limit)
-  local ids bids
-  ids=$(cut -d, -f2 "$out/uploads.csv" 2>/dev/null | sed "s/.*/'&'/" | paste -sd, -)
-  bids=$(awk -F, '$3=="submitted"{print "'\''"$2"'\''"}' "$out/inspections.csv" 2>/dev/null | paste -sd, -)
-  [[ -n "$ids" ]] && echo "select id, extract(epoch from verified_at), status from media_mediaasset where id in ($ids)" \
-    | on "deploy@$ip" 'docker exec -i vayu-postgres-1 psql -U vayu -d vayu -At -F,' > "$out/verified.csv"
-  [[ -n "$bids" ]] && echo "select id, stage from bookings_booking where id in ($bids)" \
-    | on "deploy@$ip" 'docker exec -i vayu-postgres-1 psql -U vayu -d vayu -At -F,' > "$out/stages.csv"
+  # (through the app, so it works with a managed database too; IDs through stdin)
+  cut -d, -f2 "$out/uploads.csv" 2>/dev/null \
+    | on "deploy@$ip" "$RC c exec -T api python manage.py loadtest_records files" > "$out/verified.csv" || true
+  awk -F, '$3=="submitted"{print $2}' "$out/inspections.csv" 2>/dev/null \
+    | on "deploy@$ip" "$RC c exec -T api python manage.py loadtest_records stages" > "$out/stages.csv" || true
   on "deploy@$ip" 'docker inspect --format "{{.Name}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}" $(docker ps -aq)' > "$out/server-containers.txt" || true
   on "deploy@$ip" 'journalctl -k --no-pager | grep -i "out of memory\|killed process" || true' > "$out/server-oom.txt" || true
   local mem=2048 cpus=2
@@ -332,23 +355,18 @@ cmd_run() {
   [[ -n "$(st field db id)" ]] && stamp="$stamp-manageddb"
   RUN_DIR="$RESULTS/$stamp"; mkdir -p "$RUN_DIR"
 
-  say "the load server: waiting for Docker, then perf/ from $SRC, receiver behind https"
+  say "the load server: waiting for Docker, then perf/ from $SRC"
   [[ -f "$SRC/perf/loadtest.py" && -f "$SRC/perf/receiver.py" && -f "$SRC/perf/report.py" ]] \
     || die "no perf/loadtest.py, receiver.py and report.py in $SRC (LT_SRC)"
   until on "root@$load" 'docker info >/dev/null 2>&1'; do sleep 10; done
   tar -C "$SRC" -czf - perf | on "root@$load" 'rm -rf /lt/perf && tar -C /lt -xzf -'
   on "deploy@$ip" 'cat > /tmp/sample.sh' < "$SRC/perf/local/sample.sh"
-  on "root@$load" "docker rm -f lt-caddy >/dev/null 2>&1 || true
-    docker network create lt >/dev/null 2>&1 || true
-    printf 'hooks.$load.sslip.io {\n  reverse_proxy lt-receiver:9300\n}\n' > /lt/Caddyfile
-    docker run -d --name lt-caddy --network lt -p 80:80 -p 443:443 -v /lt/Caddyfile:/etc/caddy/Caddyfile caddy:2-alpine >/dev/null"
-
   if [[ "$plan" == lowcost ]]; then
-    run_one lowcost 1 60       # the data prepare made: 50 experts, 5 Ops, its leads
+    run_one lowcost 1 60
   else
     local last=""
     for k in "${CAP_STEPS[@]}"; do
-      run_one "step-${k}x" "$k" 15 fresh; last=$k
+      run_one "step-${k}x" "$k" 15; last=$k
       stop_reason "$RUN_DIR/step-${k}x" && continue
       say "the climb stops at ${k}x: $(stop_reason "$RUN_DIR/step-${k}x" -v)"; break
     done
@@ -361,10 +379,10 @@ cmd_run() {
       local k=${pdf_break%x}
       say "PDFs broke first (at ${k}x): the same step with 2 PDFs at a time"
       on "deploy@$ip" "cd /srv/vayu && sed -i 's/^PDF_CONCURRENCY=.*/PDF_CONCURRENCY=2/' .env.staging &&
-        source infra/lib.sh && VAYU_TAG=\$(cat .deployed) compose up -d --no-build pdf-worker >/dev/null"
-      run_one "step-${k}x-pdf2" "$k" 15 fresh
+        $RC c up -d --no-build pdf-worker >/dev/null"
+      run_one "step-${k}x-pdf2" "$k" 15
       on "deploy@$ip" "cd /srv/vayu && sed -i 's/^PDF_CONCURRENCY=.*/PDF_CONCURRENCY=1/' .env.staging &&
-        source infra/lib.sh && VAYU_TAG=\$(cat .deployed) compose up -d --no-build pdf-worker >/dev/null"
+        $RC c up -d --no-build pdf-worker >/dev/null"
       python3 "$SRC/perf/summary.py" "$RUN_DIR" > "$RUN_DIR/SUMMARY.md" || true
     fi
     : "${last:?}"
@@ -379,7 +397,7 @@ cmd_down() {
   local ip; ip=$(ip_of sut)
   if [[ -n "$ip" ]]; then
     say "deleting the test bookings' files from the staging bucket (by their keys only)"
-    if ! on "deploy@$ip" 'cd /srv/vayu && source infra/lib.sh && VAYU_TAG=$(cat .deployed) compose exec -T api python manage.py loadtest_cleanup'; then
+    if ! on "deploy@$ip" "$RC c exec -T api python manage.py loadtest_cleanup"; then
       # destroying the server now would lose the only list of which files are the test's
       [[ "${1:-}" == force || "${2:-}" == force ]] || die "the clean-up failed: run 'down' again (or 'down force' to destroy anyway and leave the test files in the bucket)"
       say "forced: the test's files stay in the staging bucket"
@@ -410,7 +428,18 @@ cmd_status() {
   echo "Spent so far: \$$(spent_now) of \$$CAP"
 }
 
+# The whole-test commands run for hours from the laptop. If anything fails on the way, clean up
+# and destroy everything, so nothing keeps billing (LT_KEEP=1 keeps the servers to look at).
+on_failure_destroy() {
+  # shellcheck disable=SC2154  # rc is set inside the trap
+  trap 'rc=$?; if (( rc != 0 )) && [[ -z "${LT_KEEP:-}" ]]; then
+          echo "== failed (exit $rc): cleaning up and destroying, so nothing keeps billing" >&2
+          cmd_down all force || echo "== DESTROY FAILED: run perf/cloud.sh status, then down all force" >&2
+        fi' EXIT
+}
+
 cmd_lowcost() {
+  on_failure_destroy
   for size in small mid base; do
     cmd_up "$size"; cmd_prepare lowcost; cmd_run lowcost; cmd_down
   done
@@ -418,12 +447,19 @@ cmd_lowcost() {
 }
 
 cmd_dbcheck() {   # run D: the cheapest passing size, against a temporary managed database
+  on_failure_destroy
   cmd_up "${1:-}" managed; cmd_prepare lowcost; cmd_run lowcost; cmd_down all
 }
 
 cmd_capacity() {
+  on_failure_destroy
   cmd_up "${1:-}"; cmd_prepare capacity; cmd_run capacity; cmd_down all
 }
+
+# the long commands keep the Mac awake (caffeinate) for as long as they run
+if [[ "${1:-}" =~ ^(lowcost|capacity|dbcheck|run)$ && -z "${LT_AWAKE:-}" ]] && command -v caffeinate >/dev/null; then
+  LT_AWAKE=1 exec caffeinate -i "$0" "$@"
+fi
 
 case "${1:-}" in
   up) cmd_up "${2:-}" "${3:-}" ;;

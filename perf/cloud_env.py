@@ -15,8 +15,10 @@ import secrets
 import sys
 
 host, name, extra = sys.argv[1], sys.argv[2], sys.argv[3:]
-if not re.fullmatch(r"[a-z0-9.-]+\.sslip\.io", host) or not name.startswith("lt-"):
-    sys.exit("cloud_env: host must be *.sslip.io and the name lt-*")
+# the test server is addressed by its IP: Caddy then makes its own certificate (no public CA, no
+# DNS; the load script skips the certificate check), and the TLS work on the server is the same
+if not re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", host) or not name.startswith("lt-"):
+    sys.exit("cloud_env: host must be an IPv4 address and the name lt-*")
 
 env: dict[str, str] = {}
 for line in sys.stdin.read().splitlines():

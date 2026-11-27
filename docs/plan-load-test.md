@@ -102,16 +102,22 @@ queues, and the storage an inspection takes in R2 (with what 90 days of it cost)
    staging's data): the test server (`lt-sut-<size>`) and a 4 vCPU / 8 GB load server in Bangalore
    (`lt-load`; uploads from a laptop would measure the office internet). Named `lt-*` and tagged
    `vayu-loadtest`: the account also holds other projects' servers, and the script touches nothing
-   else. Not tagged `vayu-web` (the alerts follow that tag); the firewall is added by droplet ID.
-   Addresses `lt.<ip>.sslip.io` and `hooks.<ip>.sslip.io` (no DNS step; https works).
+   else. Not tagged `vayu-web` (the alerts follow that tag); the test server gets the firewall by
+   droplet ID. The test server is addressed by its **IP**: Caddy makes its own certificate (the
+   TLS work is the same; no public CA and no DNS step: `*.sslip.io` is not on the Public Suffix
+   List, so Let's Encrypt's shared weekly limit for it is often used up). Webhooks go to the
+   receiver on the load server over the **private network** (plain http, allowed only by the
+   load-test settings, `perf/cloud-compose.yml`); the receiver listens on the private address only.
 2. **Settings**: an allowlist of staging's (the bucket and its key, the Firebase key, the content
    rules), copied server to server (`perf/cloud_env.py`, never stored on the laptop), with the
    test's changes: its own address, Sentry off, a fresh database, no backups, no heartbeats, never
    fetched from Phase. The droplet's address is checked against its ID before any secret goes.
+   It runs **the commit staging runs** (its images are built and known to start).
 3. **Data** (`manage.py loadtest_prepare --test-form`): the test form, 3 months of history
    (≈18k bookings, ≈9k inspections, ≈1M file records, reports, webhook log), one login per
    simulated person, an API key, the 20 webhooks to the receiver, today's leads.
-4. **The run** (`perf/loadtest.py`): everyone signs in at the real limit (20 a minute) before the
+4. **The run** (`perf/loadtest.py`, detached on the load server: a dropped connection or a
+   sleeping laptop does not stop it; the laptop reconnects and waits): everyone signs in at the real limit (20 a minute) before the
    clock; phones make the app's exact calls and send real-size files straight to R2; a 401 that a
    token renewal fixes counts as normal, as in the app. The receiver (`perf/receiver.py`, behind
    https) times every webhook; the sampler (`perf/local/sample.sh`) records the server.
@@ -120,7 +126,12 @@ queues, and the storage an inspection takes in R2 (with what 90 days of it cost)
    the highest step where everything held, and where each check first broke.
 6. **Clean-up** (`manage.py loadtest_cleanup`): every file of the LT- bookings deleted from the
    staging bucket by its key, then checked gone; the servers are destroyed only after that (or
-   with `down force`).
+   with `down force`). **If a whole-test command fails on the way, it cleans up and destroys
+   everything by itself** (`LT_KEEP=1` keeps the servers to look at).
+
+**Who starts it, from where.** The owner's Mac (or Claude on it): one command, e.g.
+`perf/cloud.sh lowcost`. It needs `doctl` signed in, the owner's SSH key, staging running, and the
+Mac awake and online for the whole test (the script keeps it awake with `caffeinate`; plug it in).
 
 **Time and money.** Per size about 2½ hours for test 1 (setup and history ~30 min, the run ~2 h);
 test 2 about 9 hours on one size. Spend is checked before every step that creates or runs
@@ -135,7 +146,8 @@ anything, **cap $5** (`LT_CAP`); test 1 on all three sizes ≈ $0.80, test 2 ≈
 | `perf/receiver.py` | the webhook receiver (times every delivery) |
 | `perf/report.py`, `perf/summary.py` | the results and the verdict; the capacity steps side by side |
 | `perf/local/` | the local run on the Mac (`run.sh`, `stack.sh`, `sample.sh`, `watch.py`) |
-| `manage.py loadtest_prepare`, `loadtest_cleanup` | the test data, and the clean-up (test servers only) |
+| `manage.py loadtest_prepare`, `loadtest_cleanup`, `loadtest_records` | the test data; the clean-up; a run's file checks and stages read through the app (test servers only) |
+| `perf/cloud-compose.yml` | the load-test settings on a throwaway (webhooks over the private network) |
 
 ## 8. Estimates (replaced by the measured numbers)
 
