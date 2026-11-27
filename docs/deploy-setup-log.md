@@ -232,7 +232,7 @@ new-SSH-key behaviour above; `up` now handles it.
 **Staging from GitHub (2026-11-27)** ⏳: Actions → **staging** → up / down / status
 (`.github/workflows/staging.yml`, runs `infra/staging.sh`). One-time setup:
 1. DigitalOcean → API → **Generate New Token** `vayu-staging-github`, **Custom Scopes** only:
-   droplet (create, read, update, delete), snapshot (read, delete), image (read), domain (read,
+   droplet (create, read, update, delete), snapshot (read, delete), image (create, read), domain (read,
    update), ssh_key (read), tag (create, read), actions (read), regions (read), sizes (read).
    Saved in Phase `vayu-owner` → `DO_API_TOKEN_STAGING` and as GitHub secret `DO_API_TOKEN_STAGING`
    (environment `staging`).

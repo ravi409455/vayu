@@ -86,14 +86,17 @@ case "${1:-}" in
     echo "== pointing $HOST at the off marker $OFF_IP"
     dns_set "$OFF_IP"
     sleep 70
+    back_on() {   # a failed down leaves staging as it was: on, with its name
+      doctl compute droplet-action power-on "$id" --wait >/dev/null || true
+      dns_set "$(awk '{print $3}' <<<"$found")"
+      die "$1; staging was NOT deleted: it is back on, with its name"
+    }
     echo "== powering off (a clean snapshot)"
-    doctl compute droplet-action power-off "$id" --wait >/dev/null
+    doctl compute droplet-action power-off "$id" --wait >/dev/null || back_on "power-off failed"
     echo "== snapshot $snap (a few minutes)"
-    doctl compute droplet-action snapshot "$id" --snapshot-name "$snap" --wait >/dev/null
-    if ! snapshots | awk '{print $2}' | grep -qx "$snap"; then
-      dns_set "$(awk '{print $3}' <<<"$found")"     # the droplet stays: give it its name back
-      die "snapshot $snap not found; droplet NOT deleted (it is powered off: power it on in the dashboard)"
-    fi
+    doctl compute droplet-action snapshot "$id" --snapshot-name "$snap" --wait >/dev/null \
+      || back_on "the snapshot failed (DigitalOcean token: needs image:create)"
+    snapshots | awk '{print $2}' | grep -qx "$snap" || back_on "snapshot $snap not found"
     echo "== deleting the droplet"
     doctl compute droplet delete "$id" --force
     # keep the newest $KEEP snapshots
