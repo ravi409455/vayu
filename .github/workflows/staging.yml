@@ -41,15 +41,21 @@ jobs:
           ACTION: ${{ inputs.action }}
           GH_TOKEN: ${{ github.token }}
           STAGING_HOST_KEY: ${{ secrets.STAGING_HOST_KEY }}
+        # the script's own exit code decides the run's colour (not tee's): a failed up/down is red
+        shell: bash
         run: |
+          set +e
           case "$ACTION" in
             up)     infra/staging.sh up ;;
             down)   infra/staging.sh down --yes ;;
             status) infra/staging.sh status ;;
+            *)      echo "unknown action $ACTION"; false ;;
           esac 2>&1 | tee out.txt
+          rc=${PIPESTATUS[0]}
           {
-            echo "### Staging $ACTION"
+            if [ "$rc" -eq 0 ]; then echo "### ✓ Staging $ACTION"; else echo "### ✗ Staging $ACTION failed (exit $rc)"; fi
             echo '```'
             tail -15 out.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
