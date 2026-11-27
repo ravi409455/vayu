@@ -1,5 +1,6 @@
 package `in`.carcid.vayu.core.alerts
 
+import `in`.carcid.vayu.Notices
 import `in`.carcid.vayu.core.api.Api
 import `in`.carcid.vayu.core.api.ApiError
 import `in`.carcid.vayu.core.api.FakeServer
@@ -42,8 +43,9 @@ class AlertsTest {
             j("11", "12:00", mine = false), j("12", "12:00", draft = "d"), j("13", ""), j("14", "15:00", stage = "completed")), now, zone)
         assertEquals(listOf("8"), got.map { it.jobId })
         assertEquals(Instant.parse("2026-11-24T04:30:00Z"), got[0].at)
-        assertEquals("In 1 hour: DEMO-8 at 11:00", got[0].title)
-        assertEquals("Farhan Ali · MG Road", got[0].body)
+        assertEquals("In 1 hour · 11:00\u00a0am", got[0].title)
+        assertEquals("PDI · DEMO-8\nFarhan Ali · MG Road", got[0].body)
+        assertEquals("In 1 hour · 11:00\u00a0am", Notices.lockTitle(got[0].title))   // the time stays on the lock screen
     }
 
     @Test fun remindersUseIndiaTimeWhateverZoneThePhoneIsIn() {

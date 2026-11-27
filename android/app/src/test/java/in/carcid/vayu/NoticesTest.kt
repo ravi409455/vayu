@@ -20,12 +20,39 @@ class NoticesTest {
     /** F-075: the lock screen shows that a notice came, never the customer's name or address. */
     @Test fun aNoticeIsPrivateOnTheLockScreen() {
         shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
-        Notices.show(app, "remind-1", "In 1 hour: DEMO-8 at 11:00", "Farhan Ali · MG Road", "b1")
+        Notices.show(app, "push-1", "Inspection started · DEMO-8", "Test Expert · Farhan Ali\nMG Road", "b1")
         val n = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.single()
         assertEquals(Notification.VISIBILITY_PRIVATE, n.visibility)
         val public = n.publicVersion!!.extras
         val shown = "${public.getCharSequence(Notification.EXTRA_TITLE)} ${public.getCharSequence(Notification.EXTRA_TEXT)}"
         assertFalse(shown, shown.contains("Farhan") || shown.contains("MG Road") || shown.contains("DEMO-8"))
+        assertEquals("Inspection started", public.getCharSequence(Notification.EXTRA_TITLE))
+    }
+
+    /** The lock screen keeps what and when; only the booking ID goes. */
+    @Test fun theLockScreenKeepsWhatAndWhen() {
+        assertEquals("New lead · Wed 14 Oct, 3:30 pm", Notices.lockTitle("New lead · Wed 14 Oct, 3:30 pm"))
+        assertEquals("In 1 hour · 11:00 am", Notices.lockTitle("In 1 hour · 11:00 am"))
+        assertEquals("Report didn't build", Notices.lockTitle("Report didn't build · TST-1013"))
+        assertEquals("Vayu", Notices.lockTitle("Vayu"))
+        assertEquals("In 1 hour · 11:00\u00a0am", Notices.lockTitle("In 1 hour · 11:00\u00a0am"))
+    }
+
+    /** CarCID red with a car; a lead gets Directions, Call and Open; a problem is red with "Open booking". */
+    @Test fun aLeadHasBrandAndButtonsAProblemIsRed() {
+        shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        val lead = `in`.carcid.vayu.core.sync.Job("b1", "DEMO-8", "assigned", "Farhan Ali", "+91 98765 00111", "12 MG Road", "Pune",
+            "Swift VXi", "PDI", "2026-11-24", "11:00", assignedToMe = true, myDraft = null, versions = emptyMap())
+        Notices.show(app, "push-2", "New lead · Tue 24 Nov, 11:00 am", "PDI · Swift VXi · DEMO-8\nFarhan Ali · 12 MG Road", "b1", lead = lead)
+        Notices.show(app, "push-3", "Report didn't build · DEMO-8", "Farhan Ali · PDI", "b1", problem = true)
+        val all = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications
+        val n = all.first { it.extras.getCharSequence(Notification.EXTRA_TITLE)!!.startsWith("New lead") }
+        assertEquals(app.getColor(R.color.brand), n.color)
+        assertEquals(listOf("Directions", "Call", "Open"), n.actions.map { it.title.toString() })
+        assertEquals("PDI · Swift VXi · DEMO-8", n.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+        val p = all.first { it.extras.getCharSequence(Notification.EXTRA_TITLE)!!.startsWith("Report") }
+        assertEquals(app.getColor(R.color.notice_problem), p.color)
+        assertEquals(listOf("Open booking"), p.actions.map { it.title.toString() })
     }
 
     /** F-077: after sign-out no reminders (customer and address) or stuck-photo marks stay behind. */
@@ -45,7 +72,7 @@ class NoticesTest {
     @Test fun aReminderAlarmShowsOnlyForItsOwner() {
         shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         val intent = android.content.Intent(app, ReminderReceiver::class.java).putExtra("job", "b1").putExtra("user", 999)
-            .putExtra("title", "In 1 hour: DEMO-8 at 11:00").putExtra("body", "x")
+            .putExtra("title", "In 1 hour · 11:00 am").putExtra("body", "x")
         ReminderReceiver().onReceive(app, intent)                 // nobody signed in as 999
         assertEquals(0, shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.size)
     }

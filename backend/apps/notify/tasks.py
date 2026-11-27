@@ -64,7 +64,7 @@ def late_starts() -> int:
         if booked is None or now <= booked + grace:
             continue
         mins = round((now - booked).total_seconds() / 60)
-        to_ops(b, "late", f"{b.booking_id} not started",
+        to_ops(b, "late", f"Not started · {b.booking_id}",
                f"{mins} min past {_when(None, b.answers.get('inspection_time'))}")
         count += 1
     return count

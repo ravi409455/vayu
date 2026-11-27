@@ -36,7 +36,7 @@ def test_expert_hears_assigned_moved_changed_and_cancelled(env, booking):
     got = bell(env.expert)
     assert got["unread"] == len(got["results"])
     t = [n["title"] for n in got["results"]]
-    assert t[-1] == "New lead: SA37926" and "SA37926 details changed" in t
+    assert t[-1] == "New lead · Wed 14 Oct, 3:30 pm" and "Lead details changed · SA37926" in t
     changed = next(n for n in got["results"] if n["kind"] == "changed")
     assert changed["body"] == "Address: 12 MG Road → Aundh" and changed["booking"] == b
     assert titles(env.ops) == []                       # Ops don't hear about their own edits
@@ -46,12 +46,12 @@ def test_reassigned_away_and_cancelled(env, booking):
     other = env.make_user(Role.EXPERT)
     assign(env, booking)
     assign(env, booking, other)
-    assert "SA37926 moved to another expert" in titles(env.expert)
+    assert "Lead moved to another expert · SA37926" in titles(env.expert)
     Notification.objects.all().delete()
     with mock.patch("apps.bookings.services.active_item", return_value=True):
         assert env.ops.post(f"/api/v1/bookings/{booking['id']}/cancel", {"reason": "x"},
                             format="json").status_code == 200
-    assert [n.title for n in Notification.objects.filter(user=other)] == ["SA37926 cancelled"]
+    assert [n.title for n in Notification.objects.filter(user=other)] == ["Lead cancelled · SA37926"]
     from apps.notify import handlers
     assert handlers._reason(None) == "" and handlers._reason("zz") == "zz"
     assert handlers._when("x", "y") == "x y" and handlers._when("2026-10-14", "") == "Wed 14 Oct"
@@ -64,7 +64,7 @@ def test_rescheduled_shows_old_and_new_time(env, booking):
                          {"date": "2026-10-16", "time": "10:00", "reason": "x"}, format="json")
     assert r.status_code == 200, r.json()
     n = Notification.objects.get(user=env.expert_user, kind="rescheduled")
-    assert (n.title, n.body) == ("SA37926 moved", "Wed 14 Oct, 3:30 pm → Fri 16 Oct, 10:00 am")
+    assert (n.title, n.body) == ("Lead time changed · SA37926", "Wed 14 Oct, 3:30 pm → Fri 16 Oct, 10:00 am")
 
 
 def test_ops_hear_progress_and_can_mute_all_but_problems(ienv, booking):
@@ -74,12 +74,12 @@ def test_ops_hear_progress_and_can_mute_all_but_problems(ienv, booking):
     assign(ienv, booking)
     assert start(ienv.expert, booking).status_code in (200, 201)
     assert submit(ienv.expert, booking).status_code == 200
-    assert {"SA37926 started", "SA37926 submitted"} <= set(titles(ienv.ops))
+    assert {"Inspection started · SA37926", "Inspection submitted · SA37926"} <= set(titles(ienv.ops))
     assert not Notification.objects.filter(user=muted).exists()
     from apps.core import events
     events.emit("alert.pdf_failed", booking=booking["id"], reason="x")
     assert [n.title for n in Notification.objects.filter(user=muted)] == [
-        "Report failed for SA37926"]
+        "Report didn't build · SA37926"]
 
 
 def test_new_booking_only_when_it_came_from_the_api(env):
@@ -88,7 +88,7 @@ def test_new_booking_only_when_it_came_from_the_api(env):
     assert create(env.ops).status_code == 201
     assert titles(env.ops) == []
     services.create(service_user(), {**BASE, "booking_id": "ERP-1"})
-    assert titles(env.ops) == ["New booking ERP-1"]
+    assert titles(env.ops) == ["New booking · Wed 14 Oct, 3:30 pm"]
 
 
 def test_read_some_or_all(env, booking):
@@ -203,7 +203,7 @@ def test_late_start_once_per_job_using_the_settings_limit(env, booking):
     assert tasks.late_starts() == 1
     assert tasks.late_starts() == 0                   # once per job
     n = Notification.objects.get(kind="late", user=env.ops_user)
-    assert n.title == "SA37926 not started"
+    assert n.title == "Not started · SA37926"
     assert n.body.endswith(booked.strftime("%-I:%M ") + ("am" if booked.hour < 12 else "pm"))
     old = Notification.objects.create(user=env.ops_user, kind="x", title="old")
     Notification.objects.filter(pk=old.pk).update(created_at=now - timedelta(days=31))
@@ -294,20 +294,31 @@ def test_nobody_hears_about_their_own_action_or_internal_marks(ienv, booking):
 def test_an_expert_set_at_creation_hears_new_job(env):
     r = create(env.ops, booking_id="NEW-1", assigned_expert=env.expert_user.id)
     assert r.status_code == 201, r.json()
-    assert titles(env.expert) == ["New lead: NEW-1"]
+    assert titles(env.expert) == ["New lead · Wed 14 Oct, 3:30 pm"]
 
 
 def test_the_same_problem_is_told_once_a_day(env, booking):
     from apps.core import events
     for _ in range(10):                               # ten stuck photos on one job
         events.emit("alert.stuck_upload", booking=booking["id"], media="m", field_key="f")
-    assert titles(env.ops) == ["Photos stuck for SA37926"]
+    assert titles(env.ops) == ["Photos stuck · SA37926"]
     Notification.objects.update(created_at=timezone.now() - timedelta(hours=25))
     events.emit("alert.stuck_upload", booking=booking["id"], media="m", field_key="f")
     assert len(titles(env.ops)) == 2                  # still stuck a day later: told again
     for _ in range(5):                                # a burst of the same conflict: told once
         events.emit("alert.conflict", booking=booking["id"])
-    assert titles(env.ops).count("Two experts inspected SA37926") == 1
+    assert titles(env.ops).count("Two experts inspected · SA37926") == 1
     Notification.objects.update(created_at=timezone.now() - timedelta(minutes=11))
     events.emit("alert.conflict", booking=booking["id"])   # a new conflict later: told again
-    assert titles(env.ops).count("Two experts inspected SA37926") == 2
+    assert titles(env.ops).count("Two experts inspected · SA37926") == 2
+
+
+def test_a_new_lead_reads_what_then_who_and_where(env):
+    """Title: kind and time only (the lock screen shows it). Body: what, then who and where."""
+    r = create(env.ops, booking_id="NEW-2", assigned_expert=env.expert_user.id)
+    assert r.status_code == 201, r.json()
+    n = bell(env.expert)["results"][0]
+    assert n["title"] == "New lead · Wed 14 Oct, 3:30 pm"
+    what, where = n["body"].split("\n")
+    assert what.endswith("NEW-2") and r.json()["answers"]["customer_name"] in where
+    assert "12 MG Road" in where
