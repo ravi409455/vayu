@@ -20,7 +20,7 @@ the place this plan names (the server's env file or a GitHub secret).
 
 | Topic | Decision |
 |---|---|
-| Hosting | DigitalOcean, Bangalore (BLR1). Both 2 vCPU / 4 GB ($24). Production is always on and moves to 4 vCPU / 8 GB only if the load test or alerts say so (one click, about a minute down). |
+| Hosting | DigitalOcean, Bangalore (BLR1). Production 2 vCPU / 4 GB ($24); staging 2 vCPU / 2 GB ($18, never bigger: owner, 2026-11-28). Production is always on and moves to 4 vCPU / 8 GB only if the load test or alerts say so (one click, about a minute down). |
 | Staging | **On demand** (decided 2026-11-26): a switched-off droplet is still billed, so staging lives as a snapshot and is only created while testing, about once a month (`infra/staging.sh up` / `down`). Its name is served by DigitalOcean's DNS so the script points it itself; while off it points to the marker 192.0.2.1 and merges skip staging and production (2026-11-27). |
 | Database | Production: DigitalOcean **Managed Postgres** (restore to any minute of the last 7 days) plus our own nightly dump to R2. Staging: Postgres in Docker, nightly dump. |
 | Files | Cloudflare R2 (already set up): one bucket per server, plus a new backups bucket. |
@@ -210,7 +210,7 @@ Slack → **+** next to Channels → Create channel → name `vayu-alerts` → C
 3. Top right **Create → Droplets**:
    - Region: **Bangalore (BLR1)**.
    - Image: **Ubuntu 24.04 (LTS) x64**.
-   - Size: **Basic → Regular → 2 vCPU / 4 GB** ($24 a month if left on; billed by the hour).
+   - Size: **Basic → Regular → 2 vCPU / 2 GB** ($18 a month if left on; billed by the hour; never bigger).
    - Tick **Monitoring** (free). Leave **Backups off**: staging's backup is its snapshot.
    - Authentication: **SSH Key** → tick `owner-mac`. Never choose Password.
    - Hostname: `vayu-staging`. Tags: `vayu-staging` and `vayu-web`.
