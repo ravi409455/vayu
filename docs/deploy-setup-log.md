@@ -229,7 +229,7 @@ First real cycle (2026-11-27): `down` (marker → snapshot `vayu-staging-2026112
 `up` (new IP `159.89.168.78`, name pointed, newest main `d64a196` deployed, health ok). It showed the
 new-SSH-key behaviour above; `up` now handles it.
 
-**Staging from GitHub (2026-11-27)** ⏳: Actions → **staging** → up / down / status
+**Staging from GitHub (2026-11-27)** ✅: Actions → **staging** → up / down / status
 (`.github/workflows/staging.yml`, runs `infra/staging.sh`). One-time setup:
 1. DigitalOcean → API → **Generate New Token** `vayu-staging-github`, **Custom Scopes** only:
    droplet (create, read, update, delete), snapshot (read, delete), image (create, read), domain (read,
@@ -240,6 +240,10 @@ new-SSH-key behaviour above; `up` now handles it.
    `staging`) and Phase `vayu-owner` → `STAGING_HOST_KEY`; public half in `SSH_KNOWN_HOSTS`.
    A server made from a snapshot would otherwise get new keys on its first boot; `up` hands it this
    one (cloud-init user data) and refuses to deploy if the server shows another.
+3. Tried 2026-11-27: `status` ok; `down` failed at the snapshot (the first token lacked
+   image:create; a second token has it; the down was finished from the Mac); `up` made staging from
+   `vayu-staging-20261127-1718` at `64.227.191.1`, it showed staging's fixed key, and the deploy it
+   started put `948a9f3` on staging (health ok; production waited for Approve).
 
 ### 2.4a · R2 buckets and CORS ✅
 dash.cloudflare.com → R2 Object Storage. All buckets **private** (no public access, no custom domain):
