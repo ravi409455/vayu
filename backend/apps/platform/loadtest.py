@@ -75,25 +75,39 @@ def make_test_form(admin: User) -> str:
 
 def cleanup() -> dict[str, int]:
     """Delete from the bucket every file the load-test bookings point at (their files, previews,
-    copies and PDFs; the history's copies share the original's keys, so each key once), then
-    check nothing is left in those bookings' folders. Only keys of LT- bookings are touched."""
+    copies and PDFs), then check nothing is left in those bookings' folders. Only keys of LT-
+    bookings are touched. Fast on a 3-month history (about a million file rows): rows are read as
+    plain values, print copies are counted only for original uploads (a history copy points at
+    the original's keys and has no print copies of its own), and deletes go 1,000 per request."""
     from apps.bookings.models import Booking
     from apps.media import storage
     from apps.media.models import MediaAsset
-    from apps.media.services import asset_keys
     from apps.reports.models import Report
+    from apps.reports.render import print_keys
 
     check_test_server()
-    ids = Booking.objects.filter(booking_id__startswith=PREFIX).values_list("id", flat=True)
+    ids = set(Booking.objects.filter(booking_id__startswith=PREFIX).values_list("id", flat=True))
     keys: set[str] = set()
-    for a in MediaAsset.objects.filter(booking_id__in=ids):
-        keys.update(k for k in asset_keys(a) if k)
+    real: set = set()                                             # bookings with their own uploads
+    rows = MediaAsset.objects.filter(booking_id__in=ids).values_list(
+        "id", "booking_id", "key", "preview_key", "jpeg_key").iterator(chunk_size=5000)
+    for aid, bid, key, preview, jpeg in rows:
+        keys.update(k for k in (key, preview, jpeg) if k)
+        if key and key.startswith(f"bookings/{bid}/"):            # an original upload
+            keys.update(print_keys(aid))
+            real.add(bid)
     keys.update(Report.objects.filter(booking_id__in=ids).exclude(key="")
                 .values_list("key", flat=True))
-    for key in sorted(keys):
-        storage.delete(key)
-    folders = {"/".join(k.split("/")[:2]) + "/" for k in keys if k.startswith("bookings/")}
     client = storage.client()
+    for bid in real:                     # every PDF version of a run's booking (Regenerate)
+        for page in client.get_paginator("list_objects_v2").paginate(
+                Bucket=settings.S3_BUCKET, Prefix=f"reports/{bid}/"):
+            keys.update(o["Key"] for o in page.get("Contents", []))
+    ordered = sorted(keys)
+    for i in range(0, len(ordered), 1000):
+        client.delete_objects(Bucket=settings.S3_BUCKET, Delete={
+            "Objects": [{"Key": k} for k in ordered[i:i + 1000]], "Quiet": True})
+    folders = {"/".join(k.split("/")[:2]) + "/" for k in keys if k.startswith("bookings/")}
     left = sum(client.list_objects_v2(Bucket=settings.S3_BUCKET, Prefix=f).get("KeyCount", 0)
                for f in folders)
     return {"bookings": len(ids), "files_deleted": len(keys), "left_in_their_folders": left}
