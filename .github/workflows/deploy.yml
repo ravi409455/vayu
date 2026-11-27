@@ -8,6 +8,11 @@ name: deploy
 # The newest merge always deploys, whatever files it changed. When merges come close together,
 # CI cancels the older run and only the newest deploys; it contains every earlier change.
 # Never runs for pull requests: only after CI on a push to main, or by hand.
+# the title in the Actions list: what this run deploys, or why it deployed nothing
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch' && format('Rollback to {0}', inputs.commit)
+  || github.event.workflow_run.conclusion != 'success' && format('Skipped (CI {0}): {1}', github.event.workflow_run.conclusion, github.event.workflow_run.display_title)
+  || format('Deploy: {0}', github.event.workflow_run.display_title) }}
 on:
   workflow_run:
     workflows: [ci]
@@ -23,6 +28,24 @@ env:
   REGISTRY: ghcr.io/${{ github.repository_owner }}
 
 jobs:
+  # a run with nothing to deploy says why on its page (no machine time beyond a few seconds)
+  skipped:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: say why nothing was deployed
+        env:
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          CI_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          case "$CONCLUSION" in
+            cancelled) why="CI on main was cancelled (a newer merge replaced it; that merge deploys instead, with every change in this one)." ;;
+            failure)   why="CI on main failed, so nothing was built or deployed. Fix it and merge again." ;;
+            *)         why="CI on main ended as \"$CONCLUSION\"." ;;
+          esac
+          echo "### Nothing deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "$why [The CI run]($CI_URL)" >> "$GITHUB_STEP_SUMMARY"
+
   build:
     if: >-
       github.event_name == 'workflow_dispatch' ||
@@ -105,6 +128,21 @@ jobs:
             sentry_token=${{ secrets.SENTRY_AUTH_TOKEN }}
           cache-from: type=gha,scope=web
           cache-to: ${{ github.event_name == 'workflow_run' && 'type=gha,mode=max,scope=web' || '' }}
+      - name: summary
+        env:
+          SHA: ${{ steps.what.outputs.sha }}
+          BUILT: ${{ steps.images.outputs.build }}
+          MODE: ${{ github.event_name == 'workflow_dispatch' && 'Rollback to' || 'Deploy' }}
+        run: |
+          {
+            echo "### $MODE ${SHA::7}: $(git log -1 --format=%s)"
+            echo "| Step | Result |"
+            echo "|---|---|"
+            if [ "$BUILT" = true ]; then echo "| Images | built new: vayu-api, vayu-web :${SHA::7} |"
+            else echo "| Images | reused (built before): vayu-api, vayu-web :${SHA::7} |"; fi
+            echo "| Staging | deploys next, by itself |"
+            echo "| Production | waits for your Approve (the Review deployments button on this page) |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   staging:
     needs: build
@@ -124,13 +162,17 @@ jobs:
           SHA: ${{ needs.build.outputs.sha }}
           # started by hand = a rollback, which may go back to an older commit; a merge never does
           MODE: ${{ github.event_name == 'workflow_dispatch' && 'rollback' || '' }}
+          WHERE: ${{ github.job }}
         run: |
+          case "$WHERE" in staging) url=https://vayu-staging.carcid.in ;; *) url=https://vayu.carcid.in ;; esac
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/key && chmod 600 ~/.ssh/key
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts   # the server's own key: no man in the middle
           ssh -i ~/.ssh/key -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
             "deploy@$SSH_HOST" "$SHA${MODE:+ $MODE}" \
-            || { echo "::error::Deploy failed. Staging is on demand: if it is off, run infra/staging.sh up, then this workflow again."; exit 1; }
+            || { echo "::error::Deploy failed. Staging is on demand: if it is off, run infra/staging.sh up, then this workflow again."
+                 echo "### ✗ $WHERE: deploy of ${SHA::7} failed (see the log of this job)" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+          echo "### ✓ $WHERE: ${SHA::7} is live on $url" >> "$GITHUB_STEP_SUMMARY"
 
   production:
     needs: [build, staging]
