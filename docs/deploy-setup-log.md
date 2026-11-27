@@ -705,8 +705,11 @@ One test error from each, all three arrived labelled **`staging`**:
 | App | `adb shell am crash in.carcid.vayu.staging`, then open the app (it sends on the next start) | `VAYU-ANDROID-1`, release 0.3.0 (12) |
 Found: the earlier staging app on the phone ("photos-top", code 11) had **no DSN built in**, so its
 crashes went nowhere; any app build for testers must be built with `SENTRY_DSN_ANDROID`.
-The Sentry → Slack alert rule (`vayu production errors`) covers production only, so these staging
-tests did not post to Slack by design; check the Slack alert with the first production test error (Phase 7).
+Slack: the Sentry alert "Notify #vayu-alerts via Slack, Notify techxcid@gmail.com" covers all three
+projects and **all environments**, and fires on **a new issue** or **an issue escalating** (30 min
+throttle). Server and web posted to `#vayu-alerts` ✅. The app crash did **not**: it joined
+`VAYU-ANDROID-1`, an issue first seen 3 days earlier from a debug build, so it was neither new nor
+escalating. A crash that repeats an old issue does not alert; only new kinds of errors do.
 ## Phase 7 · Production ⏳
 
 ---
