@@ -21,7 +21,7 @@ the place this plan names (the server's env file or a GitHub secret).
 | Topic | Decision |
 |---|---|
 | Hosting | DigitalOcean, Bangalore (BLR1). Both 2 vCPU / 4 GB ($24). Production is always on and moves to 4 vCPU / 8 GB only if the load test or alerts say so (one click, about a minute down). |
-| Staging | **On demand** (decided 2026-11-26): a switched-off droplet is still billed, so staging lives as a snapshot and is only created while testing, about once a month (`infra/staging.sh up` / `down`). |
+| Staging | **On demand** (decided 2026-11-26): a switched-off droplet is still billed, so staging lives as a snapshot and is only created while testing, about once a month (`infra/staging.sh up` / `down`). Its name is served by DigitalOcean's DNS so the script points it itself; while off it points to the marker 192.0.2.1 and merges skip staging and production (2026-11-27). |
 | Database | Production: DigitalOcean **Managed Postgres** (restore to any minute of the last 7 days) plus our own nightly dump to R2. Staging: Postgres in Docker, nightly dump. |
 | Files | Cloudflare R2 (already set up): one bucket per server, plus a new backups bucket. |
 | Addresses | Production `vayu.carcid.in`. Staging `vayu-staging.carcid.in`. DNS stays at the registrar. |

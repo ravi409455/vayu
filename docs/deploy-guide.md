@@ -538,12 +538,15 @@ docker stats --no-stream          # CPU and memory per service
 
 **Staging on demand** (a switched-off server is still billed; staging lives as a snapshot):
 ```bash
-infra/staging.sh down     # power off → snapshot → delete (type "staging" to confirm)
-infra/staging.sh up       # re-create from the newest snapshot; prints the new IP
-infra/staging.sh status
+infra/staging.sh up       # re-create from the newest snapshot, point vayu-staging.carcid.in at it,
+                          # deploy the newest built main, check health (about 10 minutes)
+infra/staging.sh down     # power off → snapshot → delete (type "staging" to confirm); the name
+                          # then points to the "off" marker 192.0.2.1
+infra/staging.sh status   # droplet, snapshots, where the name points
 ```
-After `up`: GoDaddy A record `vayu-staging` → the new IP (the script waits until DNS shows it), then
-Run workflow with the newest `main` commit.
+No DNS editing by hand: GoDaddy hands just `vayu-staging` to DigitalOcean's DNS (3 NS records), and
+the script changes it. While staging is off, a merge shows "staging is off" (green, not deployed) and
+production waits; `up` brings staging to the newest main by itself. To release: `up`, test, Approve.
 
 **A phone says "your other phone still has work".** One phone per person: sync the old phone, or an
 Admin signs it out (web → Users → ⋯ → **Sign out of every device**).
@@ -658,7 +661,8 @@ the signing key's offline copies (step 13).
 | Deploy: "error: missing in Phase: X" | X not in that environment, or not **Deployed** in Phase | add it (B2), Deploy, Run workflow again |
 | "X has a line break or a '" | a value with a line break inside | fix the value in Phase |
 | "could not fetch from Phase" | the server's token is wrong or expired, or Phase is down | check `/srv/vayu/.phase`; the last good settings stay meanwhile |
-| Staging deploy fails at SSH | staging is switched off | `infra/staging.sh up`, DNS, Run workflow |
+| Deploy says "staging is off" | staging is on demand and switched off (on purpose) | `infra/staging.sh up` (it deploys the newest main) |
+| Staging deploy fails at SSH (red) | staging is on but not answering | `infra/staging.sh status`; the droplet's console in DigitalOcean |
 | A run waits forever on production | it needs Approve | Approve (release) or Cancel (no production yet) |
 | A merge did not reach staging | a newer merge cancelled its CI; only the newest deploys | `.deployed` must equal the newest `main` commit |
 | Phone: "your other phone still has work" (409) | one phone per person | sync the old phone, or an Admin signs it out |

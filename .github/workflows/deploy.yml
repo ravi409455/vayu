@@ -152,9 +152,31 @@ jobs:
     # one staging deploy at a time. A running deploy is never cut off (deploy.sh would stop
     # half-way on the server); of the runs waiting behind it GitHub keeps only the newest.
     concurrency: {group: deploy-staging, cancel-in-progress: false}
+    outputs:
+      live: ${{ steps.on.outputs.live }}
     steps:
+      # Staging is on demand (infra/staging.sh): while it is off, its name points to the marker
+      # 192.0.2.1. Then this run skips staging on purpose (green, with a note) and production waits:
+      # nothing reaches production untested. "infra/staging.sh up" deploys the newest main itself.
+      # Any other address is a real staging: a failure there is a real failure (red).
+      - name: is staging on?
+        id: on
+        run: |
+          ip=$(getent ahostsv4 vayu-staging.carcid.in | awk 'NR == 1 {print $1}')
+          if [ "$ip" = 192.0.2.1 ]; then
+            echo "live=false" >> "$GITHUB_OUTPUT"
+            echo "STAGING_OFF=true" >> "$GITHUB_ENV"
+            echo "::notice::Staging is off (on demand): not deployed now. 'infra/staging.sh up' deploys the newest main when it starts; production waits for that."
+            echo "### ⏸ staging is off: ${SHA::7} not deployed (infra/staging.sh up deploys it)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "live=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          SHA: ${{ needs.build.outputs.sha }}
       - &ssh-deploy
         name: deploy over SSH (the key can only run infra/deploy.sh <commit>)
+        # (production reuses this step: STAGING_OFF is never set there, so it always runs)
+        if: env.STAGING_OFF != 'true'
         env:
           SSH_KEY: ${{ secrets.SSH_KEY }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -170,12 +192,13 @@ jobs:
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts   # the server's own key: no man in the middle
           ssh -i ~/.ssh/key -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
             "deploy@$SSH_HOST" "$SHA${MODE:+ $MODE}" \
-            || { echo "::error::Deploy failed. Staging is on demand: if it is off, run infra/staging.sh up, then this workflow again."
+            || { echo "::error::Deploy to $WHERE failed: the server is on (its name has a real address) but the deploy did not finish. See the log of this job."
                  echo "### ✗ $WHERE: deploy of ${SHA::7} failed (see the log of this job)" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
           echo "### ✓ $WHERE: ${SHA::7} is live on $url" >> "$GITHUB_STEP_SUMMARY"
 
   production:
     needs: [build, staging]
+    if: needs.staging.outputs.live == 'true'   # staging off: production waits for a tested staging
     runs-on: ubuntu-latest
     environment: {name: production, url: "https://vayu.carcid.in"}   # waits for the owner's Approve
     # its own queue: a run waiting for Approve no longer holds up the next staging deploy
