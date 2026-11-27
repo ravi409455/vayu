@@ -29,7 +29,9 @@ export function useShared() {
 /** One version of a shared item's content (what a template using it shows). */
 export function useSharedContent<T>(item: SharedItem | undefined, revision: number | undefined) {
   return useQuery({
-    queryKey: keys.pdfShared(item?.id, revision),
+    // "content" first: with no item yet, pdfShared(undefined, …) would be the list's own key, and the
+    // two would share one cache entry (a list refresh then ran this fetch, with no item, and failed)
+    queryKey: keys.pdfShared("content", item?.id, revision),
     enabled: !!item && !!revision,
     queryFn: async () => (await api<SharedItem>(`pdf-shared/${item!.id}`, { query: { revision: String(revision) } })).content as T,
   });
