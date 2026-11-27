@@ -24,6 +24,7 @@ import com.google.firebase.messaging.RemoteMessage
 import `in`.carcid.vayu.core.alerts.reminders
 import `in`.carcid.vayu.core.alerts.stuck
 import `in`.carcid.vayu.core.api.ApiError
+import kotlinx.coroutines.async
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import java.time.Duration
@@ -141,16 +142,23 @@ suspend fun syncJobs(graph: Graph, user: Int) {
         keep = keep, elapsed = android.os.SystemClock.elapsedRealtime())
 }
 
+/** How long a new-lead notice waits for the lead's details (its Directions / Call buttons). */
+const val LEAD_WAIT_MS = 3_000L
+
 /**
  * The signed-in expert's lead [booking], for a new-lead notice's buttons: from the phone's store, or
  * fetched once if the push came before the lead (null for Ops, offline, or a lead that isn't theirs).
- * The fetch waits at most 3 s (owner, 2026-11-27): on weak signal the notice still shows, without buttons.
+ * The fetch waits at most [LEAD_WAIT_MS] (owner, 2026-11-27): on weak signal the notice still shows, without buttons.
  */
 suspend fun leadFor(graph: Graph, booking: String?): `in`.carcid.vayu.core.sync.Job? {
     val user = graph.signedInId() ?: return null
     if (booking == null || graph.tokens.me()?.get("role") != "expert") return null
     fun find() = graph.jobs(user).jobs().firstOrNull { it.id == booking && it.assignedToMe }
-    return find() ?: try { kotlinx.coroutines.withTimeoutOrNull(3_000) { syncJobs(graph, user); find() } } catch (_: ApiError) { null }
+    if (find() != null) return find()
+    // the download can't be cut off midway (a blocking call), so the notice stops *waiting* after
+    // 3 s while the download finishes on its own (it fills My leads either way)
+    val download = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).async { syncJobs(graph, user) }
+    return try { kotlinx.coroutines.withTimeoutOrNull(LEAD_WAIT_MS) { download.await(); find() } } catch (_: ApiError) { null }
 }
 
 /** Fetch an expert's jobs in the background (after a push), then set their reminders. */
