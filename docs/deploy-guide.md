@@ -553,7 +553,17 @@ staging to the newest main by itself. To release: `up`, test, Approve. When done
 **A phone says "your other phone still has work".** One phone per person: sync the old phone, or an
 Admin signs it out (web → Users → ⋯ → **Sign out of every device**).
 
-**The Android app 🧪.** On a Mac with `~/vayu-keys/` (step 10), and `SENTRY_DSN_ANDROID`,
+**The Android app 🧪.** From GitHub: **Actions → publish app → Run workflow** (branch `main`):
+target `staging` ("Vayu Staging", staging must be up) or `production` ("Vayu", waits for your
+**Approve**), a version like `0.4.0`, and optional "what's new" notes. It builds main, signed with
+the release key, checks the key and the package, keeps the APK as a GitHub release
+`app-<target>-<code>` (code = 100 + the run number) and has the server download and publish it
+(`infra/publish-apk.sh`). Engineers get it from that server's `/welcome/engineers` **Download**
+button or the portal's **Android app** page; phones with the app are offered the update.
+Secrets it needs (repository): `ANDROID_KEYSTORE_B64`, `ANDROID_STORE_PASSWORD`,
+`ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, `SENTRY_DSN_ANDROID`, `SENTRY_AUTH_TOKEN`.
+
+By hand (only if GitHub can't): on a Mac with `~/vayu-keys/` (step 10), and `SENTRY_DSN_ANDROID`,
 `SENTRY_AUTH_TOKEN` set in the Terminal. The version code must be higher than every build ever
 installed:
 ```bash
