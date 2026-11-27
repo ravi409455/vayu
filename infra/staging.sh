@@ -119,7 +119,10 @@ case "${1:-}" in
     [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "could not find the newest built commit of main (gh signed in?)"
 
     # staging's fixed SSH key goes to the new server through cloud-init (user data), so it never
-    # makes keys of its own; only an ED25519 key, the one GitHub's SSH_KNOWN_HOSTS pins
+    # makes keys of its own; only an ED25519 key, the one GitHub's SSH_KNOWN_HOSTS pins.
+    # Trade-off (owner's choice, 2026-11-27): DigitalOcean keeps user data in the droplet's
+    # metadata (169.254.169.254, readable from inside staging). The app never calls that address
+    # (webhooks refuse non-public addresses); staging only, never production.
     tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT; chmod 700 "$tmp"
     printf '%s\n' "$STAGING_HOST_KEY" > "$tmp/key"; chmod 600 "$tmp/key"
     pub=$(ssh-keygen -y -f "$tmp/key") || die "STAGING_HOST_KEY is not a valid private key"
@@ -132,6 +135,9 @@ case "${1:-}" in
       echo "  ed25519_private: |"
       sed 's/^/    /' "$tmp/key"
       echo "  ed25519_public: $pub"
+      # once used, no extra copy of this file stays on the disk (the key lives in /etc/ssh)
+      echo "runcmd:"
+      echo "  - rm -f /var/lib/cloud/instance/user-data.txt /var/lib/cloud/instance/user-data.txt.i"
     } > "$tmp/user-data"
 
     echo "== creating $NAME from $(awk '{print $2}' <<<"$snap") (a few minutes)"
