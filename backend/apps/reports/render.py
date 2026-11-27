@@ -560,18 +560,22 @@ ol.toc a::after {{ content: leader(" ") target-counter(attr(href), page); color:
 """
 
 
-def render_html(pages: list[dict], d: dict, values: dict, *, edge: int = PRINT_EDGE) -> Page:
+def render_html(pages: list[dict], d: dict, values: dict, *, edge: int = PRINT_EDGE,
+                numbering: tuple[int, int] | None = None) -> Page:
+    """numbering (first page number, pages in all): for one template page drawn on its own (the
+    designer's quick preview), so it still prints "Page 6 of 44" as in the whole report."""
     building: dict = {"files": {}, "photos": {}}
     token = _building.set(building)
     try:
-        page = Page(_html(pages, d, values, edge))
+        page = Page(_html(pages, d, values, edge, numbering))
     finally:
         _building.reset(token)
     page.files = building["files"]
     return page
 
 
-def _html(pages: list[dict], d: dict, values: dict, edge: int) -> str:
+def _html(pages: list[dict], d: dict, values: dict, edge: int,
+          numbering: tuple[int, int] | None = None) -> str:
     colors = {**COLORS, **d.get("theme", {}).get("colors", {})}
     paper = d.get("paper", {})
     w, h = PAPER[paper.get("size", "A4")]
@@ -608,6 +612,10 @@ def _html(pages: list[dict], d: dict, values: dict, edge: int) -> str:
         body.append(f'<div id="pg-{n}" class="pg pg-{style}"{mark_pg}>{inner}</div>')
     title = e(f"{values['sys']['booking_id']} {values['sys']['inspection_type']} report")
     shared = "".join(f".photos.{name},.photos .{name}{{{style}}}" for style, name in classes.items())
+    if numbering:
+        first, total = numbering
+        shared += (f"@page :first {{ counter-increment: page {int(first)} }}"
+                   f".pages::after {{ content: '{int(total)}' }}")
     return (f'<html><head><meta charset="utf-8"><title>{title}</title>'
             f'<meta name="generator" content="Vayu">'
             f'<style>{css(d, colors, margins, bands)}{mark}{"".join(custom)}{shared}</style></head>'
@@ -683,22 +691,27 @@ def quality(doc) -> list[dict]:
 
 def render_with_layout(html_text: str) -> tuple[bytes, list[dict], list[dict]]:
     """The PDF, where each part with an id sits on each page (CSS px, top left origin), so the
-    designer can highlight a part and pick one by clicking it, and the layout checks."""
+    designer can highlight a part and pick one by clicking it, and the layout checks. "section":
+    which of the pages given to render_html the sheet belongs to (None: none of them)."""
     with _no_sweeps():
         doc = _document(html_text)
         pdf = doc.write_pdf()
     pages = []
     for page in doc.pages:
         found: dict[str, list[float]] = {}
+        section = None
         for box in page._page_box.descendants():
             el = getattr(box, "element", None)
+            if section is None and el is not None and box.element_tag == "div" \
+                    and (el.get("id") or "").startswith("pg-"):
+                section = int(el.get("id")[3:])
             pid = (el.get("id") or "") if el is not None and box.element_tag == "section" else ""
             if pid.startswith("part-"):
                 r = found.setdefault(pid[5:], [1e9, 1e9, 0, 0])
                 r[0], r[1] = min(r[0], box.position_x), min(r[1], box.position_y)
                 r[2] = max(r[2], box.position_x + box.margin_width())
                 r[3] = max(r[3], box.position_y + box.margin_height())
-        pages.append({"width": page.width, "height": page.height, "parts": [
+        pages.append({"width": page.width, "height": page.height, "section": section, "parts": [
             {"id": k, "x": round(r[0], 1), "y": round(r[1], 1), "w": round(r[2] - r[0], 1),
              "h": round(r[3] - r[1], 1)} for k, r in found.items()]})
     return pdf, pages, quality(doc)

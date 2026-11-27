@@ -175,6 +175,22 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   // sharing: the table becomes a shared part, the look a shared theme
   await page.getByRole("button", { name: "Start a new draft" }).click();
   await page.getByRole("button", { name: "Condition", exact: true }).click();
+  // an edit to one page draws that page alone, numbered as in the whole report (not the whole
+  // report again), and its sheets are swapped in
+  const onePage = (r: { url(): string; postDataJSON(): { only_page?: number } | null }) =>
+    r.url().includes("/preview") && typeof r.postDataJSON()?.only_page === "number";
+  const quick = page.waitForResponse((r) => onePage(r.request()) && r.status() === 200, { timeout: 30_000 });
+  await page.getByLabel("Title", { exact: true }).fill("Condition 2");
+  const quickBody = (await quick).request().postDataJSON();
+  expect(quickBody.first_page).toBeGreaterThanOrEqual(1);
+  expect(quickBody.total_pages).toBeGreaterThanOrEqual(quickBody.first_page);
+  const sheets = (await (await quick).json()).pages as { section: number }[];
+  expect(sheets.length).toBeGreaterThan(0);
+  expect(sheets.every((sh) => sh.section === quickBody.only_page)).toBe(true);
+  await expect(page.locator('canvas[aria-label="Page 1"]')).toBeVisible();
+  const back = page.waitForResponse((r) => onePage(r.request()) && r.status() === 200, { timeout: 30_000 });
+  await page.getByLabel("Title", { exact: true }).fill("Condition");
+  await back;
   await page.getByText("Share with other reports").click();
   await page.getByLabel("Save this part as a shared part: name").fill("Condition block");
   await page.getByRole("button", { name: "Share", exact: true }).click();

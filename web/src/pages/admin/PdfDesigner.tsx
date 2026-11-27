@@ -30,6 +30,7 @@ import {
 } from "./report/model";
 import { useFormSections, useSampleBookings } from "./report/hooks";
 import { useDebounced } from "../../lib/useDebounced";
+import { usePreview } from "./report/usePreview";
 import { PagesPanel, type Sel } from "./report/PagesPanel";
 import { PageSettings, PartSettings } from "./report/PartSettings";
 import { Preview, type LayoutPage } from "./report/Preview";
@@ -176,12 +177,6 @@ function Designer({
   const [settings, setSettings] = useState(false);
   const [discard, setDiscard] = useState(false);
   const [showWarnings, setShowWarnings] = useState(false);
-  const [preview, setPreview] = useState<{
-    pdf: string;
-    pages: LayoutPage[];
-    checks?: { page: number; code: string; message: string }[];
-  } | null>(null);
-  const [rendering, setRendering] = useState(false);
   const [checks, setChecks] = useState<{ issues: Issue[]; unused: Unused[] }>({ issues: [], unused: [] });
   const v = ver.data;
   const draft = v?.status === "draft";
@@ -262,22 +257,10 @@ function Designer({
         if (n === ticket.current) setChecks(r);
       })
       .catch(() => {});
-    if (!chosen) return;
-    setRendering(true);
-    api<{ pdf: string; pages: LayoutPage[]; checks: { page: number; code: string; message: string }[] }>(
-      `pdf-template-versions/${v.id}/preview`,
-      { body: { booking: chosen, definition: shown } },
-    )
-      .then((r) => {
-        if (n === ticket.current) setPreview(r);
-      })
-      .catch((e) => {
-        if (n === ticket.current) fail(e);
-      })
-      .finally(() => {
-        if (n === ticket.current) setRendering(false);
-      });
-  }, [shown, chosen, v?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- re-renders the preview only for a new definition, booking or version; fail is a fresh function each render
+  }, [shown, v?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- checks again only for a new definition or version
+  // an edit to one page draws that page alone; the whole report follows once the editing stops
+  const { whole: preview, patches, drawing, wholePdf } = usePreview(v?.id, chosen, shown, fail);
+  const rendering = drawing === "full" || drawing === "page";
 
   async function publish() {
     if (!def || !v) return;
@@ -350,10 +333,13 @@ function Designer({
       fail(e);
     }
   }
-  function openPdf() {
+  async function openPdf() {
     if (!preview) return;
-    const blob = new Blob([Uint8Array.from(atob(preview.pdf), (c) => c.charCodeAt(0))], { type: "application/pdf" });
-    window.open(URL.createObjectURL(blob), "_blank", "noopener");
+    const tab = window.open("", "_blank"); // opened at the click (a later open is blocked); filled below
+    const pdf = await wholePdf(); // the whole report with every edit in it
+    if (!pdf) return tab?.close();
+    const blob = new Blob([Uint8Array.from(atob(pdf), (c) => c.charCodeAt(0))], { type: "application/pdf" });
+    if (tab) tab.location.href = URL.createObjectURL(blob);
   }
 
   if (!def || !v) return <p className="muted">Loading…</p>;
@@ -471,7 +457,7 @@ function Designer({
         <MoreMenu
           label="More template actions"
           items={[
-            { label: "Open the PDF", onClick: openPdf, hidden: !preview },
+            { label: "Open the PDF", onClick: () => void openPdf(), hidden: !preview },
             { label: "Export (backup file)", onClick: () => void exportFile() },
             { label: "Import a template file…", onClick: () => importInput.current?.click(), hidden: !editable },
             { label: "Copy to another form…", onClick: () => setCopying(true), hidden: !editable || copyTargets.length === 0 },
@@ -603,18 +589,21 @@ function Designer({
         )}
         <section className="rd-mid" aria-label="Preview">
           <div className="rd-status muted small">
-            {rendering
+            {drawing === "full"
               ? "" // the bar below says it
-              : chosen
-                ? "This is the real PDF. Click a part to change it."
-                : "Complete one booking inspected with this form to see the report with real answers."}
+              : drawing === "page"
+                ? "Updating this page…"
+                : chosen
+                  ? "This is the real PDF. Click a part to change it."
+                  : "Complete one booking inspected with this form to see the report with real answers."}
           </div>
-          {rendering && <PdfProgress label={preview ? "Updating the preview…" : "Making the preview…"} />}
+          {drawing === "full" && <PdfProgress label={preview ? "Updating the preview…" : "Making the preview…"} />}
           {preview ? (
-            <div className={rendering ? "pdf-fading" : undefined} aria-busy={rendering}>
+            <div className={drawing === "full" ? "pdf-fading" : undefined} aria-busy={rendering}>
               <Preview
                 pdf={preview.pdf}
                 pages={preview.pages}
+                patches={patches}
                 selected={sel?.kind === "part" ? sel.id : null}
                 names={nameMap}
                 onSelect={(id) => setSel({ kind: "part", id })}
