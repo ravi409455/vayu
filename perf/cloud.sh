@@ -36,7 +36,7 @@
 set -euo pipefail
 export COPYFILE_DISABLE=1   # macOS tar: no "._" metadata files in what goes to the servers
 
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
+ROOT=${LT_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 SRC=${LT_SRC:-$ROOT}
 STATE_DIR="$ROOT/perf/.cloud"
 STATE="$STATE_DIR/state.json"
@@ -250,7 +250,7 @@ prepare_sut() {   # prepare_sut <role>: bootstrap, settings, deploy, forms, the 
 
   say "$role: bootstrap (firewall, Docker, deploy user, code); root login is off after it"
   # in the same root session: no nightly backup on a throwaway (it would write into staging's folder)
-  { cat "$ROOT/infra/bootstrap.sh"; echo 'systemctl disable --now vayu-backup.timer'; } \
+  { cat "$SRC/infra/bootstrap.sh"; echo 'systemctl disable --now vayu-backup.timer'; } \
     | on "root@$ip" 'bash -s' >/dev/null
 
   say "$role: settings (an allowlist of staging's, with the test's changes, server to server)"
@@ -265,7 +265,7 @@ prepare_sut() {   # prepare_sut <role>: bootstrap, settings, deploy, forms, the 
     LT_DB=$(doctl databases connection "$dbid" --private --format Host,Port,User,Password,Database --no-header)
   fi
   on_staging "deploy@$staging" 'cat /srv/vayu/.env.staging' \
-    | LT_DB="$LT_DB" python3 "$ROOT/perf/cloud_env.py" "$ip" "lt-$role" "${sizes[@]}" \
+    | LT_DB="$LT_DB" python3 "$SRC/perf/cloud_env.py" "$ip" "lt-$role" "${sizes[@]}" \
     | on "deploy@$ip" 'umask 077; cat > /srv/vayu/.env.staging'
   LT_DB=""
   # the Firebase key: pushes go to Firebase for real, to fake device tokens (owner's choice)
@@ -433,6 +433,8 @@ cmd_down() {   # everything this script made: test servers first (their files), 
 on_failure_destroy() {   # a whole-test command that fails cleans up and destroys everything
   # shellcheck disable=SC2154  # rc is set inside the trap
   trap 'rc=$?; if (( rc != 0 )) && [[ -z "${LT_KEEP:-}" ]]; then
+          for j in $(jobs -p); do pkill -TERM -P "$j" 2>/dev/null; kill "$j" 2>/dev/null; done
+          true                                     # the other test servers (and their ssh) stop too
           echo "== failed (exit $rc): cleaning up and destroying, so nothing keeps billing" >&2
           cmd_down force || echo "== DESTROY FAILED: run perf/cloud.sh status, then down force" >&2
         fi' EXIT INT TERM
@@ -442,6 +444,12 @@ load_ready() {   # load_ready <load role>: Docker installed (cloud-init), perf/ 
   local ip; ip=$(ip_of "$1")
   until on "root@$ip" 'docker info >/dev/null 2>&1'; do sleep 10; done
   tar -C "$SRC" -czf - perf | on "root@$ip" 'rm -rf /lt/perf && mkdir -p /lt && tar -C /lt -xzf -'
+  # the load script that arrived is the one meant, and Python reads it: else stop before the test
+  local want got; want=$(shasum -a 256 "$SRC/perf/loadtest.py" | cut -d' ' -f1)
+  got=$(on "root@$ip" 'sha256sum /lt/perf/loadtest.py 2>/dev/null' | cut -d' ' -f1)
+  [[ "$want" == "$got" ]] || die "$1: the load script did not arrive on its load server"
+  on "root@$ip" 'docker run --rm -v /lt:/lt python:3.12-slim python3 -m py_compile /lt/perf/loadtest.py /lt/perf/receiver.py' \
+    >/dev/null 2>&1 || die "$1: the load script does not compile on its load server"
   if [[ -d "$PHOTOS" ]]; then
     tar -C "$PHOTOS" -cf - . | on "root@$ip" 'rm -rf /lt/photos && mkdir -m 700 /lt/photos && tar -C /lt/photos -xf -'
   fi
@@ -499,16 +507,32 @@ cmd_all() {
     if [[ "$role" == cap-* ]]; then cap+=($!); else lc+=($!); fi
     say "$role started (log: $dir/$role.log)"
   done
-  local failed=0 p
-  for p in "${lc[@]}"; do wait "$p" || failed=1; done
-  cleanup_destroy load-a                      # low-cost is done: its load server stops billing
-  say "low-cost done: $(overview "$dir" | grep -c 'every check') results so far"
-  for p in "${cap[@]}"; do wait "$p" || failed=1; done
+  # the first test server that fails stops the whole test at once (the trap destroys everything),
+  # never after the others ran on for nothing; low-cost done: its load server stops billing
+  local p running lc_left a_up=1 done_pids=" "
+  while :; do
+    running=0 lc_left=0
+    for p in "${pids[@]}"; do
+      [[ "$done_pids" == *" $p "* ]] && continue
+      if kill -0 "$p" 2>/dev/null; then
+        (( running += 1 ))
+        if [[ " ${lc[*]-} " == *" $p "* ]]; then (( lc_left += 1 )); fi
+      else
+        wait "$p" || die "a test server failed: see its log in $dir (stopping everything now)"
+        done_pids+="$p "
+      fi
+    done
+    if (( lc_left == 0 && a_up )); then
+      cleanup_destroy load-a; a_up=0
+      say "low-cost done: $(overview "$dir" | grep -c 'every check') results so far"
+    fi
+    (( running == 0 )) && break
+    sleep 10
+  done
   cleanup_destroy load-b
   overview "$dir" > "$dir/OVERVIEW.md"
   cat "$dir/OVERVIEW.md"
   say "spent: \$$(spent_now) (warning above \$$CAP)"
-  (( failed == 0 )) || die "a test server failed: see its log in $dir"
 }
 
 cmd_dbcheck() {   # run D: one size, its data on a temporary managed database
@@ -535,9 +559,24 @@ cmd_status() {
   echo "Spent so far: \$$(spent_now) (warning above \$$CAP)"
 }
 
+# the long commands run from a frozen copy of the files they use (this script, perf/, bootstrap.sh),
+# made before any server: a branch switch or an edit in the checkout during a run changes nothing
+# (2026-11-27: a switch mid-run sent the old load script to a load server)
+if [[ "${1:-}" =~ ^(all|rehearse|dbcheck)$ && -z "${LT_FROZEN:-}" ]]; then
+  frozen="$STATE_DIR/frozen-$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$frozen/infra"
+  tar -C "$SRC" --exclude perf/results --exclude perf/.cloud --exclude '__pycache__' -cf - perf \
+    | tar -C "$frozen" -xf -
+  cp "$ROOT/infra/bootstrap.sh" "$frozen/infra/"
+  [[ -f "$frozen/perf/loadtest.py" && -f "$frozen/perf/receiver.py" && -f "$frozen/perf/report.py" ]] \
+    || die "no perf/loadtest.py, receiver.py and report.py in $SRC (LT_SRC)"
+  say "running from a frozen copy: $frozen"
+  LT_FROZEN=1 LT_ROOT="$ROOT" LT_SRC="$frozen" exec bash "$frozen/perf/cloud.sh" "$@"
+fi
+
 # the long commands keep the Mac awake (caffeinate) for as long as they run
 if [[ "${1:-}" =~ ^(all|rehearse|dbcheck)$ && -z "${LT_AWAKE:-}" ]] && command -v caffeinate >/dev/null; then
-  LT_AWAKE=1 exec caffeinate -i "$0" "$@"
+  LT_AWAKE=1 exec caffeinate -i bash "$0" "$@"
 fi
 
 case "${1:-}" in
