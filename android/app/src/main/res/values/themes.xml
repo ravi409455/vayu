@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="brand">#A62830</color>
+    <color name="notice_problem">#B3261E</color>
     <!-- the launcher icon's background; "Vayu Staging" is blue (src/staging) -->
     <color name="launcher_bg">#A62830</color>
     <!-- the window behind the first frame matches the app's background, so opening doesn't flash -->

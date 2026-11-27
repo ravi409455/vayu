@@ -9,14 +9,16 @@ from apps.core import tasks as core_tasks
 OPS_PREF = {"submitted": "submitted", "completed": "submitted", "started": "started",
             "late": "started", "new_booking": "new_bookings"}
 PREFS = ("submitted", "started", "new_bookings")
-PROBLEMS = {"alert.conflict": "Two experts inspected {bid}",
-            "alert.pdf_failed": "Report failed for {bid}",
-            "alert.stuck_upload": "Photos stuck for {bid}",
-            "alert.type_change_rejected": "Type change wasn't applied for {bid}",
-            "alert.late_work": "Late offline work for {bid}"}
-PROGRESS = {"inspection.started": ("started", "{bid} started"),
-            "inspection.submitted": ("submitted", "{bid} submitted"),
-            "inspection.completed": ("completed", "{bid} completed")}
+# Titles say what happened first and the booking ID last (owner, 2026-11-27): the phone shows a
+# title on the lock screen, so a title never holds a customer's name or address.
+PROBLEMS = {"alert.conflict": "Two experts inspected · {bid}",
+            "alert.pdf_failed": "Report didn't build · {bid}",
+            "alert.stuck_upload": "Photos stuck · {bid}",
+            "alert.type_change_rejected": "Type change not applied · {bid}",
+            "alert.late_work": "Late offline work · {bid}"}
+PROGRESS = {"inspection.started": ("started", "Inspection started · {bid}"),
+            "inspection.submitted": ("submitted", "Inspection submitted · {bid}"),
+            "inspection.completed": ("completed", "Inspection completed · {bid}")}
 WHEN = ("inspection_date", "inspection_time")
 # told about in their own way, or internal (which inspection counts, a conflict mark)
 QUIET = {"stage", "assigned_expert", "inspection", "conflict", *WHEN}
@@ -107,30 +109,64 @@ def on_event(name: str, payload: dict) -> None:
 
     if not payload.get("booking"):
         return
-    b = Booking.objects.filter(pk=payload["booking"]).select_related("created_by").first()
+    b = (Booking.objects.filter(pk=payload["booking"])
+         .select_related("created_by", "assigned_expert").first())
     if b is None:
         return
     bid, who = b.booking_id, b.answers.get("customer_name") or ""
+    when = _when(*(b.answers.get(k) for k in WHEN))
     if name in PROBLEMS:
-        to_ops(b, "problem", PROBLEMS[name].format(bid=bid), who,
+        to_ops(b, "problem", PROBLEMS[name].format(bid=bid), _join(who, _type(b)),
                quiet=QUIET_FOR.get(name, QUIET_DEFAULT))
     elif name in PROGRESS:
         kind, title = PROGRESS[name]
-        to_ops(b, kind, title.format(bid=bid), who)
+        expert = b.assigned_expert.shown_name if b.assigned_expert else ""
+        to_ops(b, kind, title.format(bid=bid), _join(expert, who))
     elif name == "booking.created":
         from apps.integrations.apikeys import SERVICE_USERNAME
         if b.created_by and b.created_by.username == SERVICE_USERNAME:   # API / ERP only
-            to_ops(b, "new_booking", f"New booking {bid}", who)
+            to_ops(b, "new_booking", _join("New booking", when or bid, sep=" · "), _lines(b, set()))
         if b.assigned_expert_id:                       # created with an expert already chosen
-            to_user(b.assigned_expert_id, b, "assigned", f"New lead: {bid}", " · ".join(
-                x for x in (_for_expert(b, who), _when(*(b.answers.get(k) for k in WHEN))) if x))
+            _new_lead(b.assigned_expert_id, b, when)
     elif name == "booking.assigned":
         if payload.get("expert") is None:
             return
-        to_user(payload["expert"], b, "assigned", f"New lead: {bid}", " · ".join(
-            x for x in (_for_expert(b, who), _when(*(b.answers.get(k) for k in WHEN))) if x))
+        _new_lead(payload["expert"], b, when)
     else:
         _updated(b, payload.get("changes") or {}, bid, _for_expert(b, who), payload.get("by"))
+
+
+def _join(*parts, sep=" · ") -> str:
+    return sep.join(p for p in parts if p)
+
+
+def _type(b) -> str:
+    """The inspection type's name ("PDI"), as Ops named its form."""
+    from apps.forms.models import Form
+
+    return (Form.objects.filter(type="custom", inspection_type=b.inspection_type)
+            .values_list("name", flat=True).first() or b.inspection_type)
+
+
+def _lines(b, hidden: set) -> str:
+    """"PDI · Maruti Swift VXi · TST-1017" over "Radhika Iyer · Sector 45": what, then who and
+    where, leaving out what [hidden] keeps from this person."""
+    from apps.bookings.services import booking_form_version
+    from apps.forms.models import Field
+
+    fields = {f.key: f for f in Field.objects.filter(version=booking_form_version())}
+
+    def value(key):
+        v = b.answers.get(key)
+        return "" if key in hidden or v in (None, "") else _shown(fields.get(key), v)
+
+    return _join(_join(_type(b), value("car_make_model"), b.booking_id),
+                 _join(value("customer_name"), value("address") or value("city")), sep="\n")
+
+
+def _new_lead(expert, b, when: str) -> None:
+    to_user(expert, b, "assigned", _join("New lead", when or b.booking_id),
+            _lines(b, _expert_view(b)[1]))
 
 
 def _for_expert(b, who: str) -> str:
@@ -143,28 +179,28 @@ def _updated(b, changes: dict, bid: str, who: str, by) -> None:
     customer's name as experts may see it."""
     old, new = changes.get("assigned_expert", [None, None])
     if old and old != new and old != by:
-        to_user(old, b, "unassigned", f"{bid} moved to another expert", who)
+        to_user(old, b, "unassigned", f"Lead moved to another expert · {bid}", who)
     expert = b.assigned_expert_id
     if expert is None or expert == by or b.stage not in ("assigned", "in_progress", "cancelled"):
         return
     if changes.get("stage") == ["in_progress", "assigned"] and by != expert:     # force-release
-        to_user(expert, b, "released", f"{bid} released by Ops",
+        to_user(expert, b, "released", f"Lead released by Ops · {bid}",
                 "Your draft there is closed. Start the lead again to carry on.")
     elif changes.get("stage", [None, None])[1] == "cancelled":
-        to_user(expert, b, "cancelled", f"{bid} cancelled",
+        to_user(expert, b, "cancelled", f"Lead cancelled · {bid}",
                 " · ".join(x for x in (who, _reason(b.cancel_reason)) if x))
     elif b.stage == "cancelled":
         return
     elif any(k in changes for k in WHEN):
         was = [changes.get(k, [b.answers.get(k)])[0] for k in WHEN]
-        to_user(expert, b, "rescheduled", f"{bid} moved",
+        to_user(expert, b, "rescheduled", f"Lead time changed · {bid}",
                 f"{_when(*was)} → {_when(*(b.answers.get(k) for k in WHEN))}")
     elif "assigned_expert" not in changes and set(changes) - QUIET:
         # never what the expert may not see: not its value, not even its name (F-068)
         fields, hidden = _expert_view(b)
         told = {k: v for k, v in changes.items() if k not in QUIET and k not in hidden}
         if told:
-            to_user(expert, b, "changed", f"{bid} details changed", _changed(told, fields))
+            to_user(expert, b, "changed", f"Lead details changed · {bid}", _changed(told, fields))
 
 
 def to_user(user_id, booking, kind: str, title: str, body: str = "") -> None:

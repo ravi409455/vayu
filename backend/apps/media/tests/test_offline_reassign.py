@@ -52,7 +52,7 @@ def test_sana_never_began_so_the_job_goes_back_to_ravi(moved, settings):
     got = Booking.objects.get(pk=b["id"])
     assert got.assigned_expert_id == env.expert_user.id and got.conflict == ""
     assert got.stage == "completed"                                # his photo had arrived
-    assert [n.title for n in Notification.objects.filter(user=sana)] == ["OFF1 moved to another expert"]
+    assert [n.title for n in Notification.objects.filter(user=sana)] == ["Lead moved to another expert · OFF1"]
     assert not Notification.objects.filter(kind="problem").exists()    # no conflict for Ops
     assert not Notification.objects.filter(user=env.expert_user).exists()   # not about his own act
 
@@ -64,7 +64,7 @@ def test_both_inspected_so_ops_choose(moved, settings):
     assert r.status_code == 200, r.json()
     got = Booking.objects.get(pk=b["id"])
     assert got.conflict == "TWO_EXPERTS" and got.assigned_expert_id == sana.id
-    assert Notification.objects.filter(kind="problem", title="Two experts inspected OFF1").exists()
+    assert Notification.objects.filter(kind="problem", title="Two experts inspected · OFF1").exists()
 
 
 def test_an_expert_who_never_had_the_job_still_cannot_send_to_it(moved, settings):
@@ -117,7 +117,7 @@ def test_late_work_reaches_ops_even_if_sana_finished_first(moved, settings):
     assert r.status_code == 200, r.json()
     got = Booking.objects.get(pk=b["id"])
     assert got.conflict == "TWO_EXPERTS" and got.assigned_expert_id == sana.id   # Ops choose
-    assert Notification.objects.filter(kind="problem", title="Two experts inspected OFF1").exists()
+    assert Notification.objects.filter(kind="problem", title="Two experts inspected · OFF1").exists()
 
 
 def test_late_work_is_kept_on_a_cancelled_job(moved, settings):

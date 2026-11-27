@@ -45,24 +45,61 @@ object Notices {
         nm.createNotificationChannel(NotificationChannel(PROBLEMS, "Problems", NotificationManager.IMPORTANCE_HIGH))
     }
 
-    /** Show one notice; tapping it opens the app on [booking]. Silent if notices aren't allowed. */
-    fun show(ctx: Context, tag: String, title: String, body: String, booking: String?, problem: Boolean = false) {
+    private const val FLAGS = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+
+    /**
+     * Show one notice; tapping it opens the app on [booking]. Silent if notices aren't allowed.
+     * CarCID red with a car (problems: red with a warning sign). [body]'s first line shows folded,
+     * all of it opened. [lead]: the expert's own lead, for Directions / Call / Open buttons.
+     */
+    fun show(ctx: Context, tag: String, title: String, body: String, booking: String?, problem: Boolean = false,
+             lead: `in`.carcid.vayu.core.sync.Job? = null) {
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
             android.os.Build.VERSION.SDK_INT >= 33) return
         channels(ctx)
-        val open = Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            .apply { if (!booking.isNullOrBlank()) putExtra(EXTRA_BOOKING, booking) }
-        val n = NotificationCompat.Builder(ctx, if (problem) PROBLEMS else JOBS)
-            .setSmallIcon(R.drawable.ic_notice)
-            .setContentTitle(title).setContentText(body).setStyle(NotificationCompat.BigTextStyle().bigText(body))
+        val channel = if (problem) PROBLEMS else JOBS
+        val icon = if (problem) R.drawable.ic_notice_alert else R.drawable.ic_notice_car
+        val color = ContextCompat.getColor(ctx, if (problem) R.color.notice_problem else R.color.brand)
+        val open = PendingIntent.getActivity(ctx, tag.hashCode(), Intent(ctx, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .apply { if (!booking.isNullOrBlank()) putExtra(EXTRA_BOOKING, booking) }, FLAGS)
+        val n = NotificationCompat.Builder(ctx, channel)
+            .setSmallIcon(icon).setColor(color)
+            .setContentTitle(title).setContentText(body.substringBefore('\n'))
+            .apply { if (body.isNotBlank()) setStyle(NotificationCompat.BigTextStyle().bigText(body)) }
+            .setCategory(if (problem) NotificationCompat.CATEGORY_ERROR else NotificationCompat.CATEGORY_EVENT)
             .setAutoCancel(true)
-            // the lock screen says a notice came, not whose car or where (customer name and address)
+            // the lock screen shows the title, never the body: titles say what and when, never a
+            // customer's name or address (the server words them so)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-            .setPublicVersion(NotificationCompat.Builder(ctx, if (problem) PROBLEMS else JOBS).setSmallIcon(R.drawable.ic_notice)
-                .setContentTitle("Vayu").setContentText("New notice. Unlock to see it.").build())
-            .setContentIntent(PendingIntent.getActivity(ctx, tag.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
-            .build()
-        runCatching { NotificationManagerCompat.from(ctx).notify(tag, 0, n) }
+            .setPublicVersion(NotificationCompat.Builder(ctx, channel).setSmallIcon(icon).setColor(color)
+                .setContentTitle(lockTitle(title)).setContentText("Unlock to see the details.").build())
+            .setContentIntent(open)
+        if (lead != null) leadButtons(ctx, tag, lead).forEach { (label, intent) -> n.addAction(0, label, intent) }
+        if (lead != null || (problem && !booking.isNullOrBlank())) n.addAction(0, if (problem) "Open booking" else "Open", open)
+        runCatching { NotificationManagerCompat.from(ctx).notify(tag, 0, n.build()) }
+    }
+
+    /**
+     * The title as the lock screen shows it: what and when, without the booking ID (F-075).
+     * ponytail: titles end " · <ID>" and an ID has no spaces, a time always does ("Wed 14 Oct, 3:30 pm").
+     */
+    fun lockTitle(title: String): String {
+        val last = title.substringAfterLast(" · ", "")
+        return if (last.isNotEmpty() && last.none { it.isWhitespace() }) title.substringBeforeLast(" · ") else title
+    }
+
+    /** Directions and Call, as the lead page has them (digits only: a "*#06#" code never reaches the dialer). */
+    internal fun leadButtons(ctx: Context, tag: String, j: `in`.carcid.vayu.core.sync.Job): List<Pair<String, PendingIntent>> {
+        val place = listOf(j.address, j.city).filter { it.isNotBlank() }.joinToString(", ")
+        val digits = j.phone.filter { it in '0'..'9' }
+        fun view(key: String, intent: Intent) = PendingIntent.getActivity(ctx, "$tag-$key".hashCode(), intent, FLAGS)
+        return listOfNotNull(
+            if (place.isEmpty()) null else "Directions" to view("map", Intent(Intent.ACTION_VIEW,
+                android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query=" + java.net.URLEncoder.encode(place, "UTF-8")))),
+            if (digits.isEmpty()) null else "Call" to view("call", Intent(Intent.ACTION_DIAL,
+                android.net.Uri.parse("tel:" + (if (j.phone.trimStart().startsWith("+")) "+" else "") + digits))),
+        )
     }
 
     /** This phone's push token (null without Google Play services or signal). */
@@ -89,10 +126,31 @@ class VayuMessaging : FirebaseMessagingService() {
         val id = message.data["id"]?.toLongOrNull() ?: return
         val note = runCatching { kotlinx.coroutines.runBlocking { `in`.carcid.vayu.ui.parseNotes(graph.api.notifications()) } }
             .getOrNull()?.notes?.firstOrNull { it.id == id } ?: return
-        Notices.show(this, "push-$id", note.title, note.body, note.booking, problem = note.kind == "problem")
+        val lead = if (note.kind == "assigned") runCatching { kotlinx.coroutines.runBlocking { leadFor(graph, note.booking) } }.getOrNull() else null
+        Notices.show(this, "push-$id", note.title, note.body, note.booking, problem = note.kind == "problem", lead = lead)
         // the app is open: it refreshes now; closed: an expert's jobs are fetched so they're there offline
         if (!graph.pushed()) SyncWorker.enqueue(this)
     }
+}
+
+/** Download an expert's leads into the phone's store (as the app's own sync does). */
+suspend fun syncJobs(graph: Graph, user: Int) {
+    val store = graph.jobs(user)
+    val keep = graph.pinned(user)
+    store.apply(graph.api.syncJobs(store.haveVersions(), store.since(), keep), System.currentTimeMillis(),
+        keep = keep, elapsed = android.os.SystemClock.elapsedRealtime())
+}
+
+/**
+ * The signed-in expert's lead [booking], for a new-lead notice's buttons: from the phone's store, or
+ * fetched once if the push came before the lead (null for Ops, offline, or a lead that isn't theirs).
+ * The fetch waits at most 3 s (owner, 2026-11-27): on weak signal the notice still shows, without buttons.
+ */
+suspend fun leadFor(graph: Graph, booking: String?): `in`.carcid.vayu.core.sync.Job? {
+    val user = graph.signedInId() ?: return null
+    if (booking == null || graph.tokens.me()?.get("role") != "expert") return null
+    fun find() = graph.jobs(user).jobs().firstOrNull { it.id == booking && it.assignedToMe }
+    return find() ?: try { kotlinx.coroutines.withTimeoutOrNull(3_000) { syncJobs(graph, user); find() } } catch (_: ApiError) { null }
 }
 
 /** Fetch an expert's jobs in the background (after a push), then set their reminders. */
@@ -102,10 +160,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val user = graph.signedInId() ?: return Result.success()
         if (graph.tokens.me()?.get("role") != "expert") return Result.success()
         return try {
-            val store = graph.jobs(user)
-            val keep = graph.pinned(user)
-            store.apply(graph.api.syncJobs(store.haveVersions(), store.since(), keep), System.currentTimeMillis(),
-                keep = keep, elapsed = android.os.SystemClock.elapsedRealtime())
+            syncJobs(graph, user)
             Reminders.schedule(applicationContext, graph, user)
             Result.success()
         } catch (e: ApiError) {
@@ -196,7 +251,7 @@ class ReminderReceiver : android.content.BroadcastReceiver() {
         val title = intent.getStringExtra("title").orEmpty(); val body = intent.getStringExtra("body").orEmpty()
         graph.localNotes(owner).add("reminder", title, body, job)
         graph.pushed()                                       // an open bell shows it at once
-        Notices.show(context, "remind-$job", title, body, job)
+        Notices.show(context, "remind-$job", title, body, job, lead = graph.jobs(owner).jobs().firstOrNull { it.id == job })
     }
 }
 
@@ -206,7 +261,7 @@ fun alertStuck(ctx: Context, graph: Graph, user: Int) {
     val told = prefs.getStringSet("told", emptySet()).orEmpty()
     val now = stuck(graph.drafts(user).all(), Instant.now()) { p -> File(p).takeIf { it.exists() }?.let { Instant.ofEpochMilli(it.lastModified()) } }
     now.filter { it.first !in told }.forEach { (id, code) ->
-        val title = "Photos for $code haven't sent for 2 hours"; val body = "Open the app on Wi-Fi to send them."
+        val title = "Photos not sending · $code"; val body = "Stuck for 2 hours. Open the app on Wi-Fi to send them."
         graph.localNotes(user).add("problem", title, body, id)
         graph.pushed()
         Notices.show(ctx, "stuck-$id", title, body, id, problem = true)

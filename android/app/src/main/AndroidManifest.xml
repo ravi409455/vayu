@@ -44,7 +44,8 @@
         <service android:name=".VayuMessaging" android:exported="false">
             <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter>
         </service>
-        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_notice" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_notice_car" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/brand" />
         <!-- reports shared from the app's cache (Ops: Report → Share) -->
         <provider
             android:name="androidx.core.content.FileProvider"

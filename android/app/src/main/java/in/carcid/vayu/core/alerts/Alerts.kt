@@ -27,8 +27,10 @@ fun reminders(jobs: List<Job>, now: Instant, zone: ZoneId = `in`.carcid.vayu.cor
             ?: return@mapNotNull null
         val at = slot - REMIND_BEFORE
         if (at <= now) null
-        else Reminder(j.id, at, "In 1 hour: ${j.bookingId} at ${j.time}",
-            listOf(j.customer, j.address.ifBlank { j.city }).filter { it.isNotBlank() }.joinToString(" · "))
+        // what and when first, as the server's notices read; the title is what the lock screen shows
+        else Reminder(j.id, at, "In 1 hour · ${`in`.carcid.vayu.ui.expert.time12(j.time)}",
+            listOf(listOf(j.type, j.car, j.bookingId), listOf(j.customer, j.address.ifBlank { j.city }))
+                .map { l -> l.filter { it.isNotBlank() }.joinToString(" · ") }.filter { it.isNotEmpty() }.joinToString("\n"))
     }
 
 /**

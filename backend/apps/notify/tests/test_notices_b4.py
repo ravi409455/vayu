@@ -35,7 +35,7 @@ def test_a_force_released_expert_is_told(started):
     env, booking, _ = started
     env.ops.post(f"/api/v1/bookings/{booking['id']}/force-release")
     released = [n for n in _mine(env.expert_user) if n[0] == "released"]
-    assert released == [("released", "SA37926 released by Ops",
+    assert released == [("released", "Lead released by Ops · SA37926",
                          "Your draft there is closed. Start the lead again to carry on.")]
 
 
@@ -68,14 +68,14 @@ def test_a_new_lead_leaves_out_a_customer_name_experts_may_not_see(env, booking)
         access={"expert": {"assigned": "hidden"}})
     assign(env, booking)
     (_, title, body), = _mine(env.expert_user)
-    assert title == "New lead: SA37926" and "Asha" not in body
+    assert title == "New lead · Wed 14 Oct, 3:30 pm" and "Asha" not in body
 
 
 def test_submitted_then_completed_reach_ops_in_order(started):
     env, booking, _ = started
     submit(env.expert, booking)
     titles = [t for _, t, _ in _mine(env.ops_user)]
-    assert titles.index("SA37926 submitted") < titles.index("SA37926 completed")
+    assert titles.index("Inspection submitted · SA37926") < titles.index("Inspection completed · SA37926")
 
 
 # ---------------------------------------------------------------- pushes (F-140, F-141)
