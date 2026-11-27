@@ -281,7 +281,7 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
                                         scope.launch {
                                             val out = newFile(dir, "jpg")
                                             withContext(Dispatchers.Default) {
-                                                stampPhoto(raw, out, stampLines(code, expert, now(), verified, place)); raw.delete()
+                                                stampPhoto(raw, out, stampLines(code, expert, now(), verified, place), strip = true); raw.delete()
                                             }
                                             pending = out to "image/jpeg"; busy = false
                                         }
@@ -311,8 +311,8 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
 
 /**
  * Over the preview (the whole photo, 3:4 when upright): report photo boxes are 4:3 landscape, and
- * "fill" prints the middle band of an upright photo. Upright, the parts above and below that band
- * are dimmed, so the bright band is exactly what the report prints; the whole photo is still saved.
+ * the camera saves only the middle band of an upright shot (stampPhoto strip). Upright, the parts
+ * above and below that band are dimmed: the bright band is exactly the photo and what the report prints.
  * Sideways, the whole photo is the report's shape: only a thin frame. Approved 2026-11-27.
  */
 @Composable
