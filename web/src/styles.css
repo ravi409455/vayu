@@ -5067,3 +5067,41 @@ input[type="radio"] {
 label.check {
   padding: 3px 0;
 }
+
+/* the PDF is being made: an estimated bar, the old preview faded underneath */
+.pdf-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+.pdf-progress-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.pdf-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.pdf-progress-fill {
+  height: 100%;
+  background: var(--info);
+  border-radius: 999px;
+  transition: width 0.25s linear;
+}
+.pdf-fading {
+  opacity: 0.45;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pdf-progress-fill,
+  .pdf-fading {
+    transition: none;
+  }
+}

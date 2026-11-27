@@ -73,7 +73,7 @@ describe("reports are made again only by Regenerate (F-219)", () => {
     const button = await screen.findByRole("button", { name: "Regenerate" });
     await userEvent.setup().dblClick(button);
     await waitFor(() => expect(m.posts).toEqual(["POST"]));
-    expect(screen.getByRole("button", { name: "Making…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Making" })).toBeDisabled();
     m.release();
   });
   it("when it cannot be made, the button is off and says why", async () => {
@@ -85,7 +85,8 @@ describe("reports are made again only by Regenerate (F-219)", () => {
     );
     const button = await screen.findByRole("button", { name: "Regenerate" });
     expect(button).toBeDisabled();
-    expect(screen.getByText(/Regenerate is off: Its photos were removed/)).toBeInTheDocument();
+    expect(button).toHaveAttribute("title", expect.stringMatching(/^Its photos were removed/));
+    expect(screen.queryByText(/Regenerate is off/)).toBeNull();
     expect(screen.queryByText(/Out of date/)).toBeNull();
   });
   it("no Regenerate for someone who may not change submissions", async () => {
