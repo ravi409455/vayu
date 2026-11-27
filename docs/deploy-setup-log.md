@@ -21,7 +21,7 @@ Status: ✅ done · 🔄 in progress · ⏳ not started
 | 3 | Staging server setup | ✅ 2026-11-26: live, with test data |
 | 4 | Deploy pipeline | 🔄 merge → staging works; rollback not yet rehearsed |
 | 5 | Backups and alerts | ✅ 2026-11-27 on staging: DigitalOcean alerts, Better Stack (monitor, heartbeats, Slack), first restore drill. Production gets its own set in Phase 7 |
-| 6 | Prove staging | 🔄 push, update prompt, Sentry, load test, reboot, down/up cycle done; left: rollback, security headers + CSP |
+| 6 | Prove staging | 🔄 all done but the rollback rehearsal (2026-11-28) |
 | 7 | Production | ⏳ |
 
 Quick links: [Where everything lives](#where-everything-lives) · [Open items](#open-items)
@@ -696,7 +696,7 @@ staging were **equal** (1820 fields, 1768 media files, 208 booking activities, .
 
 ## Phase 6 · Prove staging 🔄
 
-### 6.6 · Security headers and the content rules (CSP) 🔄 (2026-11-28)
+### 6.6 · Security headers and the content rules (CSP) ✅ (2026-11-28)
 
 **What they are (plain words).** Rules Caddy sends with every page; the browser obeys them.
 | Header | What it stops | Example |
@@ -726,8 +726,12 @@ and R2. The welcome pages (`/welcome/*`) have their own looser line (inline code
   Dashboard, Forms, Library, the PDF designer, the customer QR check page.
 - PR 69: `X-Frame-Options: DENY`; `infra/phase-staging.env` → enforced; runbook §9. Caddyfile
   checked with `caddy validate`.
-- ⏳ Owner: Phase → `vayu` → Staging → `CSP_HEADER` = `Content-Security-Policy`, merge PR 69; then
-  re-grade (expect securityheaders.com **A**) and open the pages above again.
+- Owner set Phase → `vayu` → Staging → `CSP_HEADER` = `Content-Security-Policy` and merged PR 69.
+  PR 70 merged minutes later, so CI cancelled PR 69's run and staging got both with `ea99876`
+  (by design: the newest merge deploys).
+- After: **securityheaders.com A+** (all six headers), CSP **enforced**, `X-Frame-Options: DENY`.
+  Booking tabs (88 R2 photos, PDF preview) and the PDF designer work; nothing blocked ✅.
+- Also seen on this deploy: the Firebase key file stayed 644 by itself (PR 67 now in effect, 6.3).
 
 **If something breaks one day because of CSP — how to know and fix it:**
 1. *What it looks like:* a blank or half-drawn page, photos or the PDF preview not showing, uploads
@@ -877,5 +881,4 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 | Production server's Phase service account (`vayu-prod-server`, Production only) and robot key | Phase 7 |
 | DigitalOcean API token `vayu-owner-laptop` expires (90 days) | around 2027-02-24 |
 | Phase service token `vayu-staging-server`: if it was given an expiry, note the date here | check |
-| CSP on staging: owner sets Phase `CSP_HEADER` = `Content-Security-Policy` and merges PR 69; then re-grade (6.6) | now |
 
