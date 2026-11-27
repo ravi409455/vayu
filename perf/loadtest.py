@@ -245,11 +245,16 @@ class Phone:
         for p in init["parts"]:                       # straight to the file store, as the app does
             size = init["part_size"]
             chunk = data[(p["part_number"] - 1) * size:p["part_number"] * size]
-            t = time.time()
-            put = requests.put(p["url"], data=chunk, timeout=120, verify=VERIFY)
-            events.request.fire(request_type="PUT", name="file store PUT (not the server)",
-                                response_time=(time.time() - t) * 1000, response_length=len(chunk),
-                                exception=None if put.ok else Exception(put.status_code))
+            for attempt in range(4):           # a busy file store (503): retried, as the app does
+                t = time.time()
+                put = requests.put(p["url"], data=chunk, timeout=120, verify=VERIFY)
+                events.request.fire(request_type="PUT", name="file store PUT (not the server)",
+                                    response_time=(time.time() - t) * 1000,
+                                    response_length=len(chunk),
+                                    exception=None if put.ok else Exception(put.status_code))
+                if put.ok or put.status_code < 500:
+                    break
+                time.sleep(2 ** attempt)
             parts.append({"part_number": p["part_number"], "etag": put.headers.get("ETag", "")})
         r = self.post(f"media/{init['id']}/complete", {"parts": parts}, "media/[id]/complete")
         r.raise_for_status()
