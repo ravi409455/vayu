@@ -7,8 +7,8 @@
 #   infra/staging.sh down     power off → snapshot → delete the droplet (billing stops); keeps 2
 #                             snapshots; its name then points to the "off" marker address
 #   infra/staging.sh up       create the droplet from the newest snapshot, point its name at it,
-#                             trust its new SSH key (here and in GitHub), deploy the newest
-#                             built commit of main
+#                             trust its new SSH key once you confirm it (here and in GitHub),
+#                             deploy the newest built commit of main
 #
 # The name vayu-staging.carcid.in is served by DigitalOcean's DNS (GoDaddy hands just that name
 # over with NS records), so this script changes it itself. While staging is off it points to
@@ -115,13 +115,20 @@ case "${1:-}" in
     echo "== waiting for the server to boot"
     until nc -z -G 5 "$ip" 22 2>/dev/null; do sleep 10; done
     # A server made from a snapshot gets NEW SSH host keys on its first boot (DigitalOcean's
-    # cloud-init). Read them now (our own droplet, made minutes ago, reached by its address
-    # straight from DigitalOcean) and trust them under the staging name, here and in GitHub (the
-    # deploy workflow refuses any other key).
+    # cloud-init). The owner confirms the new key before it is trusted here and in GitHub (the
+    # deploy workflow refuses any other key); it can be compared in DigitalOcean's own Droplet
+    # Console, behind the owner's DigitalOcean login. Only the ED25519 key is trusted.
     kh=$(mktemp); trap 'rm -f "$kh"' EXIT
-    until ssh-keyscan -t ed25519,ecdsa,rsa "$ip" 2>/dev/null | grep -v '^#' \
-        | sed "s/^$ip /$HOST /" | sort -u > "$kh" && [[ $(grep -c . "$kh") -ge 1 ]]; do sleep 5; done
-    echo "== its SSH key: $(ssh-keygen -lf "$kh" | awk '$4 == "(ED25519)" {print $2}') (now trusted here and in GitHub)"
+    until ssh-keyscan -t ed25519 "$ip" 2>/dev/null | grep -v '^#' \
+        | sed "s/^$ip /$HOST /" > "$kh" && [[ $(grep -c . "$kh") -eq 1 ]]; do sleep 5; done
+    fp=$(ssh-keygen -lf "$kh" | awk '{print $2}')
+    echo
+    echo "The new server's SSH key is:  $fp"
+    echo "To be sure it is ours: DigitalOcean → Droplets → $NAME → Access → Launch Droplet Console, run"
+    echo "  ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub"
+    echo "and compare. Nothing is trusted or deployed until you answer."
+    read -rp "Trust this key (here and in GitHub) and deploy? Type yes: " typed </dev/tty
+    [[ "$typed" == yes ]] || die "stopped: the key was not trusted; staging is up but not deployed"
     ssh-keygen -R "$HOST" >/dev/null 2>&1 || true
     cat "$kh" >> ~/.ssh/known_hosts
     gh secret set SSH_KNOWN_HOSTS --env staging --repo "$REPO" < "$kh"

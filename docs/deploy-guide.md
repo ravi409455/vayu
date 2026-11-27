@@ -539,7 +539,7 @@ docker stats --no-stream          # CPU and memory per service
 **Staging on demand** (a switched-off server is still billed; staging lives as a snapshot):
 ```bash
 infra/staging.sh up       # re-create from the newest snapshot, point vayu-staging.carcid.in at it,
-                          # deploy the newest built main, check health (about 10 minutes)
+                          # show its new SSH key (type yes to trust it), deploy the newest main
 infra/staging.sh down     # power off → snapshot → delete (type "staging" to confirm); the name
                           # then points to the "off" marker 192.0.2.1
 infra/staging.sh status   # droplet, snapshots, where the name points
