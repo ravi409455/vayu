@@ -760,7 +760,7 @@ def test_pdf_renders_run_on_a_one_at_a_time_queue():
 
     assert s.CELERY_TASK_ROUTES["apps.reports.tasks.render_report"] == {"queue": "pdf"}
     compose = (Path(__file__).resolve().parents[4] / "infra" / "docker-compose.prod.yml").read_text()
-    assert "-Q pdf -c 1" in compose
+    assert '-Q pdf -c "$${PDF_CONCURRENCY:-1}"' in compose      # 1 unless the load test asks
 
 
 def test_preview_renders_a_template_with_real_data_without_storing_anything(renv, settings):
