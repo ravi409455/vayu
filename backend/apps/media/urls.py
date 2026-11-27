@@ -11,6 +11,7 @@ urlpatterns = [
     path("media/<uuid:pk>/attach", views.Attach.as_view()),
     path("problems/stuck-uploads", views.StuckUploads.as_view()),
     path("bookings/<uuid:pk>/media", views.BookingMedia.as_view()),
+    path("bookings/<uuid:pk>/media-links", views.BookingLinks.as_view()),
     path("bookings/<uuid:pk>/media-zip", views.RequestZip.as_view()),
     path("bookings/<uuid:pk>/missing-files", views.MissingFiles.as_view()),
     path("bookings/<uuid:pk>/finish", views.Finish.as_view()),

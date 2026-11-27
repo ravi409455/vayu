@@ -145,6 +145,7 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         lastPassword = ""                             // only kept for a required password change
         graph.forgetOthers(me.id)                     // another person's leftovers on this phone (N-8)
         _screen.value = Screen.Home(me)
+        entered = true
         tokens.pendingLogout()?.let { old -> viewModelScope.launch { if (api.endOld(old)) tokens.setPendingLogout(null) } }
         if (me.role == "expert") jobs.open(me.id, offline = false)
         heartbeat(me.id)
@@ -188,15 +189,25 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
         tokens.clear(); jobs.forget(); bell.clear(); _screen.value = Screen.SignIn()
     }
 
+    private var firstFront = true
+    private var entered = false
+
     /** The app came back to the front: experts get fresh jobs (and a new "today" after midnight). */
     fun onForeground() {
+        // the app's first coming to the front is its start: the server's answer (enter) loads all
+        // this, so a second load now is skipped; every later return to the front loads as before
+        if (firstFront) { firstFront = false; if (!entered) return }
+        fetchNew()
+    }
+
+    /** A push arrived: what it is about is fetched now (jobs for experts; Ops screens reload themselves). */
+    fun onPush() = fetchNew()
+
+    private fun fetchNew() {
         val me = (screen.value as? Screen.Home)?.me ?: return
         if (me.role == "expert") jobs.sync()
         bell.refresh()
     }
-
-    /** A push arrived: what it is about is fetched now (jobs for experts; Ops screens reload themselves). */
-    fun onPush() = onForeground()
 
     /** Ops: one kind of notification on or off. Shown at once; put back if the server refuses. */
     fun setNotify(key: String, on: Boolean) {

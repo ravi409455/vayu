@@ -38,7 +38,8 @@ class OpsModel(private val data: OpsData, me: Me, private val today: () -> Local
     private var namesFresh = false
     private var job: Job? = null
 
-    init { reload() }
+    // the first load is OpsHome's on-screen reload (it runs as the screen first shows): one here
+    // too loaded everything twice on every app start
 
     /** Load again; [asked]: the person pressed Refresh (names are fetched again, and the result is said). */
     fun reload(asked: Boolean = false) {

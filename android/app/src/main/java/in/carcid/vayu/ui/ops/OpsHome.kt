@@ -3,6 +3,8 @@ package `in`.carcid.vayu.ui.ops
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -81,13 +83,18 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     else BackHandler(tab != OpsTab.TODAY) { tab = OpsTab.TODAY }        // Back from Bookings or Dashboard: Today first, then out
 
     Box(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
-        when (val r = stack.lastOrNull()) {
-            null -> when (tab) {
+        // the tab stays built under an opened screen, hidden (not drawn, not touchable, not read
+        // out): Back shows it at once and where it was scrolled, instead of building it again (~90 ms)
+        Box(Modifier.fillMaxSize().then(if (stack.isEmpty()) Modifier else Modifier.hiddenBelow())) {
+            when (tab) {
                 OpsTab.TODAY -> TodayScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { push(Route.Booking(it)) }, { assigning = it }, bar)
                 OpsTab.BOOKINGS -> BookingsScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { push(Route.Booking(it)) }, { assigning = it }, bookingFilters, { bookingFilters = it },
                     onNew = { push(Route.Form(null)) }, bar)
                 OpsTab.DASHBOARD -> DashboardScreen(env, needs?.size ?: 0, { push(Route.Needs) }, onProfile, { bookingFilters = BookingFilters.fromTile(it); tab = OpsTab.BOOKINGS }, bar)
             }
+        }
+        when (val r = stack.lastOrNull()) {
+            null -> {}
             Route.Needs -> {
                 LaunchedEffect(Unit) { onBell() }
                 NeedsYouScreen(env, needs, onBack = { pop() }, onOpen = { push(Route.Booking(it)) },
@@ -117,4 +124,10 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
                 "Assigned to ${labels.person(expert)}.") { assigning = null }
         }
     }
+}
+
+/** Measured but not placed: nothing drawn, no touches, nothing for TalkBack; its state is kept. */
+private fun Modifier.hiddenBelow() = clearAndSetSemantics {}.layout { m, c ->
+    val p = m.measure(c)
+    layout(p.width, p.height) {}
 }

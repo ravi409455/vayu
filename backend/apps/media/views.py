@@ -105,23 +105,52 @@ class Finish(APIView):
         return Response({"stage": b.stage})
 
 
+def _refusal(user, asset: MediaAsset, hidden: set[str]):
+    """Why this person gets no link to [asset] (None: they do). The one rule for a file link,
+    used by one file's link and by a booking's links, so the two can never differ."""
+    if asset.field_key in hidden or (
+            asset.replaced_at is not None and user.role != "admin"):  # history: Admin
+        return fail("NOT_FOUND", "Media not found.", 404)      # same answer as a missing file
+    if asset.status == "purged":                 # Admin's storage time (Settings)
+        return fail("MEDIA_REMOVED", "This file was deleted after the storage time set in "
+                    "Settings (Photo and video storage).", 410)
+    if asset.status != "verified":
+        return fail("NOT_READY", "This file is not verified yet.", 409)
+    return None
+
+
+def _link(asset: MediaAsset, s3=None) -> dict:
+    s3 = s3 or storage.client()
+    return {"url": storage.presign_get(asset.key, s3=s3),
+            "preview_url": storage.presign_get(asset.preview_key, s3=s3)
+            if asset.preview_key else None,
+            "content_type": asset.content_type}
+
+
 class Url(APIView):
     permission_classes = [perm("submissions.view")]
 
     def get(self, request, pk):
         asset = _asset(request, pk, write=False)
-        if asset.field_key in services.hidden_fields(request.user, asset.booking) or (
-                asset.replaced_at is not None and request.user.role != "admin"):  # history: Admin
-            raise fail("NOT_FOUND", "Media not found.", 404)      # same answer as a missing file
-        if asset.status == "purged":                 # Admin's storage time (Settings)
-            raise fail("MEDIA_REMOVED", "This file was deleted after the storage time set in "
-                       "Settings (Photo and video storage).", 410)
-        if asset.status != "verified":
-            raise fail("NOT_READY", "This file is not verified yet.", 409)
-        return Response({"url": storage.presign_get(asset.key),
-                         "preview_url": storage.presign_get(asset.preview_key)
-                         if asset.preview_key else None,
-                         "content_type": asset.content_type})
+        refusal = _refusal(request.user, asset, services.hidden_fields(request.user, asset.booking))
+        if refusal is not None:
+            raise refusal
+        return Response(_link(asset))
+
+
+class BookingLinks(APIView):
+    """Every link this person may have to the booking's current files, in one answer: a
+    photo screen of 74 photos asks once, not 74 times (each ask checks access again)."""
+    permission_classes = [perm("submissions.view")]
+
+    def get(self, request, pk):
+        booking = services.readable_booking(request, pk)
+        hidden = services.hidden_fields(request.user, booking)
+        assets = MediaAsset.objects.filter(booking=booking, replaced_at__isnull=True)
+        s3 = storage.client()
+        return Response({"expires_in": storage.link_ttl(),
+                         "links": {str(a.id): _link(a, s3) for a in assets
+                                   if _refusal(request.user, a, hidden) is None}})
 
 
 class StuckUploads(APIView):
