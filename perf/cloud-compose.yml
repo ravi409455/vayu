@@ -1,0 +1,15 @@
+# Load-test servers only (perf/cloud.sh): the production compose file, plus the load-test settings
+# (perf/local/loadtest_settings.py: webhooks may go to the receiver on the load server over the
+# private network, plain http). Nothing else differs from production. Paths are relative to infra/.
+x-app: &app
+  environment:
+    DJANGO_SETTINGS_MODULE: vayu.settings.loadtest
+  volumes:
+    - ../perf/local/loadtest_settings.py:/app/vayu/settings/loadtest.py:ro
+services:
+  migrate: *app
+  api: *app
+  worker: *app
+  zip-worker: *app
+  pdf-worker: *app
+  beat: *app

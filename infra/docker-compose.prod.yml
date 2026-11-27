@@ -55,9 +55,10 @@ services:
   pdf-worker:
     <<: *app
     depends_on: {<<: *deps, migrate: {condition: service_completed_successfully}}
-    # one PDF render at a time; a safety restart if it ever holds over 600 MB (a full report
-    # peaks ~450 MB, load test 2026-11-27), checked between renders, never during one
-    command: celery -A vayu worker -Q pdf -c 1 --max-memory-per-child=600000
+    # one PDF render at a time (PDF_CONCURRENCY: the load test's capacity step tries 2); a safety
+    # restart if it ever holds over 600 MB (a full report peaks ~450 MB, load test 2026-11-27),
+    # checked between renders, never during one
+    command: sh -c 'exec celery -A vayu worker -Q pdf -c "$${PDF_CONCURRENCY:-1}" --max-memory-per-child=600000'
     environment:
       <<: *env
       MALLOC_ARENA_MAX: "2"     # glibc keeps fewer memory pools: ~200 MB less held between renders

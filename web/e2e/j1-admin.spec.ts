@@ -167,13 +167,14 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   await page.getByText("Share with other reports").click();
   await page.getByLabel("Save this part as a shared part: name").fill("Condition block");
   await page.getByRole("button", { name: "Share", exact: true }).click();
-  await expect(page.getByText(/^Shared\./)).toBeVisible();
+  // the answer can wait behind a preview render on a slow CI machine (it took over 5 s there)
+  await expect(page.getByText(/^Shared\./)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTitle("Shared with other reports")).toBeVisible();
   await page.getByRole("button", { name: "Report settings" }).click();
   await page.getByRole("tab", { name: "Theme" }).click();
   await page.getByLabel("Save this report's look as a shared theme: name").fill("House look");
   await page.getByRole("button", { name: "Share", exact: true }).click();
-  await expect(page.getByText(/uses the shared theme/)).toContainText("House look");
+  await expect(page.getByText(/uses the shared theme/)).toContainText("House look", { timeout: 20_000 });
   await page.getByRole("tab", { name: "Header and footer" }).click();
   await expect(page.getByText(/These come from the shared theme “House look”/)).toBeVisible();
   await page.getByRole("button", { name: "Done" }).click();

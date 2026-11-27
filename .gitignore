@@ -36,3 +36,8 @@ android/.kotlin/
 # on a server: backup working files and the commit that is live (infra/deploy.sh)
 /backups/
 /.deployed
+# load tests on throwaway servers (perf/cloud.sh): local state and results
+perf/.cloud/
+perf/results/
+perf/local/results/
+perf/local/.cpuset

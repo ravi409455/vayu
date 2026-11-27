@@ -14,17 +14,10 @@ time, and removes everything again.
 | 2026-11-23 | developer laptop (Apple silicon), in-memory S3 | **150 photos → 1.7 MB PDF in 16.3 s** |
 | _to do_ | staging (the real 6 GB `pdf` worker) | |
 
-## 2. Load: 200 mixed users (target: p95 under 500 ms)
-```bash
-export LOAD_OPS_USER=... LOAD_OPS_PASSWORD=... LOAD_EXPERT_USER=... LOAD_EXPERT_PASSWORD=...
-uvx locust -f perf/locustfile.py --host https://staging.carcid.in --users 200 --spawn-rate 10 --run-time 10m --headless
-```
-25 Ops users (board, search, booking, dashboards) and 175 experts (job list, one job). Use two
-throw-away accounts on staging; the passwords stay in your shell, never in the repo.
-
-| When | Where | p95 | Notes |
-|---|---|---|---|
-| _to do_ | staging | | |
+## 2. Load
+Replaced by the load tests in `docs/plan-load-test.md` (the owner's real day: phones, Ops, the
+external system, uploads, PDFs, webhooks): `perf/local/run.sh` on the Mac, `perf/cloud.sh` on
+throwaway servers. Results go there (§9).
 
 ## 3. Real Cloudflare R2
 Done 2026-11-23 on `vayu-staging`: the whole media + PDF test suite (122 tests) passes against the

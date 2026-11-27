@@ -1,0 +1,30 @@
+# Local load test only: no real secrets here (local file store, dummy Sentry, local database).
+VAYU_SERVER_KIND=test
+VAYU_SERVER_NAME=local-loadtest
+APP_HOST=localhost
+ALLOWED_HOSTS=localhost
+CSRF_TRUSTED_ORIGINS=https://localhost
+PUBLIC_BASE_URL=https://localhost
+VERIFY_BASE_URL=https://localhost/report/verify
+DJANGO_SECRET_KEY=local-loadtest-only-not-a-secret-xxxxxxxxxxxxxxxxxxxxxxxx
+# the $12 droplet's settings (1 vCPU / 2 GB); the sampler reports the memory used
+WEB_CONCURRENCY=2
+WORKER_CONCURRENCY=1
+ZIP_CONCURRENCY=1
+PDF_MEM_LIMIT=4g
+DB_NAME=vayu
+DB_USER=vayu
+DB_PASSWORD=local-loadtest
+DB_HOST=postgres
+DB_PORT=5432
+DB_SSLMODE=prefer
+# Sentry off (plan §6): a DSN that goes nowhere
+SENTRY_DSN=https://00000000000000000000000000000000@127.0.0.1:9/0
+SENTRY_ENVIRONMENT=loadtest
+S3_BUCKET=vayu-loadtest
+S3_ENDPOINT_URL=http://s3.lvh.me:9100
+S3_ACCESS_KEY_ID=loadtest
+S3_SECRET_ACCESS_KEY=loadtest-not-a-secret
+S3_REGION=us-east-1
+FIREBASE_CREDENTIALS_FILE=/run/secrets/firebase-service-account.json
+CSP_HEADER=Content-Security-Policy
