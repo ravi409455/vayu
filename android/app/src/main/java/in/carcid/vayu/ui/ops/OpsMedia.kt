@@ -77,6 +77,7 @@ import `in`.carcid.vayu.ui.expert.sha256
 import `in`.carcid.vayu.ui.theme.Vayu
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -90,7 +91,14 @@ import java.util.UUID
  */
 suspend fun mediaBytes(env: OpsEnv, dir: File, id: String, preview: Boolean = false,
                        /** The file's booking: its links come in one request for all its files. */
-                       booking: String? = null): File? = withContext(Dispatchers.IO) {
+                       booking: String? = null): File? =
+    // tiles: a few at a time, in the order they were asked for (top of the screen first). All at
+    // once, the 5 on screen waited behind the other 70 (2-3 s on a 74-photo booking, measured)
+    if (preview) previews.withPermit { fetchMedia(env, dir, id, true, booking) } else fetchMedia(env, dir, id, false, booking)
+
+private val previews = kotlinx.coroutines.sync.Semaphore(4)
+
+private suspend fun fetchMedia(env: OpsEnv, dir: File, id: String, preview: Boolean, booking: String?): File? = withContext(Dispatchers.IO) {
     // the file name comes from the server's ID: only a real ID, never a path
     if (runCatching { java.util.UUID.fromString(id) }.isFailure) return@withContext null
     val full = File(dir, "media-$id")

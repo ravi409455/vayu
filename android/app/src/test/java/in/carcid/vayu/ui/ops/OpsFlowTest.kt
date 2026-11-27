@@ -582,6 +582,26 @@ class OpsFlowTest {
         assertEquals(listOf("GET media/${ids.last()}/url"), server.requests.map { it.first }.filter { it.endsWith("/url") })
     }
 
+    @Test fun photoTilesLoadAFewAtATimeTopFirst() {
+        server.on("GET form-versions/7", """{"id":7,"checks":[],"pages":[{"id":1,"title":"Photos","visible":true,"gate":false,"sections":[{"id":1,"title":"Outside","visible":true,
+            "fields":[{"key":"front","label":"Front","type":"photo","visible":true,"config":{"max_count":8}}]}]}]}""")
+        val ids = (1..8).map { "bbbbbbbb-0000-0000-0000-00000000000$it" }
+        server.on("GET bookings/$B14/media", ids.joinToString(",", "[", "]") { """{"id":"$it","field_key":"front","kind":"photo","status":"verified"}""" })
+        server.on("GET bookings/$B14/media-links", ids.joinToString(",", """{"expires_in":3600,"links":{""", "}}") {
+            """"$it":{"url":"${server.raw("/files/$it")}","preview_url":"${server.raw("/previews/$it")}","content_type":"image/jpeg"}""" })
+        ids.forEach { server.on("GET /previews/$it", "not really a picture", lateMs = 1_500) }   // a slow network
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("Photos and videos"); compose.onNodeWithText("Photos and videos").performScrollTo().performClick()
+        val asked = { server.requests.map { it.first }.filter { it.startsWith("GET /previews/") } }
+        compose.waitUntil(10_000) { asked().size >= 4 }
+        Thread.sleep(500)                                    // the first 4 still downloading: no more asked for
+        assertEquals(ids.take(4).map { "GET /previews/$it" }.toSet(), asked().toSet())   // the top 4, together
+        compose.waitUntil(15_000) { asked().size == 8 }
+        assertEquals(ids.drop(4).map { "GET /previews/$it" }.toSet(), asked().drop(4).toSet())
+    }
+
     /** Back from a booking shows the list at once (kept, not built again); hidden, it can't be read or tapped. */
     @Test fun theListIsKeptHiddenUnderABooking() {
         show()
