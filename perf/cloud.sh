@@ -433,8 +433,10 @@ cmd_down() {   # everything this script made: test servers first (their files), 
 on_failure_destroy() {   # a whole-test command that fails cleans up and destroys everything
   # shellcheck disable=SC2154  # rc is set inside the trap
   trap 'rc=$?; if (( rc != 0 )) && [[ -z "${LT_KEEP:-}" ]]; then
+          # the other test servers stop too (and their ssh), and are gone before the clean-up below
+          # (which removes each server'"'"'s test files from the bucket, run from here, not by them)
           for j in $(jobs -p); do pkill -TERM -P "$j" 2>/dev/null; kill "$j" 2>/dev/null; done
-          true                                     # the other test servers (and their ssh) stop too
+          wait 2>/dev/null || true
           echo "== failed (exit $rc): cleaning up and destroying, so nothing keeps billing" >&2
           cmd_down force || echo "== DESTROY FAILED: run perf/cloud.sh status, then down force" >&2
         fi' EXIT INT TERM
@@ -563,8 +565,8 @@ cmd_status() {
 # made before any server: a branch switch or an edit in the checkout during a run changes nothing
 # (2026-11-27: a switch mid-run sent the old load script to a load server)
 if [[ "${1:-}" =~ ^(all|rehearse|dbcheck)$ && -z "${LT_FROZEN:-}" ]]; then
-  frozen="$STATE_DIR/frozen-$(date +%Y%m%d-%H%M%S)"
-  mkdir -p "$frozen/infra"
+  frozen=$(umask 077 && mktemp -d "$STATE_DIR/frozen-$(date +%Y%m%d-%H%M%S)-XXXXXX")   # new, private
+  mkdir "$frozen/infra"
   tar -C "$SRC" --exclude perf/results --exclude perf/.cloud --exclude '__pycache__' -cf - perf \
     | tar -C "$frozen" -xf -
   cp "$ROOT/infra/bootstrap.sh" "$frozen/infra/"
