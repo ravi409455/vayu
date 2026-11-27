@@ -648,6 +648,36 @@ Lessons:
   in the web form (by Claude, in the owner's browser), resource type Droplets only.
 - The web form defaults to **All Droplets**: always swap it for the tag.
 
+### 5.2 · Better Stack: uptime monitor and heartbeats 🔄 (2026-11-27, staging test)
+Account: Better Stack (Uptime), signed up by the owner with the company email, **Free plan**
+(10 monitors, 10 heartbeats; alerts by e-mail and Slack only; phone call, SMS and app push need
+the paid plan). Made by Claude in the owner's browser. **Staging is a test only: at launch the same
+set is made for production and the staging ones are deleted** (staging is switched off between
+rounds, so its monitor would alert every time).
+
+| Name | What | Setting |
+|---|---|---|
+| `Vayu staging health` (monitor) | `https://vayu-staging.carcid.in/api/v1/health` | alert when the page lacks `"ok"`; checked every 3 min (the Free plan's fastest; 1 min is paid); incident after 1 min failing; recovery 3 min |
+| `staging-workers` (heartbeat) | ping from a worker every 5 min (`apps.platform.tasks.heartbeat`) | expected every 5 min, grace 10 min; URL in Phase `vayu` → Staging `WORKERS_HEARTBEAT_URL` |
+| `staging-backup` (heartbeat) | ping at the end of the nightly `infra/backup.sh` | expected every 1 day, grace 3 h; URL in Phase `vayu` → Staging `BACKUP_HEARTBEAT_URL` |
+| `carcid.com` (monitor) | made by Better Stack's sign-up; the company site | left as it was |
+
+Tested:
+- Monitor: staging went down and up during the test → Better Stack opened "DNS lookup failed"
+  incidents and resolved them by itself when staging came back ✅.
+- `staging-workers`: **Up** a few minutes after staging started ✅ (values reached
+  `.env.staging` and the worker container after a hand-started deploy).
+- `staging-backup`: ⏳ waits for a nightly backup on a running staging (or a backup run by hand).
+- Slack `#vayu-alerts` integration: ⏳ the owner is connecting it; check an incident arrives there.
+
+Lessons:
+- **A heartbeat stays "Pending" until its first ping, and a Pending heartbeat never alerts.** To
+  test the alert, let it go Up first, then stop the pings.
+- Better Stack refuses a monitor while the address points to the placeholder `192.0.2.1` (staging
+  switched off): "Domain … was restricted and cannot be added as a monitor". Make it while staging is up.
+- After `staging.sh up` the Mac may still have the placeholder address cached; check with
+  `dig +short vayu-staging.carcid.in @1.1.1.1`.
+
 ## Phase 6 · Prove staging ⏳
 ## Phase 7 · Production ⏳
 
@@ -660,7 +690,7 @@ Lessons:
 ### Phase (console.phase.dev, organisation `CarCID`)
 | App → environment | Keys | Used by |
 |---|---|---|
-| `vayu` → Staging | the 24 non-secret values of `infra/phase-staging.env`; `DJANGO_SECRET_KEY`, `DB_PASSWORD`, `SENTRY_DSN`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (token `vayu-staging-app`), `BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY` (token `vayu-backups-staging`), `BACKUP_PUBLIC_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON` (the Mac's/staging's Firebase key) | the staging server, through `infra/secrets.sh` |
+| `vayu` → Staging | the 24 non-secret values of `infra/phase-staging.env`; `WORKERS_HEARTBEAT_URL`, `BACKUP_HEARTBEAT_URL` (Better Stack, 5.2); `DJANGO_SECRET_KEY`, `DB_PASSWORD`, `SENTRY_DSN`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (token `vayu-staging-app`), `BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY` (token `vayu-backups-staging`), `BACKUP_PUBLIC_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON` (the Mac's/staging's Firebase key) | the staging server, through `infra/secrets.sh` |
 | `vayu` → Production | **so far**: `SENTRY_DSN`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (token `vayu-prod-app`), `BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY` (token `vayu-backups-prod`), `BACKUP_PUBLIC_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON` (production's own key). **Still to add (Phase 7)**: import `infra/phase-production.env`, new `DJANGO_SECRET_KEY`, the managed database's `DB_PASSWORD` and `DB_HOST` | the production server |
 | `vayu` → Development | nothing yet | the Mac's local stack |
 | `vayu-owner` → Production | `ANDROID_KEYSTORE_B64`, `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, `SENTRY_DSN_WEB`, `SENTRY_DSN_ANDROID`, `SENTRY_AUTH_TOKEN` (`vayu-ci`), `DO_API_TOKEN` (`vayu-owner-laptop`), `OWNER_SSH_PRIVATE_KEY`, `BACKUP_AGE_SECRET_KEY` (unlocks backups; never on a server), `PHASE_TOKEN_STAGING_SERVER`, `DEPLOY_SSH_KEY_STAGING` | the owner |
@@ -695,6 +725,7 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 | DigitalOcean | firewall `vayu-web` (by tag), tags `vayu-web`, `vayu-staging`; SSH key `owner-mac` |
 | GitHub | ruleset `main protect`; environments `staging`, `production` (reviewer `ravi409455`) |
 | Slack | `#vayu-alerts` (public, workspace "Car C.I.D") |
+| Better Stack | Uptime, Free plan; monitor `Vayu staging health`, heartbeats `staging-workers`, `staging-backup` (5.2) |
 
 ---
 
@@ -708,7 +739,9 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 | Every deploy run waits for production Approve: cancel it until production exists (after PR 42 it no longer blocks staging) | until Phase 7 |
 | Welcome pages (`/welcome/engineers`, `/welcome/ops`, public APK download; PR welcome-pages): open both on staging after the next deploy; on production in Phase 7, with an uptime monitor on `/welcome/engineers` | next deploy, Phase 7 |
 | 2.5c Restrict the Firebase API key | once "Vayu Staging" is on a phone (Phase 6) |
-| Phase 5: Better Stack uptime and heartbeats (`BACKUP_HEARTBEAT_URL`, `WORKERS_HEARTBEAT_URL` into Phase), DigitalOcean alerts, first restore drill | after the first deploy |
+| Phase 5: first restore drill | next staging round |
+| 5.2 Better Stack: `staging-backup` turns Up after a nightly backup; Slack `#vayu-alerts` gets an incident | next staging round |
+| 5.2 Better Stack for production: monitors on `/api/v1/health`, `/` and `/welcome/engineers`; heartbeats `prod-workers`, `prod-backup` → Phase `vayu` → Production; then delete the staging monitor and heartbeats and clear their two Phase Staging values | Phase 7 |
 | Phase Production environment: the rest of its values (table above) | Phase 7 |
 | Production server's Phase service account (`vayu-prod-server`, Production only) and robot key | Phase 7 |
 | DigitalOcean API token `vayu-owner-laptop` expires (90 days) | around 2027-02-24 |

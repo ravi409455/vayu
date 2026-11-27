@@ -584,9 +584,12 @@ Make them in the web form, not with `doctl` (it only knows the old alert system)
 **Backups.** Every night at 02:00 IST the server runs `infra/backup.sh`: database → encrypted with
 `BACKUP_PUBLIC_KEY` → `vayu-backups`. Check: `ssh deploy@<server> 'systemctl list-timers vayu-backup.timer'`.
 
-🧪 **Uptime checks** (Better Stack, free): a monitor on `https://<server>/api/v1/health` every
-minute; heartbeats → Phase `vayu` → that environment → **`BACKUP_HEARTBEAT_URL`** 🔐 and
-**`WORKERS_HEARTBEAT_URL`** 🔐; Slack `#vayu-alerts`.
+**Uptime checks** (Better Stack, Free plan; tried on staging 2026-11-27, see the setup log 5.2): a
+monitor on `https://<server>/api/v1/health` (keyword `"ok"`, every 3 minutes, the Free plan's
+fastest); heartbeats `<env>-workers` (5 min, grace 10 min) and `<env>-backup` (1 day, grace 3 h) →
+their URLs into Phase `vayu` → that environment → **`WORKERS_HEARTBEAT_URL`** 🔐 and
+**`BACKUP_HEARTBEAT_URL`** 🔐, then deploy; Slack `#vayu-alerts`. A heartbeat alerts only after its
+first ping. Make the monitor while the server is up. Only production is watched after launch.
 
 🧪 **Restore drill** (first Monday of the month): `docs/runbook-new-server.md` §7
 (`infra/restore.sh`; it asks for `BACKUP_AGE_SECRET_KEY`).
