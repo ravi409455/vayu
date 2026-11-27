@@ -193,6 +193,22 @@ class VayuApp : Application() {
             .apply { priority = Thread.MIN_PRIORITY }.start()
         // shots never confirmed before the app died, and other files no draft refers to
         Thread { runCatching { graph.sweep() } }.apply { priority = Thread.MIN_PRIORITY }.start()
+        dropConnectionsOnNetworkChange()
+    }
+
+    /** Wi-Fi → 4G (or back): connections made on the old network are dead, but the app only finds
+     *  out after a ~10 s wait. Measured on a phone. Drop them, so the next call opens a new one. */
+    private fun dropConnectionsOnNetworkChange() {
+        val cm = getSystemService(android.net.ConnectivityManager::class.java) ?: return
+        runCatching {
+            cm.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+                private var current: android.net.Network? = null
+                override fun onAvailable(network: android.net.Network) {
+                    if (current != null && current != network) graph.api.http.connectionPool.evictAll()
+                    current = network
+                }
+            })
+        }
     }
 
     val graph: Graph by lazy {
