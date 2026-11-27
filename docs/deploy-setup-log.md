@@ -648,7 +648,7 @@ Lessons:
   in the web form (by Claude, in the owner's browser), resource type Droplets only.
 - The web form defaults to **All Droplets**: always swap it for the tag.
 
-### 5.2 · Better Stack: uptime monitor and heartbeats 🔄 (2026-11-27, staging test)
+### 5.2 · Better Stack: uptime monitor and heartbeats ✅ (2026-11-27, staging test)
 Account: Better Stack (Uptime), signed up by the owner with the company email, **Free plan**
 (10 monitors, 10 heartbeats; alerts by e-mail and Slack only; phone call, SMS and app push need
 the paid plan). Made by Claude in the owner's browser. **Staging is a test only: at launch the same
@@ -667,7 +667,8 @@ Tested:
   incidents and resolved them by itself when staging came back ✅.
 - `staging-workers`: **Up** a few minutes after staging started ✅ (values reached
   `.env.staging` and the worker container after a hand-started deploy).
-- `staging-backup`: ⏳ waits for a nightly backup on a running staging (or a backup run by hand).
+- `staging-backup`: **Up** ✅ after a backup run by hand (`ssh deploy@<staging> /srv/vayu/infra/backup.sh nightly`;
+  the service runs as `deploy`, so no sudo). Only `nightly` backups ping; `predeploy-<sha>` ones do not.
 - Slack `#vayu-alerts` integration: ⏳ the owner is connecting it; check an incident arrives there.
 
 Lessons:
@@ -740,7 +741,7 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 | Welcome pages (`/welcome/engineers`, `/welcome/ops`, public APK download; PR welcome-pages): open both on staging after the next deploy; on production in Phase 7, with an uptime monitor on `/welcome/engineers` | next deploy, Phase 7 |
 | 2.5c Restrict the Firebase API key | once "Vayu Staging" is on a phone (Phase 6) |
 | Phase 5: first restore drill | next staging round |
-| 5.2 Better Stack: `staging-backup` turns Up after a nightly backup; Slack `#vayu-alerts` gets an incident | next staging round |
+| 5.2 Better Stack: check Slack `#vayu-alerts` gets an incident | next staging round |
 | 5.2 Better Stack for production: monitors on `/api/v1/health`, `/` and `/welcome/engineers`; heartbeats `prod-workers`, `prod-backup` → Phase `vayu` → Production; then delete the staging monitor and heartbeats and clear their two Phase Staging values | Phase 7 |
 | Phase Production environment: the rest of its values (table above) | Phase 7 |
 | Production server's Phase service account (`vayu-prod-server`, Production only) and robot key | Phase 7 |
