@@ -295,6 +295,13 @@ prepare_sut() {   # prepare_sut <role>: bootstrap, settings, deploy, forms, the 
     c exec -T api python manage.py setup_platform --users /tmp/staff.csv >/dev/null &&
     c exec -T api rm -f /tmp/staff.csv /tmp/staff.csv.passwords"
   local k_max=1; [[ "$(role_plan "$role")" == capacity ]] && k_max=${CAP_STEPS##*,}
+  # the webhook receiver first: preparing the data already sends webhooks (bookings created), and
+  # with no receiver yet they arrived minutes late and spoiled the webhook times (the rehearsal)
+  local port; port=$(role_port "$role")
+  on "root@$load_ip" "docker rm -f lt-recv-$role lt-locust-$role >/dev/null 2>&1 || true
+    mkdir -p /lt/out/$role
+    docker run -d --name lt-recv-$role -p $(pip_of "$load"):$port:9300 -v /lt:/lt \
+      python:3.12-slim python3 /lt/perf/receiver.py --port 9300 --out /lt/out/$role/webhooks.csv >/dev/null"
   local pw; pw=$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')   # this throwaway only
   # webhooks go to this server's receiver on its load server over the private network (plain
   # http, allowed by the load-test settings only); leads unassigned: the load script's Ops give
@@ -326,10 +333,7 @@ run_sut() {   # run_sut <role> <results folder>: one run of the load script, the
   local env_photos=""
   [[ -d "$PHOTOS" ]] && env_photos="-e LT_PHOTOS=/lt/photos"
   say "$role: $plan run, up to $minutes minutes"
-  on "root@$load_ip" "docker rm -f lt-recv-$role lt-locust-$role >/dev/null 2>&1 || true
-    mkdir -p /lt/out/$role
-    docker run -d --name lt-recv-$role -p $(pip_of "$(role_load "$role")"):$port:9300 -v /lt:/lt \
-      python:3.12-slim python3 /lt/perf/receiver.py --port 9300 --out /lt/out/$role/webhooks.csv >/dev/null"
+  # (the webhook receiver has been up since prepare_sut)
   # only the sampler goes to the background, with no tie to this SSH session (a backgrounded
   # "mkdir && nohup ..." kept the session open and the run waited forever: third cloud run)
   on "deploy@$ip" "mkdir -p /tmp/lt; nohup bash /tmp/sample.sh /tmp/lt/stats.csv </dev/null >/dev/null 2>&1 & echo \$! > /tmp/sample.pid"
