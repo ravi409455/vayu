@@ -177,7 +177,7 @@ Run D afterwards: about 2 hours.
 - **Prediction** (the tests decide): $12 probably copes on CPU at 1×; whether 2 GB holds a PDF
   render is unknown; PDFs are the likely first limit in test 2.
 
-## 9. Results (fill in after the runs)
+## 9. Results
 
 **Local run (2026-11-27, Mac, server pinned to 1 core, memory not capped; the real PDI form:
 100 photos + 5 videos; measured from minute 25, so 81% of the PDFs, see §4):** every check passed.
@@ -189,21 +189,51 @@ zero loss; about 107 MB stored per inspection (≈ $14 a month in R2 at 100 a da
 It says the $12 size is close: CPU at the core's limit at peaks and little memory to spare,
 which the cloud runs (real vCPUs, the 15-video form, full warm-up, swap measured) decide.
 
-**Test 1: low-cost (1×, one hour)**
+**Test 1: low-cost (1×, one hour, the test form: 100 photos + 15 videos).** Two runs: before PR 65
+(2026-11-27, `perf/cloud.sh all`) and after it (2026-11-28, the same load). Slowest 5% unless
+said; "typical" is the median.
 
-| Size | Database | API p95 | Upload check p95 | PDF p95 (100 / 150 photos) | Webhook p95 | Peak memory | Zero loss | Pass? |
-|---|---|---|---|---|---|---|---|---|
-| 1 vCPU / 2 GB | on server | | | | | | | |
-| 2 vCPU / 2 GB | on server | | | | | | | |
-| 2 vCPU / 4 GB | on server | | | | | | | |
-| cheapest pass | managed | | | | | | | |
+| Size | Code | Screens & API | Upload check | PDF typical (Regenerate / first) | PDF 150-photo worst | Webhook | CPU p95 | Memory | Server errors |
+|---|---|---|---|---|---|---|---|---|---|
+| $12, 1 vCPU / 2 GB | before | 3.95 s | 2.9 s | 80 / 92 s | none made | 7.4 s | 102% | 1.3 of 1.7 GB, swap 0.5 GB | 6 |
+| | after | 0.93 s | 2.4 s | 29 / 35 s | 36 s | 3.0 s | 98% | 1.3 of 1.7 GB, swap 0.45 GB | 0 |
+| $18, 2 vCPU / 2 GB | before | 0.45 s | 2.2 s | 25 / 30 s | 40 s | 1.9 s | 81% | 1.4 of 1.7 GB, swap 0.6 GB | 0 |
+| | after | 0.37 s | 2.2 s | 19 / 25 s | 26 s | 1.7 s | 71% | 1.3 of 1.7 GB, swap 0.58 GB | 0 |
+| $24, 2 vCPU / 4 GB | before | 0.43 s | 2.2 s | 27 / 31 s | 37 s | 0.9 s | 76% | 1.9 of 3.7 GB, no swap | 2 |
+| | after | 0.37 s | 2.2 s | 18 / 23 s | 23 s | 1.1 s | 74% | 1.8 of 3.7 GB, no swap | 0 |
 
-**Test 2: capacity (step where each target broke)**
+Each size made only about 8 first PDFs an hour, so the first PDF's slowest 5% is one PDF
+(38 s on $18, 56 s on $24 after PR 65): read the typical time and the count, not that one number.
+The managed-database check (run D) was not run: the database on the server was never the limit.
 
-| Size | All held up to | API | Upload check | PDF | Webhook | Memory | Stopped at (why) | PDF with 2 at a time |
-|---|---|---|---|---|---|---|---|---|
-| cheapest pass | | | | | | | | |
-| 2 vCPU / 4 GB | | | | | | | | |
+**Test 2: capacity (before PR 65; 15 minutes a step).** $24 held to 2× and broke at 3×, PDFs
+first. $18 held to 2×, broke at 3× and was stopped at 6×. PDF time (~30 s then) was one core's
+speed, the same on both sizes.
 
-Decision: production size ____ , database ____ , monthly total (server + database + R2) ____ ,
-upgrade when daily load passes ____ .
+## 10. Recommendations (2026-11-28)
+
+The owner's real day (20 experts, 5 Ops, 50 inspections) is about half of the test peak (1×).
+
+1. **Server: start on $18 (2 vCPU / 2 GB).** It holds the full test peak with no server errors
+   and CPU at 71%. Memory is its weak spot (about 0.6 GB of swap at 1×): alert at 85% memory and
+   resize to $24 when the alert fires often or bookings grow (one click, no code change).
+   **Not $12:** it misses every target even with the faster PDFs.
+2. **PDFs: done for now.** PR 65 made a typical PDF about 1.4× faster on the cloud (2.3× on the
+   Mac). PDFs are still the first limit, at about 3× the test peak, far above the real day. When
+   load grows: try 2 PDFs at a time on $24 (not yet measured), or a separate small PDF server.
+3. **Uploads, screens, webhooks: on target** on $18 and $24. The 502s on upload start seen
+   before PR 65 ($12 ×6, $24 ×2) did not come back after it; watch them, no work now.
+4. **Files stay in R2.** About 200 MB per inspection: about 10 GB a day at 50 a day, about 900 GB
+   for 90 days, about $14 a month. The server's own disk cannot hold that.
+5. **Database stays on the server.** It grew about 5 MB an hour at the test peak; a managed
+   database is not needed yet.
+6. **The load-test tool (fix before the next cloud run):**
+   - `loadtest_cleanup` is too slow (it walks every history row): servers were force-destroyed
+     before their files were deleted, leaving 2.2 GB and then 1.86 GB in the staging bucket
+     (removed by hand). Delete only the real upload keys, in batches of 1,000.
+   - A failed clean-up stops the whole run (the stop-at-first-failure rule, PR 61): count only
+     real test failures, and never force-destroy a server whose files are not yet deleted.
+   - A low-cost-only run creates a second load server it never uses (about $0.10).
+   - The comparison page shows the slowest 5% of very few PDFs: show the typical time and the
+     count next to it.
+   - Cloudflare's R2 dashboard is hours behind: check the bucket itself after a clean-up.
