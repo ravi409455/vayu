@@ -112,7 +112,27 @@ def make_users(password: str) -> dict[str, User]:
 
 # ---------------------------------------------------------------- pictures
 
-def _picture(caption: str, n: int) -> bytes:
+PAYMENT_NOTE = "PAYMENT SCREENSHOT"
+
+
+def _payment_picture(caption: str) -> bytes:
+    """A payment screenshot nobody can miss: red, with its name, so a tester sees at once when
+    one reaches a report or a customer's download (it never should)."""
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (640, 480), (200, 20, 30))
+    d = ImageDraw.Draw(img)
+    d.rectangle((20, 20, 620, 460), outline=(255, 255, 255), width=8)
+    for y, line in ((150, PAYMENT_NOTE), (210, "NOT FOR THE CUSTOMER"), (270, caption[:60])):
+        d.text((60, y), line, fill=(255, 255, 255), font_size=40)
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=72)
+    return buf.getvalue()
+
+
+def _picture(caption: str, n: int, field_key: str = "") -> bytes:
+    if "payment" in field_key:
+        return _payment_picture(caption)
     files = sorted(PHOTOS.glob("*.jpg")) if PHOTOS.exists() else []
     if files:
         return files[n % len(files)].read_bytes()
@@ -138,7 +158,8 @@ class Pictures:
             kind: str = "photo") -> str:
         """A verified file on the booking, as if the phone had sent it."""
         self.n += 1
-        data = _picture(caption, self.n) if kind == "photo" else b"\x00\x00\x00\x18ftypmp42"
+        data = (_picture(caption, self.n, field_key) if kind == "photo"
+                else b"\x00\x00\x00\x18ftypmp42")
         ctype = "image/jpeg" if kind == "photo" else "video/mp4"
         a = MediaAsset(client_uuid=uuid.uuid4(), booking=booking, uploaded_by=who,
                        field_key=field_key, kind=kind, content_type=ctype, size=len(data),
@@ -281,14 +302,18 @@ class Builder:
         return start
 
     def submit(self, b: Booking, expert: User, start: dict, *, defects=0.08,
-               overrides=None, hold: tuple[str, ...] = ()) -> None:
+               overrides=None, hold: tuple[str, ...] = (), paid: bool = False) -> None:
         """hold: "optional" / "required" keeps one such photo field's files from arriving, so
         the job waits for files (Ops finish it, or upload the required one first)."""
         others = {"booking": b.answers, "start": start}
+        if paid:       # a late start paid by UPI, and a payment at the wrap-up: two screenshots
+            overrides = {"inspection_45_minutes_delayed": "yes", "delay_payment_mode": "upi",
+                         **(overrides or {})}
         version = live(b.inspection_type)
         insp = fill(version, "inspection", b, expert, self.rng, self.pics,
                     defects=defects, others=others, overrides=overrides)
-        end = fill(live("end"), "end", b, expert, self.rng, self.pics)
+        end = fill(live("end"), "end", b, expert, self.rng, self.pics, overrides={
+            "taking_payment": True, "payment_mode": "upi"} if paid else None)
         for want in hold:
             f = next((f for f in Field.objects.filter(version=version, type="photo")
                       .order_by("order") if insp.get(f.key)
@@ -363,7 +388,8 @@ def build_days(bl: Builder) -> dict[str, list[str]]:
             services.assign(bl.ops, b, e.id)
             note(f"completed {back} day(s) ago", bl.done(
                 b, e, at_hour(day, 9.5 + 2 * k + (0.6 if k == 1 else 0)), 70 + 10 * k,
-                defects=0.12 if k % 2 else 0.04))
+                defects=0.12 if k % 2 else 0.04,
+                paid=back == 3 and k < 3))            # the first of each type took payments
     # ---- today: the tester expert's day
     me = u["expert"]
     b = bl.booking(today, hhmm(max(8, now_h - 4)), "pdi")

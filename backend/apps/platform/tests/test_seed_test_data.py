@@ -1,4 +1,6 @@
 """Test data for outside testers: guarded wipe, then every flow filled in."""
+import uuid
+
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -74,6 +76,23 @@ def test_it_fills_every_flow(settings, s3):  # noqa: F811
     assert "Key Check 3" not in named                       # an unnamed pair prints nothing
     for text in (named, used_report := report_text("TST-1002")):   # a late start is not printed
         assert "Inspection Delay" not in text and "45 Minutes Delayed" not in text
+    # TST-1001..1003 took a late-start payment and a wrap-up payment by UPI: the screenshots are
+    # on the booking, hidden from the customer (not in the report's photos or its download)
+    from apps.media.models import MediaAsset
+    from apps.reports import context as report_context
+    from apps.reports import media_links
+
+    for ref in ("TST-1001", "TST-1002", "TST-1003"):
+        paid = Booking.objects.get(booking_id=ref)
+        made = paid.counted_inspection()
+        assert made is not None
+        assert made.answers["inspection"]["delay_payment_screenshot"]
+        assert made.answers["end"]["payment_screenshot"]
+        shots = set(MediaAsset.objects.filter(booking=paid, field_key__contains="payment")
+                    .values_list("id", flat=True))
+        assert len(shots) == 2
+        src = report_context.Source(paid, made, revision=1, token="t")
+        assert not shots & {uuid.UUID(i) for i in media_links.named(src, "photos")}
     plain = report_text("TST-1009")
     assert "Additional key checks" not in plain and "Key Check 1" not in plain
     assert "Mfg. Date" in named and "March 2026" in named            # on the cover (PDI, EV)
