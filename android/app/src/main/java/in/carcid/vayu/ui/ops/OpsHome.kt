@@ -82,6 +82,11 @@ fun OpsHome(me: Me, data: OpsData, today: () -> LocalDate, onProfile: () -> Unit
     if (stack.isNotEmpty()) BackHandler { pop() }
     else BackHandler(tab != OpsTab.TODAY) { tab = OpsTab.TODAY }        // Back from Bookings or Dashboard: Today first, then out
 
+    // the hidden tab below must not keep the typing focus: a search box would take the keys typed
+    // on the opened screen (and keep the keyboard up)
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    LaunchedEffect(stack.isEmpty()) { if (stack.isNotEmpty()) focus.clearFocus(force = true) }
+
     Box(Modifier.fillMaxSize().background(Vayu.colors.bg).safeDrawingPadding()) {
         // the tab stays built under an opened screen, hidden (not drawn, not touchable, not read
         // out): Back shows it at once and where it was scrolled, instead of building it again (~90 ms)

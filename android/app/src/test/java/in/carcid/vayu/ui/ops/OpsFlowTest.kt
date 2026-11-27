@@ -5,6 +5,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -591,6 +593,21 @@ class OpsFlowTest {
         androidx.test.espresso.Espresso.pressBack()
         compose.waitForIdle()
         compose.onNodeWithText("Showing 5", substring = true).assertIsDisplayed()      // no wait: it was kept
+    }
+
+    @Test fun theHiddenSearchBoxLetsGoOfTheKeyboard() {
+        // found on a phone: the kept list's search box still took the keys typed on the booking
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Showing 5")
+        val search = androidx.compose.ui.test.hasSetTextAction()
+        compose.onNode(search).performClick()
+        compose.onNode(search).assertIsFocused()
+        compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("Photos and videos")
+        androidx.test.espresso.Espresso.pressBack()
+        compose.waitForIdle()
+        compose.onNode(search).assertIsNotFocused()
     }
 
     @Test fun aSubmittedPhotoCanBeReplacedOrAddedToButNotDeleted() {

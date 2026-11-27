@@ -97,8 +97,9 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
                     tokens.clear(); jobs.forget(savedId); savedId?.let { graph.forgetCopies(it); graph.forgetDrafts(it, all = false) }
                     graph.clearNotices(); bell.clear(); _screen.value = Screen.SignIn()
                 }
-                // no signal or the server is down: still signed in, already open on the saved copy
-                JobsModel.unreachable(e) && cached != null -> {}
+                // no signal or the server is down: still signed in, already open on the saved copy;
+                // the start's skipped "came to the front" load is tried here instead (it may get through)
+                JobsModel.unreachable(e) && cached != null -> fetchNew()
                 else -> _screen.value = Screen.SignIn()
             }
         }
