@@ -210,8 +210,12 @@ then deletes the container. Record each drill below.
 - Logs: `C logs --tail 100 api` (or `worker`, `pdf-worker`, `caddy`...). Kept about a week.
 
 ## 9. Security headers
-Caddy sends HSTS, nosniff, a referrer policy, a permissions policy and the content rules (CSP).
-`CSP_HEADER` defaults to `Content-Security-Policy` (enforced). Staging alone starts with
-`CSP_HEADER=Content-Security-Policy-Report-Only` (the browser only reports, in its console) until a
-full run (sign-in, booking, inspection with photos and video, PDF preview, QR page) shows nothing
-blocked; then remove the line and redeploy. Production never runs report-only.
+Caddy sends HSTS, nosniff, a referrer policy, a permissions policy, `X-Frame-Options: DENY` and
+the content rules (CSP). `CSP_HEADER` is `Content-Security-Policy` (enforced) on both servers. To try
+a change to the rules first, set `CSP_HEADER=Content-Security-Policy-Report-Only` in Phase (staging
+only) and deploy: the browser then only reports what it would block, in its console. Production
+never runs report-only. Grades (2026-11-28, staging): SSL Labs A+; securityheaders.com B while
+report-only (CSP and X-Frame-Options missing), expected A once this is enforced.
+**A page broke because of CSP** (blank page, photos or PDF preview missing, uploads stuck): Chrome →
+Inspect → Console shows `Refused to load ... violates the following Content Security Policy directive`.
+Step-by-step fix: `docs/deploy-setup-log.md` 6.6 ("If something breaks one day because of CSP").

@@ -2,8 +2,8 @@
 # the QR on every report) and /api to the API. The same image serves staging and production.
 #
 # CSP_HEADER picks how the content rules apply: Content-Security-Policy (the default: enforced) or
-# Content-Security-Policy-Report-Only (the browser only reports what it would block). Only staging
-# sets report-only, for its first runs; a server that forgets the setting is protected.
+# Content-Security-Policy-Report-Only (the browser only reports what it would block). Staging ran
+# report-only for its first runs (no reports, 2026-11-28); both servers now enforce.
 {$APP_HOST} {
 	encode gzip
 
@@ -13,6 +13,8 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(self), geolocation=(self), microphone=(), payment=(), usb=()"
 		Cross-Origin-Opener-Policy "same-origin"
+		# older browsers ignore CSP frame-ancestors; this says the same: never inside another site
+		X-Frame-Options "DENY"
 		-Server
 	}
 
