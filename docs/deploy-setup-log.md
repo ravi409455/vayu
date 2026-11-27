@@ -165,7 +165,7 @@ touches them).
 |---|---|
 | Region | Bangalore (BLR1) |
 | Image | Ubuntu 24.04 (LTS) x64 |
-| Size | Basic → Regular → 2 vCPU / 4 GB |
+| Size | Basic → Regular → 2 vCPU / 4 GB (since 2026-11-28: 2 vCPU / 2 GB, $18, see "Staging moved to $18" in 2.3) |
 | Monitoring | on |
 | Backups | **off** (staging's backup is its snapshot) |
 | Authentication | SSH key `owner-mac` (never a password) |
@@ -244,6 +244,22 @@ new-SSH-key behaviour above; `up` now handles it.
    image:create; a second token has it; the down was finished from the Mac); `up` made staging from
    `vayu-staging-20261127-1718` at `64.227.191.1`, it showed staging's fixed key, and the deploy it
    started put `948a9f3` on staging (health ok; production waited for Approve).
+
+**Staging moved to $18 (2026-11-28)** ✅: owner: staging is always 2 vCPU / 2 GB (`s-2vcpu-2gb`,
+$18), never bigger (`SIZE` in `infra/staging.sh`). The old snapshots held an 80 GB disk, which
+DigitalOcean cannot put on the $18 size (60 GB disk; a disk never shrinks), so staging was built
+again once:
+1. New `s-2vcpu-2gb` Ubuntu 24.04 droplet with staging's fixed SSH key (same cloud-init user data
+   as `up`), tag `vayu-web`; `infra/bootstrap.sh` as root.
+2. `/srv/vayu/.phase` and deploy's `authorized_keys` (owner key + locked GitHub robot key) copied
+   from the old server (piped, never shown); `infra/secrets.sh` → 38 values from Phase.
+3. Name pointed at the new IP; deploy workflow by hand for `eb4a61d` (staging green; its
+   production wait cancelled).
+4. Database copied: `pg_dump --format=custom` on the old server piped into `pg_restore --clean
+   --if-exists` on the new one. Every table's row count the same on both (41 tables: 10 logins,
+   30 bookings …); health ok. Photos stay in R2.
+5. Old `s-2vcpu-4gb` droplet deleted; the new one renamed `vayu-staging` and tagged `vayu-staging`.
+6. Tested from the branch on the Mac: `down` → snapshot `vayu-staging-20261127-2110` (60 GB disk); `up` → `s-2vcpu-2gb` at `159.65.151.154`, staging's own SSH key, deploy `eb4a61d` green, health ok, 10 logins and 30 bookings. The two old 80 GB snapshots are deleted (they could never make a $18 server).
 
 ### 2.4a · R2 buckets and CORS ✅
 dash.cloudflare.com → R2 Object Storage. All buckets **private** (no public access, no custom domain):

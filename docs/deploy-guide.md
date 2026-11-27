@@ -414,7 +414,7 @@ the `pss_service:v2:…` token → Phase (B2). Write any expiry date in the setu
 |---|---|
 | Region | Bangalore (BLR1) |
 | Image | Ubuntu 24.04 (LTS) x64 |
-| Size | Basic → Regular → 2 vCPU / 4 GB |
+| Size | Basic → Regular → 2 vCPU / 2 GB ($18; staging is never bigger) |
 | Monitoring | on |
 | Backups | off (staging's backup is its snapshot) |
 | Authentication | SSH Key (yours / `owner-mac`); never Password |
