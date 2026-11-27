@@ -20,7 +20,7 @@ Status: ✅ done · 🔄 in progress · ⏳ not started
 | 2 | Accounts and dashboards | ✅ 2026-11-26 (2.5c, the Firebase key restriction, waits for the staging app) |
 | 3 | Staging server setup | ✅ 2026-11-26: live, with test data |
 | 4 | Deploy pipeline | 🔄 merge → staging works; rollback not yet rehearsed |
-| 5 | Backups and alerts | ⏳ |
+| 5 | Backups and alerts | ✅ 2026-11-27 on staging: DigitalOcean alerts, Better Stack (monitor, heartbeats, Slack), first restore drill. Production gets its own set in Phase 7 |
 | 6 | Prove staging | ⏳ |
 | 7 | Production | ⏳ |
 
