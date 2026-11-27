@@ -35,6 +35,8 @@ python3 perf/receiver.py --port 9300 --out "$RUN/webhooks.csv" & RECV=$!
 perf/local/sample.sh "$RUN/stats.csv" & SAMPLER=$!
 trap 'kill $RECV $SAMPLER 2>/dev/null || true' EXIT
 PACE=(); [[ -n "${SMOKE:-}" ]] && PACE=(LT_UPLOAD_MINUTES=1 LT_REVIEW_MINUTES=1)
+PHOTOS="${LT_PHOTOS:-$HOME/vayu-loadtest-photos}"   # real car photos, if the folder is there
+[[ -d "$PHOTOS" ]] && PACE+=(LT_PHOTOS="$PHOTOS")
 env LT_DATA="$RUN/lt.json" LT_OUT="$RUN" LT_TLS_VERIFY=0 ${PACE[@]+"${PACE[@]}"} \
   uv run --quiet --with locust --with pillow locust -f perf/loadtest.py --headless \
   --host https://localhost -u 58 -r 0.3 --run-time "${MINUTES}m" --only-summary > "$RUN/locust.log" 2>&1 || true

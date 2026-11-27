@@ -61,8 +61,14 @@ def test_test_form_prepare_and_cleanup(settings, s3, tmp_path, capsys):  # noqa:
     assert hooks.filter(event="inspection.submitted", form__key="loadtest").count() == 10
     assert Booking.objects.filter(booking_id__startswith="LT-H").count() == 4     # the history
 
-    # again (each capacity step): no second history, the webhooks still exactly 10 + 10
-    call_command("loadtest_prepare", password=PW + "2", out=str(out), test_form=True, **SMALL)
+    # again (each run): no second history, the webhooks still exactly 10 + 10; leads left for the
+    # load script's Ops to assign (the cloud runs)
+    call_command("loadtest_prepare", password=PW + "2", out=str(out), test_form=True,
+                 unassigned=True, **SMALL)
+    again = json.loads(out.read_text())["today"]
+    assert all(j["expert"] is None for j in again)
+    assert not Booking.objects.filter(id__in=[j["id"] for j in again],
+                                      assigned_expert__isnull=False).exists()
     assert Booking.objects.filter(booking_id__startswith="LT-H").count() == 4
     assert Integration.objects.filter(name__startswith="load test").count() == 20
     assert ApiKey.objects.filter(name="load test", revoked_at=None).count() == 1
@@ -75,7 +81,7 @@ def test_test_form_prepare_and_cleanup(settings, s3, tmp_path, capsys):  # noqa:
 
     asset = MediaAsset.objects.filter(booking__booking_id__startswith="LT-").first()
     assert asset is not None
-    booking = Booking.objects.get(id=data["today"][0]["id"])
+    booking = Booking.objects.get(id=again[0]["id"])
     capsys.readouterr()
     for what, ident in (("files", asset.id), ("stages", booking.id)):
         sys.stdin = io.StringIO(f"{ident}\n")

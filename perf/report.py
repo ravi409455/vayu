@@ -30,6 +30,8 @@ def args(argv=None):
     a.add_argument("--from-min", type=float, default=25)
     a.add_argument("--minutes", type=float, default=60)
     a.add_argument("--memory-mb", type=float, default=2048)
+    a.add_argument("--step", type=float, default=None,
+                   help="a capacity run: measure the window run.csv recorded for this step")
     a.add_argument("--cpus", type=float, default=1,
                    help="the server's vCPUs (CPU 100%% = all of them)")
     return a.parse_args(argv)
@@ -66,6 +68,13 @@ class Report:
         self.t0, self.mult = float(run[0][0]), float(run[0][2]) if len(run[0]) > 2 else 1.0
         self.lo = self.t0 + o.from_min * 60
         self.hi = self.lo + o.minutes * 60
+        if o.step is not None:          # the capacity step's own window, as the load script set it
+            row = next((x for x in run if len(x) > 4 and x[1] == "step"
+                        and float(x[2]) == o.step), None)
+            if row is None:
+                raise SystemExit(f"{o.run}: no step {o.step:g}x in run.csv")
+            self.mult, self.lo, self.hi = o.step, float(row[3]), float(row[4])
+            o.from_min, o.minutes = (self.lo - self.t0) / 60, (self.hi - self.lo) / 60
         # a run that ended earlier (a smoke run, a stopped step) is judged on what it ran
         last = max((float(r[0]) for r in self.rows("requests")), default=self.hi)
         self.cut = last < self.hi
@@ -236,6 +245,13 @@ class Report:
         self.facts["memory_peak_mib"], self.facts["cpu_p95_pct"] = total, pct(cv, 95)
         self.verdict("memory fits", total <= self.o.memory_mb - 300,
                      f"{total:.0f} of {self.o.memory_mb - 300:.0f} MiB")
+        # passing is not enough to choose a size: a server's CPU varies by 10-20% from day to day
+        # (shared vCPUs), so the choice needs room to spare
+        usable = self.o.memory_mb - 300
+        room = pct(cv, 95) < 80 and total <= 0.9 * usable
+        self.facts["headroom"] = room
+        self.verdict("headroom (CPU p95 < 80%, memory <= 90% of usable)", room if cv else None,
+                     f"CPU p95 {pct(cv, 95):.0f}%, memory {total:.0f} of {usable:.0f} MiB")
 
         host = [r for r in self.rows("host") if self.inside(r[0])]
         if not host:
@@ -314,7 +330,8 @@ class Report:
             self.say(f"| {v['check']} | {word} | {v['measured']} |")
         ok = all(v["pass"] is not False for v in self.verdicts)
         self.say(f"\n**{'Every check passed.' if ok else 'Not every check passed.'}**")
-        with open(os.path.join(self.o.run, "verdict.json"), "w") as f:
+        name = f"verdict-{self.o.step:g}x.json" if self.o.step is not None else "verdict.json"
+        with open(os.path.join(self.o.run, name), "w") as f:
             json.dump({"mult": self.mult, "pass": ok, "checks": self.verdicts,
                        "facts": self.facts}, f, indent=1, default=str)
         return "\n".join(self.lines)

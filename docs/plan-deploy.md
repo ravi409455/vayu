@@ -483,11 +483,11 @@ Staging is "done" only when all of these pass. Each is a line in the runbook's c
    labelled `staging`, with readable code lines → the Slack alert arrives.
 6. **Security headers**: securityheaders.com and SSL Labs both grade **A** for the staging address.
    The CSP report shows nothing blocked during steps 1 and 2 → switch CSP from "report only" to enforced.
-7. **Load tests** (`docs/plan-load-test.md`), after checks 1–6 pass: **low-cost test**
-   (`perf/cloud.sh lowcost`: the owner's real numbers, measured for an hour, on 1 vCPU / 2 GB,
-   2 vCPU / 2 GB and 2 vCPU / 4 GB) and **capacity test** (`perf/cloud.sh capacity <size>`: 1× to 8×
-   on the cheapest passing size and 2 vCPU / 4 GB). Throwaway servers, scripted, cap $5.
-   Production gets the cheapest size that passes the low-cost test.
+7. **Load tests** (`docs/plan-load-test.md`), after checks 1–6 pass: one command,
+   `perf/cloud.sh all` (about 3½ hours, in parallel): the **low-cost test** (the owner's real
+   numbers, measured for an hour, on 1 vCPU / 2 GB, 2 vCPU / 2 GB and 2 vCPU / 4 GB) and the
+   **capacity test** (1× to 8× on 2 vCPU / 2 GB and 2 vCPU / 4 GB). Throwaway servers, cap $5.
+   Production gets the cheapest size that passes the low-cost test **with headroom**.
 8. **Backup and restore drill** passed (5.3).
 9. **Rollback** rehearsed (4.2).
 10. **Reboot test**: restart the droplet from the DigitalOcean dashboard → everything comes back

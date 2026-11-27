@@ -5,15 +5,21 @@
 
 Needs LT_DATA (the JSON `loadtest_prepare` wrote: logins, API key, today's bookings, answer
 templates) and LT_OUT (a folder for the logs). LT_TLS_VERIFY=0 for a local server's own
-certificate. LT_MULT (default 1) multiplies every rate (the capacity test's steps).
+certificate. LT_MULT (default 1) multiplies every rate. LT_STEPS (e.g. "1,2,3,4,6,8") makes it the
+capacity test: one continuous run that steps the load up; each step lasts until its new users have
+signed in, its new work has settled (LT_UPLOAD_MINUTES + LT_REVIEW_MINUTES) and LT_STEP_MINUTES
+(default 15) have been measured; the measured windows go to run.csv ("step" rows).
 
 Who does what (at 1x; every number is the owner's unless marked "assumed"):
 - 50 phones: sign in once (before the clock: the sign-in limit is 20 a minute), register a push
   token (a fake one: Firebase answers "invalid", nobody receives anything), sync (assumed: every
   2 minutes, as an open app does) and send a heartbeat.
-- 9 inspections an hour (one every 400 s, from the start): the phone starts the lead, uploads 100
-  photos and 5 videos over 25 minutes (assumed pace), then submits. Files go straight to the file
-  store through the upload links, as from the app.
+- 9 inspections an hour (one every 400 s, from the clock; a dispatcher gives each lead to its
+  phone, or, for an unassigned lead, Ops assign it to a free phone): the phone starts it, uploads
+  100 photos and 5 videos (15 on the test form) over LT_UPLOAD_MINUTES (default 25, assumed), then
+  submits. Files go straight to the file store through the upload links, as from the app.
+  LT_PHOTOS: a folder of real car photos (never in the repo); each is shrunk as the app does
+  (2048 px, JPEG ~500-700 KB) and uploads pick one at random. Without it, one made-up photo.
 - 5 Ops: Today, bookings, search, open a booking (assumed: one page every 5-15 s each), assign
   every booking the external system creates, and for each finished inspection 20 Key Check
   changes with 5 Regenerates over 30 minutes (assumed spread).
@@ -37,13 +43,17 @@ from zoneinfo import ZoneInfo
 import gevent
 import requests
 import urllib3
-from locust import HttpUser, between, constant_pacing, events, task
+from gevent.queue import Empty, Queue
+from locust import HttpUser, LoadTestShape, between, constant, constant_pacing, events, task
 
 DATA = json.load(open(os.environ["LT_DATA"]))   # noqa: SIM115
 OUT = os.environ["LT_OUT"]
 VERIFY = os.environ.get("LT_TLS_VERIFY", "1") != "0"
 MULT = float(os.environ.get("LT_MULT", "1"))
-INSPECTION_EVERY = 400 / MULT          # 9 an hour at 1x
+STEPS = [float(x) for x in os.environ.get("LT_STEPS", "").split(",") if x.strip()]
+STEP_MINUTES = float(os.environ.get("LT_STEP_MINUTES", 15))
+CUR = [STEPS[0] if STEPS else MULT]    # the multiplier now (the capacity steps change it)
+SIGNIN_RATE = 0.3                      # users a second: the server's 20-a-minute sign-in limit
 UPLOAD_MINUTES = float(os.environ.get("LT_UPLOAD_MINUTES", 25))   # assumed; smoke runs shorten it
 REVIEW_MINUTES = float(os.environ.get("LT_REVIEW_MINUTES", 30))   # assumed; smoke runs shorten it
 if not VERIFY:
@@ -77,9 +87,49 @@ def today() -> str:
 
 @events.spawning_complete.add_listener
 def _start(**_):
-    """The clock starts once everyone has signed in (at the real limit of 20 a minute)."""
+    """The clock starts once everyone has signed in (at the real limit of 20 a minute); the
+    capacity steps' later sign-ins do not move it."""
+    if T0[0]:
+        return
     T0[0] = time.time()
-    log("run", f"{T0[0]:.3f}", "start", MULT)
+    log("run", f"{T0[0]:.3f}", "start", CUR[0])
+    gevent.spawn(_dispatch)
+    if STEPS:
+        settle = (UPLOAD_MINUTES + REVIEW_MINUTES) * 60
+        log("run", f"{T0[0]:.3f}", "step", STEPS[0], f"{T0[0] + settle:.3f}",
+            f"{T0[0] + settle + STEP_MINUTES * 60:.3f}")
+
+
+# ------------------------------------------------------------------ the dispatcher
+
+PHONES: dict = {}            # username → its PhoneUser (signed in)
+IDLE: Queue = Queue()        # usernames of phones with no lead
+OPS_CLIENTS: list = []       # signed-in Ops users (one assigns the unassigned leads)
+
+
+def _dispatch() -> None:
+    """One lead every 400 s at 1× (9 an hour), at the rate of the moment. A lead already assigned
+    goes to its expert's phone; an unassigned one is assigned by Ops to the first free phone."""
+    ids = dict(zip(DATA["experts"], DATA["expert_ids"], strict=False))
+    due = T0[0]
+    for n, job in enumerate(DATA["today"]):
+        gevent.sleep(max(0.0, due - time.time()))
+        due = max(due, time.time()) + 400 / CUR[0]
+        name = job.get("expert")
+        if not name or name not in PHONES:
+            try:
+                name = IDLE.get(timeout=600)
+            except Empty:
+                log("inspections", f"{time.time():.3f}", job["id"], "failed: no free phone")
+                continue
+            ops = OPS_CLIENTS[n % len(OPS_CLIENTS)] if OPS_CLIENTS else None
+            if ops is None or not ops.api("POST", f"bookings/{job['id']}/assign",
+                                          "bookings/[id]/assign",
+                                          json={"expert": ids[name]}).ok:
+                IDLE.put(name)
+                log("inspections", f"{time.time():.3f}", job["id"], "failed: could not assign")
+                continue
+        PHONES[name].jobs.put({**job, "n": n})
 
 
 # ------------------------------------------------------------------ files as the phone sends them
@@ -101,7 +151,29 @@ def _photo_base() -> bytes:
     return buf.getvalue()
 
 
-PHOTO = _photo_base()
+def _real_photos(folder: str) -> list[bytes]:
+    """Real photos as the app sends them (Media.kt stampPhoto): upright, at most 2048 px,
+    JPEG quality 85, 75 or 65, the first that fits 700 KB."""
+    from PIL import Image, ImageOps
+
+    out = []
+    for name in sorted(os.listdir(folder)):
+        if not name.lower().endswith((".jpg", ".jpeg")):
+            continue
+        img = ImageOps.exif_transpose(Image.open(os.path.join(folder, name))).convert("RGB")
+        img.thumbnail((2048, 2048))
+        for q in (85, 75, 65):
+            buf = io.BytesIO()
+            img.save(buf, "JPEG", quality=q)
+            if buf.tell() <= 700_000:
+                break
+        out.append(buf.getvalue())
+    if not out:
+        raise SystemExit(f"LT_PHOTOS={folder} has no .jpg/.jpeg files")
+    return out
+
+
+PHOTOS = _real_photos(os.environ["LT_PHOTOS"]) if os.environ.get("LT_PHOTOS") else [_photo_base()]
 VIDEO = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + os.urandom(10 * 1024 * 1024)
 
 
@@ -162,7 +234,7 @@ class Phone:
                   "devices/heartbeat")
 
     def upload(self, booking: str, field: str, kind: str) -> str:
-        data = unique(PHOTO if kind == "photo" else VIDEO)
+        data = unique(random.choice(PHOTOS) if kind == "photo" else VIDEO)  # noqa: S311
         r = self.post("media/initiate", {
             "booking": booking, "client_uuid": str(uuid.uuid4()), "field_key": field, "kind": kind,
             "content_type": "image/jpeg" if kind == "photo" else "video/mp4", "size": len(data),
@@ -241,18 +313,21 @@ class PhoneUser(HttpUser):
             self.phone = None
             return
         self.phone = Phone(self, DATA["experts"][i])
-        mine = [(k, j) for k, j in enumerate(DATA["today"]) if j["expert"] == self.phone.name]
-        for k, job in mine:
-            gevent.spawn(self._later, k * INSPECTION_EVERY, {**job, "n": k})
+        self.jobs: Queue = Queue()
+        PHONES[self.phone.name] = self
+        gevent.spawn(self._work)
+        IDLE.put(self.phone.name)
 
-    def _later(self, delay: float, job: dict) -> None:
-        while not T0[0]:
-            gevent.sleep(1)
-        gevent.sleep(max(0.0, T0[0] + delay - time.time()))
-        try:
-            self.phone.inspect(job)
-        except Exception as e:  # noqa: BLE001 - counted, the test goes on
-            log("inspections", f"{time.time():.3f}", job["id"], f"failed: {e}")
+    def _work(self) -> None:
+        """The leads the dispatcher gives this phone, one at a time."""
+        while True:
+            job = self.jobs.get()
+            try:
+                self.phone.inspect(job)
+            except Exception as e:  # noqa: BLE001 - counted, the test goes on
+                log("inspections", f"{time.time():.3f}", job["id"], f"failed: {e}")
+            if self.jobs.empty():
+                IDLE.put(self.phone.name)
 
     @task
     def sync(self):
@@ -278,6 +353,7 @@ class OpsUser(HttpUser):
         self.client.headers["Referer"] = f"{self.host}/"
         self.client.headers["Origin"] = self.host
         self.ids: list[str] = [j["id"] for j in DATA["today"]]
+        OPS_CLIENTS.append(self)
 
     def api(self, method, path, name, **kw):
         return self.client.request(method, f"/api/v1/{path}", name=name, **kw)
@@ -368,10 +444,11 @@ NEW_BOOKINGS: list = []
 
 
 class ExternalSystem(HttpUser):
-    """100 calls a minute from 3 of these (one call every 1.8 s each); ~200 writes an hour."""
+    """100 calls a minute from 3 of these (one call every 1.8 s each, at 1×; the rate of the
+    moment in the capacity steps); ~200 writes an hour."""
     weight = 3
     fixed_count = 3
-    wait_time = constant_pacing(1.8 / MULT)
+    wait_time = constant(0)
     _n = iter(range(1_000_000))
 
     def on_start(self):
@@ -380,9 +457,12 @@ class ExternalSystem(HttpUser):
         self.live = [j["ref"] for j in DATA["today"]]        # changes only to live bookings
         self.refs = self.live + DATA["done_refs"][:100]
         self.done = DATA["done_refs"] or self.refs
+        self.due = time.time()
 
     @task
     def call(self):
+        gevent.sleep(max(0.0, self.due - time.time()))
+        self.due = max(self.due, time.time() - 1.8) + 1.8 / CUR[0]
         n = next(self._n)
         if n % 333 == 0:                                       # 6000 calls an hour: 18 creates
             self.create()
@@ -418,3 +498,49 @@ class ExternalSystem(HttpUser):
         else:
             self.client.get(f"/api/v1/ext/bookings/{random.choice(self.done)}/inspection",  # noqa: S311
                             name="ext/bookings/[ref]/inspection")
+
+
+# ------------------------------------------------------------------ the capacity steps
+
+if STEPS:
+    class CapacitySteps(LoadTestShape):
+        """LT_STEPS: 58 users per 1× (50 phones, 5 Ops, 3 external-system users), stepped up
+        through one run. A step lasts while its new users sign in (at the real limit), its new
+        work settles (an inspection's uploads and review) and LT_STEP_MINUTES are measured; the
+        windows go to run.csv as ("step", k, from, to)."""
+
+        def __init__(self):
+            super().__init__()
+            self.i = 0
+            self.end = 0.0
+            self.at_start = (0, 0)                     # requests, failures when the step began
+
+        def _failing(self) -> bool:
+            """More than 1% of the step's requests failed: a real failure, the climb stops."""
+            s = self.runner.stats.total
+            n, f = s.num_requests - self.at_start[0], s.num_failures - self.at_start[1]
+            return n >= 200 and f / n > 0.01
+
+        def tick(self):
+            if not T0[0]:                              # before the clock: the first step's users
+                return round(58 * STEPS[0]), SIGNIN_RATE
+            settle = (UPLOAD_MINUTES + REVIEW_MINUTES) * 60
+            if not self.end:
+                self.end = T0[0] + settle + STEP_MINUTES * 60
+            now = time.time()
+            if now >= self.end:
+                if self._failing():
+                    log("run", f"{now:.3f}", "stopped", STEPS[self.i], "errors above 1%")
+                    return None                        # a real failure: no higher step
+                s = self.runner.stats.total
+                self.at_start = (s.num_requests, s.num_failures)
+                self.i += 1
+                if self.i >= len(STEPS):
+                    return None                        # the last step is measured: stop
+                k, prev = STEPS[self.i], STEPS[self.i - 1]
+                CUR[0] = k
+                start = now + 58 * (k - prev) / SIGNIN_RATE + settle
+                self.end = start + STEP_MINUTES * 60
+                log("run", f"{now:.3f}", "step", k, f"{start:.3f}", f"{self.end:.3f}")
+            return round(58 * STEPS[self.i]), SIGNIN_RATE
+

@@ -29,7 +29,7 @@ run on the Mac is done (§9); the cloud runs are next.
 | Users | 50 experts (phones), 5 Ops (web) | all 55 active, each with their own login |
 | New bookings | 200 | 18 |
 | Inspections finished | 100, spread evenly 9 am–8 pm | 9, of which 2 are 150-photo reports (the old requirement's worst case) |
-| Files per inspection | 100 photos (~500 KB, shrunk on the phone) + 15 videos (30 s, 720p at 2.5 Mbit/s ≈ 10 MB) ≈ **200 MB**. Today's forms allow at most 5 videos (EV: 3), so the **cloud runs use a test-only copy of PDI** with an extra last page (owner, 2026-11-27); the local run uses the real PDI with 5 videos | ~1,035 files, ~1.8 GB |
+| Files per inspection | 100 photos (~500 KB, shrunk on the phone) + 15 videos (30 s, 720p at 2.5 Mbit/s ≈ 10 MB) ≈ **200 MB**. Today's forms allow at most 5 videos (EV: 3), so the **cloud runs use a test-only copy of PDI** with an extra last page (owner, 2026-11-27); the local run uses the real PDI with 5 videos. Photos are **real car photos** from `~/vayu-loadtest-photos` (20 taken from Clappia, never in git; `LT_PHOTOS` names another folder), shrunk as the app does (2048 px, ≤700 KB, ~420 KB average); without the folder, one made-up photo | ~1,035 files, ~1.8 GB |
 | PDFs | 6 per booking: 1 automatic + 5 Regenerate (changes only mark a PDF out of date) | 54 |
 | Outgoing webhooks | 15 per booking on average: 10 when a booking is made, 10 when its inspection is submitted (3,000 a day) | 270 |
 | External system (REST API key) | peaks of 100 calls/min | 100/min the whole hour: ~200 writes (the 18 creates + changes), the rest reads |
@@ -50,6 +50,10 @@ is, and the server alerts (deploy plan 5.5) show it in real life.
 | Server | no process killed for memory; swap barely used; CPU not pinned at 100% |
 | **Zero loss** (old requirement) | every answer and file the test sent is stored and verified, counted at the end |
 
+**Choosing a size** needs more than a pass: DigitalOcean's shared vCPUs vary by 10–20%, so the
+report also checks **headroom** (CPU p95 under 80%, memory at most 90% of what the server can use).
+Production gets the cheapest size that passes every check, headroom included.
+
 Two checks make the others trustworthy:
 - **The load as specified**: bookings, inspections, PDFs, API calls and webhooks in the measured
   hour each reach at least 80% of the target (else a "pass" means nothing).
@@ -63,9 +67,12 @@ queues, and the storage an inspection takes in R2 (with what 90 days of it cost)
 
 - One run per size: $12, $18, $24, each measured for **one hour** at 1× (an hour holds 9
   inspections and 54 PDFs; a shorter run measures too few PDFs to trust the 95-in-100 figure).
-- **The warm-up is 55 minutes**: an inspection's files take 25 minutes and Ops then review it for
-  30, so only from minute 55 is every kind of work going on at once. (The local run measured from
-  minute 25 and so made 81% of the PDFs it should have; found by the "load as specified" check.)
+- **Warm-up 10 minutes** (owner, 2026-11-27: the whole test must take about 3½ hours, not 7–16):
+  each inspection's uploads and its Ops review are paced over 5 minutes each, so from minute 10
+  every kind of work is going on at once. Totals per hour stay the owner's numbers; the work is
+  just more bunched, which makes the test harsher, not easier. (The local run paced them over 25
+  and 30 minutes and measured from minute 25, so it made 81% of the PDFs it should have; found by
+  the "load as specified" check.)
 - Postgres runs on the same server in every run.
 - Then **one database check**: the cheapest passing size against a temporary managed Postgres
   (1 GB, destroyed after): connections and speed. If the cheapest size also passes with Postgres
@@ -74,16 +81,21 @@ queues, and the storage an inspection takes in R2 (with what 90 days of it cost)
 
 ## 5. Test 2: capacity
 
-- Load in steps, **15 measured minutes each (after the same 55-minute warm-up): 1×, 2×, 3×, 4×,
-  6×, 8×**; every step gets fresh test data (its own leads and logins). Everything grows together: users
+- **One continuous run** that steps the load up: **1×, 2×, 3×, 4×, 6×, 8×**, 15 measured minutes
+  each. A step lasts while its new users sign in (the real 20-a-minute limit), its new work
+  settles (10 minutes) and 15 minutes are measured; the load script writes each step's window to
+  its log. Leads are left unassigned and the simulated Ops give each to a free phone, however many
+  phones the step has. Everything grows together: users
   (4× = 200 experts + 20 Ops, about the old 200-user requirement), bookings, inspections, PDFs,
   webhooks, API calls.
 - **Each limit is recorded, the climb stops only on real failure.** A missed target is noted ("PDF
   over 30 s from 2×") and the climb goes on; it stops on errors above 1%, a process killed for
   memory, or work that piles up and never clears.
-- **If PDFs are the first limit**, one extra step at that load with 2 PDFs rendered at a time
-  instead of 1: shows whether a setting, not a bigger server, moves the limit.
-- Runs on the cheapest size that passed test 1, and on $24.
+- **If PDFs are the first limit**, a rerun with 2 PDFs rendered at a time instead of 1
+  (`LT_PDF_CONCURRENCY=2 perf/cloud.sh all`) shows whether a setting, not a bigger server, moves
+  the limit. Not automatic any more (it would add about 40 minutes).
+- Runs on **$18 and $24** (owner, 2026-11-27): the account may run 10 droplets and 3 are taken, so
+  7 are free; capacity runs at the same time as test 1 and cannot wait for its result.
 - Result per size: the highest step where every target held, and the step where each one broke.
   That says how far today's load can grow before an upgrade.
 
@@ -93,10 +105,9 @@ queues, and the storage an inspection takes in R2 (with what 90 days of it cost)
 
 | Command | What it does |
 |---|---|
-| `perf/cloud.sh lowcost` | test 1 on $12, $18 and $24 in turn |
-| `perf/cloud.sh capacity <size>` | test 2 on one size |
+| `perf/cloud.sh all` | the whole test **in parallel**: test 1 on $12, $18, $24 and test 2 on $18, $24 (5 test servers, 2 load servers) |
 | `perf/cloud.sh dbcheck <size>` | run D: the low-cost hour against a temporary managed Postgres |
-| `up`, `prepare`, `run`, `down`, `cost`, `status` | the same, a step at a time |
+| `perf/cloud.sh status`, `cost`, `down [force]` | what is running; spend so far; clean up and destroy everything |
 
 1. **Throwaway servers**, built fresh (Ubuntu + `infra/bootstrap.sh` + main's images; none of
    staging's data): the test server (`lt-sut-<size>`) and a 4 vCPU / 8 GB load server in Bangalore
@@ -129,13 +140,14 @@ queues, and the storage an inspection takes in R2 (with what 90 days of it cost)
    with `down force`). **If a whole-test command fails on the way, it cleans up and destroys
    everything by itself** (`LT_KEEP=1` keeps the servers to look at).
 
-**Who starts it, from where.** The owner's Mac (or Claude on it): one command, e.g.
-`perf/cloud.sh lowcost`. It needs `doctl` signed in, the owner's SSH key, staging running, and the
+**Who starts it, from where.** The owner's Mac (or Claude on it): one command,
+`perf/cloud.sh all`. It needs `doctl` signed in, the owner's SSH key, staging running, and the
 Mac awake and online for the whole test (the script keeps it awake with `caffeinate`; plug it in).
 
-**Time and money.** Per size about 2½ hours for test 1 (setup and history ~30 min, the run ~2 h);
-test 2 about 9 hours on one size. Spend is checked before every step that creates or runs
-anything, **cap $5** (`LT_CAP`); test 1 on all three sizes ≈ $0.80, test 2 ≈ $1.
+**Time and money.** Everything at once: setup and history ~30–40 min, test 1's run ~1¼ h (its
+results after about 2 hours; its servers are then destroyed), test 2's run ~3 h: **about 3½ hours
+in all, about $1–1.50.** Spend is checked before anything is created, **cap $5** (`LT_CAP`).
+Run D afterwards: about 2 hours.
 
 ## 7. What was built
 

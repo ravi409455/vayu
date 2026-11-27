@@ -2,9 +2,10 @@
 """The capacity test in one table (docs/plan-load-test.md §5, §9): every step's checks side by
 side, the highest step where all of them held, and the step where each one first broke.
 
-    python3 perf/summary.py <capacity run folder>     (its step-1x, step-2x, … folders)
+    python3 perf/summary.py <capacity run folder>
 
-Each step folder has the verdict.json that perf/report.py wrote."""
+It reads the verdict-<k>x.json files perf/report.py --step wrote (or step folders' verdict.json)."""
+import glob
 import json
 import os
 import sys
@@ -12,11 +13,10 @@ import sys
 
 def summary(run: str) -> str:
     steps = []
-    for name in os.listdir(run):
-        p = os.path.join(run, name, "verdict.json")
-        if os.path.isfile(p):
-            with open(p) as f:
-                steps.append(json.load(f))
+    for p in sorted(glob.glob(os.path.join(run, "verdict-*.json"))
+                    + glob.glob(os.path.join(run, "*", "verdict.json"))):
+        with open(p) as f:
+            steps.append(json.load(f))
     if not steps:
         return f"{run}: no step has a verdict.json yet"
     steps.sort(key=lambda s: s["mult"])

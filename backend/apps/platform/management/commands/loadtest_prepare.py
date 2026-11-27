@@ -112,6 +112,9 @@ class Command(BaseCommand):
         p.add_argument("--per-day", type=int, default=200)
         p.add_argument("--inspected-per-day", type=int, default=100)
         p.add_argument("--today", type=int, default=9)
+        p.add_argument("--unassigned", action="store_true",
+                       help="leave today's bookings unassigned: the load script's Ops give each to "
+                            "a free phone (the cloud runs, where the number of phones grows)")
         p.add_argument("--test-form", action="store_true",
                        help="use a test-only copy of PDI with extra photo/video fields (cloud "
                             "runs: 15 videos); off = the real PDI form, 5 videos (local runs)")
@@ -141,7 +144,7 @@ class Command(BaseCommand):
         self.integrations(o["receiver"])
         found = self.found_or_template(ops[0], experts[0])
         self.history(found, experts, o["history_days"], o["per_day"], o["inspected_per_day"])
-        today = self.today_bookings(ops[0], experts, o["today"])
+        today = self.today_bookings(ops[0], experts, o["today"], o["unassigned"])
         start, start_files = template("start", "start", {}, 0, 1)
         others = {"booking": found.answers, "start": start}
         insp, insp_files = self.pdi_template(others)
@@ -291,14 +294,18 @@ class Command(BaseCommand):
             self.stdout.write(f"history: {days - day + 1}/{days} days", ending="\r")
         self.stdout.write("")
 
-    def today_bookings(self, ops, experts, n: int) -> list[dict]:
-        """Today's work for the phones: booked, assigned, not started."""
+    def today_bookings(self, ops, experts, n: int, unassigned: bool = False) -> list[dict]:
+        """Today's work for the phones: booked and assigned (or, unassigned, left for the load
+        script's Ops to give to a free phone), not started."""
         out = []
         bl = testdata.Builder({"ops": ops}, seed=13)
         day = timezone.localdate()
         for i in range(n):
             b = bl.booking(day, f"{9 + i % 11:02d}:00", self.form,
                            booking_id=f"{PREFIX}T{uuid.uuid4().hex[:10].upper()}")  # never twice
+            if unassigned:
+                out.append({"id": str(b.id), "ref": b.booking_id, "expert": None})
+                continue
             expert = experts[i % len(experts)]
             services.assign(ops, b, expert.id)
             out.append({"id": str(b.id), "ref": b.booking_id, "expert": expert.username})
