@@ -21,7 +21,7 @@ Status: ✅ done · 🔄 in progress · ⏳ not started
 | 3 | Staging server setup | ✅ 2026-11-26: live, with test data |
 | 4 | Deploy pipeline | 🔄 merge → staging works; rollback not yet rehearsed |
 | 5 | Backups and alerts | ✅ 2026-11-27 on staging: DigitalOcean alerts, Better Stack (monitor, heartbeats, Slack), first restore drill. Production gets its own set in Phase 7 |
-| 6 | Prove staging | 🔄 push, update prompt and Sentry done 2026-11-28 |
+| 6 | Prove staging | 🔄 push, update prompt, Sentry, down/up cycle done; left: rollback, security headers + CSP, reboot, load test |
 | 7 | Production | ⏳ |
 
 Quick links: [Where everything lives](#where-everything-lives) · [Open items](#open-items)
@@ -695,6 +695,12 @@ staging were **equal** (1820 fields, 1768 media files, 208 booking activities, .
 `docs/runbook-new-server.md` §7. Next drill: first Monday of the month.
 
 ## Phase 6 · Prove staging 🔄
+
+### 6.11 · On-demand cycle ✅ (2026-11-27, by the owner)
+Staging taken down and brought back up (Actions → staging down / up, PR 63 and 64) during these
+checks: it came back healthy with its data, https and settings; Better Stack saw the outage and the
+recovery (5.2). After an up, the server has a new IP; the Mac may keep the old address cached
+(`dig +short vayu-staging.carcid.in @1.1.1.1` shows the new one).
 
 ### 6.3 · Push ✅ (2026-11-28)
 **No push had ever been sent from staging.** The push task failed with `PermissionError:
