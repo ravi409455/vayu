@@ -209,7 +209,7 @@ The short TTL lets a new IP reach everyone within 10 minutes; `infra/staging.sh 
 new IP each time and waits until DNS shows it.
 Checked: GoDaddy, Cloudflare (1.1.1.1) and Google (8.8.8.8) all answer `139.59.39.207`.
 
-**Changed 2026-11-27: the staging name moved to DigitalOcean's DNS** ⏳ (so `infra/staging.sh` can
+**Changed 2026-11-27: the staging name moved to DigitalOcean's DNS** ✅ (so `infra/staging.sh` can
 point it itself when staging is re-made; GoDaddy's API is not open to small accounts).
 1. DigitalOcean → Networking → Domains: zone `vayu-staging.carcid.in`, record **A `@`** →
    `139.59.39.207`, TTL 60 s (made with `doctl`, 2026-11-27).
@@ -223,6 +223,8 @@ point it itself when staging is re-made; GoDaddy's API is not open to small acco
 
 Everything else (the `vayu` production record, the company website, email) stays at GoDaddy.
 While staging is off the name points to `192.0.2.1` (the "off" marker the deploy workflow reads).
+Checked: GoDaddy answers with the 3 NS records; Cloudflare and Google answer `139.59.39.207` with
+DigitalOcean's 60 s TTL; `https://vayu-staging.carcid.in/api/v1/health` says ok.
 
 ### 2.4a · R2 buckets and CORS ✅
 dash.cloudflare.com → R2 Object Storage. All buckets **private** (no public access, no custom domain):
