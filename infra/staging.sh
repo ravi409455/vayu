@@ -71,11 +71,19 @@ case "${1:-}" in
     read -rp "Snapshot and DELETE droplet $NAME ($id)? Type staging to go on: " typed
     [[ "$typed" == staging ]] || die "stopped"
     snap="$NAME-$(date -u +%Y%m%d-%H%M)"
+    # the name leaves the droplet's IP BEFORE the droplet goes: a released IP can go to someone
+    # else, and the name must never point at it (wait out the 60 s TTL)
+    echo "== pointing $HOST at the off marker $OFF_IP"
+    dns_set "$OFF_IP"
+    sleep 70
     echo "== powering off (a clean snapshot)"
     doctl compute droplet-action power-off "$id" --wait >/dev/null
     echo "== snapshot $snap (a few minutes)"
     doctl compute droplet-action snapshot "$id" --snapshot-name "$snap" --wait >/dev/null
-    snapshots | awk '{print $2}' | grep -qx "$snap" || die "snapshot $snap not found; droplet NOT deleted"
+    if ! snapshots | awk '{print $2}' | grep -qx "$snap"; then
+      dns_set "$(awk '{print $3}' <<<"$found")"     # the droplet stays: give it its name back
+      die "snapshot $snap not found; droplet NOT deleted (it is powered off: power it on in the dashboard)"
+    fi
     echo "== deleting the droplet"
     doctl compute droplet delete "$id" --force
     # keep the newest $KEEP snapshots
@@ -85,7 +93,6 @@ case "${1:-}" in
       [[ -n "$sid" ]] || continue
       echo "== deleting old snapshot $sname"; doctl compute snapshot delete "$sid" --force
     done <<<"$old"
-    dns_set "$OFF_IP"
     echo "Staging is off. Billing for it stopped (snapshots cost about \$0.06 per GB a month)."
     echo "Its name now points to the off marker: merges skip staging (and production) until 'up'."
     ;;
