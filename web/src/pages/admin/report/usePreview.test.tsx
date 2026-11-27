@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { previewPlan, type Definition } from "./model";
-import { placeOf, sheetsOf, type LayoutPage } from "./Preview";
+import { pdfIds, placeOf, sheetsOf, type LayoutPage } from "./Preview";
 import { usePreview } from "./usePreview";
 
 const api = vi.hoisted(() => vi.fn());
@@ -50,6 +50,21 @@ describe("the sheets on screen", () => {
     expect(placeOf(pages, {}, 1)).toEqual({ first: 2, total: 5 });
     expect(placeOf(pages, { 1: { pdf: "new", pages: [sheet(1)] } }, 2)).toEqual({ first: 4, total: 4 });
     expect(placeOf(pages, {}, 7)).toBeNull();
+  });
+});
+
+describe("the ids of the PDFs on screen", () => {
+  it("are never given twice, so each new drawing of a page is shown (the third edit too)", () => {
+    const ids = pdfIds();
+    const seen = new Set<number>();
+    for (const patch of ["A", "B", "C", "D", "E"]) {
+      const id = ids.idOf(patch);
+      expect(seen.has(id)).toBe(false);
+      seen.add(id);
+      ids.idOf("whole");
+      ids.keep(new Set(["whole", patch])); // the older drawing of the page is gone
+    }
+    expect(ids.idOf("whole")).toBe(ids.idOf("whole"));
   });
 });
 
