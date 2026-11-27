@@ -7,7 +7,8 @@
 #   infra/staging.sh down     power off → snapshot → delete the droplet (billing stops); keeps 2
 #                             snapshots; its name then points to the "off" marker address
 #   infra/staging.sh up       create the droplet from the newest snapshot, point its name at it,
-#                             deploy the newest built commit of main, check health
+#                             trust its new SSH key (here and in GitHub), deploy the newest
+#                             built commit of main
 #
 # The name vayu-staging.carcid.in is served by DigitalOcean's DNS (GoDaddy hands just that name
 # over with NS records), so this script changes it itself. While staging is off it points to
@@ -111,9 +112,20 @@ case "${1:-}" in
     echo "== pointing $HOST at $ip"
     dns_set "$ip"
     until [[ "$(dns_now)" == "$ip" ]]; do sleep 5; done
-    # the server's own key is in the snapshot: check it under the staging name, whatever the IP
-    ssh_s() { ssh -o HostKeyAlias="$HOST" -o ConnectTimeout=10 -o BatchMode=yes "deploy@$ip" "$@"; }
     echo "== waiting for the server to boot"
+    until nc -z -G 5 "$ip" 22 2>/dev/null; do sleep 10; done
+    # A server made from a snapshot gets NEW SSH host keys on its first boot (DigitalOcean's
+    # cloud-init). Read them now (our own droplet, made minutes ago, reached by its address
+    # straight from DigitalOcean) and trust them under the staging name, here and in GitHub (the
+    # deploy workflow refuses any other key).
+    kh=$(mktemp); trap 'rm -f "$kh"' EXIT
+    until ssh-keyscan -t ed25519,ecdsa,rsa "$ip" 2>/dev/null | grep -v '^#' \
+        | sed "s/^$ip /$HOST /" | sort -u > "$kh" && [[ $(grep -c . "$kh") -ge 1 ]]; do sleep 5; done
+    echo "== its SSH key: $(ssh-keygen -lf "$kh" | awk '$4 == "(ED25519)" {print $2}') (now trusted here and in GitHub)"
+    ssh-keygen -R "$HOST" >/dev/null 2>&1 || true
+    cat "$kh" >> ~/.ssh/known_hosts
+    gh secret set SSH_KNOWN_HOSTS --env staging --repo "$REPO" < "$kh"
+    ssh_s() { ssh -o HostKeyAlias="$HOST" -o ConnectTimeout=10 -o BatchMode=yes "deploy@$ip" "$@"; }
     until ssh_s true 2>/dev/null; do sleep 10; done
     sha=$(newest_built)
     [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "could not find the newest built commit of main (gh signed in?)"

@@ -225,6 +225,9 @@ Everything else (the `vayu` production record, the company website, email) stays
 While staging is off the name points to `192.0.2.1` (the "off" marker the deploy workflow reads).
 Checked: GoDaddy answers with the 3 NS records; Cloudflare and Google answer `139.59.39.207` with
 DigitalOcean's 60 s TTL; `https://vayu-staging.carcid.in/api/v1/health` says ok.
+First real cycle (2026-11-27): `down` (marker → snapshot `vayu-staging-20261127-1614` → delete) and
+`up` (new IP `159.89.168.78`, name pointed, newest main `d64a196` deployed, health ok). It showed the
+new-SSH-key behaviour above; `up` now handles it.
 
 ### 2.4a · R2 buckets and CORS ✅
 dash.cloudflare.com → R2 Object Storage. All buckets **private** (no public access, no custom domain):
@@ -419,7 +422,10 @@ Result, checked afterwards:
 - Code in `/srv/vayu` (from `main`); `/srv/vayu/secrets` readable by `deploy` only.
 - Nightly backup timer enabled (20:30 UTC = 02:00 IST).
 - The server's own SSH fingerprint: `SHA256:yOMBc1Z3D4XpkN6a7LGHAREreTlKmgOAAkrKZxQSjoQ` (the same
-  as at the first connection; it stays the same when staging is re-made from its snapshot).
+  as at the first connection). **Correction 2026-11-27:** it does NOT survive a snapshot: a server
+  made from one gets new keys on its first boot. `infra/staging.sh up` reads the new key and updates
+  the Mac's known_hosts and GitHub's `SSH_KNOWN_HOSTS` itself (re-made 2026-11-27: ED25519
+  `SHA256:TLSc0mqGF3rY3ZMVT2GQb/QTEwJY00Fk/PbXDmJTk9s`).
 
 ### 3.2 · GitHub robot key ✅
 A key pair made for GitHub Actions only. Its public half is in the server's
@@ -664,7 +670,7 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 ### Names and addresses (not secret)
 | What | Value |
 |---|---|
-| Staging | `https://vayu-staging.carcid.in` (droplet `vayu-staging`, BLR1, IP changes when re-made) |
+| Staging | `https://vayu-staging.carcid.in` (droplet `vayu-staging`, BLR1; IP and SSH key change when re-made, `infra/staging.sh up` handles both) |
 | Production | `https://vayu.carcid.in` (not created yet) |
 | Customer QR page | `https://<address>/report/verify/<code>` |
 | DNS | GoDaddy (`ns19/ns20.domaincontrol.com`); just `vayu-staging` is DigitalOcean DNS (`ns1-3.digitalocean.com`) |

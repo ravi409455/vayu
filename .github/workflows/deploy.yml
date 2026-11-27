@@ -55,6 +55,7 @@ jobs:
     outputs:
       sha: ${{ steps.what.outputs.sha }}
       deploy: ${{ steps.what.outputs.deploy }}
+      built_before: ${{ steps.images.outputs.build == 'false' }}   # images existed: a real rollback
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -198,9 +199,12 @@ jobs:
 
   production:
     needs: [build, staging]
-    # staging off: a merge's production deploy waits for a tested staging; a rollback started by
-    # hand still reaches production (an emergency must not need staging switched on first)
-    if: needs.staging.outputs.live == 'true' || github.event_name == 'workflow_dispatch'
+    # staging off: a merge's production deploy waits for a tested staging. A rollback started by
+    # hand still reaches production (an emergency must not need staging switched on first), but
+    # only to a commit whose images were built before (it went through a merge): never a new build
+    if: >-
+      needs.staging.outputs.live == 'true' ||
+      (github.event_name == 'workflow_dispatch' && needs.build.outputs.built_before == 'true')
     runs-on: ubuntu-latest
     environment: {name: production, url: "https://vayu.carcid.in"}   # waits for the owner's Approve
     # its own queue: a run waiting for Approve no longer holds up the next staging deploy
