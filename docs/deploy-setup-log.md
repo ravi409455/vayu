@@ -17,11 +17,11 @@ Status: ✅ done · 🔄 in progress · ⏳ not started
 |---|---|---|
 | 0 | Safety first: secrets home, 2-step login, SSH key | ✅ 2026-11-26 |
 | 1 | Code changes (PR 27) | ✅ merged 2026-11-26 as `35fdec9` |
-| 2 | Accounts and dashboards | ✅ 2026-11-26 (2.5c, the Firebase key restriction, waits for the staging app) |
+| 2 | Accounts and dashboards | ✅ 2026-11-26 (2.5c, the Firebase key restriction, 2026-11-28) |
 | 3 | Staging server setup | ✅ 2026-11-26: live, with test data |
 | 4 | Deploy pipeline | 🔄 merge → staging works; rollback not yet rehearsed |
 | 5 | Backups and alerts | ✅ 2026-11-27 on staging: DigitalOcean alerts, Better Stack (monitor, heartbeats, Slack), first restore drill. Production gets its own set in Phase 7 |
-| 6 | Prove staging | 🔄 update prompt and Sentry done 2026-11-28 |
+| 6 | Prove staging | 🔄 push, update prompt and Sentry done 2026-11-28 |
 | 7 | Production | ⏳ |
 
 Quick links: [Where everything lives](#where-everything-lives) · [Open items](#open-items)
@@ -317,8 +317,16 @@ new private key** → the JSON goes straight into Phase → `vayu` → Productio
 `FIREBASE_SERVICE_ACCOUNT_JSON`, then the downloaded file is deleted. Staging keeps the existing
 key (already in Phase, step 2 of Phase 0), so production shares no key with staging or the Mac.
 
-**2.5c · Restrict the Firebase API key (R-32)** ⏳ — done once "Vayu Staging" is built, and checked
-in Phase 6 (a push still arrives).
+**2.5c · Restrict the Firebase API key (R-32)** ✅ (2026-11-28, by the owner) — Google Cloud →
+APIs & Services → Credentials → "Android key (auto created by Firebase)" (ends `5Rc8`):
+Android apps `in.carcid.vayu` and `in.carcid.vayu.staging`, both with the release key's SHA-1
+`4E:9E:AD:F9:4D:73:82:90:D7:4F:F9:3E:2A:3B:17:59:52:52:62:97` (not secret; read from the APK with
+`apksigner verify --print-certs`); API restrictions: Firebase Installations, FCM Registration,
+Firebase Cloud Messaging. Google Cloud only shows project `vayu-8bb7a` to the Google account that
+owns Firebase: open it from Firebase → Project settings → Service accounts → "Manage service account
+permissions". Checked: after the lock the app restarted with no Firebase errors and a push arrived
+(6.3). Not yet seen: a brand-new install getting its first push token under the lock (check in the
+phone test).
 
 ### 2.6 · Sentry: projects, build token, Slack alert ✅
 Organisation slug **`car-cid`** (`https://car-cid.sentry.io`; not a secret).
@@ -688,6 +696,17 @@ staging were **equal** (1820 fields, 1768 media files, 208 booking activities, .
 
 ## Phase 6 · Prove staging 🔄
 
+### 6.3 · Push ✅ (2026-11-28)
+**No push had ever been sent from staging.** The push task failed with `PermissionError:
+/run/secrets/firebase-service-account.json` (Sentry, since 26 Nov): `secrets.sh` wrote the key 600
+for `deploy` (uid 1000), the api and worker containers run as uid 10001. Fixed by PR 67: the file
+is 644 (still private: `secrets/` is 700). Five test notifications to `ops` on the phone ("Push
+test", "Inspection started", "Inspection submitted", "New booking", one after the key lock), sent
+through `notify.handlers.to_user`: all arrived ✅.
+Lesson: **a deploy runs `secrets.sh` from the code it replaces**, before checking out the new
+commit, so a change to `secrets.sh` works from the deploy after the one that brings it. PR 67's own
+deploy still wrote 600; fixed by hand once (`chmod 644`), the next deploy keeps it.
+
 ### 6.4 · Update prompt ✅ (2026-11-28)
 "Vayu Staging" 0.3.0 (version code 12) built from `main` `005b6c8` on the Mac (`assembleStaging`,
 signing key in `~/vayu-keys`, `SENTRY_DSN_ANDROID` and `SENTRY_AUTH_TOKEN` pasted at a hidden prompt
@@ -771,7 +790,6 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 | Phase 4: rehearse a rollback (Actions → deploy → Run workflow → previous commit) | after the merges |
 | Every deploy run waits for production Approve: cancel it until production exists (after PR 42 it no longer blocks staging) | until Phase 7 |
 | Welcome pages (`/welcome/engineers`, `/welcome/ops`, public APK download; PR welcome-pages): open both on staging after the next deploy; on production in Phase 7, with an uptime monitor on `/welcome/engineers` | next deploy, Phase 7 |
-| 2.5c Restrict the Firebase API key | now: "Vayu Staging" 0.3.0 is on the phone (Phase 6) |
 | 5.2 Better Stack for production: monitors on `/api/v1/health`, `/` and `/welcome/engineers`; heartbeats `prod-workers`, `prod-backup` → Phase `vayu` → Production; then delete the staging monitor and heartbeats and clear their two Phase Staging values | Phase 7 |
 | Phase Production environment: the rest of its values (table above) | Phase 7 |
 | Production server's Phase service account (`vayu-prod-server`, Production only) and robot key | Phase 7 |
