@@ -306,6 +306,9 @@ def test_a_late_start_is_a_library_page_of_every_inspection_form_after_ops_pages
             paying[:2])
         assert shown(inspection_45_minutes_delayed="yes", delay_payment_mode="upi") == set(
             paying)
+        # a payment screenshot is ours: never in the report, its downloads or a ZIP
+        assert mine["delay_payment_screenshot"].config["hide_from_customer"] is True
+        assert live_fields("end")["payment_screenshot"].config["hide_from_customer"] is True
         # the built-in chassis number is scanned
         assert mine["chassis_no"].config.get("scan") is True
         if key != "ev":

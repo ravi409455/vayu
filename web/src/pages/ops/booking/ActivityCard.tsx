@@ -40,14 +40,12 @@ export function activityText(
   if (r.kind === "media_added") return `${by} added a file to ${r.keys.map(label).join(", ") || "the inspection"}`;
   if (r.kind === "finished_without_files") {
     const n = Number(c?.missing?.[1] ?? c?.missing ?? 0);
-    return `Finished by ${by} without ${n} file${n === 1 ? "" : "s"}${
-      r.keys.filter((k) => k !== "stage").length
-        ? `: ${r.keys
-            .filter((k) => k !== "stage")
-            .map(label)
-            .join(", ")}`
-        : ""
-    }`;
+    const req = Number(c?.required ?? 0);
+    const why = { customer_waiting: "customer is waiting", phone_lost: "phone lost or broken", other: "other" }[String(c?.reason ?? "")];
+    const which = r.keys.filter((k) => k !== "stage").map(label);
+    return `Finished by ${by} without ${n} file${n === 1 ? "" : "s"}${req ? ` (${req} required)` : ""}${which.length ? `: ${which.join(", ")}` : ""}${
+      why ? ` · ${why}` : ""
+    }${c?.note ? ` · "${String(c.note)}"` : ""}`;
   }
   if (r.kind === "late_reviewed") return `Late start reviewed by ${by}`;
   if (r.kind === "quick_reviewed") return `Quick finish reviewed by ${by}`;

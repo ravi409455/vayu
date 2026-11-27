@@ -1539,8 +1539,9 @@ paths:
   /api/v1/bookings/{id}/finish:
     post:
       operationId: bookings_finish_create
-      description: 'Ops: finish a job without the expert''s missing optional files
-        (every required one is in).'
+      description: |-
+        Ops: finish a job without the expert's missing files, required ones too, with a reason
+        (customer_waiting, phone_lost, other) and an optional note.
       parameters:
       - in: path
         name: id

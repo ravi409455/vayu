@@ -687,6 +687,22 @@ def test_no_download_before_the_report_is_ready(renv, settings):
     assert renv.ops.get(f"/api/v1/bookings/{b['id']}/report/download").status_code == 404
 
 
+def test_an_older_pdf_of_a_booking_waiting_again_is_not_passed_on(renv, settings):
+    """Security review: the report is passed on only once the booking is Completed; the server
+    enforces it (the greyed-out buttons only show it)."""
+    from apps.bookings.models import Booking
+
+    set_template(renv)
+    b = complete_job(renv, settings=settings)
+    Booking.objects.filter(pk=b["id"]).update(stage="submitted")    # waiting for files again
+    body = renv.ops.get(f"/api/v1/bookings/{b['id']}/report").json()
+    assert body["url"] is None and body["preview_url"] is None
+    d = renv.ops.get(f"/api/v1/bookings/{b['id']}/report/download")
+    assert d.status_code == 409 and d.json()["code"] == "NOT_COMPLETED"
+    assert renv.ops.post(f"/api/v1/bookings/{b['id']}/report/shared", {"how": "pdf"},
+                         format="json").status_code == 409
+
+
 def test_a_change_during_a_render_leaves_the_new_pdf_out_of_date(renv, settings, monkeypatch):
     set_template(renv)
     b = complete_job(renv, settings=settings)

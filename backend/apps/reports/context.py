@@ -119,6 +119,7 @@ class Source:
     defects: list[str] = field(default_factory=list)
     version: Any = None
     _values: dict | None = None
+    _hidden: set[str] | None = None
 
     def __post_init__(self):
         scores = self.insp.scores or {}
@@ -141,6 +142,14 @@ class Source:
     def get_field(self, ref: str) -> Field | None:
         form, key = field_ref(ref)
         return self.fields.get(form, {}).get(key)
+
+    @property
+    def customer_hidden(self) -> set[str]:
+        """Fields marked "Hide from customer": never printed or linked (apps.media.services)."""
+        if self._hidden is None:
+            from apps.media.services import customer_hidden
+            self._hidden = customer_hidden(self.booking)
+        return self._hidden
 
     def shown(self, ref: str) -> bool:
         form, key = field_ref(ref)
@@ -343,7 +352,8 @@ def photo_items(src: Source, part: dict) -> list[dict]:
     out = []
     for ref in refs:
         f = src.get_field(ref)
-        if f is None or f.type != "photo":
+        # "Hide from customer" photos never print, even when placed by name (owner, 2026-11-27)
+        if f is None or f.type != "photo" or f.key in src.customer_hidden:
             continue
         of = f.config.get("photo_of")
         check = src.cell(f"inspection.{of}") if of else None

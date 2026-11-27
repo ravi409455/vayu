@@ -29,6 +29,7 @@ COLORS = {"brand": "#a62830", "text": "#1b1f27", "ok": "#15703f", "warn": "#b25e
 PRINT_EDGE = 1000            # print photos: the largest size, for a photo across the page
 SMALL_EDGE = 600             # a photo in a box up to 65 mm wide: about 250 dpi, sharp in print
 SMALL_BOX_MM = 65
+PRINT_QUALITY = 80           # JPEG quality of the print copies (also made at upload)
 PADS = {"compact": 0.6, "normal": 1.2, "roomy": 2.0}
 RATIO = {"4:3": 0.75, "16:9": 0.5625, "1:1": 1.0}
 FONTS_DIR = Path(__file__).parent / "fonts"
@@ -79,7 +80,7 @@ def _print_uri(asset: MediaAsset, edge: int, c=None) -> str | None:
         return None
     image.thumbnail((edge, edge))
     buf = io.BytesIO()
-    image.convert("RGB").save(buf, "JPEG", quality=80)
+    image.convert("RGB").save(buf, "JPEG", quality=PRINT_QUALITY)
     storage.put(key, buf.getvalue(), "image/jpeg", c)
     return _jpeg_uri(buf.getvalue())
 

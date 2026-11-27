@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { PdfProgress } from "../../../ui/PdfProgress";
 import { Download, RefreshCw } from "lucide-react";
 import { api, ApiError } from "../../../api/client";
 import { useRefresh } from "../../../api/hooks";
@@ -81,8 +82,12 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
   });
   const why = r?.regenerate && !r.regenerate.allowed ? (r.regenerate.reason ?? "") : "";
   const busy = regen.isPending || !!r?.updating || watching;
+  // the bar shows while a PDF is on its way: Regenerate pressed, an update running, or the first one
+  const making = busy || (!!r && r.status !== "ready" && r.status !== "failed");
   // no report at all (its first render was lost or had no layout): Ops can make it from here
   const firstMissing = q.isSuccess && !r && booking.stage === "completed" && !booking.conflict;
+  // a PDF is passed on only once the booking is Completed (every file in, or Ops finished it)
+  const notYet = booking.stage !== "completed" ? "Available once the booking is Completed." : "";
   if (q.isError) return <LoadError error={q.error} what="report" onRetry={q.refetch} />;
   if (q.isPending && can("reports.view")) return <p className="muted pad">Loading…</p>;
   const passedOn = activity.filter((a) => a.kind === "report_downloaded" || a.kind === "report_shared");
@@ -105,47 +110,58 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
   }
   return (
     <>
-      <div className="bar">
-        {r && (
-          <>
-            <Pill tone={r.updating ? "warn" : r.status === "ready" ? "ok" : r.status === "failed" ? "bad" : "warn"}>
-              {r.updating ? "Updating…" : r.status === "ready" ? "Ready" : r.status === "failed" ? "Failed" : "Being made"}
-            </Pill>
-            {r.out_of_date && !r.updating && <Pill tone="warn">Out of date</Pill>}
-            <span className="muted small">
-              Revision {r.revision} · {fmtStamp(r.generated_at)}
-            </span>
-          </>
-        )}
-        <span className="grow" />
-        {(r || firstMissing) && can("submissions.edit") && (
-          <button
-            disabled={busy || !!why}
-            title={why || undefined}
-            onClick={() => {
-              if (!regen.isPending) regen.mutate();
-            }}
-          >
-            <RefreshCw size={15} aria-hidden /> {busy ? "Making…" : r ? "Regenerate" : "Make the PDF"}
-          </button>
-        )}
-        {r?.verify_url && r.status === "ready" && <button onClick={() => void copyCheckLink()}>Copy check link</button>}
-        {r?.url && (
-          <a
-            className="btn primary"
-            href={r.url}
-            download={r.filename}
-            onClick={() => setTimeout(() => void refresh(keys.bookingPart(booking.id, "activity")), 1500)}
-          >
-            <Download size={15} aria-hidden /> Download PDF
-          </a>
-        )}
-      </div>
-      {(r?.updating || watching) && <p className="muted small">The new PDF is being made. This page shows it by itself.</p>}
+      {(r || firstMissing) && ( // nothing to show yet: no empty row above "No report yet"
+        <div className="bar">
+          {r && (
+            <>
+              <Pill tone={r.updating ? "warn" : r.status === "ready" ? "ok" : r.status === "failed" ? "bad" : "warn"}>
+                {r.updating ? "Updating…" : r.status === "ready" ? "Ready" : r.status === "failed" ? "Failed" : "Being made"}
+              </Pill>
+              {r.out_of_date && !r.updating && <Pill tone="warn">Out of date</Pill>}
+              <span className="muted small">
+                Revision {r.revision} · {fmtStamp(r.generated_at)}
+              </span>
+            </>
+          )}
+          <span className="grow" />
+          {(r || firstMissing) && can("submissions.edit") && (
+            <button
+              disabled={busy || !!why}
+              title={why || undefined}
+              onClick={() => {
+                if (!regen.isPending) regen.mutate();
+              }}
+            >
+              <RefreshCw size={15} aria-hidden /> {busy ? "Making" : r ? "Regenerate" : "Make the PDF"}
+            </button>
+          )}
+          {r?.verify_url && r.status === "ready" && (
+            <button disabled={!!notYet} title={notYet || undefined} onClick={() => void copyCheckLink()}>
+              Copy check link
+            </button>
+          )}
+          {r?.url && notYet && (
+            <button className="primary" disabled title={notYet}>
+              <Download size={15} aria-hidden /> Download PDF
+            </button>
+          )}
+          {r?.url && !notYet && (
+            <a
+              className="btn primary"
+              href={r.url}
+              download={r.filename}
+              onClick={() => setTimeout(() => void refresh(keys.bookingPart(booking.id, "activity")), 1500)}
+            >
+              <Download size={15} aria-hidden /> Download PDF
+            </a>
+          )}
+        </div>
+      )}
+      {making && <PdfProgress />}
       {r?.out_of_date && !busy && (
         <div className="banner warn">Out of date: changes since this PDF. Press Regenerate when you are done to make a new one.</div>
       )}
-      {r && why && can("submissions.edit") && <p className="muted small">Regenerate is off: {why}</p>}
+      {/* why Regenerate is off stays on the button's hover text, not as a line on the page */}
       {r?.error && !r.updating && <div className="banner bad">Problem: {reportError(r.error)}. It is tried again by itself.</div>}
       {!r && !firstMissing && <Empty title="No report yet">It is made automatically when the booking is Completed.</Empty>}
       {!r && firstMissing && (
@@ -153,7 +169,11 @@ export function ReportTab({ booking, activity }: { booking: Booking; activity: A
           This booking is Completed but its PDF was not made{busy ? "" : ". Press Make the PDF to make it now"}.
         </Empty>
       )}
-      {r?.preview_url && <PdfPreview url={r.preview_url} />}
+      {r?.preview_url && (
+        <div className={making ? "pdf-fading" : undefined} aria-busy={making}>
+          <PdfPreview url={r.preview_url} />
+        </div>
+      )}
       {r && (
         <section className="card" aria-label="Downloads and shares" style={{ marginTop: 14 }}>
           <h3 style={{ marginTop: 0 }}>Downloads and shares</h3>

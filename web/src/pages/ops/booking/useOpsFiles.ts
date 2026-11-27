@@ -13,11 +13,15 @@ export function useOpsFiles(booking: Booking, f: MediaField, onDone: () => void,
   const { can } = useAuth();
   const { say, fail } = useToast();
   const [busy, setBusy] = useState(false);
-  async function put(files: File[], replaces?: string) {
+  /** `replaces`: one file in place of that one. `slots`: file i takes the place of slots[i] (files
+   *  that never arrived), so one pick fills several gaps. */
+  async function put(files: File[], replaces?: string, slots?: string[]) {
     if (!files.length) return;
     setBusy(true);
     try {
-      for (const file of files) {
+      for (const [i, file] of files.entries()) {
+        const replacesThis = slots ? slots[i] : replaces;
+        if (!replacesThis && slots) break;
         const id = await addFile({
           bookingId: booking.id,
           fieldKey: f.key,
@@ -25,7 +29,7 @@ export function useOpsFiles(booking: Booking, f: MediaField, onDone: () => void,
           file,
           name: file.name,
           source: "gallery",
-          replaces,
+          replaces: replacesThis,
         });
         // only a fully sent file goes into the inspection (a half-sent one must not push out a good one)
         try {
@@ -34,10 +38,16 @@ export function useOpsFiles(booking: Booking, f: MediaField, onDone: () => void,
           void discardFile(id);
           throw e;
         }
-        await api(`media/${id}/attach`, { body: replaces ? { replaces } : {} });
-        if (replaces) onReplaced?.(id);
+        await api(`media/${id}/attach`, { body: replacesThis ? { replaces: replacesThis } : {} });
+        if (replacesThis && !slots) onReplaced?.(id);
       }
-      say(replaces ? "Replaced. The old file is kept in the history." : "Added. It is checked in the background.");
+      say(
+        slots
+          ? "Uploaded. It is checked in the background."
+          : replaces
+            ? "Replaced. The old file is kept in the history."
+            : "Added. It is checked in the background.",
+      );
     } catch (e) {
       fail(e);
     } finally {

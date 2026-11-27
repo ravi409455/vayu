@@ -1,5 +1,9 @@
 # Deployment setup log
 
+> **New here, or doing a deployment yourself? Use `docs/deploy-guide.md`**: the clean
+> step-by-step handbook from zero to production. This file is the diary of how it was done the
+> first time (with every problem met) and the live list of where everything lives.
+
 What was actually done, step by step, while setting up staging and production. The plan (the why,
 and steps not done yet) is `docs/plan-deploy.md`; the exact server commands are
 `docs/runbook-new-server.md`. This file is updated after every step until production is live.

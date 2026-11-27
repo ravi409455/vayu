@@ -284,6 +284,14 @@ export function FieldEditor({
                 tip={`After the expert submits, Ops and Admin can add or replace these ${field.type}s from their computer or phone. Turn off when only the expert's own upload counts.`}
               />
             )}
+            {!locked && (media || field.type === "file") && (
+              <Check
+                label="Hide from customer"
+                checked={cfg.hide_from_customer === true}
+                onChange={(e) => setCfg({ hide_from_customer: e.target.checked ? true : undefined })}
+                tip="For payment or other internal photos. Kept out of the report, its photo and video downloads, partner integrations and every ZIP. Ops still see it on the booking. Applies to older bookings too once published."
+              />
+            )}
             {!locked && UPLOAD_TYPES.includes(field.type) && (
               <div className="grid2">
                 {field.type !== "file" && (

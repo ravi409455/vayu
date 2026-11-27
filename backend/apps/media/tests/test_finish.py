@@ -23,37 +23,55 @@ def stuck(env, b, n=1):
 
 def test_missing_optional_files_can_be_finished_without(job, settings):
     env, b = job
-    stuck(env, b, 2)
+    ids = stuck(env, b, 2)
     r = env.ops.get(f"/api/v1/bookings/{b['id']}/missing-files").json()
-    assert r == {"can_finish": True, "missing": [{"part": "inspection", "key": "photo_a",
-                 "label": "photo_a", "count": 2, "required": False}]}
+    [row] = r["missing"]
+    assert r["can_finish"] is True and r["phone"] is None          # the test expert has no phone
+    assert row == {"part": "inspection", "key": "photo_a", "label": "photo_a", "count": 2,
+                   "required": False, "ids": ids, "of": 2, "page": "Inspection",
+                   "section": row["section"]} and row["section"]
     assert env.expert.post(f"/api/v1/bookings/{b['id']}/finish").status_code == 403   # Ops only
     with mock.patch("apps.reports.tasks.render_report.delay") as render:
         r = env.ops.post(f"/api/v1/bookings/{b['id']}/finish")
     assert r.status_code == 200 and r.json() == {"stage": "completed"}
     render.assert_called_once_with(b["id"])                               # the report is made now
     row = BookingActivity.objects.get(kind="finished_without_files")
-    assert row.changes == {"stage": ["submitted", "completed"], "missing": 2}
+    assert row.changes == {"stage": ["submitted", "completed"], "missing": 2, "required": 0}
     assert row.keys == ["inspection.photo_a", "stage"]
     assert env.ops.post(f"/api/v1/bookings/{b['id']}/finish").status_code == 409     # once only
 
 
-def test_a_required_field_needs_its_file_from_ops_first(job, settings):
+def test_required_files_missing_can_be_finished_with_a_reason(job, settings):
+    """Owner, 2026-11-27: a customer who wants the report now gets it without the required
+    photos (the report uses its stand-in image); the reason is kept in the history."""
+    env, b = job
+    Field.objects.filter(key="photo_a").update(required=True)
+    stuck(env, b)
+    r = env.ops.get(f"/api/v1/bookings/{b['id']}/missing-files").json()
+    assert r["can_finish"] is True and r["missing"][0]["required"] is True
+    bad = env.ops.post(f"/api/v1/bookings/{b['id']}/finish", {"reason": "bored"}, format="json")
+    assert bad.status_code == 400
+    with mock.patch("apps.reports.tasks.render_report.delay"):
+        r = env.ops.post(f"/api/v1/bookings/{b['id']}/finish",
+                         {"reason": "customer_waiting", "note": "  Called twice  "}, format="json")
+    assert r.status_code == 200 and r.json() == {"stage": "completed"}
+    row = BookingActivity.objects.get(kind="finished_without_files")
+    assert row.changes == {"stage": ["submitted", "completed"], "missing": 1, "required": 1,
+                           "reason": "customer_waiting", "note": "Called twice"}
+
+
+def test_an_ops_upload_in_place_of_a_required_file_completes_the_job(job, settings):
     env, b = job
     Field.objects.filter(key="photo_a").update(required=True)
     [old] = stuck(env, b)
-    r = env.ops.get(f"/api/v1/bookings/{b['id']}/missing-files").json()
-    assert r["can_finish"] is False and r["missing"][0]["required"] is True
-    r = env.ops.post(f"/api/v1/bookings/{b['id']}/finish")
-    assert r.status_code == 409 and r.json()["code"] == "REQUIRED_FILES_MISSING"
-    assert r.json()["keys"] == ["inspection.photo_a"]
+    assert env.ops.get(f"/api/v1/bookings/{b['id']}/missing-files").json()["missing"][0]["ids"] == [old]
     new = upload(env.ops, b["id"], jpeg(color=(9, 9, 9)), settings, source="gallery",
                  replaces=old).json()["id"]
     assert env.ops.post(f"/api/v1/media/{new}/attach", {"replaces": old}, format="json").status_code == 204
     # Ops' file was the only one missing: the job completes by itself, nothing left to finish
     assert Booking.objects.get(pk=b["id"]).stage == "completed"
     assert env.ops.get(f"/api/v1/bookings/{b['id']}/missing-files").json() == {
-        "missing": [], "can_finish": False}
+        "missing": [], "can_finish": False, "phone": None}
 
 
 def test_nothing_missing_or_not_waiting_for_files(job, settings):
@@ -156,3 +174,25 @@ def test_after_the_finish_the_phone_can_still_send_a_file_it_registered_but_no_n
     Booking.objects.filter(pk=b["id"]).update(stage="cancelled")      # cancelled: nothing at all
     gone = env.expert.post("/api/v1/media/initiate", body, format="json")
     assert gone.status_code == 409 and gone.json()["code"] == "BOOKING_CLOSED"
+
+
+def test_missing_files_names_the_expert_phone_so_ops_can_tell_sending_from_lost(job, settings):
+    from django.utils import timezone
+
+    from apps.accounts.models import Device
+    env, b = job
+    stuck(env, b)
+    from apps.bookings.models import Inspection
+    expert = Inspection.objects.get(booking_id=b["id"]).expert
+    Device.objects.filter(user=expert).delete()
+    Device.objects.create(user=expert, revoked_at=timezone.now())           # signed out: not used
+    seen = timezone.now()
+    Device.objects.create(user=expert, last_seen_at=seen, unsynced={"drafts": 0, "files": 3})
+    phone = env.ops.get(f"/api/v1/bookings/{b['id']}/missing-files").json()["phone"]
+    assert phone["files"] == 3 and phone["last_seen_at"].startswith(seen.isoformat()[:16])
+
+
+def test_no_phone_line_without_a_submitted_inspection(job, settings):
+    from apps.media.services import expert_phone
+    env, b = job
+    assert expert_phone(Booking.objects.get(pk=b["id"])) is None       # started, nothing submitted

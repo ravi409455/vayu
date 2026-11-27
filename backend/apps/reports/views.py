@@ -160,6 +160,8 @@ class BookingReport(APIView):
         if r is None:
             raise fail("NO_REPORT", "No report has been generated yet.", 404)
         blocked = regenerate_blocked(b, r)
+        # links only once the booking is Completed (the same rule _ready_report enforces)
+        ready = r.status == "ready" and b.stage == "completed"
         return Response({"revision": r.revision, "status": r.status,
                          "updating": bool(r.render_started_at),       # being made right now
                          # something it shows changed since: Ops press Regenerate
@@ -168,11 +170,9 @@ class BookingReport(APIView):
                          "generated_at": r.generated_at, "filename": r.filename, "error": r.error,
                          "verify_url": f"{settings.VERIFY_BASE_URL}/{r.token}",
                          # a download goes through the server so it is logged (who, when)
-                         "url": f"/api/v1/bookings/{b.id}/report/download"
-                         if r.status == "ready" else None,
+                         "url": f"/api/v1/bookings/{b.id}/report/download" if ready else None,
                          # same file, shown in the page instead of downloaded
-                         "preview_url": storage.presign_get(r.key) if r.status == "ready"
-                         else None})
+                         "preview_url": storage.presign_get(r.key) if ready else None})
 
 
 def regenerate_blocked(b: Booking, r: Report | None) -> str | None:
@@ -213,6 +213,8 @@ def _ready_report(request, pk) -> Report:
     r = Report.objects.filter(booking=b, status="ready").first()
     if r is None:
         raise fail("NO_REPORT", "The report is not ready yet.", 404)
+    if b.stage != "completed":        # an older PDF of a booking waiting again: not passed on
+        raise fail("NOT_COMPLETED", "The report is available once the booking is Completed.", 409)
     return r
 
 

@@ -1,5 +1,6 @@
 import { AlertTriangle, ChevronsLeft, ChevronsRight, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PdfProgress } from "../../ui/PdfProgress";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
@@ -603,19 +604,22 @@ function Designer({
         <section className="rd-mid" aria-label="Preview">
           <div className="rd-status muted small">
             {rendering
-              ? "Updating…"
+              ? "" // the bar below says it
               : chosen
                 ? "This is the real PDF. Click a part to change it."
                 : "Complete one booking inspected with this form to see the report with real answers."}
           </div>
+          {rendering && <PdfProgress label={preview ? "Updating the preview…" : "Making the preview…"} />}
           {preview ? (
-            <Preview
-              pdf={preview.pdf}
-              pages={preview.pages}
-              selected={sel?.kind === "part" ? sel.id : null}
-              names={nameMap}
-              onSelect={(id) => setSel({ kind: "part", id })}
-            />
+            <div className={rendering ? "pdf-fading" : undefined} aria-busy={rendering}>
+              <Preview
+                pdf={preview.pdf}
+                pages={preview.pages}
+                selected={sel?.kind === "part" ? sel.id : null}
+                names={nameMap}
+                onSelect={(id) => setSel({ kind: "part", id })}
+              />
+            </div>
           ) : (
             <Empty title={chosen ? "Drawing the report…" : "Nothing to show yet"} />
           )}

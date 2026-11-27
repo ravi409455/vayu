@@ -1756,6 +1756,31 @@ button.sm {
 .bad-text {
   color: var(--bad);
 }
+.ok-text {
+  color: var(--ok);
+}
+/* a booking waiting for files: one row per field with an Upload in place of the missing ones */
+.missing-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  color: var(--ink);
+}
+.missing-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+.missing-row.done {
+  color: var(--muted);
+}
+.missing-row.drop {
+  outline: 2px dashed var(--warn);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
 .warn-text {
   color: var(--warn);
 }
@@ -2023,6 +2048,13 @@ label.btn.primary:hover {
   left: auto;
   right: 6px;
   background: var(--panel);
+}
+/* a "Hide from customer" field's file: bottom left, so it never covers the other tags */
+.tile-tag.hidden-tag {
+  top: auto;
+  bottom: 26px;
+  background: var(--warn-tint);
+  color: var(--warn);
 }
 .tile-label {
   font-size: 12px;
@@ -5034,4 +5066,42 @@ input[type="radio"] {
 .check-row label,
 label.check {
   padding: 3px 0;
+}
+
+/* the PDF is being made: an estimated bar, the old preview faded underneath */
+.pdf-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+.pdf-progress-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.pdf-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.pdf-progress-fill {
+  height: 100%;
+  background: var(--info);
+  border-radius: 999px;
+  transition: width 0.25s linear;
+}
+.pdf-fading {
+  opacity: 0.45;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pdf-progress-fill,
+  .pdf-fading {
+    transition: none;
+  }
 }

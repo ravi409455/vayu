@@ -16,7 +16,14 @@ from apps.core.errors import fail
 
 from .. import storage
 from ..models import KINDS, MediaAsset
-from .access import field_for, hidden_fields, is_manager, word, writable_booking
+from .access import (
+    customer_hidden,
+    field_for,
+    hidden_fields,
+    is_manager,
+    word,
+    writable_booking,
+)
 from .answers import max_count, submitted_answer, unarrived
 from .ops import FILE_TYPES, LOOSE_LIMIT, check_ops_upload
 
@@ -40,8 +47,10 @@ def booking_media(request: Any, booking_id: Any) -> list[dict[str, Any]]:
     if scope_for(request.user, "media.manage", request) is None:
         qs = qs.filter(uploaded_by=request.user)
     hidden = hidden_fields(request.user, booking)
+    internal = customer_hidden(booking)
     return [{"id": str(a.id), "field_key": a.field_key, "kind": a.kind, "status": a.status,
-             "by_ops": a.uploaded_by.role != "expert"}
+             "by_ops": a.uploaded_by.role != "expert",
+             "hidden_from_customer": a.field_key in internal}
             for a in qs if a.field_key not in hidden]
 
 
