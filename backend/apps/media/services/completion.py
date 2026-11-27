@@ -44,9 +44,15 @@ def check_completion(booking_id: Any) -> bool:
     return True
 
 
+PART_WORD = {"start": "Check-in", "inspection": "Inspection", "end": "Wrap-up"}
+REASONS = {"customer_waiting": "customer is waiting", "phone_lost": "phone lost or broken",
+           "other": "other"}
+
+
 def missing_files(booking: Booking) -> list[dict[str, Any]]:
     """What holds a submitted job back: per field of the counted inspection, the files it names
-    that have not arrived, and whether the field is required (Ops upload those before finishing)."""
+    that have not arrived (`ids`, so an Ops upload can take each one's place), of how many, where
+    the field is, and whether it is required."""
     from apps.forms.rules import evaluate_form, spec_from_version
 
     insp = booking.counted_inspection()
@@ -65,20 +71,42 @@ def missing_files(booking: Booking) -> list[dict[str, Any]]:
         # with the booking's answers: a rule may look at them (e.g. the inspection type)
         required = evaluate_form(spec_from_version(version),
                                  {"booking": booking.answers, **insp.answers}, today).required
-        for f in Field.objects.filter(version=version, type__in=KINDS).order_by("order", "id"):
+        for f in (Field.objects.filter(version=version, type__in=KINDS)
+                  .select_related("section").order_by("order", "id")):
             value = answers.get(f.key)
-            gone = [i for i in ([value] if isinstance(value, str) else value or [])
-                    if str(i) not in arrived]
+            named = [str(i) for i in ([value] if isinstance(value, str) else value or [])]
+            gone = [i for i in named if i not in arrived]
             if gone:
                 rows.append({"part": part, "key": f.key, "label": f.label, "count": len(gone),
-                             "required": bool(required.get(f.key))})
+                             "required": bool(required.get(f.key)), "ids": gone, "of": len(named),
+                             "page": PART_WORD[part], "section": f.section.title})
     return rows
 
 
-def finish_without_missing(actor: Any, booking: Booking) -> Booking:
-    """Ops finish a job whose expert's files will not come (a lost phone): only once every
-    required field has its file. Missing optional files are left out of the report; if they
-    arrive later they are added and the report is marked out of date (Ops press Regenerate)."""
+def expert_phone(booking: Booking) -> dict[str, Any] | None:
+    """The submitting expert's live phone: when it was last seen and how many files it still
+    holds, so Ops can tell "still sending" from "lost". None when there is no live phone."""
+    from apps.accounts.models import Device
+
+    insp = booking.counted_inspection()
+    if insp is None:
+        return None
+    d = (Device.objects.filter(user_id=insp.expert_id, revoked_at__isnull=True)
+         .order_by("-last_seen_at").first())
+    if d is None:
+        return None
+    return {"last_seen_at": d.last_seen_at, "files": (d.unsynced or {}).get("files")}
+
+
+def finish_without_missing(actor: Any, booking: Booking, reason: str = "",
+                           note: str = "") -> Booking:
+    """Ops finish a job whose expert's files will not come (a lost phone, a customer who wants
+    the report now), even with required files missing (owner, 2026-11-27): the report uses its
+    stand-in image for them. Files that arrive later are added and the report is marked out of
+    date (Ops press Regenerate)."""
+    if reason and reason not in REASONS:
+        raise fail("VALIDATION_ERROR", "Pick a reason from the list.", 400)
+    note = (note or "").strip()[:300]
     with transaction.atomic():
         b = Booking.objects.select_for_update().get(pk=booking.pk)
         if b.stage != "submitted":
@@ -87,18 +115,18 @@ def finish_without_missing(actor: Any, booking: Booking) -> Booking:
         if b.conflict:
             raise fail("CONFLICT_OPEN", "Choose which inspection counts first.", 409)
         rows = missing_files(b)
-        need = [r for r in rows if r["required"]]
-        if need:
-            raise fail("REQUIRED_FILES_MISSING", "Upload the required files first: "
-                       + ", ".join(r["label"] for r in need) + ".", 409,
-                       keys=[f"{r['part']}.{r['key']}" for r in need])
         insp = b.counted_inspection()
         b.stage = "completed"
         stamp(b, actor, ["stage"], edited=False)
         b.save()
         left = sum(r["count"] for r in rows)
-        activity.log(b, actor, "finished_without_files",
-                     {"stage": ["submitted", "completed"], "missing": left},
+        changes: dict[str, Any] = {"stage": ["submitted", "completed"], "missing": left,
+                                   "required": sum(r["count"] for r in rows if r["required"])}
+        if reason:
+            changes["reason"] = reason
+        if note:
+            changes["note"] = note
+        activity.log(b, actor, "finished_without_files", changes,
                      keys=["stage", *(f"{r['part']}.{r['key']}" for r in rows)], inspection=insp)
     events.emit("booking.updated", booking=str(b.id), booking_id=b.booking_id,
                 changes={"stage": ["submitted", "completed"]}, by=actor.pk)

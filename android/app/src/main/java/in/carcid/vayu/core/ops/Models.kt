@@ -115,6 +115,8 @@ data class MediaItem(
     val kind: String = "",
     /** "pending", "uploaded", "verified", "failed" or "purged". */
     val status: String = "",
+    /** its field is marked "Hide from customer": never in the report, its downloads or a ZIP */
+    @SerialName("hidden_from_customer") val hiddenFromCustomer: Boolean = false,
 ) {
     companion object {
         fun list(rows: List<JsonObject>): List<MediaItem> = rows.mapNotNull { runCatching { opsJson.decodeFromJsonElement(serializer(), it) }.getOrNull() }

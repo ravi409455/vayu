@@ -111,7 +111,9 @@ private suspend fun decoded(f: File, size: Int): ImageBitmap? = kotlinx.coroutin
  * Admin opens; nobody deletes): start the upload saying what it replaces, send it, attach it.
  */
 class OpsUploader(val pick: (part: String, f: Field, replaces: String?) -> Unit,
-                  val canAdd: (part: String, f: Field, have: Int) -> Boolean, val canReplace: (Field) -> Boolean)
+                  val canAdd: (part: String, f: Field, have: Int) -> Boolean, val canReplace: (Field) -> Boolean,
+                  /** one pick of several files: file i takes the place of slots[i] (files that never arrived) */
+                  val fill: (f: Field, slots: List<String>, done: () -> Unit) -> Unit = { _, _, _ -> })
 
 @Composable
 fun rememberOpsUploader(env: OpsEnv, id: String, data: Loaded3?, online: Boolean): OpsUploader {
@@ -120,17 +122,18 @@ fun rememberOpsUploader(env: OpsEnv, id: String, data: Loaded3?, online: Boolean
     var target by remember { mutableStateOf<Triple<String, Field, String?>?>(null) }
     // only once the expert has submitted, and never on a cancelled booking
     val may = env.can("media.manage") && online && data?.insp?.status == "submitted" && data.b.stage != "cancelled"
-    suspend fun upload(f: Field, file: File, type: String, replaces: String?) {
+    suspend fun upload(f: Field, file: File, type: String, replaces: String?, quiet: Boolean = false): Boolean {
         var loose: String? = null
         try {
             val hash = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { sha256(file) }
             val init = env.data.api.mediaInitiate(id, UUID.randomUUID().toString(), f.key, f.type, type, file.length(), hash, "gallery", replaces)
             loose = init.s("id")
-            if (!transfer(env.data.api, init, file, type)) { env.say("The file arrived damaged. Try again."); return }
+            if (!transfer(env.data.api, init, file, type)) { env.say("The file arrived damaged. Try again."); return false }
             env.data.act("POST", "media/$loose/attach", buildJsonObject { if (replaces != null) put("replaces", replaces) })
             loose = null
-            env.say(if (replaces != null) "Replaced." else "Added."); env.refresh()
-        } catch (e: ApiError) { env.say(e.message) } finally {
+            if (!quiet) { env.say(if (replaces != null) "Replaced." else "Added."); env.refresh() }
+            return true
+        } catch (e: ApiError) { env.say(e.message); return false } finally {
             file.delete()
             // an upload that never got attached is taken back, so it can't pile up
             loose?.let { l -> try { env.data.act("DELETE", "media/$l") } catch (e: ApiError) { } }
@@ -145,6 +148,25 @@ fun rememberOpsUploader(env: OpsEnv, id: String, data: Loaded3?, online: Boolean
             upload(f, tmp, type, replaces)
         }
     }
+    var filling by remember { mutableStateOf<Triple<Field, List<String>, () -> Unit>?>(null) }
+    val many = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        val (f, slots, done) = filling ?: return@rememberLauncherForActivityResult
+        filling = null
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        done()
+        scope.launch {
+            var sent = 0
+            for ((uri, slot) in uris.zip(slots)) {          // in the order picked; extra ones not used
+                val tmp = newFile(ctx.cacheDir, "up")
+                val type = withContext(Dispatchers.IO) { copyIn(ctx, uri, tmp) } ?: continue
+                if (upload(f, tmp, type, slot, quiet = true)) sent++ else break
+            }
+            val extra = uris.size - slots.size
+            if (sent > 0) env.say("Uploaded. It is checked in the background." +
+                if (extra > 0) " Only ${slots.size} ${if (slots.size == 1) "was" else "were"} missing; $extra not used." else "")
+            env.refresh()
+        }
+    }
     fun types(f: Field): Array<String> = when (f.type) {
         "video" -> arrayOf("video/*")
         "file" -> ((f.config["allowed"] as? List<*>)?.map { it.toString() } ?: listOf("image", "pdf")).map { if (it == "pdf") "application/pdf" else "image/*" }.toTypedArray()
@@ -153,7 +175,8 @@ fun rememberOpsUploader(env: OpsEnv, id: String, data: Loaded3?, online: Boolean
     return OpsUploader(
         pick = { p, f, r -> target = Triple(p, f, r); picker.launch(types(f)) },
         canAdd = { _, f, have -> may && f.config["ops_upload"] != false && have < f.maxCount },
-        canReplace = { f -> may && f.config["ops_upload"] != false })
+        canReplace = { f -> may && f.config["ops_upload"] != false },
+        fill = { f, slots, done -> filling = Triple(f, slots, done); many.launch(types(f)) })
 }
 
 /** Photos and videos by section: view full screen, play, add, replace, delete, share a ZIP. */
@@ -240,6 +263,10 @@ internal fun MediaTile(env: OpsEnv, m: MediaItem, size: androidx.compose.ui.unit
         .semantics { contentDescription = "${m.kind} ${m.fieldKey}" }, contentAlignment = Alignment.Center) {
         img?.let { Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
         if (m.kind == "video") Icon(Icons.Outlined.PlayCircle, null, tint = Color.White, modifier = Modifier.size(30.dp))
+        if (m.hiddenFromCustomer) Text("Hidden", fontSize = 10.sp, color = Vayu.colors.warn, maxLines = 1,
+            modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).clip(RoundedCornerShape(6.dp))
+                .background(Vayu.colors.warnTint).padding(horizontal = 5.dp, vertical = 1.dp)
+                .semantics { contentDescription = "Hidden from customer" })
     }
 }
 
@@ -258,7 +285,11 @@ internal fun MediaViewer(env: OpsEnv, m: MediaItem, fieldLabel: String, onClose:
     Column(Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding()) {
         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             `in`.carcid.vayu.ui.expert.CloseButton("Back", onClose, tint = Color.White)
-            Text(fieldLabel, color = Color.White, fontWeight = FontWeight.Bold)
+            Column {
+                Text(fieldLabel, color = Color.White, fontWeight = FontWeight.Bold)
+                if (m.hiddenFromCustomer) Text("Hidden from customer: not in the report, its downloads or any ZIP",
+                    color = Vayu.colors.warnTint, fontSize = 12.sp)
+            }
         }
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             when {

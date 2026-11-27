@@ -55,9 +55,11 @@ export function MediaTab({
   const onServer = useQuery({
     queryKey: keys.bookingPart(booking.id, "media"),
     enabled: can("media.manage"),
-    queryFn: ({ signal }) => api<{ id: string; by_ops: boolean }[]>(`bookings/${booking.id}/media`, { signal }),
+    queryFn: ({ signal }) =>
+      api<{ id: string; by_ops: boolean; hidden_from_customer?: boolean }[]>(`bookings/${booking.id}/media`, { signal }),
   });
   const byOps = new Set((onServer.data ?? []).filter((m) => m.by_ops).map((m) => m.id));
+  const internal = new Set((onServer.data ?? []).filter((m) => m.hidden_from_customer).map((m) => m.id));
   // Ops add or replace photos and videos once the expert has submitted; nobody deletes
   if (!insp) return <Empty title="No inspection yet">Photos and videos show here once the expert starts uploading.</Empty>;
   const all = fields.flatMap((f) => idsOf(insp, f.part, f.key).map((id) => ({ id, f })));
@@ -148,6 +150,7 @@ export function MediaTab({
                       <Thumb id={x.id} video={x.f.type === "video"} />
                       {sev && <span className="pill bad tile-tag">{sev}</span>}
                       {byOps.has(x.id) && <span className="pill tile-tag ops-tag">Added by Ops</span>}
+                      {internal.has(x.id) && <span className="pill tile-tag hidden-tag">Hidden from customer</span>}
                       <span className="tile-label ellipsis" title={`${x.f.section} › ${x.f.label}`}>
                         {view === "type" ? `${x.f.section} › ${x.f.label}` : x.f.label}
                       </span>
@@ -195,6 +198,11 @@ export function MediaTab({
             {byOps.has(current.id) && (
               <p className="muted small" style={{ margin: "6px 0 0" }}>
                 Added by Ops
+              </p>
+            )}
+            {internal.has(current.id) && (
+              <p className="small warn-text" style={{ margin: "6px 0 0" }}>
+                Hidden from customer: not in the report, its downloads or any ZIP
               </p>
             )}
             <OpsFileActions

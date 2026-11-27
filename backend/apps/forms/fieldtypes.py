@@ -135,6 +135,8 @@ def _check_capture(type: str, config: dict) -> None:
         raise ConfigError(f"camera must be one of {', '.join(CAMERAS)}.")
     if not isinstance(config.get("ops_upload", True), bool):
         raise ConfigError("ops_upload must be true or false.")
+    if not isinstance(config.get("hide_from_customer", False), bool):
+        raise ConfigError("hide_from_customer must be true or false.")
     if not isinstance(config.get("issue_photo", False), bool):
         raise ConfigError("issue_photo must be true or false.")
     if "photo_of" in config and not (isinstance(config["photo_of"], str)
@@ -150,6 +152,8 @@ def _check_file(type: str, config: dict) -> None:
     _int_in(config, "max_count", 1, 10)
     if not isinstance(config.get("ops_upload", True), bool):
         raise ConfigError("ops_upload must be true or false.")
+    if not isinstance(config.get("hide_from_customer", False), bool):
+        raise ConfigError("hide_from_customer must be true or false.")
     allowed = config.get("allowed", ["image", "pdf"])
     if not isinstance(allowed, list) or not allowed or set(allowed) - {"image", "pdf"}:
         raise ConfigError("allowed must be a non-empty subset of ['image', 'pdf'].")
@@ -448,12 +452,14 @@ TYPES: dict[str, FieldType] = {
     # issue_photo: always an issue photo when filled; photo_of: the check this photo shows
     # ops_upload: Ops and Admin may add or replace this field's files on the web (default yes)
     # camera: which camera the Android app opens first (default back); the expert can still flip
+    # hide_from_customer: never in the report, its downloads, integrations or a ZIP (default no)
     "photo": FieldType(_keys("min_count", "max_count", "capture", "issue_photo", "photo_of",
-                             "ops_upload", "camera"), _clean_files, _check_capture, value=False),
-    "video": FieldType(_keys("min_count", "max_count", "capture", "ops_upload", "camera"),
-                       _clean_files, _check_capture, value=False),
-    "file": FieldType(_keys("max_count", "allowed", "ops_upload"), _clean_files, _check_file,
-                      value=False),
+                             "ops_upload", "camera", "hide_from_customer"), _clean_files,
+                       _check_capture, value=False),
+    "video": FieldType(_keys("min_count", "max_count", "capture", "ops_upload", "camera",
+                             "hide_from_customer"), _clean_files, _check_capture, value=False),
+    "file": FieldType(_keys("max_count", "allowed", "ops_upload", "hide_from_customer"),
+                      _clean_files, _check_file, value=False),
     "derived": FieldType(_keys("rule", "true_label", "false_label"), _clean_derived,
                          _check_derived, system=True),
     "rating": FieldType(_keys("category"), _clean_rating, _check_rating, system=True),

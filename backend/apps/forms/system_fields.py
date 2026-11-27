@@ -61,7 +61,8 @@ STARTER_FIELDS: dict[str, list[dict]] = {
          "required_if": PAID, "show_if": PAID},
         {"section": "Payment",
          "key": "payment_screenshot", "label": "Payment screenshot", "type": "photo",
-         "config": {"max_count": 1}, "required_if": PAID, "show_if": PAID},
+         "config": {"max_count": 1, "hide_from_customer": True}, "required_if": PAID,
+         "show_if": PAID},
     ],
 }
 

@@ -282,6 +282,21 @@ describe("field editor", () => {
     await u.click(screen.getByRole("button", { name: "Save field" }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ config: expect.objectContaining({ camera: "front" }) }));
   });
+  it("a photo, video or document can be hidden from the customer; other fields can't", async () => {
+    const onSave = vi.fn();
+    const u = userEvent.setup();
+    const photo: FormField = { ...FIELD, key: "pay", type: "photo", config: { max_count: 1 } };
+    const { unmount } = render(
+      <FieldEditor field={photo} choices={[]} lists={[]} categories={[]} onSave={onSave} onDelete={noop} readOnly={false} />,
+    );
+    expect(screen.getByLabelText("Hide from customer")).not.toBeChecked();
+    await u.click(screen.getByLabelText("Hide from customer"));
+    await u.click(screen.getByRole("button", { name: "Save field" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ config: expect.objectContaining({ hide_from_customer: true }) }));
+    unmount();
+    render(<FieldEditor field={FIELD} choices={[]} lists={[]} categories={[]} onSave={noop} onDelete={noop} readOnly={false} />);
+    expect(screen.queryByLabelText("Hide from customer")).toBeNull();
+  });
   it("an upload-only photo field has no camera choice", () => {
     const photo: FormField = { ...FIELD, key: "doc2", type: "photo", config: { capture: "upload" } };
     render(<FieldEditor field={photo} choices={[]} lists={[]} categories={[]} onSave={noop} onDelete={noop} readOnly={false} />);

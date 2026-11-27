@@ -117,6 +117,7 @@ Regenerate: `uv run python -c "from apps.platform.error_codes import table; prin
 | `NOT_AUTHENTICATED` | 401 | Sign in first. |
 | `NOT_A_DEVICE` | 400 | Only the app sends a heartbeat. |
 | `NOT_A_DRAFT` | 409 | Only a draft can be discarded. |
+| `NOT_COMPLETED` | 409 | The report is available once the booking is Completed. |
 | `NOT_DUPLICABLE` | 400 | Only custom forms can be copied; the booking, start and end forms are the only ones of their kind. |
 | `NOT_FOUND` | 404 | No such object (or not one you may see). |
 | `NOT_GRANTABLE` | 400 | '…' can only be held by Admin. |
@@ -146,7 +147,6 @@ Regenerate: `uv run python -c "from apps.platform.error_codes import table; prin
 | `PUBLISH_BLOCKED` | 400 | Fix these problems before publishing. |
 | `PUSH_BLOCKED` | 409 | Fix these problems first; nothing was changed. |
 | `REQUEST_FAILED` | 400 | The request cannot be built: …. |
-| `REQUIRED_FILES_MISSING` | 409 | Upload the required files first: …. |
 | `REVISION_REQUIRED` | 400 | Send the revision you started from. |
 | `RULE_NOT_SELF_CONTAINED` | 400 | A rule uses '…', which is not part of this library item. Put that field in the same library section, or keep this item out of the library. |
 | `SHARED_BLOCKED` | 400 | Some templates using this would show fields their form does not have. |
@@ -170,6 +170,7 @@ Regenerate: `uv run python -c "from apps.platform.error_codes import table; prin
 | `UPLOAD_NOT_FINISHED` | 409 | The file is still uploading. |
 | `USE_ACTION` | 400 | … change through their own actions. |
 | `UUID_CONFLICT` | 409 | That request ID belongs to another request. |
+| `VALIDATION_ERROR` | 400 | Pick a reason from the list. |
 | `VERSION_PUBLISHED` | 409 | Published versions cannot be changed. |
 | `VIA_SECTION` | 400 | This field is part of a linked section; unlink the section. |
 | `WRONG_KIND` | 400 | Expected a … item. |

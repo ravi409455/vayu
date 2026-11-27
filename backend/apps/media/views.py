@@ -86,18 +86,22 @@ class MissingFiles(APIView):
     permission_classes = [perm("media.manage")]
 
     def get(self, request, pk):
-        rows = services.missing_files(services.writable_booking(request, pk))
-        return Response({"missing": rows,
-                         "can_finish": bool(rows) and not any(r["required"] for r in rows)})
+        b = services.writable_booking(request, pk)
+        rows = services.missing_files(b)
+        return Response({"missing": rows, "can_finish": bool(rows),
+                         "phone": services.expert_phone(b) if rows else None})
 
 
 class Finish(APIView):
-    """Ops: finish a job without the expert's missing optional files (every required one is in)."""
+    """Ops: finish a job without the expert's missing files, required ones too, with a reason
+    (customer_waiting, phone_lost, other) and an optional note."""
 
     permission_classes = [perm("media.manage")]
 
     def post(self, request, pk):
-        b = services.finish_without_missing(request.user, services.writable_booking(request, pk))
+        b = services.finish_without_missing(
+            request.user, services.writable_booking(request, pk),
+            str(request.data.get("reason") or ""), str(request.data.get("note") or ""))
         return Response({"stage": b.stage})
 
 
@@ -158,6 +162,10 @@ class ZipDownload(APIView):
         z = zips.zip_from_token(token)
         if z is None or not zips.fresh(z):
             raise fail("LINK_EXPIRED", "This download link is invalid or has expired.", 404)
+        if services.customer_hidden(z.booking) - set(z.excluded):
+            # made before a field was set to "Hide from customer": never hand it out; the same
+            # link now gives a ZIP without it (built fresh, or the cached one already without it)
+            z = zips.request_zip(z.booking, z.kind, z.excluded, z.only)
         if z.status == "ready":
             url = storage.presign_get(z.key, zips.download_name(z))
             if request.query_params.get("format") == "json":    # the "Preparing..." web page
