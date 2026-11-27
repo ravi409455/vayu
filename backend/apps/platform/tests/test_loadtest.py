@@ -93,6 +93,15 @@ def test_test_form_prepare_and_cleanup(settings, s3, tmp_path, capsys):  # noqa:
     assert rows[0].startswith(f"{asset.id},") and rows[0].endswith(f",{asset.status}")
     assert rows[1] == f"{booking.id},{booking.stage}"
 
+    # an original upload's print copies and an older PDF version (Regenerate) go too
+    from apps.reports.render import print_keys
+
+    original = next(a for a in MediaAsset.objects.filter(booking__booking_id__startswith="LT-")
+                    if a.key.startswith(f"bookings/{a.booking_id}/"))      # not a history copy
+    extra = [*print_keys(original.id), f"reports/{original.booking_id}/old-version.pdf"]
+    for k in extra:
+        storage.put(k, b"x", "application/octet-stream")
+
     capsys.readouterr()
     call_command("loadtest_cleanup")
     result = json.loads(capsys.readouterr().out)
@@ -100,6 +109,7 @@ def test_test_form_prepare_and_cleanup(settings, s3, tmp_path, capsys):  # noqa:
     left = {o["Key"] for o in storage.client().list_objects_v2(
         Bucket=settings.S3_BUCKET).get("Contents", [])}
     assert "bookings/staging-own/file.jpg" in left                           # untouched
+    assert not left & set(extra)
 
 
 def test_real_form_sends_five_videos(settings, s3, tmp_path):  # noqa: F811

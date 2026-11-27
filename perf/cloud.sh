@@ -391,9 +391,20 @@ cleanup_destroy() {   # cleanup_destroy <role> [force]: the test's files out of 
   id=$(st field "$role" id); ip=$(ip_of "$role")
   [[ -n "$id" ]] || return 0
   if [[ "$role" != load-* ]]; then
-    if ! on "deploy@$ip" "$RC c exec -T api python manage.py loadtest_cleanup" >/dev/null 2>&1; then
-      # destroying the server now would lose the only list of which files are the test's
-      [[ "${2:-}" == force ]] || die "$role: the clean-up failed: run 'down' again (or 'down force')"
+    local try ok=""
+    for try in 1 2 3; do
+      if on "deploy@$ip" "$RC c exec -T api python manage.py loadtest_cleanup" 2>&1 | tail -3; then
+        ok=1; break
+      fi
+      say "$role: clean-up try $try of 3 failed"; (( try < 3 )) && sleep 30
+    done
+    if [[ -z "$ok" ]]; then
+      # destroying the server now would lose the only list of which files are the test's: keep
+      # it (it bills) unless the owner said 'down force'
+      if [[ "${2:-}" != force ]]; then
+        printf '\a\n\033[1;41;97m  !!! KEPT lt-%s: its test files are still in the staging bucket and it keeps billing. Run perf/cloud.sh down (tries the clean-up again) or down force (gives up on the files). !!!  \033[0m\n\n' "$role" >&2
+        return 3
+      fi
       say "$role: forced: its test files stay in the staging bucket"
     fi
   fi
@@ -405,19 +416,19 @@ cleanup_destroy() {   # cleanup_destroy <role> [force]: the test's files out of 
 
 sut_job() {   # sut_job <role> <results>: one test server from start to end (in the background)
   local role=$1 dir=$2
-  trap 'rc=$?; (( rc == 0 )) || [[ -n "${LT_KEEP:-}" ]] || cleanup_destroy "$role" force' EXIT
+  trap 'rc=$?; (( rc == 0 )) || [[ -n "${LT_KEEP:-}" ]] || cleanup_destroy "$role" || true' EXIT
   prepare_sut "$role"
   run_sut "$role" "$dir/$role"
-  cleanup_destroy "$role"
+  cleanup_destroy "$role" || true      # results are in: a kept server is not a failed test
 }
 
 # ---------------------------------------------------------------- the commands
 
 cmd_down() {   # everything this script made: test servers first (their files), then the rest
-  local role dbid
+  local role dbid kept=""
   for role in $(st roles); do
     [[ "$role" == load-* || "$role" == db ]] && continue
-    cleanup_destroy "$role" "${1:-}"
+    cleanup_destroy "$role" "${1:-}" || kept+=" lt-$role"
   done
   for role in $(st roles); do [[ "$role" == load-* ]] && cleanup_destroy "$role"; done
   dbid=$(st field db id)
@@ -428,6 +439,7 @@ cmd_down() {   # everything this script made: test servers first (their files), 
     say "the managed database destroyed"
   fi
   say "spent so far: \$$(spent_now) (warning above \$$CAP)"
+  [[ -z "$kept" ]] || say "still running (their files are in the bucket):$kept; run down again"
 }
 
 on_failure_destroy() {   # a whole-test command that fails cleans up and destroys everything
@@ -436,7 +448,7 @@ on_failure_destroy() {   # a whole-test command that fails cleans up and destroy
           for j in $(jobs -p); do pkill -TERM -P "$j" 2>/dev/null; kill "$j" 2>/dev/null; done
           true                                     # the other test servers (and their ssh) stop too
           echo "== failed (exit $rc): cleaning up and destroying, so nothing keeps billing" >&2
-          cmd_down force || echo "== DESTROY FAILED: run perf/cloud.sh status, then down force" >&2
+          cmd_down || echo "== DESTROY FAILED: run perf/cloud.sh status, then down force" >&2
         fi' EXIT INT TERM
 }
 
@@ -489,17 +501,18 @@ cmd_all() {
     hours=3; [[ "$role" == cap-* ]] && hours=5
     total=$(python3 -c "print($total + $hours * $price)")
   done
-  check_budget "$(python3 -c "print($total + 3 * $LOAD_PRICE + 5 * $LOAD_PRICE)")"
-  droplet_room $(( ${#ROLES[@]} + 2 ))
+  local need_b=0; [[ " ${ROLES[*]} " == *" cap-"* ]] && need_b=1   # load-b drives capacity only
+  check_budget "$(python3 -c "print($total + 3 * $LOAD_PRICE + 5 * $need_b * $LOAD_PRICE)")"
+  droplet_room $(( ${#ROLES[@]} + 1 + need_b ))
   local dir; dir="$RESULTS/$(date -u +%Y%m%d-%H%M)-$1"; mkdir -p "$dir"
-  say "creating ${#ROLES[@]} test servers and 2 load servers (results: $dir)"
+  say "creating ${#ROLES[@]} test servers and $(( 1 + need_b )) load servers (results: $dir)"
   for role in "${ROLES[@]}"; do
     local slug; read -r slug price _ <<<"$(size_info "$(role_size "$role")")"
     make_droplet "$role" "$slug" "$price"
   done
   make_droplet load-a "$LOAD_SIZE" "$LOAD_PRICE" load
-  make_droplet load-b "$LOAD_SIZE" "$LOAD_PRICE" load
-  load_ready load-a; load_ready load-b
+  if (( need_b )); then make_droplet load-b "$LOAD_SIZE" "$LOAD_PRICE" load; fi
+  load_ready load-a; if (( need_b )); then load_ready load-b; fi
   local pids=() lc=() cap=()
   for role in "${ROLES[@]}"; do
     sut_job "$role" "$dir" > "$dir/$role.log" 2>&1 &
@@ -533,6 +546,8 @@ cmd_all() {
   overview "$dir" > "$dir/OVERVIEW.md"
   cat "$dir/OVERVIEW.md"
   say "spent: \$$(spent_now) (warning above \$$CAP)"
+  local left; left=$(st roles | tr ' ' '\n' | grep -v '^load-' | tr '\n' ' ' || true)
+  [[ -z "${left// }" ]] || say "KEPT (clean-up failed, still billing): $left; run perf/cloud.sh down"
 }
 
 cmd_dbcheck() {   # run D: one size, its data on a temporary managed database
