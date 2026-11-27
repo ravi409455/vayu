@@ -314,13 +314,35 @@ class Report:
                      "its CPU maxed out: rerun on a bigger load server" if hot else
                      ("ok" if text else "no locust.log"))
 
+    def r2(self):
+        """Each R2 call's own time (r2.jsonl: the servers' "r2.call" log lines, R2_CALL_LOG=1):
+        sets the upload start/finish targets (R2's time + our ~100 ms)."""
+        p = os.path.join(self.o.run, "r2.jsonl")
+        if not os.path.exists(p):
+            return
+        by, bad = defaultdict(list), Counter()
+        for line in open(p):
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            by[r["op"]].append(r["duration_ms"])
+            bad[r["op"]] += r.get("status", 0) >= 400
+        self.say("## R2 calls, the whole run (ms, the file store's own time)\n")
+        self.say("| Call | p50 | p95 | max | count | errors |\n|---|---|---|---|---|---|")
+        for op in sorted(by):
+            v = by[op]
+            self.say(f"| {op} | {pct(v, 50):.0f} | {pct(v, 95):.0f} | {max(v):.0f} | {len(v)} "
+                     f"| {bad[op]} |")
+        self.say("")
+
     def run(self):
         self.say(f"# Load test results ({self.minutes:.0f} min from minute "
                  f"{self.o.from_min:.0f}, {self.mult:g}x)\n")
         if self.cut:
             self.say(f"_The run ended before the {self.o.minutes:.0f} minutes asked: judged on "
                      f"the {self.minutes:.0f} it ran._\n")
-        for part in (self.generator, self.load, self.requests, self.pdfs, self.uploads,
+        for part in (self.generator, self.load, self.requests, self.r2, self.pdfs, self.uploads,
                      self.webhooks,
                      self.server, self.zero_loss):
             part()

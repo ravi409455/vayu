@@ -330,6 +330,9 @@ run_sut() {   # run_sut <role> <results folder>: one run of the load script, the
   on "root@$load_ip" "tar -C /lt/out/$role -czf - ." | tar -C "$out" -xzf -
   on "deploy@$ip" 'cat /tmp/lt/stats.csv' > "$out/stats.csv" || true
   on "deploy@$ip" 'cat /tmp/lt/host.csv' > "$out/host.csv" || true
+  # each R2 call's own time (R2_CALL_LOG=1): the upload start/finish targets come from these
+  on "deploy@$ip" "$RC c logs --no-log-prefix api worker zip-worker pdf-worker 2>/dev/null | grep '\"r2.call\"'" \
+    > "$out/r2.jsonl" || true
   # the server's own records, through the app (works with a managed database too)
   cut -d, -f2 "$out/uploads.csv" 2>/dev/null \
     | on "deploy@$ip" "$RC c exec -T api python manage.py loadtest_records files" > "$out/verified.csv" || true

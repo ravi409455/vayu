@@ -47,6 +47,7 @@ env.update({
     "DB_HOST": "postgres", "DB_PORT": "5432", "DB_SSLMODE": "prefer",
     "DB_PASSWORD": secrets.token_urlsafe(24), "DJANGO_SECRET_KEY": secrets.token_urlsafe(50),
     "PDF_CONCURRENCY": "1",
+    "R2_CALL_LOG": "1",            # each R2 call's own time in the logs (perf/report.py: R2 calls)
 })
 # run D (perf/cloud.sh dbcheck): a temporary managed database instead of Postgres on the server;
 # its details come through the environment (never a command line): "host port user password db"
