@@ -8,7 +8,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithText
 import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Assert.assertEquals
@@ -19,26 +18,23 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** The camera's "Turn your phone sideways" hint (approved 2026-11-27): report photo boxes are 4:3 landscape. */
+/** The camera shows the band the report prints (approved 2026-11-27): report photo boxes are 4:3 landscape. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w390dp-h844dp-xxhdpi", sdk = [34])
-class SidewaysGuideTest {
+class ReportStripTest {
     @get:Rule val compose = createComposeRule()
     private val options = RoborazziOptions(compareOptions = RoborazziOptions.CompareOptions(changeThreshold = 0.01F))
 
-    @Test fun uprightShowsTheHintWithTheFieldName() {
-        compose.mainClock.autoAdvance = false
-        compose.setContent { Box(Modifier.fillMaxSize().background(Color(0xFF3A3A3A))) { SidewaysGuide("Front left view", hint = true, framed = false) } }
-        compose.mainClock.advanceTimeBy(5000)
-        compose.onNodeWithText("Turn your phone sideways").assertExists()
-        compose.onNodeWithText("Front left view").assertExists()
-        compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/camera_turn_sideways.png", roborazziOptions = options)
+    /** Upright: the band the report prints is bright, above and below are dimmed. */
+    @Test fun uprightShowsTheReportBand() {
+        compose.setContent { Box(Modifier.fillMaxSize().background(Color(0xFF8A8A8A))) { ReportStrip(sideways = false) } }
+        compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/camera_report_band.png", roborazziOptions = options)
     }
 
-    @Test fun sidewaysFramesThePhotoAndDropsTheHint() {
-        compose.setContent { Box(Modifier.fillMaxSize().background(Color(0xFF3A3A3A))) { SidewaysGuide("Front left view", hint = false, framed = true) } }
-        compose.onNodeWithText("Turn your phone sideways").assertDoesNotExist()
+    /** Sideways: the whole photo is the report's shape, only a thin frame. */
+    @Test fun sidewaysFramesTheWholePhoto() {
+        compose.setContent { Box(Modifier.fillMaxSize().background(Color(0xFF8A8A8A))) { ReportStrip(sideways = true) } }
         compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/camera_sideways_framed.png", roborazziOptions = options)
     }
 

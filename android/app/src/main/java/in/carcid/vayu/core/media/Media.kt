@@ -98,8 +98,11 @@ private fun drawStamp(img: Bitmap, lines: List<String>) {
     val pad = size * 0.6f
     val width = lines.maxOf { text.measureText(it) } + pad * 2
     val height = lines.size * size * 1.3f + pad * 1.4f
-    c.drawRect(0f, img.height - height, width, img.height.toFloat(), Paint().apply { color = Color.argb(140, 0, 0, 0) })
-    lines.forEachIndexed { i, l -> c.drawText(l, pad, img.height - height + pad + size * (i + 1) * 1.2f, text) }
+    // an upright photo prints only its middle 4:3 band in the report (and the camera shows that band):
+    // the stamp sits at the band's bottom so the report shows it (owner, 2026-11-27)
+    val bottom = if (img.height > img.width) (img.height + img.width * 3f / 4f) / 2f else img.height.toFloat()
+    c.drawRect(0f, bottom - height, width, bottom, Paint().apply { color = Color.argb(140, 0, 0, 0) })
+    lines.forEachIndexed { i, l -> c.drawText(l, pad, bottom - height + pad + size * (i + 1) * 1.2f, text) }
 }
 
 /** Copy something the person picked (gallery, files) into the app's own folder. */

@@ -50,17 +50,6 @@ def _jpeg_uri(data: bytes) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(data).decode()
 
 
-def _upright(uri: str) -> bool:
-    """A print copy taller than wide (read from its header only)."""
-    from PIL import Image
-
-    try:
-        w, h = Image.open(io.BytesIO(base64.b64decode(uri.split(",", 1)[1]))).size
-    except (OSError, ValueError, IndexError):
-        return False
-    return h > w
-
-
 def print_keys(media_id) -> list[str]:
     """The print-size copies a report keeps of a photo (removed with the photo)."""
     return [f"print/{media_id}-{edge}.jpg" for edge in (PRINT_EDGE, SMALL_EDGE)]
@@ -258,17 +247,13 @@ def _photos(part: dict, width_mm: float, edge: int) -> str:
     size = f"width:{cell:.2f}mm;" + (f"height:{cell * ratio:.2f}mm;" if ratio else "")
     obj = {"fill": "object-fit:cover", "whole": "object-fit:contain",
            "top": "object-fit:cover;object-position:top"}[fit]
-    obj_whole = "object-fit:contain"
     border = {"none": "", "grey": "border:0.3mm solid var(--line)",
               "brand": "border:0.3mm solid var(--brand)"}[frame.get("border", "none")]
     radius = "border-radius:1.5mm;" if frame.get("round", True) else ""
     figs = []
     uris = _print_uris([str(it["media"]) for it in part["items"]], edge)
     for it, uri in zip(part["items"], uris, strict=True):
-        # an upright photo in a landscape box would lose its top and bottom: shown whole instead
-        # (owner, 2026-11-27); "top" is the designer's own choice and stays as set
-        whole = fit == "fill" and ratio is not None and ratio < 1 and uri is not None and _upright(uri)
-        img = (f'<img src="{uri}" style="{size}{obj_whole if whole else obj};{border};{radius}">' if uri
+        img = (f'<img src="{uri}" style="{size}{obj};{border};{radius}">' if uri
                else f'<div class="noimg" style="{size}{radius}">Photo not available</div>')
         cap = ""
         if it["caption"]:

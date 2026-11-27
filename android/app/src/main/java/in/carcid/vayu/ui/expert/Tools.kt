@@ -51,7 +51,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FlashOff
 import androidx.compose.material.icons.outlined.FlashOn
 import androidx.compose.material.icons.outlined.PhotoCamera
-import androidx.compose.material.icons.outlined.StayCurrentPortrait
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -67,7 +66,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -190,8 +188,8 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
     LaunchedEffect(Unit) { while (true) { clock = now(); kotlinx.coroutines.delay(1000) } }
     val preview = remember { Preview.Builder().build() }
     val capture = remember { ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build() }
-    // report photo boxes are 4:3 landscape: a photo taken upright loses its top and bottom there. The
-    // camera follows the phone's turn (the screen stays upright) and an upright back camera says so
+    // report photo boxes are 4:3 landscape: upright, the camera shows the band the report prints;
+    // the camera follows the phone's turn (the screen stays upright), so a sideways shot saves upright
     val sideways = rememberSideways { capture.targetRotation = it }
     val recorder = remember { videoRecorder() }
     val videoCapture = remember { VideoCapture.withOutput(recorder) }
@@ -232,7 +230,7 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
                 Text("Allow camera in Settings", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
-        if (!video && camOk) SidewaysGuide(field.label, hint = back && !sideways, framed = sideways)
+        if (!video && camOk) ReportStrip(sideways)
 
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
             Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -312,31 +310,22 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
 }
 
 /**
- * Over the preview: the photo's own area (4:3, as saved) framed when the phone is sideways; when it
- * is upright, a dark layer with a turning phone, "Turn your phone sideways" and the field's name.
- * Only a hint: the shutter above still works (a document may be better upright). Approved 2026-11-27.
+ * Over the preview (the whole photo, 3:4 when upright): report photo boxes are 4:3 landscape, and
+ * "fill" prints the middle band of an upright photo. Upright, the parts above and below that band
+ * are dimmed, so the bright band is exactly what the report prints; the whole photo is still saved.
+ * Sideways, the whole photo is the report's shape: only a thin frame. Approved 2026-11-27.
  */
 @Composable
-internal fun androidx.compose.foundation.layout.BoxScope.SidewaysGuide(label: String, hint: Boolean, framed: Boolean) {
+internal fun androidx.compose.foundation.layout.BoxScope.ReportStrip(sideways: Boolean) {
+    val line = Color.White.copy(alpha = .85f)
     Box(Modifier.align(Alignment.Center).fillMaxWidth().aspectRatio(3f / 4f)
-        .then(if (framed) Modifier.border(1.5.dp, Color.White.copy(alpha = .85f)) else Modifier))
-    androidx.compose.animation.AnimatedVisibility(hint, Modifier.matchParentSize(),
-        enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut()) {
-        Column(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .6f)),
-            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            // shown twice, then still (turned): a loop would redraw the screen for as long as it shows
-            val turn = remember { androidx.compose.animation.core.Animatable(0f) }
-            LaunchedEffect(Unit) {
-                repeat(2) {
-                    kotlinx.coroutines.delay(400); turn.animateTo(-90f, androidx.compose.animation.core.tween(700))
-                    kotlinx.coroutines.delay(600); if (it == 0) turn.animateTo(0f, androidx.compose.animation.core.tween(400))
-                }
-            }
-            Icon(Icons.Outlined.StayCurrentPortrait, null, tint = Color.White,
-                modifier = Modifier.size(64.dp).graphicsLayer { rotationZ = turn.value })
-            Text("Turn your phone sideways", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp,
-                modifier = Modifier.padding(top = 14.dp))
-            Text(label, color = Color.White.copy(alpha = .8f), fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+        .then(if (sideways) Modifier.border(1.5.dp, line) else Modifier)) {
+        if (!sideways) Column(Modifier.fillMaxSize()) {
+            val dim = Modifier.fillMaxWidth().weight(1f).background(Color.Black.copy(alpha = .6f))
+            Box(dim)
+            // the band: 4:3 of the width, as the report box
+            Box(Modifier.fillMaxWidth().aspectRatio(4f / 3f).border(1.5.dp, line))
+            Box(dim)
         }
     }
 }
