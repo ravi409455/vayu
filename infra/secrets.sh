@@ -92,6 +92,9 @@ for key in sorted(data):
 write_private(fb_path + ".new", json.dumps(firebase))
 write_private(out + ".new", "\n".join(lines) + "\n")
 os.replace(fb_path + ".new", fb_path)
+# the app containers run as another user (10001), so the mounted key must be readable by others;
+# it stays private on the server because secrets/ itself is 700 (deploy only)
+os.chmod(fb_path, 0o644)
 os.replace(out + ".new", out)
 print(f"settings: {len(data)} values from Phase -> {out}, Firebase key -> {fb_path}")
 PY
