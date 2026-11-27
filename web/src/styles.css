@@ -4125,6 +4125,13 @@ button.link.danger-link,
   justify-self: stretch;
   text-align: center;
 }
+/* the box around the preview (it fades while a new PDF is made) is as wide as the column: left
+   to fit its content, the preview sizes itself to the box and the box to the preview, and the
+   pages shrink to their smallest size */
+.rd-mid > [aria-busy] {
+  justify-self: stretch;
+  min-width: 0;
+}
 .rd-pages {
   display: grid;
   gap: 14px;
