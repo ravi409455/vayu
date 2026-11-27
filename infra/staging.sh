@@ -87,8 +87,14 @@ case "${1:-}" in
     dns_set "$OFF_IP"
     sleep 70
     back_on() {   # a failed down leaves staging as it was: on, with its name
-      doctl compute droplet-action power-on "$id" --wait >/dev/null || true
-      dns_set "$(awk '{print $3}' <<<"$found")"
+      doctl compute droplet-action power-on "$id" --wait >/dev/null \
+        || die "$1; staging could not be powered back on: its name stays on the off marker"
+      local now ip
+      now=$(droplets); ip=$(awk '{print $3}' <<<"$now")
+      # the name only goes back to an address that is still this droplet's (never a released one)
+      [[ $(grep -c . <<<"$now") -eq 1 && "$(awk '{print $1}' <<<"$now")" == "$id" && -n "$ip" ]] \
+        || die "$1; droplet $id is gone or changed: its name stays on the off marker"
+      dns_set "$ip"
       die "$1; staging was NOT deleted: it is back on, with its name"
     }
     echo "== powering off (a clean snapshot)"
