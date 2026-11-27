@@ -1,0 +1,9 @@
+# Load-test servers only (perf/cloud-compose.yml): production's Caddyfile, plus one setting.
+# A test server is reached by its bare IP address, so clients send no TLS server name (SNI) and
+# Caddy would not know which certificate to show: the handshake fails. default_sni answers them
+# with the address's own (Caddy-made) certificate.
+{
+	default_sni {$APP_HOST}
+}
+
+import /etc/caddy/Caddyfile.app

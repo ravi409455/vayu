@@ -260,6 +260,9 @@ prepare_sut() {   # prepare_sut <role>: bootstrap, settings, deploy, forms, the 
 
   say "$role: deploy ${sha:0:7} (staging's commit) with the load-test settings"
   on "deploy@$ip" "cd /srv/vayu && git fetch -q origin && git checkout -q --detach $sha && echo $sha > .deployed"
+  # the load-test settings come from this checkout (fixes here need no staging deploy)
+  tar -C "$SRC" -cf - perf/cloud-compose.yml perf/cloud.Caddyfile perf/local/loadtest_settings.py \
+    | on "deploy@$ip" 'tar -C /srv/vayu -xf -'
   on "deploy@$ip" "$RC c pull -q && c up -d --no-build --remove-orphans" >/dev/null
   local t=0
   until curl -fsk --max-time 5 "https://$ip/api/v1/health" 2>/dev/null | grep -q '"ok"'; do

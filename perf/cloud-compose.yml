@@ -13,3 +13,7 @@ services:
   zip-worker: *app
   pdf-worker: *app
   beat: *app
+  caddy:                    # reached by IP: see perf/cloud.Caddyfile
+    volumes:
+      - ../perf/cloud.Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile.app:ro
