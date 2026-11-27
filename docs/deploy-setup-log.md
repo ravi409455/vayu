@@ -17,11 +17,11 @@ Status: ✅ done · 🔄 in progress · ⏳ not started
 |---|---|---|
 | 0 | Safety first: secrets home, 2-step login, SSH key | ✅ 2026-11-26 |
 | 1 | Code changes (PR 27) | ✅ merged 2026-11-26 as `35fdec9` |
-| 2 | Accounts and dashboards | ✅ 2026-11-26 (2.5c, the Firebase key restriction, waits for the staging app) |
+| 2 | Accounts and dashboards | ✅ 2026-11-26 (2.5c, the Firebase key restriction, 2026-11-28) |
 | 3 | Staging server setup | ✅ 2026-11-26: live, with test data |
 | 4 | Deploy pipeline | 🔄 merge → staging works; rollback not yet rehearsed |
-| 5 | Backups and alerts | ⏳ |
-| 6 | Prove staging | ⏳ |
+| 5 | Backups and alerts | ✅ 2026-11-27 on staging: DigitalOcean alerts, Better Stack (monitor, heartbeats, Slack), first restore drill. Production gets its own set in Phase 7 |
+| 6 | Prove staging | 🔄 all done but the rollback rehearsal (2026-11-28) |
 | 7 | Production | ⏳ |
 
 Quick links: [Where everything lives](#where-everything-lives) · [Open items](#open-items)
@@ -317,8 +317,16 @@ new private key** → the JSON goes straight into Phase → `vayu` → Productio
 `FIREBASE_SERVICE_ACCOUNT_JSON`, then the downloaded file is deleted. Staging keeps the existing
 key (already in Phase, step 2 of Phase 0), so production shares no key with staging or the Mac.
 
-**2.5c · Restrict the Firebase API key (R-32)** ⏳ — done once "Vayu Staging" is built, and checked
-in Phase 6 (a push still arrives).
+**2.5c · Restrict the Firebase API key (R-32)** ✅ (2026-11-28, by the owner) — Google Cloud →
+APIs & Services → Credentials → "Android key (auto created by Firebase)" (ends `5Rc8`):
+Android apps `in.carcid.vayu` and `in.carcid.vayu.staging`, both with the release key's SHA-1
+`4E:9E:AD:F9:4D:73:82:90:D7:4F:F9:3E:2A:3B:17:59:52:52:62:97` (not secret; read from the APK with
+`apksigner verify --print-certs`); API restrictions: Firebase Installations, FCM Registration,
+Firebase Cloud Messaging. Google Cloud only shows project `vayu-8bb7a` to the Google account that
+owns Firebase: open it from Firebase → Project settings → Service accounts → "Manage service account
+permissions". Checked: after the lock the app restarted with no Firebase errors and a push arrived
+(6.3). Not yet seen: a brand-new install getting its first push token under the lock (check in the
+phone test).
 
 ### 2.6 · Sentry: projects, build token, Slack alert ✅
 Organisation slug **`car-cid`** (`https://car-cid.sentry.io`; not a secret).
@@ -618,7 +626,7 @@ After the security review of that change:
 - only merges to `main` write the build cache.
 How to notice next time: `ssh deploy@<staging> cat /srv/vayu/.deployed` should equal the newest
 commit on `main` after each deploy run.
-## Phase 5 · Backups and alerts 🔄
+## Phase 5 · Backups and alerts ✅
 
 ### 5.1 · Watching the server's resources (owner asked 2026-11-26)
 DigitalOcean alerts say **when** the server was busy. (A recorder of *which service* used what,
@@ -648,7 +656,167 @@ Lessons:
   in the web form (by Claude, in the owner's browser), resource type Droplets only.
 - The web form defaults to **All Droplets**: always swap it for the tag.
 
-## Phase 6 · Prove staging ⏳
+### 5.2 · Better Stack: uptime monitor and heartbeats ✅ (2026-11-27, staging test)
+Account: Better Stack (Uptime), signed up by the owner with the company email, **Free plan**
+(10 monitors, 10 heartbeats; alerts by e-mail and Slack only; phone call, SMS and app push need
+the paid plan). Made by Claude in the owner's browser. **Staging is a test only: at launch the same
+set is made for production and the staging ones are deleted** (staging is switched off between
+rounds, so its monitor would alert every time).
+
+| Name | What | Setting |
+|---|---|---|
+| `Vayu staging health` (monitor) | `https://vayu-staging.carcid.in/api/v1/health` | alert when the page lacks `"ok"`; checked every 3 min (the Free plan's fastest; 1 min is paid); incident after 1 min failing; recovery 3 min |
+| `staging-workers` (heartbeat) | ping from a worker every 5 min (`apps.platform.tasks.heartbeat`) | expected every 5 min, grace 10 min; URL in Phase `vayu` → Staging `WORKERS_HEARTBEAT_URL` |
+| `staging-backup` (heartbeat) | ping at the end of the nightly `infra/backup.sh` | expected every 1 day, grace 3 h; URL in Phase `vayu` → Staging `BACKUP_HEARTBEAT_URL` |
+| `carcid.com` (monitor) | made by Better Stack's sign-up; the company site | left as it was |
+
+Tested:
+- Monitor: staging went down and up during the test → Better Stack opened "DNS lookup failed"
+  incidents and resolved them by itself when staging came back ✅.
+- `staging-workers`: **Up** a few minutes after staging started ✅ (values reached
+  `.env.staging` and the worker container after a hand-started deploy).
+- `staging-backup`: **Up** ✅ after a backup run by hand (`ssh deploy@<staging> /srv/vayu/infra/backup.sh nightly`;
+  the service runs as `deploy`, so no sudo). Only `nightly` backups ping; `predeploy-<sha>` ones do not.
+- Slack `#vayu-alerts` integration: connected by the owner; the staging incidents arrived there ✅.
+
+Lessons:
+- **A heartbeat stays "Pending" until its first ping, and a Pending heartbeat never alerts.** To
+  test the alert, let it go Up first, then stop the pings.
+- Better Stack refuses a monitor while the address points to the placeholder `192.0.2.1` (staging
+  switched off): "Domain … was restricted and cannot be added as a monitor". Make it while staging is up.
+- After `staging.sh up` the Mac may still have the placeholder address cached; check with
+  `dig +short vayu-staging.carcid.in @1.1.1.1`.
+
+### 5.3 · First restore drill ✅ (2026-11-27, staging)
+`infra/restore.sh 2026-11-27T1809Z-nightly.dump.age --drill`, run by the owner from the Mac
+(`ssh -t`; the unlocking key `BACKUP_AGE_SECRET_KEY` pasted from Phase at the prompt, never stored).
+Restored into the throwaway container in **6 s**; the 12 biggest tables of the backup and of live
+staging were **equal** (1820 fields, 1768 media files, 208 booking activities, ...). Logged in
+`docs/runbook-new-server.md` §7. Next drill: first Monday of the month.
+
+## Phase 6 · Prove staging 🔄
+
+### 6.6 · Security headers and the content rules (CSP) ✅ (2026-11-28)
+
+**What they are (plain words).** Rules Caddy sends with every page; the browser obeys them.
+| Header | What it stops | Example |
+|---|---|---|
+| `Content-Security-Policy` (CSP) | code or files from anywhere but the places we list | a customer name `<script>steal()</script>` shown by a bug never runs: that code is not from an allowed place |
+| `X-Frame-Options: DENY` (+ CSP `frame-ancestors 'none'`) | another site showing Vayu inside its page | a fake "Win a prize" button laid over an invisible "Delete booking" |
+| `Strict-Transport-Security` (HSTS, 1 year) | being pushed onto plain http | someone on café Wi-Fi reading a password |
+| `X-Content-Type-Options: nosniff` | a "photo" being run as code | an upload that is really a script |
+| `Referrer-Policy` | other sites seeing our full page address | a booking id in the URL leaking when a link is clicked |
+| `Permissions-Policy` | camera / location for anyone but us; microphone, payment, USB for everyone | |
+
+**Where they live:** `infra/Caddyfile` (the `header` block at the top, and the `@app` CSP line).
+Which way CSP applies comes from `CSP_HEADER` in Phase → `vayu` → each environment:
+`Content-Security-Policy` = enforced (blocks); `Content-Security-Policy-Report-Only` = only warns in
+the browser console, blocks nothing. Production is always enforced.
+
+**What our CSP allows (the `@app` line):** code, styles and fonts only from our own address; photos
+and videos from our address, `data:`/`blob:` and `*.r2.cloudflarestorage.com`; network calls to our
+address, R2 (uploads) and `*.sentry.io` (errors); frames (the PDF preview) from our address, `blob:`
+and R2. The welcome pages (`/welcome/*`) have their own looser line (inline code, Google fonts).
+
+**Done on staging:**
+- Grades: **SSL Labs A+** (TLS 1.3, HSTS). **securityheaders.com B** while CSP was report-only and
+  X-Frame-Options missing.
+- With a violation listener in Chrome, nothing would have been blocked on: Today, Bookings, a
+  booking (Booking, Inspection, Media with 88 R2 photos, Review, Report with the PDF preview),
+  Dashboard, Forms, Library, the PDF designer, the customer QR check page.
+- PR 69: `X-Frame-Options: DENY`; `infra/phase-staging.env` → enforced; runbook §9. Caddyfile
+  checked with `caddy validate`.
+- Owner set Phase → `vayu` → Staging → `CSP_HEADER` = `Content-Security-Policy` and merged PR 69.
+  PR 70 merged minutes later, so CI cancelled PR 69's run and staging got both with `ea99876`
+  (by design: the newest merge deploys).
+- After: **securityheaders.com A+** (all six headers), CSP **enforced**, `X-Frame-Options: DENY`.
+  Booking tabs (88 R2 photos, PDF preview) and the PDF designer work; nothing blocked ✅.
+- Also seen on this deploy: the Firebase key file stayed 644 by itself (PR 67 now in effect, 6.3).
+
+**If something breaks one day because of CSP — how to know and fix it:**
+1. *What it looks like:* a blank or half-drawn page, photos or the PDF preview not showing, uploads
+   stuck at 0%, or Sentry getting no web errors. It shows up right after a change that adds
+   something new (a map, chat widget, analytics, a font from a CDN, a new storage address, a new
+   Sentry region) or after the R2 / Sentry address changes.
+2. *Confirm it is CSP:* open the page in Chrome → right-click → Inspect → **Console**. A CSP block
+   reads: `Refused to load ... because it violates the following Content Security Policy directive:
+   "img-src ..."`. The word after "directive" (`img-src`, `script-src`, `connect-src`, `frame-src`...)
+   says which rule, and the address it names is what was blocked.
+3. *Quick relief on staging only:* Phase → Staging → `CSP_HEADER` =
+   `Content-Security-Policy-Report-Only` → deploy (Actions → deploy → Run workflow, the live commit).
+   Pages work again; the console still lists what would be blocked. **Never on production.**
+4. *Real fix (both servers):* in `infra/Caddyfile`, add the blocked address to that rule on the
+   `@app` line (e.g. a new photo host into `img-src` **and** `media-src`; a new API into
+   `connect-src`). Add only that address, never `*` or `'unsafe-inline'`. Check with
+   `docker run --rm -e APP_HOST=localhost -e CSP_HEADER=Content-Security-Policy -v "$PWD/infra/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile`,
+   then a PR; the merge deploys it.
+5. *After the fix:* set staging's `CSP_HEADER` back to `Content-Security-Policy`, deploy, open the
+   page with the console open: no "Refused" lines. Re-run securityheaders.com.
+6. *Check what a server sends:* `curl -sI https://<address>/ | grep -iE "content-security|x-frame|strict"`.
+
+### 6.7 · Load test ✅ (2026-11-27, owner + load-test session)
+Cloud run on throwaway servers (`perf/cloud.sh all`, PR 46/61, cost $1.06, real car photos; results
+kept on the Mac, `perf/results/20261127-1237-all`, not in git). At the test's 1× day:
+| Server | Screens p95 | PDF | CPU | Verdict |
+|---|---|---|---|---|
+| $12 (1 vCPU / 2 GB) | 3.7 s | 106-176 s | 102% | fails |
+| $18 (2 vCPU / 2 GB) | 0.45 s | 31 s | 81%, swap 0.6 GB | near pass |
+| $24 (2 vCPU / 4 GB, the plan's size) | 0.43 s | 31 s | 76%, no swap | near pass |
+Capacity: $24 and $18 both break at 3× (PDFs first). PDF time (~30 s) is per-core speed, not size.
+The owner's real day (20 experts, 5 Ops, 50 inspections) is well under the test's 1×.
+Open: a few 502s on `media/initiate` ($12 ×6, $24 ×2); the report's API p95 should leave uploads
+out; `loadtest_cleanup` too slow on 1M history rows; PR 61's stop-all treats a clean-up failure as a
+test failure.
+
+### 6.10 · Reboot test ✅ (2026-11-28)
+`doctl compute droplet-action power-cycle <staging id> --wait` (the same as DigitalOcean → Power →
+Power cycle). Power cycle took 29 s; **health answered ok 62 s after the start**, with nobody
+logging in. After it: all 8 containers up (api, worker, pdf-worker, zip-worker, beat, caddy healthy
+postgres and redis), web page 200, data unchanged (30 bookings, 1768 media, 10 users), backup timer
+still set for 02:00 IST, the worker reads the Firebase key, both Better Stack heartbeats Up. The
+health monitor (every 3 min) did not even notice the 1-minute gap.
+
+### 6.11 · On-demand cycle ✅ (2026-11-27, by the owner)
+Staging taken down and brought back up (Actions → staging down / up, PR 63 and 64) during these
+checks: it came back healthy with its data, https and settings; Better Stack saw the outage and the
+recovery (5.2). After an up, the server has a new IP; the Mac may keep the old address cached
+(`dig +short vayu-staging.carcid.in @1.1.1.1` shows the new one).
+
+### 6.3 · Push ✅ (2026-11-28)
+**No push had ever been sent from staging.** The push task failed with `PermissionError:
+/run/secrets/firebase-service-account.json` (Sentry, since 26 Nov): `secrets.sh` wrote the key 600
+for `deploy` (uid 1000), the api and worker containers run as uid 10001. Fixed by PR 67: the file
+is 644 (still private: `secrets/` is 700). Five test notifications to `ops` on the phone ("Push
+test", "Inspection started", "Inspection submitted", "New booking", one after the key lock), sent
+through `notify.handlers.to_user`: all arrived ✅.
+Lesson: **a deploy runs `secrets.sh` from the code it replaces**, before checking out the new
+commit, so a change to `secrets.sh` works from the deploy after the one that brings it. PR 67's own
+deploy still wrote 600; fixed by hand once (`chmod 644`), the next deploy keeps it.
+
+### 6.4 · Update prompt ✅ (2026-11-28)
+"Vayu Staging" 0.3.0 (version code 12) built from `main` `005b6c8` on the Mac (`assembleStaging`,
+signing key in `~/vayu-keys`, `SENTRY_DSN_ANDROID` and `SENTRY_AUTH_TOKEN` pasted at a hidden prompt
+in the terminal, so the mapping was uploaded) and published on staging with `publish_apk`. The
+phone, on code 11, offered the update; installed and opened ✅.
+Lessons: a new worktree needs `android/local.properties` (`sdk.dir`) copied in. A command typed
+in the chat box runs in Claude's shell, not the Terminal tab, so it never sees keys pasted there.
+
+### 6.5 · Sentry ✅ (2026-11-28)
+One test error from each, all three arrived labelled **`staging`**:
+| Where | How | Issue |
+|---|---|---|
+| Server | `capture_exception` in `manage.py shell` in `vayu-api-1` | `VAYU-SERVER-8` (release = the deployed commit) |
+| Web | an uncaught error thrown on the signed-in staging site | `VAYU-WEB-1` |
+| App | `adb shell am crash in.carcid.vayu.staging`, then open the app (it sends on the next start) | `VAYU-ANDROID-1`, release 0.3.0 (12) |
+Found: the earlier staging app on the phone ("photos-top", code 11) had **no DSN built in**, so its
+crashes went nowhere; any app build for testers must be built with `SENTRY_DSN_ANDROID`.
+Slack: the Sentry alert "Notify #vayu-alerts via Slack, Notify techxcid@gmail.com" covers all three
+projects and **all environments**, and fires on **a new issue** or **an issue escalating** (30 min
+throttle). Server and web posted to `#vayu-alerts` ✅. The app crash did **not**: it joined
+`VAYU-ANDROID-1`, an issue first seen 3 days earlier from a debug build, so it was neither new nor
+escalating. Fix (owner's OK, 2026-11-28): the alert also fires when **a resolved issue regresses**
+(comes back after being marked fixed). Then `VAYU-ANDROID-1` was resolved and the app crashed again →
+the alert fired (6:52 PM UTC) and reached `#vayu-alerts` ✅ (owner saw it). So: mark an issue **Resolved** once fixed, and it alerts if it returns.
 ## Phase 7 · Production ⏳
 
 ---
@@ -660,7 +828,7 @@ Lessons:
 ### Phase (console.phase.dev, organisation `CarCID`)
 | App → environment | Keys | Used by |
 |---|---|---|
-| `vayu` → Staging | the 24 non-secret values of `infra/phase-staging.env`; `DJANGO_SECRET_KEY`, `DB_PASSWORD`, `SENTRY_DSN`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (token `vayu-staging-app`), `BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY` (token `vayu-backups-staging`), `BACKUP_PUBLIC_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON` (the Mac's/staging's Firebase key) | the staging server, through `infra/secrets.sh` |
+| `vayu` → Staging | the 24 non-secret values of `infra/phase-staging.env`; `WORKERS_HEARTBEAT_URL`, `BACKUP_HEARTBEAT_URL` (Better Stack, 5.2); `DJANGO_SECRET_KEY`, `DB_PASSWORD`, `SENTRY_DSN`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (token `vayu-staging-app`), `BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY` (token `vayu-backups-staging`), `BACKUP_PUBLIC_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON` (the Mac's/staging's Firebase key) | the staging server, through `infra/secrets.sh` |
 | `vayu` → Production | **so far**: `SENTRY_DSN`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (token `vayu-prod-app`), `BACKUP_ACCESS_KEY_ID`, `BACKUP_SECRET_ACCESS_KEY` (token `vayu-backups-prod`), `BACKUP_PUBLIC_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON` (production's own key). **Still to add (Phase 7)**: import `infra/phase-production.env`, new `DJANGO_SECRET_KEY`, the managed database's `DB_PASSWORD` and `DB_HOST` | the production server |
 | `vayu` → Development | nothing yet | the Mac's local stack |
 | `vayu-owner` → Production | `ANDROID_KEYSTORE_B64`, `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, `SENTRY_DSN_WEB`, `SENTRY_DSN_ANDROID`, `SENTRY_AUTH_TOKEN` (`vayu-ci`), `DO_API_TOKEN` (`vayu-owner-laptop`), `OWNER_SSH_PRIVATE_KEY`, `BACKUP_AGE_SECRET_KEY` (unlocks backups; never on a server), `PHASE_TOKEN_STAGING_SERVER`, `DEPLOY_SSH_KEY_STAGING` | the owner |
@@ -695,6 +863,7 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 | DigitalOcean | firewall `vayu-web` (by tag), tags `vayu-web`, `vayu-staging`; SSH key `owner-mac` |
 | GitHub | ruleset `main protect`; environments `staging`, `production` (reviewer `ravi409455`) |
 | Slack | `#vayu-alerts` (public, workspace "Car C.I.D") |
+| Better Stack | Uptime, Free plan; monitor `Vayu staging health`, heartbeats `staging-workers`, `staging-backup` (5.2) |
 
 ---
 
@@ -707,11 +876,9 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 | Phase 4: rehearse a rollback (Actions → deploy → Run workflow → previous commit) | after the merges |
 | Every deploy run waits for production Approve: cancel it until production exists (after PR 42 it no longer blocks staging) | until Phase 7 |
 | Welcome pages (`/welcome/engineers`, `/welcome/ops`, public APK download; PR welcome-pages): open both on staging after the next deploy; on production in Phase 7, with an uptime monitor on `/welcome/engineers` | next deploy, Phase 7 |
-| 2.5c Restrict the Firebase API key | once "Vayu Staging" is on a phone (Phase 6) |
-| Phase 5: Better Stack uptime and heartbeats (`BACKUP_HEARTBEAT_URL`, `WORKERS_HEARTBEAT_URL` into Phase), DigitalOcean alerts, first restore drill | after the first deploy |
+| 5.2 Better Stack for production: monitors on `/api/v1/health`, `/` and `/welcome/engineers`; heartbeats `prod-workers`, `prod-backup` → Phase `vayu` → Production; then delete the staging monitor and heartbeats and clear their two Phase Staging values | Phase 7 |
 | Phase Production environment: the rest of its values (table above) | Phase 7 |
 | Production server's Phase service account (`vayu-prod-server`, Production only) and robot key | Phase 7 |
 | DigitalOcean API token `vayu-owner-laptop` expires (90 days) | around 2027-02-24 |
 | Phase service token `vayu-staging-server`: if it was given an expiry, note the date here | check |
-| CSP on staging: switch `CSP_HEADER` from report-only to enforced after a clean full run | Phase 6 |
 
