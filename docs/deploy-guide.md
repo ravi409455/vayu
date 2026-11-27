@@ -536,17 +536,19 @@ compose logs --tail 100 api       # or worker, zip-worker, pdf-worker, beat, cad
 docker stats --no-stream          # CPU and memory per service
 ```
 
-**Staging on demand** (a switched-off server is still billed; staging lives as a snapshot):
-```bash
-infra/staging.sh up       # re-create from the newest snapshot, point vayu-staging.carcid.in at it,
-                          # show its new SSH key (type yes to trust it), deploy the newest main
-infra/staging.sh down     # power off → snapshot → delete (type "staging" to confirm); the name
-                          # then points to the "off" marker 192.0.2.1
-infra/staging.sh status   # droplet, snapshots, where the name points
-```
-No DNS editing by hand: GoDaddy hands just `vayu-staging` to DigitalOcean's DNS (3 NS records), and
-the script changes it. While staging is off, a merge shows "staging is off" (green, not deployed) and
-production waits; `up` brings staging to the newest main by itself. To release: `up`, test, Approve.
+**Staging on demand** (a switched-off server is still billed; staging lives as a snapshot).
+From GitHub: **Actions → staging → Run workflow** (branch `main`) → choose:
+
+| Choice | What happens |
+|---|---|
+| `up` | fails if staging is already running; otherwise creates it from the newest snapshot with staging's fixed SSH key, points `vayu-staging.carcid.in` at it, checks the key, then starts **deploy** for the newest built commit of main: staging deploys, production waits for your **Approve**, as after a merge (about 10 minutes) |
+| `down` | points the name at the "off" marker `192.0.2.1`, then power off → snapshot → delete (billing stops; the 2 newest snapshots are kept) |
+| `status` | is staging up, where its name points, which snapshots are kept |
+
+The same from the laptop: `infra/staging.sh up | down | status` (`up` needs `STAGING_HOST_KEY` set).
+No DNS editing by hand: GoDaddy hands just `vayu-staging` to DigitalOcean's DNS (3 NS records). While
+staging is off, a merge shows "staging is off" (green, not deployed) and production waits; `up` brings
+staging to the newest main by itself. To release: `up`, test, Approve. When done testing: `down`.
 
 **A phone says "your other phone still has work".** One phone per person: sync the old phone, or an
 Admin signs it out (web → Users → ⋯ → **Sign out of every device**).
@@ -661,7 +663,8 @@ the signing key's offline copies (step 13).
 | Deploy: "error: missing in Phase: X" | X not in that environment, or not **Deployed** in Phase | add it (B2), Deploy, Run workflow again |
 | "X has a line break or a '" | a value with a line break inside | fix the value in Phase |
 | "could not fetch from Phase" | the server's token is wrong or expired, or Phase is down | check `/srv/vayu/.phase`; the last good settings stay meanwhile |
-| Deploy says "staging is off" | staging is on demand and switched off (on purpose) | `infra/staging.sh up` (it deploys the newest main) |
+| Deploy says "staging is off" | staging is on demand and switched off (on purpose) | Actions → staging → `up` (it deploys the newest main) |
+| staging `up` says "an SSH key that is not staging's" | the new server did not take the fixed key | look at the droplet in DigitalOcean, then Actions → staging → `down` and `up` again |
 | Staging deploy fails at SSH (red) | staging is on but not answering | `infra/staging.sh status`; the droplet's console in DigitalOcean |
 | A run waits forever on production | it needs Approve | Approve (release) or Cancel (no production yet) |
 | A merge did not reach staging | a newer merge cancelled its CI; only the newest deploys | `.deployed` must equal the newest `main` commit |

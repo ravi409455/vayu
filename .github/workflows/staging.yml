@@ -1,0 +1,55 @@
+name: staging
+# On-demand staging from the GitHub page: Actions → staging → Run workflow → up / down / status.
+# Each runs infra/staging.sh, the same script the laptop uses (docs/deploy-guide.md):
+#   up      fails if staging is already running; otherwise creates it from the newest snapshot
+#           (with staging's fixed SSH key), points vayu-staging.carcid.in at it, checks the key,
+#           then starts the deploy workflow for the newest built commit of main: staging deploys,
+#           production waits for the owner's Approve, as after a merge
+#   down    points the name at the "off" marker, then power off → snapshot → delete (billing stops)
+#   status  is staging up, where its name points, which snapshots are kept
+# Secrets (environment "staging"): DO_API_TOKEN_STAGING (DigitalOcean, only the scopes this needs),
+# STAGING_HOST_KEY (staging's fixed SSH key, private half).
+run-name: "Staging ${{ inputs.action }} (by ${{ github.actor }})"
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: up = start staging and deploy main · down = snapshot and switch off · status
+        type: choice
+        options: [status, up, down]
+        default: status
+permissions:
+  contents: read
+  actions: write     # "up" starts the deploy workflow
+jobs:
+  staging:
+    # only from main: the script and workflow that run are the reviewed ones
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    # one at a time: an "up" and a "down" must never run together
+    concurrency: {group: staging-on-demand, cancel-in-progress: false}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {persist-credentials: false}
+      - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
+        with:
+          token: ${{ secrets.DO_API_TOKEN_STAGING }}
+      - name: staging ${{ inputs.action }}
+        env:
+          ACTION: ${{ inputs.action }}
+          GH_TOKEN: ${{ github.token }}
+          STAGING_HOST_KEY: ${{ secrets.STAGING_HOST_KEY }}
+        run: |
+          case "$ACTION" in
+            up)     infra/staging.sh up ;;
+            down)   infra/staging.sh down --yes ;;
+            status) infra/staging.sh status ;;
+          esac 2>&1 | tee out.txt
+          {
+            echo "### Staging $ACTION"
+            echo '```'
+            tail -15 out.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

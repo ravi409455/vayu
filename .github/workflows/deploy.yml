@@ -4,13 +4,14 @@ name: deploy
 #   staging deploys by itself → production waits for the owner's Approve (environment
 #   "production" has a required reviewer) and deploys the SAME images.
 # Rollback: Actions → deploy → Run workflow → the full commit id to go back to (must be on main;
-# its images are reused, never rebuilt).
+# its images are reused, never rebuilt). "Actions → staging → up" starts this the same way, for the
+# newest built commit of main, once staging is back.
 # The newest merge always deploys, whatever files it changed. When merges come close together,
 # CI cancels the older run and only the newest deploys; it contains every earlier change.
 # Never runs for pull requests: only after CI on a push to main, or by hand.
 # the title in the Actions list: what this run deploys, or why it deployed nothing
 run-name: >-
-  ${{ github.event_name == 'workflow_dispatch' && format('Rollback to {0}', inputs.commit)
+  ${{ github.event_name == 'workflow_dispatch' && format('By hand (staging up, or a rollback): {0}', inputs.commit)
   || github.event.workflow_run.conclusion != 'success' && format('Skipped (CI {0}): {1}', github.event.workflow_run.conclusion, github.event.workflow_run.display_title)
   || format('Deploy: {0}', github.event.workflow_run.display_title) }}
 on:
