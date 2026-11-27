@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { apiAs, JPEG, json, signIn, uploadFile } from "./api";
 
+// no retry: the first try already made "Used car" in this database, so a retry can only fail on
+// "form with this key already exists" (after 90 s), hiding the first try's real error
+test.describe.configure({ retries: 0 });
+
 // J1: build a 2-page form with a condition, publish it, map it in a PDF template, preview the PDF.
 test("J1: admin builds, publishes and maps a form, then previews its PDF", async ({ page }) => {
   await signIn(page, "admin");
