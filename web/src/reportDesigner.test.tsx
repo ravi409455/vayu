@@ -334,6 +334,38 @@ describe("room to work", () => {
     await u.click(screen.getByRole("button", { name: "Edit grid" }));
     expect((screen.getByLabelText("Column 1 name") as HTMLInputElement).value).toBe("Engine");
   });
+  it("shows what each grid cell holds: a report value, typed text, a field the form lost", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const { PartSettings } = await import("./pages/admin/report/PartSettings");
+    const u = userEvent.setup();
+    const onChange = vi.fn();
+    const ctx = { readOnly: false, sections: [], fields: [{ value: "inspection.e", label: "Engine", type: "text" }] };
+    const part: Part = {
+      id: "g",
+      type: "table",
+      source: {
+        kind: "grid",
+        columns: [{ label: "A" }, { label: "B" }, { label: "C" }],
+        rows: [{ label: "", cells: [{ text: "{{ sys.points }}" }, { text: "Hand typed" }, { field: "inspection.gone" }] }],
+      },
+    };
+    render(<PartSettings part={part} ctx={ctx} onChange={onChange} onDelete={() => {}} onDuplicate={() => {}} onMove={() => {}} />);
+    await u.click(screen.getByRole("button", { name: "Edit grid" }));
+    const shown = (n: number) => {
+      const s = screen.getByLabelText(`Row 1 column ${n}`) as HTMLSelectElement;
+      return s.options[s.selectedIndex]!.text;
+    };
+    expect(shown(1)).toBe("Checkpoints inspected");
+    expect(shown(2)).toBe("Text: Hand typed");
+    expect(shown(3)).toBe("inspection.gone (not in the form)");
+    await u.selectOptions(screen.getByLabelText("Row 1 column 3"), "Number of issues");
+    expect(onChange.mock.calls.at(-1)![0].source.rows[0].cells).toEqual([
+      { text: "{{ sys.points }}" },
+      { text: "Hand typed" },
+      { text: "{{ sys.issues }}" },
+    ]);
+  });
   it("folds pages and opens the page of the part being changed", async () => {
     const { render, screen } = await import("@testing-library/react");
     const userEvent = (await import("@testing-library/user-event")).default;

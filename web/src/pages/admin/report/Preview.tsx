@@ -26,6 +26,22 @@ export function sheetsOf(pdf: string, pages: LayoutPage[], patches: Record<numbe
   return out;
 }
 
+/** Short ids for the PDFs on screen. An id is never given twice: a sheet's canvas is drawn again
+ *  only when its key changes, so a new PDF reusing an old id would leave the old drawing up. */
+export function pdfIds() {
+  const ids = new Map<string, number>();
+  let last = 0;
+  return {
+    idOf(p: string) {
+      if (!ids.has(p)) ids.set(p, ++last);
+      return ids.get(p)!;
+    },
+    keep(used: Set<string>) {
+      for (const p of [...ids.keys()]) if (!used.has(p)) ids.delete(p);
+    },
+  };
+}
+
 /** The real PDF, drawn page by page, with an outline over every part: click one to change it.
  *  Smaller parts sit on top, so a click inside columns picks the inner part.
  *  patches: template pages drawn again on their own since the whole report was (the designer's
@@ -49,15 +65,10 @@ export function Preview({
   const [width, setWidth] = useState(560);
   const [failed, setFailed] = useState(false);
   const canvases = useRef(new Map<string, HTMLCanvasElement>());
-  const ids = useRef(new Map<string, number>()); // each PDF on screen gets a short id (the key of its sheets)
+  const ids = useRef(pdfIds()); // each PDF on screen gets a short id (the key of its sheets)
   const sheets = useMemo(() => {
-    const idOf = (p: string) => {
-      if (!ids.current.has(p)) ids.current.set(p, ids.current.size + 1);
-      return ids.current.get(p)!;
-    };
-    const list = sheetsOf(pdf, pages, patches ?? {}, idOf);
-    const used = new Set(list.map((s) => s.pdf));
-    for (const p of [...ids.current.keys()]) if (!used.has(p) && p !== pdf) ids.current.delete(p);
+    const list = sheetsOf(pdf, pages, patches ?? {}, ids.current.idOf);
+    ids.current.keep(new Set([pdf, ...list.map((s) => s.pdf)]));
     return list;
   }, [pdf, pages, patches]);
 

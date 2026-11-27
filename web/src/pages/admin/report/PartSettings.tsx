@@ -15,7 +15,7 @@ import {
   type Source,
   type StyleRule,
 } from "./model";
-import { RichText, ValuePicker } from "./RichText";
+import { RichText, SYS, ValuePicker } from "./RichText";
 import { ShareForm, snippetContent, type SharedItem } from "./sharing";
 import { NO_TEXT_TYPES } from "../../../lib/fieldTypes";
 
@@ -696,6 +696,7 @@ function RowsEditor({
         <div key={i} className="rd-row">
           <select aria-label="Field" value={r.field} onChange={(e) => setRow(i, { field: e.target.value })}>
             <option value="">Choose a field…</option>
+            {r.field && !fields.some((c) => c.value === r.field) && <option value={r.field}>{r.field} (not in the form)</option>}
             {fields.map((c) => (
               <option key={c.value} value={c.value}>
                 {c.label}
@@ -790,6 +791,16 @@ function GridBox({
   );
 }
 
+/** A cell's own value when the lists below lack it: typed text, or a field the form no longer has. */
+function CellOther({ cell, fields }: { cell: Cell | undefined; fields: Ctx["fields"] }) {
+  if (!cell) return null;
+  if ("field" in cell)
+    return fields.some((f) => f.value === cell.field) ? null : <option value={cell.field}>{cell.field} (not in the form)</option>;
+  const text = cell.text;
+  if (!text.trim() || SYS.some(([v]) => `{{ ${v} }}` === text)) return null;
+  return <option value={`text:${text}`}>Text: {text.length > 40 ? `${text.slice(0, 40)}…` : text}</option>;
+}
+
 function GridEditor({
   src,
   onChange,
@@ -800,7 +811,9 @@ function GridEditor({
   fields: Ctx["fields"];
 }) {
   const known = new Set(fields.filter((f) => f.value.startsWith("inspection.")).map((f) => f.value.slice(11)));
-  const cellValue = (c: Cell | undefined) => (c && "field" in c ? c.field : "");
+  // a cell holds a field, or text: a report value ({{ sys.points }}) or anything else typed in
+  const cellValue = (c: Cell | undefined) => (!c ? "" : "field" in c ? c.field : c.text.trim() ? `text:${c.text}` : "");
+  const cellOf = (v: string): Cell => (v.startsWith("text:") ? { text: v.slice(5) } : v ? { field: v } : { text: "" });
   return (
     <div className="rd-grid">
       <div className="tbl-wrap">
@@ -860,9 +873,7 @@ function GridEditor({
                             j === i
                               ? {
                                   ...x,
-                                  cells: src.columns.map((__, k) =>
-                                    k === c ? (e.target.value ? { field: e.target.value } : { text: "" }) : (x.cells[k] ?? { text: "" }),
-                                  ),
+                                  cells: src.columns.map((__, k) => (k === c ? cellOf(e.target.value) : (x.cells[k] ?? { text: "" }))),
                                 }
                               : x,
                           ),
@@ -870,11 +881,21 @@ function GridEditor({
                       }
                     >
                       <option value="">—</option>
-                      {fields.map((f) => (
-                        <option key={f.value} value={f.value}>
-                          {f.label}
-                        </option>
-                      ))}
+                      <CellOther cell={r.cells[c]} fields={fields} />
+                      <optgroup label="Report">
+                        {SYS.map(([v, l]) => (
+                          <option key={v} value={`text:{{ ${v} }}`}>
+                            {l}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Answers">
+                        {fields.map((f) => (
+                          <option key={f.value} value={f.value}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </optgroup>
                     </select>
                   </td>
                 ))}
@@ -963,6 +984,7 @@ function PhotoSettings({
       {src.kind === "section" && (
         <Field label="Form section">
           <select value={src.section} onChange={(e) => set({ source: { ...src, section: e.target.value } })}>
+            {!ctx.sections.some((s) => s.value === src.section) && <option value={src.section}>{src.section} (not in the form)</option>}
             {ctx.sections.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
@@ -1109,6 +1131,7 @@ const WHEN: [StyleRule["when"], string][] = [
   ["bad", "the answer is red"],
   ["warn", "the answer is amber"],
   ["ok", "the answer is green"],
+  ["muted", "the answer is grey"],
   ["not_checked", "it was not able to be checked"],
   ["empty", "there is no answer"],
 ];

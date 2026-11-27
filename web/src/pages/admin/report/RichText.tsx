@@ -147,16 +147,22 @@ export function RichText({
   );
 }
 
-const SYS: [string, string][] = [
+/** The values the report works out itself (sys.*), as the server gives them (apps/reports/context.py). */
+export const SYS: [string, string][] = [
   ["sys.booking_id", "Booking ID"],
   ["sys.car", "Car"],
   ["sys.inspection_type", "Inspection type"],
   ["sys.expert", "Expert"],
   ["sys.inspected_on", "Inspected on"],
+  ["sys.submitted_at", "Submitted at (date and time)"],
   ["sys.overall", "Expert rating"],
   ["sys.issues", "Number of issues"],
+  ["sys.points", "Checkpoints inspected"],
+  ["sys.checks", "Checks answered"],
+  ["sys.not_checked", "Not able to check (number)"],
   ["sys.not_checked_list", "Not able to check (list)"],
   ["sys.generated_at", "Generated at"],
+  ["sys.revision", "Report revision"],
   ["sys.verify_url", "Verify link"],
   ["sys.photos_url", "All photos link"],
   ["sys.videos_url", "All videos link"],
