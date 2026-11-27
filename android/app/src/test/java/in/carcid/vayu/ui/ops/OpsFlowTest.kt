@@ -5,6 +5,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -558,6 +560,55 @@ class OpsFlowTest {
         val width = compose.onNode(isRoot()).fetchSemanticsNode().boundsInRoot.width
         val gap = width - tiles.maxOf { it.right } - tiles.minOf { it.left }       // right margin minus left margin
         assertTrue("tiles leave ${gap}px empty on the right: $tiles in $width", kotlin.math.abs(gap) < 4f)
+    }
+
+    /** The photo screen asks once for all its links; a file they don't have is asked for alone. */
+    @Test fun photoLinksComeInOneRequest() {
+        server.on("GET form-versions/7", """{"id":7,"checks":[],"pages":[{"id":1,"title":"Photos","visible":true,"gate":false,"sections":[{"id":1,"title":"Outside","visible":true,
+            "fields":[{"key":"front","label":"Front","type":"photo","visible":true,"config":{"max_count":8}}]}]}]}""")
+        val ids = (1..8).map { "bbbbbbbb-0000-0000-0000-00000000000$it" }
+        server.on("GET bookings/$B14/media", ids.joinToString(",", "[", "]") { """{"id":"$it","field_key":"front","kind":"photo","status":"verified"}""" })
+        // the shared answer leaves out the last file (it arrived after): that one is asked for alone
+        server.on("GET bookings/$B14/media-links", ids.dropLast(1).joinToString(",", """{"expires_in":3600,"links":{""", "}}") {
+            """"$it":{"url":"${server.raw("/files/$it")}","preview_url":"${server.raw("/previews/$it")}","content_type":"image/jpeg"}""" })
+        server.on("GET media/${ids.last()}/url", """{"url":"${server.raw("/files/x")}","preview_url":"${server.raw("/previews/x")}","content_type":"image/jpeg"}""")
+        (ids + "x").forEach { server.on("GET /previews/$it", "not really a picture") }
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Manoj Pillai"); compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("Photos and videos"); compose.onNodeWithText("Photos and videos").performScrollTo().performClick()
+        compose.waitUntil(10_000) { server.requests.count { it.first.startsWith("GET /previews/") } == 8 }
+        assertEquals(1, server.requests.count { it.first == "GET bookings/$B14/media-links" })
+        assertEquals(listOf("GET media/${ids.last()}/url"), server.requests.map { it.first }.filter { it.endsWith("/url") })
+    }
+
+    /** Back from a booking shows the list at once (kept, not built again); hidden, it can't be read or tapped. */
+    @Test fun theListIsKeptHiddenUnderABooking() {
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Showing 5")
+        compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("Photos and videos")
+        assertTrue(compose.onAllNodes(hasText("Showing 5", substring = true)).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodes(hasText("Rohit Sharma")).fetchSemanticsNodes().isEmpty())
+        androidx.test.espresso.Espresso.pressBack()
+        compose.waitForIdle()
+        compose.onNodeWithText("Showing 5", substring = true).assertIsDisplayed()      // no wait: it was kept
+    }
+
+    @Test fun theHiddenSearchBoxLetsGoOfTheKeyboard() {
+        // found on a phone: the kept list's search box still took the keys typed on the booking
+        show()
+        compose.onNodeWithText("Bookings").performClick()
+        waitFor("Showing 5")
+        val search = androidx.compose.ui.test.hasSetTextAction()
+        compose.onNode(search).performClick()
+        compose.onNode(search).assertIsFocused()
+        compose.onNodeWithText("Manoj Pillai").performClick()
+        waitFor("Photos and videos")
+        androidx.test.espresso.Espresso.pressBack()
+        compose.waitForIdle()
+        compose.onNode(search).assertIsNotFocused()
     }
 
     @Test fun aSubmittedPhotoCanBeReplacedOrAddedToButNotDeleted() {

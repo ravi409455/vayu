@@ -273,6 +273,18 @@ class SignInFlowTest {
         waitFor("Your sign-in has ended. Sign in again; your unsent work stays on this phone.")
     }
 
+    @Test fun aStartWhileTheServerIsDownStillFetchesTheLeads() {
+        // the start skips its first "came to the front" load (the server's answer loads all);
+        // when that answer fails, the leads are still fetched once, as before
+        signedIn("expert")
+        server.on("GET auth/me", """{"detail":"down"}""", 503)
+        tokens.save("A", "R")
+        tokens.saveMe(mapOf("id" to "3", "username" to "ravi", "name" to "Ravi Expert", "role" to "expert",
+            "theme" to "light", "must_change" to "false", "perms" to ""))
+        launch(); waitFor("My leads")
+        compose.waitUntil(5_000) { server.requests.any { it.first == "GET sync/jobs" } }
+    }
+
     @Test fun opsLandOnToday() {
         signedIn("ops")
         launch(); signIn(); waitFor("Today")

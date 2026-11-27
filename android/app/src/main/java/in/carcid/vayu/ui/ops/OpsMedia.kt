@@ -88,18 +88,29 @@ import java.util.UUID
  * A file fetched through its signed link and kept in the cache folder. [preview]: the server's small
  * preview when it has one (tiles; a phone photo is ~0.5 MB, its preview a few KB), else the file.
  */
-suspend fun mediaBytes(env: OpsEnv, dir: File, id: String, preview: Boolean = false): File? = withContext(Dispatchers.IO) {
+suspend fun mediaBytes(env: OpsEnv, dir: File, id: String, preview: Boolean = false,
+                       /** The file's booking: its links come in one request for all its files. */
+                       booking: String? = null): File? = withContext(Dispatchers.IO) {
     // the file name comes from the server's ID: only a real ID, never a path
     if (runCatching { java.util.UUID.fromString(id) }.isFailure) return@withContext null
     val full = File(dir, "media-$id")
     if (full.exists()) return@withContext full                  // the whole file serves as its own preview
     val f = if (preview) File(dir, "media-$id-p") else full
     if (f.exists()) return@withContext f
-    try {
-        val links = MediaLinks.from(env.data.api.get("media/$id/url")) ?: return@withContext null
+    suspend fun fetch(links: MediaLinks): File {
         val url = links.previewUrl?.takeIf { preview && it.isNotBlank() } ?: links.url
         writeAtomically(if (url == links.url) full else f, env.data.api.download(url))
-        if (url == links.url) full else f
+        return if (url == links.url) full else f
+    }
+    try {
+        // the booking's links first; this file's own link when they don't have it or theirs fails
+        // (expired, replaced): the old way, one request for this file
+        booking?.let { b -> env.loads?.link(b, id) }?.let { shared ->
+            try { return@withContext fetch(shared) }
+            catch (e: kotlin.coroutines.cancellation.CancellationException) { throw e }
+            catch (e: Exception) { env.loads?.forgetLinks(booking) }
+        }
+        fetch(MediaLinks.from(env.data.api.get("media/$id/url")) ?: return@withContext null)
     } catch (e: kotlin.coroutines.cancellation.CancellationException) { throw e } catch (e: Exception) { null }
 }
 
@@ -236,7 +247,7 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
                 // whole pixels: a tile a fraction too wide would push the last one to the next row
                 val tile = with(androidx.compose.ui.platform.LocalDensity.current) { ((constraints.maxWidth - 8.dp.roundToPx() * (cols - 1)) / cols).toDp() }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), maxItemsInEachRow = cols) {
-                    here.forEach { m -> MediaTile(env, m, size = tile) { open = m } }
+                    here.forEach { m -> MediaTile(env, m, size = tile, booking = id) { open = m } }
                     // an add tile only where Ops may add, the field shows in this inspection, and it has room
                     addable.forEach { (p, _, f) ->
                         Box(Modifier.size(tile).clip(RoundedCornerShape(12.dp)).background(Vayu.colors.soft)
@@ -254,10 +265,10 @@ fun MediaScreen(env: OpsEnv, id: String, onBack: () -> Unit) {
 }
 
 @Composable
-internal fun MediaTile(env: OpsEnv, m: MediaItem, size: androidx.compose.ui.unit.Dp = 76.dp, onClick: () -> Unit) {
+internal fun MediaTile(env: OpsEnv, m: MediaItem, size: androidx.compose.ui.unit.Dp = 76.dp, booking: String? = null, onClick: () -> Unit) {
     val ctx = LocalContext.current
     val img by produceState<ImageBitmap?>(null, m.id) {
-        if (m.kind in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.id, preview = true)?.let { decoded(it, 160) }
+        if (m.kind in setOf("photo", "signature")) value = mediaBytes(env, ctx.cacheDir, m.id, preview = true, booking = booking)?.let { decoded(it, 160) }
     }
     Box(Modifier.size(size).clip(RoundedCornerShape(if (size < 76.dp) 10.dp else 12.dp)).background(Vayu.colors.illo).clickable(role = Role.Button, onClick = onClick)
         .semantics { contentDescription = "${m.kind} ${m.fieldKey}" }, contentAlignment = Alignment.Center) {

@@ -85,9 +85,17 @@ def exists(key: str) -> bool:
         return False
 
 
-def presign_get(key: str, filename: str | None = None, expires: int | None = None) -> str:
+def link_ttl() -> int:
+    """How long a file link works, in seconds."""
+    return int(settings.MEDIA_URL_TTL)
+
+
+def presign_get(key: str, filename: str | None = None, expires: int | None = None,
+                s3=None) -> str:
+    """[s3]: a client to reuse (making one costs a few ms: a booking's links make one, not two
+    per file)."""
     params = {"Bucket": settings.S3_BUCKET, "Key": key}
     if filename:
         params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
-    return client().generate_presigned_url(
-        "get_object", ExpiresIn=expires or settings.MEDIA_URL_TTL, Params=params)
+    return (s3 or client()).generate_presigned_url(
+        "get_object", ExpiresIn=expires or link_ttl(), Params=params)
