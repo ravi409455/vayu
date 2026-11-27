@@ -198,10 +198,10 @@ then deletes the container. Record each drill below.
 
 | Date | Server | Backup | Restore took | Counts match | By |
 |---|---|---|---|---|---|
-| | | | | | |
+| 2026-11-27 | staging | `2026-11-27T1809Z-nightly.dump.age` | 6 s | yes, all 12 biggest tables equal (backup minutes old) | owner + Claude |
 
 ## 8. Watching
-- `https://<address>/api/v1/health` every minute (Better Stack) → `#vayu-alerts`.
+- `https://<address>/api/v1/health` every 3 minutes (Better Stack, Free plan) → `#vayu-alerts`.
 - Heartbeats: `BACKUP_HEARTBEAT_URL` (daily), `WORKERS_HEARTBEAT_URL` (every 5 minutes: beat queues
   it, a worker sends it, so it stops if beat, Redis or the workers stop).
 - Sentry (server, web, app): new issues and spikes in `production` → `#vayu-alerts`.

@@ -679,6 +679,13 @@ Lessons:
 - After `staging.sh up` the Mac may still have the placeholder address cached; check with
   `dig +short vayu-staging.carcid.in @1.1.1.1`.
 
+### 5.3 · First restore drill ✅ (2026-11-27, staging)
+`infra/restore.sh 2026-11-27T1809Z-nightly.dump.age --drill`, run by the owner from the Mac
+(`ssh -t`; the unlocking key `BACKUP_AGE_SECRET_KEY` pasted from Phase at the prompt, never stored).
+Restored into the throwaway container in **6 s**; the 12 biggest tables of the backup and of live
+staging were **equal** (1820 fields, 1768 media files, 208 booking activities, ...). Logged in
+`docs/runbook-new-server.md` §7. Next drill: first Monday of the month.
+
 ## Phase 6 · Prove staging ⏳
 ## Phase 7 · Production ⏳
 
@@ -740,7 +747,6 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 | Every deploy run waits for production Approve: cancel it until production exists (after PR 42 it no longer blocks staging) | until Phase 7 |
 | Welcome pages (`/welcome/engineers`, `/welcome/ops`, public APK download; PR welcome-pages): open both on staging after the next deploy; on production in Phase 7, with an uptime monitor on `/welcome/engineers` | next deploy, Phase 7 |
 | 2.5c Restrict the Firebase API key | once "Vayu Staging" is on a phone (Phase 6) |
-| Phase 5: first restore drill | next staging round |
 | 5.2 Better Stack: check Slack `#vayu-alerts` gets an incident | next staging round |
 | 5.2 Better Stack for production: monitors on `/api/v1/health`, `/` and `/welcome/engineers`; heartbeats `prod-workers`, `prod-backup` → Phase `vayu` → Production; then delete the staging monitor and heartbeats and clear their two Phase Staging values | Phase 7 |
 | Phase Production environment: the rest of its values (table above) | Phase 7 |
