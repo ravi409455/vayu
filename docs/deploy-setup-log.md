@@ -696,6 +696,60 @@ staging were **equal** (1820 fields, 1768 media files, 208 booking activities, .
 
 ## Phase 6 · Prove staging 🔄
 
+### 6.6 · Security headers and the content rules (CSP) 🔄 (2026-11-28)
+
+**What they are (plain words).** Rules Caddy sends with every page; the browser obeys them.
+| Header | What it stops | Example |
+|---|---|---|
+| `Content-Security-Policy` (CSP) | code or files from anywhere but the places we list | a customer name `<script>steal()</script>` shown by a bug never runs: that code is not from an allowed place |
+| `X-Frame-Options: DENY` (+ CSP `frame-ancestors 'none'`) | another site showing Vayu inside its page | a fake "Win a prize" button laid over an invisible "Delete booking" |
+| `Strict-Transport-Security` (HSTS, 1 year) | being pushed onto plain http | someone on café Wi-Fi reading a password |
+| `X-Content-Type-Options: nosniff` | a "photo" being run as code | an upload that is really a script |
+| `Referrer-Policy` | other sites seeing our full page address | a booking id in the URL leaking when a link is clicked |
+| `Permissions-Policy` | camera / location for anyone but us; microphone, payment, USB for everyone | |
+
+**Where they live:** `infra/Caddyfile` (the `header` block at the top, and the `@app` CSP line).
+Which way CSP applies comes from `CSP_HEADER` in Phase → `vayu` → each environment:
+`Content-Security-Policy` = enforced (blocks); `Content-Security-Policy-Report-Only` = only warns in
+the browser console, blocks nothing. Production is always enforced.
+
+**What our CSP allows (the `@app` line):** code, styles and fonts only from our own address; photos
+and videos from our address, `data:`/`blob:` and `*.r2.cloudflarestorage.com`; network calls to our
+address, R2 (uploads) and `*.sentry.io` (errors); frames (the PDF preview) from our address, `blob:`
+and R2. The welcome pages (`/welcome/*`) have their own looser line (inline code, Google fonts).
+
+**Done on staging:**
+- Grades: **SSL Labs A+** (TLS 1.3, HSTS). **securityheaders.com B** while CSP was report-only and
+  X-Frame-Options missing.
+- With a violation listener in Chrome, nothing would have been blocked on: Today, Bookings, a
+  booking (Booking, Inspection, Media with 88 R2 photos, Review, Report with the PDF preview),
+  Dashboard, Forms, Library, the PDF designer, the customer QR check page.
+- PR 69: `X-Frame-Options: DENY`; `infra/phase-staging.env` → enforced; runbook §9. Caddyfile
+  checked with `caddy validate`.
+- ⏳ Owner: Phase → `vayu` → Staging → `CSP_HEADER` = `Content-Security-Policy`, merge PR 69; then
+  re-grade (expect securityheaders.com **A**) and open the pages above again.
+
+**If something breaks one day because of CSP — how to know and fix it:**
+1. *What it looks like:* a blank or half-drawn page, photos or the PDF preview not showing, uploads
+   stuck at 0%, or Sentry getting no web errors. It shows up right after a change that adds
+   something new (a map, chat widget, analytics, a font from a CDN, a new storage address, a new
+   Sentry region) or after the R2 / Sentry address changes.
+2. *Confirm it is CSP:* open the page in Chrome → right-click → Inspect → **Console**. A CSP block
+   reads: `Refused to load ... because it violates the following Content Security Policy directive:
+   "img-src ..."`. The word after "directive" (`img-src`, `script-src`, `connect-src`, `frame-src`...)
+   says which rule, and the address it names is what was blocked.
+3. *Quick relief on staging only:* Phase → Staging → `CSP_HEADER` =
+   `Content-Security-Policy-Report-Only` → deploy (Actions → deploy → Run workflow, the live commit).
+   Pages work again; the console still lists what would be blocked. **Never on production.**
+4. *Real fix (both servers):* in `infra/Caddyfile`, add the blocked address to that rule on the
+   `@app` line (e.g. a new photo host into `img-src` **and** `media-src`; a new API into
+   `connect-src`). Add only that address, never `*` or `'unsafe-inline'`. Check with
+   `docker run --rm -e APP_HOST=localhost -e CSP_HEADER=Content-Security-Policy -v "$PWD/infra/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile`,
+   then a PR; the merge deploys it.
+5. *After the fix:* set staging's `CSP_HEADER` back to `Content-Security-Policy`, deploy, open the
+   page with the console open: no "Refused" lines. Re-run securityheaders.com.
+6. *Check what a server sends:* `curl -sI https://<address>/ | grep -iE "content-security|x-frame|strict"`.
+
 ### 6.7 · Load test ✅ (2026-11-27, owner + load-test session)
 Cloud run on throwaway servers (`perf/cloud.sh all`, PR 46/61, cost $1.06, real car photos; results
 kept on the Mac, `perf/results/20261127-1237-all`, not in git). At the test's 1× day:
@@ -823,5 +877,5 @@ Service account `vayu-staging-server`: role Service, app `vayu`, **Staging only*
 | Production server's Phase service account (`vayu-prod-server`, Production only) and robot key | Phase 7 |
 | DigitalOcean API token `vayu-owner-laptop` expires (90 days) | around 2027-02-24 |
 | Phase service token `vayu-staging-server`: if it was given an expiry, note the date here | check |
-| CSP on staging: switch `CSP_HEADER` from report-only to enforced after a clean full run | Phase 6 |
+| CSP on staging: owner sets Phase `CSP_HEADER` = `Content-Security-Policy` and merges PR 69; then re-grade (6.6) | now |
 
