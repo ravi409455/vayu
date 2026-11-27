@@ -28,13 +28,13 @@ class ReportStripTest {
 
     /** Upright: the band the report prints is bright, above and below are dimmed. */
     @Test fun uprightShowsTheReportBand() {
-        compose.setContent { Box(Modifier.fillMaxSize().background(Color(0xFF8A8A8A))) { ReportStrip(sideways = false) } }
+        compose.setContent { Box(Modifier.fillMaxSize().background(Color(0xFF8A8A8A))) { ReportStrip(0) } }
         compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/camera_report_band.png", roborazziOptions = options)
     }
 
-    /** Sideways: the whole photo is the report's shape, only a thin frame. */
+    /** Sideways: the whole photo is the report's shape, only a thin frame; the name and stamp read the right way up. */
     @Test fun sidewaysFramesTheWholePhoto() {
-        compose.setContent { Box(Modifier.fillMaxSize().background(Color(0xFF8A8A8A))) { ReportStrip(sideways = true) } }
+        compose.setContent { Box(Modifier.fillMaxSize().background(Color(0xFF8A8A8A))) { ReportStrip(-90, "Front left view", "0 of 1 taken", "TST-1014 · Test Expert · 27 Nov 2026 13:07\n27.907475, 78.112752") } }
         compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/camera_sideways_framed.png", roborazziOptions = options)
     }
 
