@@ -213,7 +213,8 @@ class OpsFlowTest {
         compose.onNodeWithText("Regenerate").performClick()
         compose.onAllNodes(hasText("Regenerat", substring = true)).onLast().performClick()   // a second tap while sending does nothing
         compose.waitUntil(5_000) { server.bodiesOf("POST bookings/$B6/report/regenerate").isNotEmpty() }
-        waitFor("Updating…")
+        waitFor("Updating the PDF…")
+        waitFor("Usually about 7 seconds")
         assertEquals(1, server.bodiesOf("POST bookings/$B6/report/regenerate").size)
     }
 

@@ -2,6 +2,7 @@
  *  with a live preview. Saving makes a new version and moves every report using it (drafts at
  *  once; live reports get a new published version), so it is an explicit step, not autosave. */
 import { ArrowLeft, Link2, Palette, Settings2 } from "lucide-react";
+import { PdfProgress } from "../../../ui/PdfProgress";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../api/client";
@@ -390,21 +391,24 @@ function SharedEditor({
           <section className="rd-mid" aria-label="Preview">
             <div className="rd-status muted small">
               {rendering
-                ? "Updating…"
+                ? "" // the bar below says it
                 : chosen
                   ? theme
                     ? "The whole report, wearing this theme."
                     : "This part on its own, in the report's look."
                   : "Complete one booking inspected with this form to see a preview."}
             </div>
+            {rendering && <PdfProgress label={preview ? "Updating the preview…" : "Making the preview…"} />}
             {preview ? (
-              <Preview
-                pdf={preview.pdf}
-                pages={preview.pages}
-                selected={sel?.kind === "part" ? sel.id : null}
-                names={names}
-                onSelect={(id) => !theme && setSel({ kind: "part", id })}
-              />
+              <div className={rendering ? "pdf-fading" : undefined} aria-busy={rendering}>
+                <Preview
+                  pdf={preview.pdf}
+                  pages={preview.pages}
+                  selected={sel?.kind === "part" ? sel.id : null}
+                  names={names}
+                  onSelect={(id) => !theme && setSel({ kind: "part", id })}
+                />
+              </div>
             ) : (
               <Empty title={chosen ? "Drawing…" : "Nothing to show yet"} />
             )}

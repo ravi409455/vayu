@@ -21,7 +21,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.height
+import kotlinx.coroutines.delay
+import kotlin.math.exp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -111,12 +115,15 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
             b.conflict.isNotEmpty() -> "Waits for your choice above"
             missing -> "Not made yet"
             b.stage != "completed" -> "No report yet"
-            rep == null -> "Being made"
-            updating -> "Updating…"
+            rep == null -> "Making the PDF…"
+            updating || sending -> "Updating the PDF…"
             failed -> "Couldn't be made · tried again by itself"
             rep!!.status == "ready" -> (if (outOfDate) "Out of date" else "Ready") + (rep!!.generatedAt?.takeIf { it.isNotBlank() }?.let { " · made ${whenStamp(it, env.today()).replaceFirstChar { c -> c.lowercase() }}" } ?: "")
-            else -> "Being made"
+            else -> "Making the PDF…"
         }, fontWeight = FontWeight.SemiBold, color = Vayu.colors.ink)
+        // a PDF is on its way (about 7 s): an estimated bar above the buttons
+        val making = sending || updating || (done && b.conflict.isEmpty() && !missing && !failed && rep?.status != "ready")
+        if (making) PdfProgress()
         if (failed && rep?.error?.isNotBlank() == true) Note(reportError(rep!!.error), Vayu.colors.badTint)
         if (missing) Note("The booking is completed but its PDF was not made. Make it now.", Vayu.colors.warnTint)
         if (outOfDate && !updating && done) Note("Something it shows changed since it was made. Regenerate it when you're done.", Vayu.colors.warnTint)
@@ -134,7 +141,7 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
                 } ?: env.say("Couldn't download the report.")
             } }
             // F-219: reports are made again only when Ops press Regenerate (one tap, one request)
-            if (canRegenerate) CardButton(if (sending) "Regenerating…" else if (missing) "Make the PDF" else "Regenerate", Modifier.weight(1f), online && allowed && !sending) {
+            if (canRegenerate) CardButton(if (sending || updating) "Making" else if (missing) "Make the PDF" else "Regenerate", Modifier.weight(1f), online && allowed && !sending && !updating) {
                 sending = true
                 env.actions.send("POST", "bookings/$id/report/regenerate", refused = { e -> env.say(e.message); sending = false }) {
                     scope.launch { try { rep = Report.from(env.data.api.get("bookings/$id/report")) ?: rep } catch (e: ApiError) { } finally { sending = false } }
@@ -143,6 +150,22 @@ fun ReportCard(env: OpsEnv, id: String, b: Bk) {
         }
         if (done && canRegenerate && !allowed && regen?.reason?.isNotBlank() == true) Text(regen.reason, fontSize = 13.sp, color = Vayu.colors.muted)
     }
+}
+
+/** The PDF is being made and the server can't say how far along: the bar fills to 90% over the
+ *  usual 7 s, then creeps on until the PDF arrives (web: PdfProgress). */
+// ponytail: a fixed 7 s guess; measure real render times if they drift far from it
+@Composable
+private fun PdfProgress(seconds: Int = 7) {
+    var elapsed by remember { mutableStateOf(0f) }
+    LaunchedEffect(Unit) {
+        val start = System.currentTimeMillis()
+        while (true) { elapsed = (System.currentTimeMillis() - start) / 1000f; delay(250) }
+    }
+    val p = if (elapsed <= seconds) 0.9f * elapsed / seconds else 0.9f + 0.09f * (1f - exp(-(elapsed - seconds) / seconds))
+    LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+        color = Vayu.colors.info, trackColor = Vayu.colors.line2, drawStopIndicator = {})
+    Text(if (elapsed > seconds) "Taking longer than usual" else "Usually about $seconds seconds", fontSize = 13.sp, color = Vayu.colors.muted)
 }
 
 /** A button on a grey card: white with a border, one line. */
