@@ -58,7 +58,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -325,11 +324,16 @@ internal fun androidx.compose.foundation.layout.BoxScope.SidewaysGuide(label: St
         enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut()) {
         Column(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .6f)),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            val turn by androidx.compose.animation.core.rememberInfiniteTransition("turn").animateFloat(0f, -90f,
-                androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.keyframes {
-                    durationMillis = 2400; 0f at 500; -90f at 1200; -90f at 2000 }), "turn")
+            // shown twice, then still (turned): a loop would redraw the screen for as long as it shows
+            val turn = remember { androidx.compose.animation.core.Animatable(0f) }
+            LaunchedEffect(Unit) {
+                repeat(2) {
+                    kotlinx.coroutines.delay(400); turn.animateTo(-90f, androidx.compose.animation.core.tween(700))
+                    kotlinx.coroutines.delay(600); if (it == 0) turn.animateTo(0f, androidx.compose.animation.core.tween(400))
+                }
+            }
             Icon(Icons.Outlined.StayCurrentPortrait, null, tint = Color.White,
-                modifier = Modifier.size(64.dp).graphicsLayer { rotationZ = turn })
+                modifier = Modifier.size(64.dp).graphicsLayer { rotationZ = turn.value })
             Text("Turn your phone sideways", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp,
                 modifier = Modifier.padding(top = 14.dp))
             Text(label, color = Color.White.copy(alpha = .8f), fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
@@ -345,10 +349,11 @@ private fun rememberSideways(onRotation: (Int) -> Unit): Boolean {
     // only while the camera is open: the phone's own motion sensor, already running for screen turns
     DisposableEffect(Unit) {
         var last = -1
+        val steady = TurnFilter()
         val l = object : android.view.OrientationEventListener(ctx) {
             override fun onOrientationChanged(deg: Int) {
                 if (deg == ORIENTATION_UNKNOWN) return
-                sideways = sidewaysAt(deg, sideways)
+                sideways = steady.feed(sidewaysAt(deg, sideways), android.os.SystemClock.uptimeMillis())
                 val r = rotationAt(deg)
                 if (r != last) { last = r; onRotation(r) }
             }
@@ -364,6 +369,21 @@ internal fun sidewaysAt(deg: Int, was: Boolean): Boolean = when (deg) {
     in 60..120, in 240..300 -> true
     in 0..30, in 330..359, in 150..210 -> false
     else -> was
+}
+
+/**
+ * A phone pointed at the floor or an engine bay reads a jumpy turn: the hint would flicker (and
+ * redraw the screen). A new state counts only once it has held for [holdMs].
+ */
+internal class TurnFilter(private val holdMs: Long = 500) {
+    private var state = false
+    private var since = -1L
+    fun feed(now: Boolean, at: Long): Boolean {
+        if (now == state) since = -1L
+        else if (since < 0) since = at
+        else if (at - since >= holdMs) { state = now; since = -1L }
+        return state
+    }
 }
 
 /** The phone's turn as the camera's target rotation, so a sideways shot is saved upright. */

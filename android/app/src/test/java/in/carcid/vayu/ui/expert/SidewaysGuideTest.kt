@@ -30,7 +30,7 @@ class SidewaysGuideTest {
     @Test fun uprightShowsTheHintWithTheFieldName() {
         compose.mainClock.autoAdvance = false
         compose.setContent { Box(Modifier.fillMaxSize().background(Color(0xFF3A3A3A))) { SidewaysGuide("Front left view", hint = true, framed = false) } }
-        compose.mainClock.advanceTimeBy(1000)
+        compose.mainClock.advanceTimeBy(5000)
         compose.onNodeWithText("Turn your phone sideways").assertExists()
         compose.onNodeWithText("Front left view").assertExists()
         compose.onNode(isRoot()).captureRoboImage("src/test/screenshots/camera_turn_sideways.png", roborazziOptions = options)
@@ -47,6 +47,13 @@ class SidewaysGuideTest {
         assertEquals(true, sidewaysAt(90, false)); assertEquals(true, sidewaysAt(270, false))
         assertEquals(false, sidewaysAt(0, true)); assertEquals(false, sidewaysAt(180, true))
         assertEquals(true, sidewaysAt(45, true)); assertEquals(false, sidewaysAt(45, false))
+    }
+
+    /** A jumpy reading (phone pointed down) doesn't flicker the hint: a new state must hold half a second. */
+    @Test fun aJumpyTurnDoesNotFlicker() {
+        val f = TurnFilter()
+        assertEquals(false, f.feed(true, 0)); assertEquals(false, f.feed(false, 200)); assertEquals(false, f.feed(true, 300))
+        assertEquals(false, f.feed(true, 700)); assertEquals(true, f.feed(true, 800)); assertEquals(true, f.feed(false, 900))
     }
 
     /** A sideways shot is saved upright: the camera turns with the phone. */
