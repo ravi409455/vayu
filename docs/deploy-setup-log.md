@@ -21,7 +21,7 @@ Status: ✅ done · 🔄 in progress · ⏳ not started
 | 3 | Staging server setup | ✅ 2026-11-26: live, with test data |
 | 4 | Deploy pipeline | 🔄 merge → staging works; rollback not yet rehearsed |
 | 5 | Backups and alerts | ✅ 2026-11-27 on staging: DigitalOcean alerts, Better Stack (monitor, heartbeats, Slack), first restore drill. Production gets its own set in Phase 7 |
-| 6 | Prove staging | 🔄 push, update prompt, Sentry, load test, down/up cycle done; left: rollback, security headers + CSP, reboot |
+| 6 | Prove staging | 🔄 push, update prompt, Sentry, load test, reboot, down/up cycle done; left: rollback, security headers + CSP |
 | 7 | Production | ⏳ |
 
 Quick links: [Where everything lives](#where-everything-lives) · [Open items](#open-items)
@@ -709,6 +709,14 @@ The owner's real day (20 experts, 5 Ops, 50 inspections) is well under the test'
 Open: a few 502s on `media/initiate` ($12 ×6, $24 ×2); the report's API p95 should leave uploads
 out; `loadtest_cleanup` too slow on 1M history rows; PR 61's stop-all treats a clean-up failure as a
 test failure.
+
+### 6.10 · Reboot test ✅ (2026-11-28)
+`doctl compute droplet-action power-cycle <staging id> --wait` (the same as DigitalOcean → Power →
+Power cycle). Power cycle took 29 s; **health answered ok 62 s after the start**, with nobody
+logging in. After it: all 8 containers up (api, worker, pdf-worker, zip-worker, beat, caddy healthy
+postgres and redis), web page 200, data unchanged (30 bookings, 1768 media, 10 users), backup timer
+still set for 02:00 IST, the worker reads the Firebase key, both Better Stack heartbeats Up. The
+health monitor (every 3 min) did not even notice the 1-minute gap.
 
 ### 6.11 · On-demand cycle ✅ (2026-11-27, by the owner)
 Staging taken down and brought back up (Actions → staging down / up, PR 63 and 64) during these
