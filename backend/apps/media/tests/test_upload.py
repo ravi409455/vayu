@@ -141,6 +141,16 @@ def test_complete_verifies_and_makes_a_preview(job, settings, logged):
     assert max(Image.open(io.BytesIO(storage.read(a.preview_key))).size) <= 480
 
 
+def test_a_photo_gets_its_report_print_copies_when_checked(job, settings):
+    from apps.reports.render import print_keys
+
+    env, b = job
+    upload(env.expert, b["id"], jpeg(1600, 1200), settings)
+    a = MediaAsset.objects.get()
+    sizes = [Image.open(io.BytesIO(storage.read(k))).size for k in print_keys(a.id)]
+    assert sizes == [(1000, 750), (600, 450)]          # what the first render would have made
+
+
 def test_a_huge_photo_is_stored_at_most_2048px(job, settings):
     env, b = job
     data = jpeg(4000, 3000)

@@ -114,12 +114,27 @@ def _check(asset: MediaAsset) -> bool:
         if not picture_file and (image.format == "HEIF" or max(image.size) > MAX_EDGE):
             asset.jpeg_key = f"copies/{asset.id}.jpg"
             storage.put(asset.jpeg_key, _jpeg(_shrink(image, MAX_EDGE), 85), "image/jpeg")
+        if asset.kind == "photo":
+            _print_copies(asset, image)
         asset.preview_key = f"previews/{asset.id}.jpg"
         storage.put(asset.preview_key, _jpeg(_shrink(image, PREVIEW_EDGE), 75), "image/jpeg")
     except (OSError, ValueError, Image.DecompressionBombError):   # not a readable image
         _failed(asset, "unreadable_image")
         return False
     return True
+
+
+def _print_copies(asset: MediaAsset, image: Image.Image) -> None:
+    """The report's print-size copies, made now while the photo is open: made at the first
+    render instead, 100+ full photos at once held the PDF worker at ~800 MB (load test
+    2026-11-27). The render still makes any copy that is missing (photos from before this)."""
+    from apps.reports import render  # here: the reports app imports media
+
+    copy = _shrink(image, render.PRINT_EDGE)
+    for key, edge in zip(render.print_keys(asset.id), (render.PRINT_EDGE, render.SMALL_EDGE),
+                         strict=True):
+        copy.thumbnail((edge, edge))
+        storage.put(key, _jpeg(copy, render.PRINT_QUALITY), "image/jpeg")
 
 
 def _failed(asset: MediaAsset, reason: str) -> None:
