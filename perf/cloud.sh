@@ -275,8 +275,8 @@ prepare_sut() {   # prepare_sut <role>: bootstrap, settings, deploy, forms, the 
   say "$role: forms and an Admin (setup_platform), the test form and 3 months of history"
   local admin_pw; admin_pw=$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')
   on "deploy@$ip" "$RC
-    (umask 077; printf 'username,name,role,phone,password\nlt-admin,LT Admin,admin,9700000000,$admin_pw\n' > /tmp/staff.csv) &&
-    c cp /tmp/staff.csv api:/tmp/staff.csv && rm /tmp/staff.csv &&
+    printf 'username,name,role,phone,password\nlt-admin,LT Admin,admin,9700000000,$admin_pw\n' |
+      c exec -T api sh -c 'umask 077 && cat > /tmp/staff.csv' &&
     c exec -T api python manage.py setup_platform --users /tmp/staff.csv >/dev/null &&
     c exec -T api rm -f /tmp/staff.csv /tmp/staff.csv.passwords"
   local k_max=1; [[ "$(role_plan "$role")" == capacity ]] && k_max=${CAP_STEPS##*,}
