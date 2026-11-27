@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Load tests on throwaway DigitalOcean servers (docs/plan-load-test.md). Runs on the owner's Mac,
-# with doctl signed in and the owner's SSH key. Spend is capped (LT_CAP, default $5).
+# with doctl signed in and the owner's SSH key. Spend over LT_CAP (default $5) gives a loud warning; it never stops a test.
 #
 #   perf/cloud.sh all            the whole test, in parallel (about 3½ hours):
 #                                  low-cost: $12, $18, $24 at the owner's numbers, 60 measured minutes
@@ -139,10 +139,11 @@ PY
 
 spent_now() { st spent; }
 
-check_budget() {   # check_budget <more $ this may cost>
+check_budget() {   # check_budget <more $ this may cost>: warns loudly, never stops (owner, 2026-11-27)
   python3 -c "import sys; a, b, c = map(float, sys.argv[1:]); sys.exit(0 if a + b <= c else 1)" \
-    "$(spent_now)" "$1" "$CAP" \
-    || die "this could take spend past \$$CAP (so far \$$(spent_now)): stopped"
+    "$(spent_now)" "$1" "$CAP" && return 0
+  printf '\a\n\033[1;41;97m  !!! WARNING: spend could pass $%s (so far $%s, this step up to $%s more). CONTINUING. !!!  \033[0m\n\n' \
+    "$CAP" "$(spent_now)" "$1" >&2
 }
 
 ours() {   # ours <id>: true only for a droplet this script made (name lt-*, tag vayu-loadtest)
@@ -393,7 +394,7 @@ cmd_down() {   # everything this script made: test servers first (their files), 
     st drop db
     say "the managed database destroyed"
   fi
-  say "spent so far: \$$(spent_now) (cap \$$CAP)"
+  say "spent so far: \$$(spent_now) (warning above \$$CAP)"
 }
 
 on_failure_destroy() {   # a whole-test command that fails cleans up and destroys everything
@@ -473,7 +474,7 @@ cmd_all() {
   cleanup_destroy load-b
   overview "$dir" > "$dir/OVERVIEW.md"
   cat "$dir/OVERVIEW.md"
-  say "spent: \$$(spent_now) (cap \$$CAP)"
+  say "spent: \$$(spent_now) (warning above \$$CAP)"
   (( failed == 0 )) || die "a test server failed: see its log in $dir"
 }
 
@@ -498,7 +499,7 @@ cmd_dbcheck() {   # run D: one size, its data on a temporary managed database
 cmd_status() {
   echo "Ours (tag $TAG):"; doctl compute droplet list --tag-name "$TAG" --format ID,Name,PublicIPv4,Size --no-header || true
   echo "State:"; cat "$STATE"
-  echo "Spent so far: \$$(spent_now) of \$$CAP"
+  echo "Spent so far: \$$(spent_now) (warning above \$$CAP)"
 }
 
 # the long commands keep the Mac awake (caffeinate) for as long as they run
@@ -510,7 +511,7 @@ case "${1:-}" in
   all) cmd_all ;;
   dbcheck) cmd_dbcheck "${2:-}" ;;
   down) cmd_down "${2:-}" ;;
-  cost) echo "spent so far: \$$(spent_now) of \$$CAP" ;;
+  cost) echo "spent so far: \$$(spent_now) (warning above \$$CAP)" ;;
   status) cmd_status ;;
   *) sed -n 2,16p "$0" ;;
 esac

@@ -146,7 +146,7 @@ Mac awake and online for the whole test (the script keeps it awake with `caffein
 
 **Time and money.** Everything at once: setup and history ~30–40 min, test 1's run ~1¼ h (its
 results after about 2 hours; its servers are then destroyed), test 2's run ~3 h: **about 3½ hours
-in all, about $1–1.50.** Spend is checked before anything is created, **cap $5** (`LT_CAP`).
+in all, about $1–1.50.** Spend is checked before anything is created: above **$5** (`LT_CAP`) it gives a loud warning but **never stops** the test (owner, 2026-11-27: a run stopped part-way wastes what it already spent).
 Run D afterwards: about 2 hours.
 
 ## 7. What was built
