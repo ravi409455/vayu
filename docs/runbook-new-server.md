@@ -216,3 +216,6 @@ a change to the rules first, set `CSP_HEADER=Content-Security-Policy-Report-Only
 only) and deploy: the browser then only reports what it would block, in its console. Production
 never runs report-only. Grades (2026-11-28, staging): SSL Labs A+; securityheaders.com B while
 report-only (CSP and X-Frame-Options missing), expected A once this is enforced.
+**A page broke because of CSP** (blank page, photos or PDF preview missing, uploads stuck): Chrome →
+Inspect → Console shows `Refused to load ... violates the following Content Security Policy directive`.
+Step-by-step fix: `docs/deploy-setup-log.md` 6.6 ("If something breaks one day because of CSP").
