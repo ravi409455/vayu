@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -65,6 +66,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -187,6 +190,13 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
     LaunchedEffect(Unit) { while (true) { clock = now(); kotlinx.coroutines.delay(1000) } }
     val preview = remember { Preview.Builder().build() }
     val capture = remember { ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build() }
+    // report photo boxes are 4:3 landscape: upright, the camera shows the band the report prints;
+    // the camera follows the phone's turn (the screen stays upright), so a sideways shot saves upright
+    // 0 upright; -90 / 90: sideways, the turn that makes labels read the right way up
+    val turn = rememberTurn { capture.targetRotation = it }
+    val sideways = turn != 0
+    // sideways, the field name and stamp are drawn turned over the photo (ReportStrip), not here
+    val hideHere = Modifier.alpha(if (!video && sideways) 0f else 1f)
     val recorder = remember { videoRecorder() }
     val videoCapture = remember { VideoCapture.withOutput(recorder) }
     val canFlip = provider?.let { runCatching { it.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) }.getOrDefault(false) } == true
@@ -210,6 +220,8 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (camOk) AndroidView(factory = { c ->
             PreviewView(c).also { view ->
+                // a photo shows whole, as it is saved (filling the screen hid its sides)
+                if (!video) view.scaleType = PreviewView.ScaleType.FIT_CENTER
                 preview.surfaceProvider = view.surfaceProvider
                 val future = ProcessCameraProvider.getInstance(c)
                 future.addListener({ provider = future.get() }, ContextCompat.getMainExecutor(c))
@@ -224,11 +236,13 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
                 Text("Allow camera in Settings", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
+        if (!video && camOk) ReportStrip(turn, field.label, "$taken of ${field.maxCount} taken",
+            stampLines(code, expert, clock, verified, place).joinToString("\n"))
 
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
             Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 CloseButton("Close the camera", close, tint = Color.White)
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f).then(hideHere)) {
                     Text(field.label, color = Color.White, fontWeight = FontWeight.Bold)
                     Text("$taken of ${field.maxCount} ${if (video) "recorded" else "taken"}", color = Color.White.copy(alpha = .8f), fontSize = 13.sp)
                 }
@@ -241,7 +255,7 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
                 `in`.carcid.vayu.ui.components.appSettings(ctx), Modifier.padding(horizontal = 12.dp), dark = true)
             Spacer(Modifier.weight(1f))
             Text(stampLines(code, expert, clock, verified, place).joinToString("\n"), color = Color.White, fontFamily = FontFamily.Monospace,
-                fontSize = 12.sp, modifier = Modifier.padding(12.dp).background(Color.Black.copy(alpha = .45f)).padding(8.dp))
+                fontSize = 12.sp, modifier = Modifier.padding(12.dp).then(hideHere).background(Color.Black.copy(alpha = .45f)).padding(8.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Spacer(Modifier.size(56.dp))
                 Spacer(Modifier.weight(1f))
@@ -274,7 +288,7 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
                                         scope.launch {
                                             val out = newFile(dir, "jpg")
                                             withContext(Dispatchers.Default) {
-                                                stampPhoto(raw, out, stampLines(code, expert, now(), verified, place)); raw.delete()
+                                                stampPhoto(raw, out, stampLines(code, expert, now(), verified, place), strip = true); raw.delete()
                                             }
                                             pending = out to "image/jpeg"; busy = false
                                         }
@@ -300,6 +314,105 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
             })
         }
     }
+}
+
+/**
+ * Over the preview (the whole photo, 3:4 when upright): report photo boxes are 4:3 landscape, and
+ * the camera saves only the middle band of an upright shot (stampPhoto strip). Upright, the parts
+ * above and below that band are dimmed: the bright band is exactly the photo and what the report prints.
+ * Sideways ([turn] -90 or 90), the whole photo is the report's shape: only a thin frame, and the
+ * field name and stamp turned to read the right way up, where the expert sees the photo's top-left and
+ * bottom-left (the stamp's place in the saved photo). Approved 2026-11-27.
+ */
+@Composable
+internal fun androidx.compose.foundation.layout.BoxScope.ReportStrip(turn: Int, title: String = "", count: String = "", stamp: String = "") {
+    val sideways = turn != 0
+    val line = Color.White.copy(alpha = .85f)
+    Box(Modifier.align(Alignment.Center).fillMaxWidth().aspectRatio(3f / 4f)
+        .then(if (sideways) Modifier.border(1.5.dp, line) else Modifier)) {
+        if (sideways) {
+            // turned -90 (phone turned clockwise): the expert's top-left is the screen's bottom-left
+            Column(Modifier.align(if (turn < 0) Alignment.BottomStart else Alignment.TopEnd).turned(turn).padding(12.dp)) {
+                Text(title, color = Color.White, fontWeight = FontWeight.Bold)
+                Text(count, color = Color.White.copy(alpha = .8f), fontSize = 13.sp)
+            }
+            Text(stamp, color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 12.sp,
+                modifier = Modifier.align(if (turn < 0) Alignment.BottomEnd else Alignment.TopStart).turned(turn)
+                    .padding(12.dp).background(Color.Black.copy(alpha = .45f)).padding(8.dp))
+        }
+        if (!sideways) Column(Modifier.fillMaxSize()) {
+            val dim = Modifier.fillMaxWidth().weight(1f).background(Color.Black.copy(alpha = .6f))
+            Box(dim)
+            // the band: 4:3 of the width, as the report box
+            Box(Modifier.fillMaxWidth().aspectRatio(4f / 3f).border(1.5.dp, line))
+            Box(dim)
+        }
+    }
+}
+
+/** A label turned a quarter: measured and placed as the turned box it becomes (not overlapping). */
+private fun Modifier.turned(deg: Int): Modifier = if (deg == 0) this else layout { m, c ->
+    val p = m.measure(androidx.compose.ui.unit.Constraints(maxWidth = c.maxHeight, maxHeight = c.maxWidth))
+    layout(p.height, p.width) { p.placeWithLayer((p.height - p.width) / 2, (p.width - p.height) / 2) { rotationZ = deg.toFloat() } }
+}
+
+/**
+ * How the phone is held (the app stays upright): 0 upright, -90 / 90 sideways (the turn that makes a
+ * label read the right way up). [onRotation] gets the camera's matching turn.
+ */
+@Composable
+private fun rememberTurn(onRotation: (Int) -> Unit): Int {
+    val ctx = LocalContext.current
+    var turn by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    // only while the camera is open: the phone's own motion sensor, already running for screen turns
+    DisposableEffect(Unit) {
+        var last = -1
+        var side = -90
+        val steady = TurnFilter()
+        val l = object : android.view.OrientationEventListener(ctx) {
+            override fun onOrientationChanged(deg: Int) {
+                if (deg == ORIENTATION_UNKNOWN) return
+                // Android: 90 when the phone's left side is up (turned clockwise), 270 the other way
+                if (deg in 60..120) side = -90 else if (deg in 240..300) side = 90
+                turn = if (steady.feed(sidewaysAt(deg, turn != 0), android.os.SystemClock.uptimeMillis())) side else 0
+                val r = rotationAt(deg)
+                if (r != last) { last = r; onRotation(r) }
+            }
+        }
+        if (l.canDetectOrientation()) l.enable()
+        onDispose { l.disable() }
+    }
+    return turn
+}
+
+/** Sideways or not, with a margin: a phone held at a slant keeps its last state (no flicker). */
+internal fun sidewaysAt(deg: Int, was: Boolean): Boolean = when (deg) {
+    in 60..120, in 240..300 -> true
+    in 0..30, in 330..359, in 150..210 -> false
+    else -> was
+}
+
+/**
+ * A phone pointed at the floor or an engine bay reads a jumpy turn: the hint would flicker (and
+ * redraw the screen). A new state counts only once it has held for [holdMs].
+ */
+internal class TurnFilter(private val holdMs: Long = 500) {
+    private var state = false
+    private var since = -1L
+    fun feed(now: Boolean, at: Long): Boolean {
+        if (now == state) since = -1L
+        else if (since < 0) since = at
+        else if (at - since >= holdMs) { state = now; since = -1L }
+        return state
+    }
+}
+
+/** The phone's turn as the camera's target rotation, so a sideways shot is saved upright. */
+internal fun rotationAt(deg: Int): Int = when (deg) {
+    in 45..134 -> android.view.Surface.ROTATION_270
+    in 135..224 -> android.view.Surface.ROTATION_180
+    in 225..314 -> android.view.Surface.ROTATION_90
+    else -> android.view.Surface.ROTATION_0
 }
 
 /** The shot just taken, full screen: Retake or Use. A video plays on a loop. */

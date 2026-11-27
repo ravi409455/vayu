@@ -63,9 +63,11 @@ object Locator {
 
 /**
  * A photo as it is sent: upright, at most [MAX_EDGE] px, JPEG around 500 KB, with the stamp
- * (booking, expert, time, place) burned into the bottom-left corner.
+ * (booking, expert, time, place) burned into the bottom-left corner. [strip]: an upright shot keeps
+ * only its middle 4:3 band, the part the camera shows bright and the report's 4:3 boxes print
+ * (owner, 2026-11-27); a sideways shot already has that shape.
  */
-fun stampPhoto(src: File, dest: File, lines: List<String>) {
+fun stampPhoto(src: File, dest: File, lines: List<String>, strip: Boolean = false) {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeFile(src.path, bounds)
     var sample = 1
@@ -76,10 +78,18 @@ fun stampPhoto(src: File, dest: File, lines: List<String>) {
         ExifInterface.ORIENTATION_ROTATE_90 -> 90f; ExifInterface.ORIENTATION_ROTATE_180 -> 180f
         ExifInterface.ORIENTATION_ROTATE_270 -> 270f; else -> 0f
     }
-    val scale = minOf(1f, MAX_EDGE.toFloat() / maxOf(raw.width, raw.height))
+    val sideOn = turn == 90f || turn == 270f
+    val w = if (sideOn) raw.height else raw.width
+    val h = if (sideOn) raw.width else raw.height
+    val cut = strip && h > w
+    // a strip keeps its full width (sharp in print), not shrunk by the height it loses
+    val scale = minOf(1f, MAX_EDGE.toFloat() / (if (cut) w else maxOf(w, h)))
     val m = Matrix().apply { postScale(scale, scale); postRotate(turn) }
-    val img = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true).copy(Bitmap.Config.ARGB_8888, true)
-    if (img !== raw) raw.recycle()
+    val turned = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true)
+    if (turned !== raw) raw.recycle()
+    val band = if (cut) turned.width * 3 / 4 else turned.height
+    val img = Bitmap.createBitmap(turned, 0, (turned.height - band) / 2, turned.width, band).copy(Bitmap.Config.ARGB_8888, true)
+    if (img !== turned) turned.recycle()
     if (lines.isNotEmpty()) drawStamp(img, lines)
     for (quality in listOf(85, 75, 65)) {
         FileOutputStream(dest).use { img.compress(Bitmap.CompressFormat.JPEG, quality, it) }
@@ -98,8 +108,9 @@ private fun drawStamp(img: Bitmap, lines: List<String>) {
     val pad = size * 0.6f
     val width = lines.maxOf { text.measureText(it) } + pad * 2
     val height = lines.size * size * 1.3f + pad * 1.4f
-    c.drawRect(0f, img.height - height, width, img.height.toFloat(), Paint().apply { color = Color.argb(140, 0, 0, 0) })
-    lines.forEachIndexed { i, l -> c.drawText(l, pad, img.height - height + pad + size * (i + 1) * 1.2f, text) }
+    val bottom = img.height.toFloat()
+    c.drawRect(0f, bottom - height, width, bottom, Paint().apply { color = Color.argb(140, 0, 0, 0) })
+    lines.forEachIndexed { i, l -> c.drawText(l, pad, bottom - height + pad + size * (i + 1) * 1.2f, text) }
 }
 
 /** Copy something the person picked (gallery, files) into the app's own folder. */
