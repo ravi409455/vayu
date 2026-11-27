@@ -1113,3 +1113,25 @@ def test_checkpoints_leave_out_what_only_ops_fill(renv, settings):
     sec = Section.objects.filter(version=src.insp.form_version)[0]
     Section.objects.filter(pk=sec.pk).update(access={"expert": {"in_progress": "hidden"}})
     assert int(source(b).values()["sys"]["points"]) < before
+
+
+def test_an_upright_photo_in_a_landscape_box_is_shown_whole(monkeypatch):
+    """Experts shoot upright; filling a 4:3 box would cut off the car's top and bottom."""
+    import base64
+    import io
+
+    from PIL import Image
+
+    def uri(w, h):
+        buf = io.BytesIO()
+        Image.new("RGB", (w, h)).save(buf, "JPEG")
+        return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+
+    monkeypatch.setattr(render, "_print_uris", lambda ids, edge: [uri(30, 40), uri(40, 30)])
+    items = [{"media": "a", "caption": ""}, {"media": "b", "caption": ""}]
+    html = render._photos({"items": items}, 180, 1600)
+    upright, wide = html.split("<img")[1:]
+    assert "object-fit:contain" in upright and "object-fit:cover" in wide
+    # a square box, or the designer's "top", is left as set
+    assert render._photos({"items": items, "shape": "1:1"}, 180, 1600).count("cover") == 2
+    assert "contain" not in render._photos({"items": items, "fit": "top"}, 180, 1600)

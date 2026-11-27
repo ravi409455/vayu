@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -50,12 +51,14 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FlashOff
 import androidx.compose.material.icons.outlined.FlashOn
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.StayCurrentPortrait
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +68,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -187,6 +191,9 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
     LaunchedEffect(Unit) { while (true) { clock = now(); kotlinx.coroutines.delay(1000) } }
     val preview = remember { Preview.Builder().build() }
     val capture = remember { ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build() }
+    // report photo boxes are 4:3 landscape: a photo taken upright loses its top and bottom there. The
+    // camera follows the phone's turn (the screen stays upright) and an upright back camera says so
+    val sideways = rememberSideways { capture.targetRotation = it }
     val recorder = remember { videoRecorder() }
     val videoCapture = remember { VideoCapture.withOutput(recorder) }
     val canFlip = provider?.let { runCatching { it.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) }.getOrDefault(false) } == true
@@ -210,6 +217,8 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         if (camOk) AndroidView(factory = { c ->
             PreviewView(c).also { view ->
+                // a photo shows whole, as it is saved (filling the screen hid its sides)
+                if (!video) view.scaleType = PreviewView.ScaleType.FIT_CENTER
                 preview.surfaceProvider = view.surfaceProvider
                 val future = ProcessCameraProvider.getInstance(c)
                 future.addListener({ provider = future.get() }, ContextCompat.getMainExecutor(c))
@@ -224,6 +233,7 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
                 Text("Allow camera in Settings", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
+        if (!video && camOk) SidewaysGuide(field.label, hint = back && !sideways, framed = sideways)
 
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
             Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -300,6 +310,68 @@ fun CameraScreen(field: Field, have: Int, code: String, expert: String, now: () 
             })
         }
     }
+}
+
+/**
+ * Over the preview: the photo's own area (4:3, as saved) framed when the phone is sideways; when it
+ * is upright, a dark layer with a turning phone, "Turn your phone sideways" and the field's name.
+ * Only a hint: the shutter above still works (a document may be better upright). Approved 2026-11-27.
+ */
+@Composable
+internal fun androidx.compose.foundation.layout.BoxScope.SidewaysGuide(label: String, hint: Boolean, framed: Boolean) {
+    Box(Modifier.align(Alignment.Center).fillMaxWidth().aspectRatio(3f / 4f)
+        .then(if (framed) Modifier.border(1.5.dp, Color.White.copy(alpha = .85f)) else Modifier))
+    androidx.compose.animation.AnimatedVisibility(hint, Modifier.matchParentSize(),
+        enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut()) {
+        Column(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .6f)),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            val turn by androidx.compose.animation.core.rememberInfiniteTransition("turn").animateFloat(0f, -90f,
+                androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.keyframes {
+                    durationMillis = 2400; 0f at 500; -90f at 1200; -90f at 2000 }), "turn")
+            Icon(Icons.Outlined.StayCurrentPortrait, null, tint = Color.White,
+                modifier = Modifier.size(64.dp).graphicsLayer { rotationZ = turn })
+            Text("Turn your phone sideways", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp,
+                modifier = Modifier.padding(top = 14.dp))
+            Text(label, color = Color.White.copy(alpha = .8f), fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+}
+
+/** The phone held sideways (the app stays upright); [onRotation] gets the camera's matching turn. */
+@Composable
+private fun rememberSideways(onRotation: (Int) -> Unit): Boolean {
+    val ctx = LocalContext.current
+    var sideways by remember { mutableStateOf(false) }
+    // only while the camera is open: the phone's own motion sensor, already running for screen turns
+    DisposableEffect(Unit) {
+        var last = -1
+        val l = object : android.view.OrientationEventListener(ctx) {
+            override fun onOrientationChanged(deg: Int) {
+                if (deg == ORIENTATION_UNKNOWN) return
+                sideways = sidewaysAt(deg, sideways)
+                val r = rotationAt(deg)
+                if (r != last) { last = r; onRotation(r) }
+            }
+        }
+        if (l.canDetectOrientation()) l.enable()
+        onDispose { l.disable() }
+    }
+    return sideways
+}
+
+/** Sideways or not, with a margin: a phone held at a slant keeps its last state (no flicker). */
+internal fun sidewaysAt(deg: Int, was: Boolean): Boolean = when (deg) {
+    in 60..120, in 240..300 -> true
+    in 0..30, in 330..359, in 150..210 -> false
+    else -> was
+}
+
+/** The phone's turn as the camera's target rotation, so a sideways shot is saved upright. */
+internal fun rotationAt(deg: Int): Int = when (deg) {
+    in 45..134 -> android.view.Surface.ROTATION_270
+    in 135..224 -> android.view.Surface.ROTATION_180
+    in 225..314 -> android.view.Surface.ROTATION_90
+    else -> android.view.Surface.ROTATION_0
 }
 
 /** The shot just taken, full screen: Retake or Use. A video plays on a loop. */
