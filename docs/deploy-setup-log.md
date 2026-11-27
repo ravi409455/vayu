@@ -709,7 +709,9 @@ Slack: the Sentry alert "Notify #vayu-alerts via Slack, Notify techxcid@gmail.co
 projects and **all environments**, and fires on **a new issue** or **an issue escalating** (30 min
 throttle). Server and web posted to `#vayu-alerts` ✅. The app crash did **not**: it joined
 `VAYU-ANDROID-1`, an issue first seen 3 days earlier from a debug build, so it was neither new nor
-escalating. A crash that repeats an old issue does not alert; only new kinds of errors do.
+escalating. Fix (owner's OK, 2026-11-28): the alert also fires when **a resolved issue regresses**
+(comes back after being marked fixed). Then `VAYU-ANDROID-1` was resolved and the app crashed again →
+the alert fired (6:52 PM UTC) ✅. So: mark an issue **Resolved** once fixed, and it alerts if it returns.
 ## Phase 7 · Production ⏳
 
 ---
