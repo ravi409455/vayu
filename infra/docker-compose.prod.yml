@@ -12,7 +12,7 @@ x-app: &app
   build: ../backend
   restart: always
   env_file: ../${VAYU_ENV_FILE:-.env.prod}
-  environment:
+  environment: &env
     DJANGO_SETTINGS_MODULE: vayu.settings.prod
     REDIS_URL: redis://redis:6379/0
     SENTRY_RELEASE: ${VAYU_TAG}   # errors are labelled with the commit that runs
@@ -55,7 +55,12 @@ services:
   pdf-worker:
     <<: *app
     depends_on: {<<: *deps, migrate: {condition: service_completed_successfully}}
-    command: celery -A vayu worker -Q pdf -c 1   # one PDF render at a time
+    # one PDF render at a time; a safety restart if it ever holds over 600 MB (a full report
+    # peaks ~450 MB, load test 2026-11-27), checked between renders, never during one
+    command: celery -A vayu worker -Q pdf -c 1 --max-memory-per-child=600000
+    environment:
+      <<: *env
+      MALLOC_ARENA_MAX: "2"     # glibc keeps fewer memory pools: ~200 MB less held between renders
     mem_limit: ${PDF_MEM_LIMIT:-1500m}   # a 4 GB box; on 8 GB: 4g
   beat:                       # the schedules: webhook retries, report and upload sweeps, purge, heartbeat
     <<: *app
