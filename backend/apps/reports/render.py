@@ -1,13 +1,26 @@
 """HTML and PDF for a report. WeasyPrint turns the HTML into pages: running header and footer
-bands per page style, repeated table headers, page numbers. Every image is embedded by us as a
-data URI, and the renderer loads nothing else (no files, no network)."""
+bands per page style, repeated table headers, page numbers. Every picture and font is given to it
+by us: small ones as data URIs, photos and fonts as bytes it asks for by name (see Page). The
+renderer loads nothing else (no files, no network).
+
+Speed (measured 2026-11-27 on a 150-photo PDI report, 44 pages; pages and text identical):
+photo grids are fixed-width tables, not CSS grid (WeasyPrint measures every grid cell several
+times); photos and fonts are handed over as bytes, not as 20 MB of base64 text it must parse;
+repeated styles are classes; no garbage sweeps while one PDF is drawn. The fonts are still trimmed
+to the letters used, per PDF: putting them in whole is faster, but the renderer then takes the
+PDF's text map from the font file, and copied or searched text comes out wrong (a hyphen between
+digits became a private-use character). The image has HarfBuzz-Subset so that trimming is quick."""
 import base64
+import gc
+import hashlib
 import html
 import io
 import os
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -38,6 +51,17 @@ STACK = {"Inter": '"Inter", Helvetica, Arial, sans-serif',
          "Barlow Semi Condensed": '"Barlow Semi Condensed", "Inter", Helvetica, sans-serif',
          "Helvetica": "Helvetica, Arial, sans-serif"}
 SCORE = re.compile(r"^(\d)/5$")
+FILE = "vayufile:"           # how the HTML names a photo or font that is handed over as bytes
+
+
+class Page(str):
+    """The report's HTML, with the photos it names as "vayufile:<name>" (kept out of the text: the
+    renderer asks for each by name, see _document)."""
+    files: dict[str, bytes]
+
+
+# the photos of the report being built: {"files": name -> bytes, "photos": (id, edge) -> name}
+_building: ContextVar[dict | None] = ContextVar("report_files", default=None)
 
 
 def e(s: Any) -> str:
@@ -59,18 +83,20 @@ def print_image(media_id: str, edge: int = PRINT_EDGE) -> str | None:
     """A verified photo as a data URI, shrunk once for print and kept (originals untouched).
     edge <= 480 uses the preview made at upload (the designer's live preview)."""
     asset = MediaAsset.objects.filter(pk=media_id, status="verified").first()
-    return _print_uri(asset, edge) if asset else None
+    data = _print_bytes(asset, edge) if asset else None
+    return _jpeg_uri(data) if data is not None else None
 
 
-def _print_uri(asset: MediaAsset, edge: int, c=None) -> str | None:
-    """print_image without the database: safe to run in a thread (c: a storage client to reuse)."""
+def _print_bytes(asset: MediaAsset, edge: int, c=None) -> bytes | None:
+    """The photo's print copy, without the database: safe to run in a thread (c: a storage client
+    to reuse)."""
     from PIL import Image, ImageOps
 
     if edge <= 480 and asset.preview_key:
-        return _jpeg_uri(storage.read(asset.preview_key, c))
+        return storage.read(asset.preview_key, c)
     key = f"print/{asset.id}-{edge}.jpg"
     try:                       # the copy made by an earlier render: one call, not two (F-093)
-        return _jpeg_uri(storage.read(key, c))
+        return storage.read(key, c)
     except ClientError:
         pass
     try:
@@ -82,18 +108,32 @@ def _print_uri(asset: MediaAsset, edge: int, c=None) -> str | None:
     buf = io.BytesIO()
     image.convert("RGB").save(buf, "JPEG", quality=PRINT_QUALITY)
     storage.put(key, buf.getvalue(), "image/jpeg", c)
-    return _jpeg_uri(buf.getvalue())
+    return buf.getvalue()
 
 
 def _print_uris(media_ids: list[str], edge: int) -> list[str | None]:
     """A photo grid's pictures, fetched 8 at a time over one storage client (one by one, a full PDI
     spent 30 s of a 43 s preview waiting on storage). The database is read here, once per grid,
-    never in the threads."""
-    assets = {str(a.pk): a for a in MediaAsset.objects.filter(pk__in=media_ids, status="verified")}
+    never in the threads. Inside render_html a photo is named ("vayufile:…") and its bytes kept
+    beside the HTML; a photo the report shows twice is fetched and kept once."""
+    building = _building.get()
+    known = building["photos"] if building else {}
+    want = [m for m in dict.fromkeys(media_ids) if (m, edge) not in known]
+    assets = {str(a.pk): a for a in MediaAsset.objects.filter(pk__in=want, status="verified")}
     c = storage.client()
     with ThreadPoolExecutor(max_workers=8) as pool:
-        return list(pool.map(lambda m: _print_uri(assets[m], edge, c) if m in assets else None,
-                             media_ids))
+        got = dict(zip(want, pool.map(
+            lambda m: _print_bytes(assets[m], edge, c) if m in assets else None, want), strict=True))
+    if building is None:
+        return [_jpeg_uri(data) if (data := got[m]) is not None else None for m in media_ids]
+    for m, data in got.items():
+        if data is None:
+            known[(m, edge)] = None
+            continue
+        name = hashlib.sha1(data, usedforsecurity=False).hexdigest()     # same bytes: one file
+        building["files"][name] = data
+        known[(m, edge)] = FILE + name
+    return [known[(m, edge)] for m in media_ids]
 
 
 def asset_uri(asset_id: str, opacity: float = 1.0) -> str | None:
@@ -233,9 +273,18 @@ def _table(part: dict) -> str:
     return f'<table class="{cls}"{style}><colgroup>{cg}</colgroup>{head}<tbody>{body}</tbody></table>'
 
 
-def _photos(part: dict, width_mm: float, edge: int) -> str:
+def _class(classes: dict[str, str], style: str) -> str:
+    """A class for a style many boxes repeat (a 150-photo report has 3,000 of them): the renderer
+    reads it once. Scoped under .photos, so it beats table rules of a box around the part."""
+    return classes.setdefault(style, f"s{len(classes)}")
+
+
+def _photos(part: dict, width_mm: float, edge: int, classes: dict[str, str]) -> str:
     """edge: the largest photo size; a photo in a small box is printed smaller (a full PDI with
-    100 photos stays a reasonable size)."""
+    100 photos stays a reasonable size). Laid out as a table of fixed-width cells: the same picture
+    as a CSS grid, at a third of the renderer's time (it measures every grid cell several times).
+    The gap between rows is each later row's top padding, so a row that starts a page keeps it,
+    as the grid did."""
     n = part.get("per_row", 2)
     frame = part.get("frame", {})
     gap = frame.get("gap", 4)
@@ -250,19 +299,35 @@ def _photos(part: dict, width_mm: float, edge: int) -> str:
     border = {"none": "", "grey": "border:0.3mm solid var(--line)",
               "brand": "border:0.3mm solid var(--brand)"}[frame.get("border", "none")]
     radius = "border-radius:1.5mm;" if frame.get("round", True) else ""
+    wide = _class(classes, f"width:{cell:.2f}mm")
+    img_cls = _class(classes, f"{size}{obj};{border};{radius}")
+    none_cls = _class(classes, f"{size}{radius}")
     figs = []
     uris = _print_uris([str(it["media"]) for it in part["items"]], edge)
     for it, uri in zip(part["items"], uris, strict=True):
-        img = (f'<img src="{uri}" style="{size}{obj};{border};{radius}">' if uri
-               else f'<div class="noimg" style="{size}{radius}">Photo not available</div>')
+        img = (f'<img src="{uri}" class="{img_cls}">' if uri
+               else f'<div class="noimg {none_cls}">Photo not available</div>')
         cap = ""
         if it["caption"]:
             answer = (f'<span class="ans tone-{it["tone"] or "text"}">{e(it["answer"])}</span>'
                       if it.get("answer") else "")
             cap = f"<figcaption><span>{e(it['caption'])}</span>{answer}</figcaption>"
-        figs.append(f'<figure style="width:{cell:.2f}mm">{img}{cap}</figure>')
-    return (f'<div class="photos" style="grid-template-columns:repeat({n},{cell:.2f}mm);'
-            f'gap:{gap}mm">{"".join(figs)}</div>')
+        figs.append(f'<figure class="{wide}">{img}{cap}</figure>')
+    if not figs:                       # no photos: an empty block, no room asked for
+        return '<div class="photos"></div>'
+    rows = []
+    for r in range(0, len(figs), n):
+        cells = ""
+        for i, fig in enumerate((figs[r:r + n] + [""] * n)[:n]):     # a short last row: empty cells
+            pad = _class(classes, f"width:{cell:.2f}mm;padding:{gap if r else 0}mm "
+                                  f"{0 if i == n - 1 else gap}mm 0 0")
+            cells += f'<td class="{pad}">{fig}</td>'
+        rows.append(f"<tr>{cells}</tr>")
+    # exactly the cells' own (rounded) widths: a hair more and the renderer spreads it over them
+    table = _class(classes, f"width:{n * round(cell, 2) + (n - 1) * gap:.2f}mm")
+    # the block itself is one cell wide (the table runs past it): beside other columns it then
+    # asks for as little room as the grid did, so the columns keep their widths to the hair
+    return f'<div class="photos {wide}"><table class="{table}">{"".join(rows)}</table></div>'
 
 
 def part_html(part: dict, width_mm: float, ctx: dict) -> str:
@@ -277,7 +342,7 @@ def part_html(part: dict, width_mm: float, ctx: dict) -> str:
         inner = _table(part)
     elif t == "photos":
         pad = part.get("box", {}).get("padding", 0) * 2
-        inner = _photos(part, width_mm - pad, ctx["edge"])
+        inner = _photos(part, width_mm - pad, ctx["edge"], ctx["classes"])
     elif t == "verify":
         size = part.get("size", 40)
         url = ctx["verify_url"]
@@ -364,16 +429,19 @@ def _band(name: str, band: dict, values: dict, margins: dict, page_w: float) -> 
 
 
 @cache
+def font_files() -> dict[str, bytes]:
+    """The bundled fonts (SIL Open Font License, apps/reports/fonts) by the name the CSS uses."""
+    return {f"{family.replace(' ', '')}-{w}.ttf":
+            (FONTS_DIR / f"{family.replace(' ', '')}-{w}.ttf").read_bytes()
+            for family, weights in FONT_FILES.items() for w in weights}
+
+
+@cache
 def font_faces() -> str:
-    """The bundled fonts (SIL Open Font License, apps/reports/fonts) as data URIs."""
-    out = []
-    for family, weights in FONT_FILES.items():
-        for w in weights:
-            data = (FONTS_DIR / f"{family.replace(' ', '')}-{w}.ttf").read_bytes()
-            uri = "data:font/ttf;base64," + base64.b64encode(data).decode()
-            out.append(f'@font-face {{ font-family: "{family}"; font-weight: {w}; '
-                       f'src: url({uri}) format("truetype") }}')
-    return "\n".join(out)
+    """The bundled fonts, named for the renderer to ask for (not written into the CSS as text)."""
+    return "\n".join(f'@font-face {{ font-family: "{family}"; font-weight: {w}; '
+                     f'src: url({FILE}{family.replace(" ", "")}-{w}.ttf) format("truetype") }}'
+                     for family, weights in FONT_FILES.items() for w in weights)
 
 
 def css(d: dict, colors: dict, margins: dict, bands: dict) -> str:
@@ -462,7 +530,8 @@ table.t.emphasis thead th {{ border-bottom: .2mm solid var(--line); color: var(-
 .chip {{ padding: .3mm 1.8mm; border-radius: 3mm; font-weight: 600 }}
 .chip.tone-bad {{ background: var(--bad-tint) }} .chip.tone-warn {{ background: var(--warn-tint) }}
 .chip.tone-ok {{ background: var(--ok-tint) }} .chip.tone-muted {{ background: var(--muted-tint) }}
-.photos {{ display: grid }}
+.photos table {{ table-layout: fixed; border-collapse: collapse }}
+.photos tr {{ break-inside: avoid }} .photos td {{ vertical-align: top }}
 .photos figure {{ margin: 0; break-inside: avoid }}
 .photos img {{ display: block; background: #eef0f3 }}
 .photos figcaption {{ display: flex; justify-content: space-between; gap: 2mm; font-size: .85em;
@@ -491,7 +560,18 @@ ol.toc a::after {{ content: leader(" ") target-counter(attr(href), page); color:
 """
 
 
-def render_html(pages: list[dict], d: dict, values: dict, *, edge: int = PRINT_EDGE) -> str:
+def render_html(pages: list[dict], d: dict, values: dict, *, edge: int = PRINT_EDGE) -> Page:
+    building: dict = {"files": {}, "photos": {}}
+    token = _building.set(building)
+    try:
+        page = Page(_html(pages, d, values, edge))
+    finally:
+        _building.reset(token)
+    page.files = building["files"]
+    return page
+
+
+def _html(pages: list[dict], d: dict, values: dict, edge: int) -> str:
     colors = {**COLORS, **d.get("theme", {}).get("colors", {})}
     paper = d.get("paper", {})
     w, h = PAPER[paper.get("size", "A4")]
@@ -511,6 +591,7 @@ def render_html(pages: list[dict], d: dict, values: dict, *, edge: int = PRINT_E
     width = w - margins["left"] - margins["right"]
     body = []
     custom: list[str] = []
+    classes: dict[str, str] = {}
     for n, page in enumerate(pages):
         style = page.get("style", "normal")
         # the contents list names the pages after this one that are not full-page designs
@@ -520,30 +601,59 @@ def render_html(pages: list[dict], d: dict, values: dict, *, edge: int = PRINT_E
         links = {"verify": sv["verify_url"], "photos": sv.get("photos_url", ""),
                  "videos": sv.get("videos_url", "")}
         ctx = {"edge": edge, "verify_url": sv["verify_url"], "links": links, "toc": toc,
-               "css": custom}
+               "css": custom, "classes": classes}
         inner = "".join(part_html(p, w if style == "full" else width, ctx) for p in page["parts"])
         # each page is a bookmark in the PDF reader, its part titles under it
         mark_pg = f' data-title="{e(page["title"])}"' if page.get("title") else ""
         body.append(f'<div id="pg-{n}" class="pg pg-{style}"{mark_pg}>{inner}</div>')
     title = e(f"{values['sys']['booking_id']} {values['sys']['inspection_type']} report")
+    shared = "".join(f".photos.{name},.photos .{name}{{{style}}}" for style, name in classes.items())
     return (f'<html><head><meta charset="utf-8"><title>{title}</title>'
             f'<meta name="generator" content="Vayu">'
-            f'<style>{css(d, colors, margins, bands)}{mark}{"".join(custom)}</style></head>'
+            f'<style>{css(d, colors, margins, bands)}{mark}{"".join(custom)}{shared}</style></head>'
             f'<body>{running}{"".join(body)}</body></html>')
+
+
+@contextmanager
+def _no_sweeps():
+    """No garbage sweeps while one PDF is drawn (millions of short-lived objects, none to free
+    until it is done); one sweep right after."""
+    was = gc.isenabled()
+    gc.disable()
+    try:
+        yield
+    finally:
+        if was:
+            gc.enable()
+        gc.collect()
 
 
 def _document(html_text: str):
     if sys.platform == "darwin" and os.path.isdir("/opt/homebrew/lib"):  # pragma: no cover
         os.environ.setdefault("DYLD_FALLBACK_LIBRARY_PATH", "/opt/homebrew/lib")
     from weasyprint import HTML
-    from weasyprint.urls import URLFetcher
+    from weasyprint.urls import URLFetcher, URLFetcherResponse
 
-    # only data URIs, which we made ourselves: never a file or anything on the network
-    return HTML(string=html_text, url_fetcher=URLFetcher(allowed_protocols={"data"})).render()
+    files = {**font_files(), **getattr(html_text, "files", {})}
+
+    class Ours(URLFetcher):
+        """Only what we made ourselves: data URIs, and the photos and fonts named in the HTML.
+        Never a file or anything on the network."""
+
+        def fetch(self, url, headers=None):
+            if url.startswith(FILE):
+                name = url[len(FILE):]
+                kind = "font/ttf" if name.endswith(".ttf") else "image/jpeg"
+                return URLFetcherResponse(url, body=files[name], headers={"Content-Type": kind})
+            return super().fetch(url, headers)
+
+    return HTML(string=html_text,
+                url_fetcher=Ours(allowed_protocols={"data", FILE[:-1]})).render()
 
 
 def render_pdf(html_text: str) -> bytes:
-    return _document(html_text).write_pdf()
+    with _no_sweeps():
+        return _document(html_text).write_pdf()
 
 
 def quality(doc) -> list[dict]:
@@ -574,7 +684,9 @@ def quality(doc) -> list[dict]:
 def render_with_layout(html_text: str) -> tuple[bytes, list[dict], list[dict]]:
     """The PDF, where each part with an id sits on each page (CSS px, top left origin), so the
     designer can highlight a part and pick one by clicking it, and the layout checks."""
-    doc = _document(html_text)
+    with _no_sweeps():
+        doc = _document(html_text)
+        pdf = doc.write_pdf()
     pages = []
     for page in doc.pages:
         found: dict[str, list[float]] = {}
@@ -589,4 +701,4 @@ def render_with_layout(html_text: str) -> tuple[bytes, list[dict], list[dict]]:
         pages.append({"width": page.width, "height": page.height, "parts": [
             {"id": k, "x": round(r[0], 1), "y": round(r[1], 1), "w": round(r[2] - r[0], 1),
              "h": round(r[3] - r[1], 1)} for k, r in found.items()]})
-    return doc.write_pdf(), pages, quality(doc)
+    return pdf, pages, quality(doc)

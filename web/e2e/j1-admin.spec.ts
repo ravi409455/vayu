@@ -162,6 +162,13 @@ test("J1: admin builds, publishes and maps a form, then previews its PDF", async
   expect(Buffer.from(body.pdf, "base64").subarray(0, 4).toString()).toBe("%PDF");
   expect(body.pages[0].parts.length).toBeGreaterThan(0); // where each part sits, for clicking
   await expect(page.locator('canvas[aria-label="Page 1"]')).toBeVisible();
+  // the preview fills its column (it once shrank itself to its smallest size)
+  await page.waitForTimeout(1500);
+  const [shown, room] = await page.evaluate(() => [
+    document.querySelector(".rd-page")!.getBoundingClientRect().width,
+    document.querySelector(".rd-mid")!.getBoundingClientRect().width,
+  ]);
+  expect(shown).toBeGreaterThan(Math.min(900, room - 8) - 4);
   await page.getByRole("button", { name: "Select Condition" }).click(); // click the table in the PDF
   await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Condition");
 
