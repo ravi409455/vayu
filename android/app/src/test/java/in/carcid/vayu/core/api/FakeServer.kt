@@ -31,9 +31,10 @@ class FakeServer {
     }
     val url: String get() = server.url("/api/v1/").toString()
 
-    /** Answer [route] with [body] from now on (replaces any earlier answer). */
-    fun on(route: String, body: String, code: Int = 200, headers: Map<String, String> = emptyMap()) = synchronized(routes) {
+    /** Answer [route] with [body] from now on (replaces any earlier answer); [lateMs]: answer that much later. */
+    fun on(route: String, body: String, code: Int = 200, headers: Map<String, String> = emptyMap(), lateMs: Long = 0) = synchronized(routes) {
         routes[route] = MockResponse().setResponseCode(code).setBody(body).apply { headers.forEach { (k, v) -> setHeader(k, v) } }
+            .setHeadersDelay(lateMs, java.util.concurrent.TimeUnit.MILLISECONDS)
     }
 
     /** Answer [route] with [body] when its query contains [part] (e.g. "page=2"). */

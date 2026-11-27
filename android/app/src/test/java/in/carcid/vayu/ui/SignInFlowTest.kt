@@ -63,7 +63,16 @@ class SignInFlowTest {
         compose.onNode(androidx.compose.ui.test.hasText("Sign in") and androidx.compose.ui.test.hasClickAction()).performClick()
     }
 
-    private fun waitFor(text: String) = compose.waitUntil(5_000) {
+    /**
+     * compose.waitUntil, but it also runs what waits on the main thread. A server reply comes back on
+     * another thread and hands the rest of its work (a sync's save, a sign-out's clean-up) to the
+     * main thread; once the screen is still, waitUntil alone doesn't always run that, so a late reply
+     * (a busy CI machine) was never finished and the wait timed out.
+     */
+    private fun until(ms: Long = 5_000, condition: () -> Boolean) =
+        compose.waitUntil(ms) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); condition() }
+
+    private fun waitFor(text: String) = until {
         compose.onAllNodes(androidx.compose.ui.test.hasText(text)).fetchSemanticsNodes().isNotEmpty()
     }
 
@@ -94,7 +103,7 @@ class SignInFlowTest {
         compose.onNodeWithContentDescription("Profile").performClick()
         compose.onNodeWithText("Sign out").performClick()
         waitFor("Sign in")
-        compose.waitUntil(5_000) { !java.io.File(root, "drafts-3").exists() }
+        until { !java.io.File(root, "drafts-3").exists() }
         org.junit.Assert.assertEquals("""{"drafts":0,"files":0}""", server.bodiesOf("POST auth/logout").single())
     }
 
@@ -123,7 +132,7 @@ class SignInFlowTest {
         compose.onNodeWithText("DEMO-2").assertIsDisplayed()
         compose.onRoot().captureRoboImage("src/test/screenshots/sign_out_unsent.png", roborazziOptions = options)
         compose.onNodeWithText("Stay signed in").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("Sign out with unsent work?")).fetchSemanticsNodes().isEmpty() }
+        until { compose.onAllNodes(androidx.compose.ui.test.hasText("Sign out with unsent work?")).fetchSemanticsNodes().isEmpty() }
         org.junit.Assert.assertEquals(0, server.bodiesOf("POST auth/logout").size)
         compose.onNodeWithText("Sign out").assertIsDisplayed()                   // still on Profile
     }
@@ -190,10 +199,11 @@ class SignInFlowTest {
     @Test fun aBookingOpsFinishedIsNotNamedInTheWarning() {
         signedIn("expert")
         val id = "00000000-0000-0000-0000-000000000001"
-        server.on("GET sync/jobs", """{"server_time":"2026-11-24T05:00:00Z","jobs":[${`in`.carcid.vayu.core.sync.job(id, stage = "completed")}]}""")
+        server.on("GET sync/jobs", """{"server_time":"2026-11-24T05:00:00Z","jobs":[${`in`.carcid.vayu.core.sync.job(id, stage = "completed")}]}""",
+            lateMs = 1_500)   // a late reply, as on a busy CI machine: its save must still be run (see until)
         server.on("POST auth/logout", "", 204)
         launch(); signIn(); waitFor("My leads")
-        compose.waitUntil(10_000) { graph.jobs(3).jobs().any { it.id == id } }   // the first sync is slow under load (CI)
+        until(10_000) { graph.jobs(3).jobs().any { it.id == id } }
         val waiting = `in`.carcid.vayu.core.draft.LocalFile("f1", "inspection", "front", "photo", "", "image/jpeg", "camera", 4, "", "Front 1")
         graph.drafts(3).save(`in`.carcid.vayu.core.draft.Draft(id, "DEMO-1", "Farhan Ali", emptyMap(), "pdi", submitSent = true, files = listOf(waiting)))
         graph.drafts(3).save(`in`.carcid.vayu.core.draft.Draft(unsentId, "DEMO-2", "Arjun", emptyMap(), "pdi"))
@@ -216,7 +226,7 @@ class SignInFlowTest {
         val bad = java.io.File(root, "drafts-3").apply { mkdirs() }.resolve("00000000-0000-0000-0000-000000000009.json").apply { writeText("{not json") }
         compose.onNodeWithContentDescription("Profile").performClick()
         compose.onNodeWithText("Sign out").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("can't be read", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        until { compose.onAllNodes(androidx.compose.ui.test.hasText("can't be read", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         org.junit.Assert.assertTrue(bad.exists())
         org.junit.Assert.assertEquals(0, server.bodiesOf("POST auth/logout").size)
     }
@@ -232,8 +242,8 @@ class SignInFlowTest {
         server.on("POST auth/logout", "", 204)
         server.on("POST auth/refresh", """{"access":"OLD-A","refresh":"R2"}""")
         signIn(); waitFor("My leads")
-        compose.waitUntil(5_000) { server.bodiesOf("POST auth/refresh").any { "\"R\"" in it } }
-        compose.waitUntil(5_000) { server.bodiesOf("POST auth/logout").size == 2 }
+        until { server.bodiesOf("POST auth/refresh").any { "\"R\"" in it } }
+        until { server.bodiesOf("POST auth/logout").size == 2 }
     }
 
     /** F-018: the update downloads in the view model (it carries on if its screen closes) and is checked. */
@@ -244,8 +254,7 @@ class SignInFlowTest {
         val vm = AppViewModel(`in`.carcid.vayu.Graph(Api(server.url, tokens), tokens, root, {}), "Test phone")
         val file = java.io.File(root, "update/vayu-5.apk").apply { parentFile!!.mkdirs() }
         vm.downloadUpdate(`in`.carcid.vayu.core.update.AppUpdate(5, "1.1.0", 11, sha, emptyList(), server.raw("/api/v1/apk"), false), file)
-        // no screen is shown here, so the main looper (where the view model resumes) is run by hand
-        compose.waitUntil(10_000) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); vm.updateDownload.value.ready }
+        until(10_000) { vm.updateDownload.value.ready }
         org.junit.Assert.assertEquals(bytes, file.readText())
         org.junit.Assert.assertEquals(11L, vm.updateDownload.value.got)
     }
@@ -265,7 +274,7 @@ class SignInFlowTest {
         signedIn("expert")
         launch(); signIn(); waitFor("My leads")
         // the first sync must be over, or the Refresh tap below is ignored while it runs (seen under load)
-        compose.waitUntil(10_000) { server.requests.any { it.first == "GET sync/jobs" } &&
+        until(10_000) { server.requests.any { it.first == "GET sync/jobs" } &&
             compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Updating leads")).fetchSemanticsNodes().isEmpty() }
         server.on("GET sync/jobs", """{"code":"token_not_valid","detail":"Token is invalid or expired"}""", 401)
         server.on("POST auth/refresh", """{"code":"token_not_valid","detail":"Token is invalid or expired"}""", 401)
@@ -282,7 +291,7 @@ class SignInFlowTest {
         tokens.saveMe(mapOf("id" to "3", "username" to "ravi", "name" to "Ravi Expert", "role" to "expert",
             "theme" to "light", "must_change" to "false", "perms" to ""))
         launch(); waitFor("My leads")
-        compose.waitUntil(5_000) { server.requests.any { it.first == "GET sync/jobs" } }
+        until { server.requests.any { it.first == "GET sync/jobs" } }
     }
 
     @Test fun opsLandOnToday() {
