@@ -1393,6 +1393,10 @@ table.access-grid.vertical {
   color: var(--warn);
   white-space: nowrap;
 }
+.logo-link {
+  color: inherit;
+  text-decoration: none;
+}
 .logo {
   display: inline-flex;
   align-items: center;

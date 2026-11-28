@@ -19,7 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { useAuth } from "./auth";
 import { loadJSON, saveJSON } from "./lib/store";
@@ -98,7 +98,9 @@ export function Layout() {
       <div className={`shell${collapsed ? " collapsed" : ""}`}>
         <nav className="side" aria-label="Main">
           <div className="side-top">
-            <Logo markOnly={collapsed} />
+            <Link to={me?.role === "expert" ? "/jobs" : "/today"} className="logo-link" aria-label="Vayu, go to the start page">
+              <Logo markOnly={collapsed} />
+            </Link>
             <button
               className="icon-btn dark side-toggle"
               aria-label={collapsed ? "Expand the menu" : "Collapse the menu"}
