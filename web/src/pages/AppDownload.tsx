@@ -8,7 +8,7 @@ type Latest = { version_code: number | null; version_name?: string; size?: numbe
 
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 
-/** The Android app for experts and Ops: the newest build, straight from our server (signed in only,
+/** The Android app page (Admin only; experts get it from /welcome or the app itself): the newest build, straight from our server (signed in only,
  *  REQUIREMENTS §10), with its checksum so it can be checked before installing. */
 export function AppDownload() {
   const q = useQuery({ queryKey: keys.appLatest(), queryFn: ({ signal }) => api<Latest>("app/latest", { signal }) });

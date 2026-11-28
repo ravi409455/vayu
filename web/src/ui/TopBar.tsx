@@ -228,9 +228,11 @@ function AccountMenu() {
           <Link role="menuitem" to="/profile" onClick={() => setOpen(false)}>
             <UserRound size={16} aria-hidden /> Your profile
           </Link>
-          <Link role="menuitem" to="/app" onClick={() => setOpen(false)}>
-            <Smartphone size={16} aria-hidden /> Get the Android app
-          </Link>
+          {me.role === "admin" && (
+            <Link role="menuitem" to="/app" onClick={() => setOpen(false)}>
+              <Smartphone size={16} aria-hidden /> Android app
+            </Link>
+          )}
           <button
             role="menuitem"
             onClick={() => {
