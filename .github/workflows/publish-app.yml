@@ -1,0 +1,127 @@
+name: publish app
+# Publish the Android app from the GitHub page: Actions → publish app → Run workflow.
+#   staging     builds "Vayu Staging" (blue icon, talks to staging) and publishes it on staging
+#   production  builds "Vayu" and publishes it on production, after the owner's Approve
+# Engineers then get it from that server's /welcome/engineers page (Download), and phones that
+# already have the app are offered the update by the app itself.
+#
+# How: build from main, signed with the release key → check the APK carries that key's
+# certificate and the right package → save it as a GitHub release (app-<target>-<code>) → the
+# server's locked robot key runs "publish-apk <tag> <version>": the server downloads that release
+# from this repository itself and runs manage.py publish_apk (infra/publish-apk.sh). The robot key
+# can only publish builds that are already releases of this repository, never a file it is handed.
+#
+# Version code: 100 + this workflow's run number, so it always goes up (the hand-made builds
+# before this stopped at 12). Secrets (repository): ANDROID_KEYSTORE_B64, ANDROID_STORE_PASSWORD,
+# ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD, SENTRY_DSN_ANDROID, SENTRY_AUTH_TOKEN; per environment:
+# SSH_KEY, SSH_HOST, SSH_KNOWN_HOSTS (the same ones the deploy workflow uses).
+run-name: "Publish app ${{ inputs.version }} to ${{ inputs.target }} (by ${{ github.actor }})"
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: staging = Vayu Staging on staging · production = Vayu on production (asks for Approve)
+        type: choice
+        options: [staging, production]
+        default: staging
+      version:
+        description: Version people see, e.g. 0.4.0
+        type: string
+        required: true
+      notes:
+        description: What's new (optional, one line; shown in the update offer)
+        type: string
+        required: false
+permissions:
+  contents: write    # the build is kept as a GitHub release; the server downloads it from there
+concurrency: {group: publish-app, cancel-in-progress: false}
+jobs:
+  publish:
+    # only from main: the code that is built is the reviewed code
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # production: this waits for the owner's Approve before anything is built or published
+    environment: ${{ inputs.target }}
+    timeout-minutes: 40
+    env:
+      TARGET: ${{ inputs.target }}
+      VERSION: ${{ inputs.version }}
+      NOTES: ${{ inputs.notes }}
+      RUN_NUMBER: ${{ github.run_number }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      # the release key's certificate (SHA-256; public, not a secret): an APK signed with any other
+      # key could never update the phones, so it is never published
+      CERT_SHA256: 251bb5d28b2423c1ff6dd3d6badfd94be503956e36590f48abe8fd356640f0cd
+    steps:
+      - name: check the inputs and that the server is on
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]] || { echo "::error::version must look like 0.4.0"; exit 1; }
+          (( ${#NOTES} <= 500 )) || { echo "::error::notes: 500 characters at most"; exit 1; }
+          [[ -n "$SSH_HOST" ]] || { echo "::error::no $TARGET server yet (environment $TARGET has no SSH_HOST)"; exit 1; }
+          ip=$(getent ahostsv4 "$SSH_HOST" | awk 'NR==1 {print $1}')
+          # 192.0.2.1 = "staging is off" (infra/staging.sh)
+          [[ -n "$ip" && "$ip" != 192.0.2.1 ]] || { echo "::error::$TARGET is off: Actions → staging → up first"; exit 1; }
+          code=$((100 + RUN_NUMBER))
+          echo "CODE=$code" >> "$GITHUB_ENV"
+          echo "TAG=app-$TARGET-$code" >> "$GITHUB_ENV"
+          case "$TARGET" in
+            staging)    { echo "GRADLE_TASK=assembleStaging"; echo "PACKAGE=in.carcid.vayu.staging"; } >> "$GITHUB_ENV" ;;
+            production) { echo "GRADLE_TASK=assembleRelease"; echo "PACKAGE=in.carcid.vayu"; } >> "$GITHUB_ENV" ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with: {distribution: temurin, java-version: 17}
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+      - name: build, signed with the release key
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          SENTRY_DSN_ANDROID: ${{ secrets.SENTRY_DSN_ANDROID }}
+          # with it, the R8 mapping goes to Sentry so crash reports are readable (build.gradle.kts)
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: car-cid
+        run: |
+          [[ -n "$ANDROID_KEYSTORE_B64" ]] || { echo "::error::the signing key is not in GitHub's secrets"; exit 1; }
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/vayu.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/vayu.jks"
+            echo "storePassword=$ANDROID_STORE_PASSWORD"
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "keyPassword=$ANDROID_KEY_PASSWORD"
+          } > "$RUNNER_TEMP/keystore.properties"
+          VAYU_KEYSTORE_PROPS="$RUNNER_TEMP/keystore.properties" ./gradlew --no-daemon "$GRADLE_TASK" \
+            -Pvayu.versionCode="$CODE" -Pvayu.versionName="$VERSION"
+          rm -f "$RUNNER_TEMP/vayu.jks" "$RUNNER_TEMP/keystore.properties"
+      - name: check the APK (release key, package, version)
+        run: |
+          apk=$(find android/app/build/outputs/apk -name '*.apk' | head -1)
+          [[ -f "$apk" ]] || { echo "::error::no APK was built"; exit 1; }
+          bt=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          "$bt/apksigner" verify --print-certs "$apk" | grep -qi "SHA-256 digest: $CERT_SHA256" \
+            || { echo "::error::the APK is not signed with the release key"; exit 1; }
+          "$bt/aapt2" dump badging "$apk" | grep -q "^package: name='$PACKAGE' versionCode='$CODE' versionName='$VERSION'" \
+            || { echo "::error::the APK is not $PACKAGE $VERSION ($CODE)"; exit 1; }
+          mkdir -p out
+          cp "$apk" "out/vayu-$TARGET-$CODE.apk"
+          printf '%s\n' "${NOTES:-Vayu $VERSION}" > out/notes.txt
+      - name: keep the build as a GitHub release
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          gh release create "$TAG" out/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "App $VERSION ($CODE) for $TARGET" --notes "${NOTES:-Vayu $VERSION}"
+      - name: publish on the server (the key can only run infra/deploy.sh and publish-apk)
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/key && chmod 600 ~/.ssh/key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts   # the server's own key: no man in the middle
+          ssh -i ~/.ssh/key -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+            "deploy@$SSH_HOST" "publish-apk $TAG $VERSION"
+          echo "### ✓ Vayu $VERSION ($CODE) is published on $TARGET: its /welcome/engineers page gives it out" >> "$GITHUB_STEP_SUMMARY"

@@ -10,6 +10,14 @@
 # If health fails, the previous commit's images go back (safe: every migration must also work
 # with the previous release, docs/plan-deploy.md §1a). The database is never rolled back here.
 
+# The same key may also publish an app build: "publish-apk <tag> <version>" (the "publish app"
+# workflow; infra/publish-apk.sh downloads that release of this repository itself).
+if [[ "${SSH_ORIGINAL_COMMAND:-}" == "publish-apk "* ]]; then
+  read -r _ tag version extra <<<"$SSH_ORIGINAL_COMMAND"
+  [[ -z "${extra:-}" ]] || { echo "usage: publish-apk <tag> <version>" >&2; exit 1; }
+  exec bash "$(cd "$(dirname "$0")" && pwd)/publish-apk.sh" "$tag" "$version"
+fi
+
 # git checkout below rewrites this file while bash is still reading it: run from a copy.
 if [[ -z "${VAYU_DEPLOY_COPY:-}" ]]; then
   copy=$(mktemp)

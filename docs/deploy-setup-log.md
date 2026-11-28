@@ -261,6 +261,21 @@ again once:
 5. Old `s-2vcpu-4gb` droplet deleted; the new one renamed `vayu-staging` and tagged `vayu-staging`.
 6. Tested from the branch on the Mac: `down` → snapshot `vayu-staging-20261127-2110` (60 GB disk); `up` → `s-2vcpu-2gb` at `159.65.151.154`, staging's own SSH key, deploy `eb4a61d` green, health ok, 10 logins and 30 bookings. The two old 80 GB snapshots are deleted (they could never make a $18 server).
 
+**Publish the app from GitHub (2026-11-28)** 🔄: Actions → **publish app** → staging / production
+(`.github/workflows/publish-app.yml`, `infra/publish-apk.sh`). Owner asked for a button for both.
+- The robot key stays locked to `deploy.sh`; `deploy.sh` passes `publish-apk <tag> <version>` on.
+  The server downloads the APK from this repository's GitHub release itself, so the key can only
+  publish builds the workflow made (signed with the release key, certificate SHA-256
+  `251bb5d2…6640f0cd`, package checked). A staging build never goes on production and back.
+- Version code = 100 + run number (hand-made builds stopped at 12).
+- Tested before the PR: the workflow's build and checks on the Mac (`assembleStaging`, apksigner,
+  aapt2); on staging, the new server script by hand with release `app-staging-100` (0.3.1, built on
+  the Mac): bad tag / production tag / extra words / bad version refused; published; the same code
+  again refused; the download link served the same file (SHA-256 equal).
+- Owner, once: repository secrets `ANDROID_KEYSTORE_B64`, `ANDROID_STORE_PASSWORD`,
+  `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, `SENTRY_DSN_ANDROID` (from Phase `vayu-owner` →
+  Production). Then the first run from GitHub.
+
 ### 2.4a · R2 buckets and CORS ✅
 dash.cloudflare.com → R2 Object Storage. All buckets **private** (no public access, no custom domain):
 
