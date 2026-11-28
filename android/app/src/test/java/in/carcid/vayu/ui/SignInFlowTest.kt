@@ -279,7 +279,7 @@ class SignInFlowTest {
         server.on("GET sync/jobs", """{"code":"token_not_valid","detail":"Token is invalid or expired"}""", 401)
         server.on("POST auth/refresh", """{"code":"token_not_valid","detail":"Token is invalid or expired"}""", 401)
         compose.onNode(androidx.compose.ui.test.hasContentDescription("Refresh", substring = true)).performClick()
-        waitFor("Your sign-in has ended. Sign in again; your unsent work stays on this phone.")
+        waitFor("You were signed out on the server. Sign in again. Work not sent yet is still on this phone.")
     }
 
     @Test fun aStartWhileTheServerIsDownStillFetchesTheLeads() {

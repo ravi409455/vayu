@@ -284,7 +284,7 @@ class Api(private val baseUrl: String, private val tokens: TokenStore,
         var res = send(method, path, body, auth, headers)
         if (res.status == 401 && auth && res.code != "DEVICE_REVOKED") {
             if (renewed(sentWith)) res = send(method, path, body, auth, headers)
-            else if (expired.value) throw ApiError(ApiError.SESSION_EXPIRED, "Your sign-in has ended. Sign in again; your unsent work stays on this phone.", 401)
+            else if (expired.value) throw ApiError(ApiError.SESSION_EXPIRED, "You were signed out on the server. Sign in again. Work not sent yet is still on this phone.", 401)
         }
         if (res.code == "DEVICE_REVOKED") tokens.clear()
         if (res.status !in 200..299) throw ApiError(res.code ?: "HTTP_${res.status}",
