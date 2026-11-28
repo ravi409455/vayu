@@ -29,7 +29,6 @@ const SECTION: Record<string, [string, string]> = {
   roles: ["Roles & permissions", "/roles"],
   integrations: ["Integrations", "/integrations"],
   "api-keys": ["API keys", "/api-keys"],
-  promote: ["Promote", "/promote"],
   audit: ["Audit log", "/audit"],
   profile: ["Your profile", "/profile"],
 };

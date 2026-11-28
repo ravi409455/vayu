@@ -79,11 +79,12 @@ booking before you publish. Shared parts (a header used by several templates) ar
 - **API keys** let another system create and change bookings. Give each key only the forms, fields
   and actions it needs; it is shown once. See [the REST API guide](../integrations/rest-api.md).
 
-## Moving forms from staging to production (Promote)
+## Moving forms from staging to production
 
-Forms are built and tried on the staging server. There, Promote → Export downloads a bundle (the
-form version, its library items, the master lists it uses by key, and its PDF template); on
-production, Promote → Import brings it in **as a draft**, which you then check and publish.
+Forms are built and tried on the staging server. There, open the form → ⋯ → **Export**: it downloads
+a file (the published version, its library items, the master lists it uses by key, and its PDF
+template). On production, Forms → **Import** brings it in **as a draft**, which you then check and
+publish.
 
 ## Settings
 
