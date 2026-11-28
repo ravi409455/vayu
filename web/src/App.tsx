@@ -67,7 +67,14 @@ export function App() {
           >
             <Route path="/" element={<Home />} />
             <Route path="/profile" element={<Profile />} />
-            <Route path="/app" element={<AppDownload />} />
+            <Route
+              path="/app"
+              element={
+                <RequireAuth adminOnly>
+                  <AppDownload />
+                </RequireAuth>
+              }
+            />
             <Route
               path="/today"
               element={
