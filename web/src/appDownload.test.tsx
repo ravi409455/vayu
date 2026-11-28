@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppDownload } from "./pages/AppDownload";
+import { ToastProvider } from "./ui/kit";
 
 afterEach(() => vi.restoreAllMocks());
 const show = (body: unknown) => {
@@ -10,7 +11,9 @@ const show = (body: unknown) => {
   );
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <AppDownload />
+      <ToastProvider>
+        <AppDownload />
+      </ToastProvider>
     </QueryClientProvider>,
   );
 };
@@ -25,8 +28,9 @@ describe("APK download page (F-226)", () => {
       notes: ["Faster uploads"],
       min_version: 40,
     });
-    const link = await screen.findByRole("link", { name: /Download the app \(30\.0 MB\)/ });
+    const link = await screen.findByRole("link", { name: "Download the app" });
     expect(link).toHaveAttribute("href", "/api/v1/app/download");
+    expect(screen.getByText(/30\.0 MB/)).toBeInTheDocument();
     expect(screen.getByText("Faster uploads")).toBeInTheDocument();
     expect(screen.getByText("ab".repeat(32))).toBeInTheDocument();
   });
