@@ -93,9 +93,9 @@ test("the menu and pages: Ops see only their four, nothing of the admin side", a
   await signIn(page, "ops");
   for (const name of ["Today", "Bookings", "Needs you", "Dashboard"])
     await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
-  for (const name of ["Library", "Master lists", "Users", "Forms", "PDF templates", "Promote", "Integrations", "API keys", "Search"])
+  for (const name of ["Library", "Master lists", "Users", "Forms", "PDF templates", "Integrations", "API keys", "Search"])
     await expect(page.getByRole("link", { name })).toHaveCount(0);
-  for (const path of ["/library", "/lists", "/users", "/forms", "/pdf", "/promote", "/integrations"]) {
+  for (const path of ["/library", "/lists", "/users", "/forms", "/pdf", "/integrations"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/today$/);
   }

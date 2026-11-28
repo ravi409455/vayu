@@ -121,23 +121,26 @@ test.describe("admin screens", () => {
     expect(gone.status()).toBe(401);
   });
 
-  test("promote: export a bundle and import it back as a draft", async ({ page }) => {
+  test("forms: export a published form and import it back as a draft", async ({ page }) => {
     await signIn(page, "admin");
     const admin = await apiAs("admin");
     const forms = await json(await admin.get("forms"));
     const pdi = (forms.results ?? forms).find((f: { key: string }) => f.key === "pdi");
-    // drop the open draft the rating test left, so the import has room
-    await page.goto("/promote");
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      page.locator("tr", { hasText: "PDI" }).getByRole("link", { name: "Download bundle" }).click(),
-    ]);
-    const path = await download.path();
-    const bundle = JSON.parse(await (await import("node:fs/promises")).readFile(path!, "utf8"));
+    const exported = await admin.get(`promote/export?version=${pdi.published_version.id}`);
+    const bundle = await exported.json();
     expect(bundle.form.key).toBe("pdi");
-    expect(pdi.id).toBeTruthy();
-    await page.getByLabel("Bundle file").setInputFiles(path!);
-    await expect(page.getByRole("alert").or(page.getByRole("status")).first()).toBeVisible();
+    const path = test.info().outputPath("pdi.json");
+    await (await import("node:fs/promises")).writeFile(path, JSON.stringify(bundle));
+    await page.goto("/forms");
+    await page.getByLabel("Form file to import").setInputFiles(path);
+    await expect(page.getByRole("dialog")).toContainText("Import");
+    await page.getByRole("button", { name: "Import as a draft" }).click();
+    await expect(
+      page
+        .getByRole("alert")
+        .or(page.getByRole("dialog", { name: "Imported as a draft" }))
+        .first(),
+    ).toBeVisible();
   });
 
   test("audit log shows what was done", async ({ page }) => {

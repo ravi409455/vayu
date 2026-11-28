@@ -22,7 +22,6 @@ const IntegrationEditor = lazyPage(() =>
   import("./pages/admin/integrations/IntegrationEditor").then((m) => ({ default: m.IntegrationEditor })),
 );
 const ApiKeys = lazyPage(() => import("./pages/admin/ApiKeys").then((m) => ({ default: m.ApiKeys })));
-const Promote = lazyPage(() => import("./pages/admin/Promote").then((m) => ({ default: m.Promote })));
 const MyJobs = lazyPage(() => import("./pages/expert/MyJobs").then((m) => ({ default: m.MyJobs })));
 const Job = lazyPage(() => import("./pages/expert/Job").then((m) => ({ default: m.Job })));
 const Today = lazyPage(() => import("./pages/ops/Today").then((m) => ({ default: m.Today })));
@@ -211,14 +210,6 @@ export function App() {
               element={
                 <RequireAuth adminOnly perm="api_keys.manage">
                   <ApiKeys />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/promote"
-              element={
-                <RequireAuth adminOnly perm="forms.promote">
-                  <Promote />
                 </RequireAuth>
               }
             />
