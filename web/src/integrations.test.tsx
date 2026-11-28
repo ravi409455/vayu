@@ -8,13 +8,14 @@ import { AuthProvider } from "./auth";
 import type { FormSummary, Integration } from "./api/types";
 import {
   bodyText,
-  eventsFor,
   insertValue,
   jsonOpenToken,
   matchValues,
   parseBody,
   parseParts,
   joinParts,
+  EVENT_LABEL,
+  integrationForms,
   pickerHint,
   removeValue,
   STARTER_BODY,
@@ -148,10 +149,11 @@ describe("values inside a text", () => {
     expect(pickerHint("custom", "inspection.started")).toMatch(/Check-in/);
     expect(pickerHint("custom", "inspection.submitted")).toMatch(/PDF link comes with/);
     expect(pickerHint("custom", "pdf.ready")).toBe("");
+    expect(pickerHint("start", "checkin.completed")).toMatch(/every inspection type.*5 minutes.*offline/);
   });
-  it("offers the booking events to a booking form and all nine to an inspection form", () => {
-    expect(eventsFor("booking")).toEqual(["booking.created", "booking.updated", "booking.deleted"]);
-    expect(eventsFor("custom")).toHaveLength(9);
+  it("offers the booking, inspection and Check-in forms only", () => {
+    const forms = ["booking", "custom", "start", "end"].map((type, id) => ({ id, type }));
+    expect(integrationForms(forms).map((f) => f.type)).toEqual(["booking", "custom", "start"]);
   });
   it("finds the {{ the caret is in and the values that fit what was typed after it", () => {
     expect(jsonOpenToken('{ "a": "{{', 10)).toEqual({ start: 8, fragment: "" });
@@ -354,6 +356,14 @@ describe("the JSON editor", () => {
 });
 
 describe("the field checklist", () => {
+  it("lists the check-in answers instead of the inspection's on the Check-in form", async () => {
+    const u = userEvent.setup();
+    const cat = [...CAT, { group: "start", ref: "start.checkin_gps", label: "Check-in GPS", type: "text" }];
+    render(<FieldChecklist fields={[]} catalogue={cat} parts={["booking", "start"]} onChange={() => {}} />);
+    await u.click(screen.getByRole("button", { name: "Only these" }));
+    expect(screen.getByRole("checkbox", { name: /Check-in GPS/ })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Odometer/ })).toBeNull();
+  });
   it("sends everything, or only the ticked fields of the booking and inspection forms", async () => {
     const u = userEvent.setup();
     const seen = vi.fn();
@@ -392,6 +402,13 @@ function editor(path: string, extra: Record<string, Handler> = {}) {
     forms: () => FORMS,
     "integrations/catalogue": () => CAT,
     "integrations/preview": () => ok(PREVIEW),
+    // the server's table of which form may use which event
+    "integrations/events": (_i, url) =>
+      url!.includes("form=1")
+        ? ["booking.created", "booking.updated", "booking.deleted"]
+        : url!.includes("form=3")
+          ? ["checkin.completed"]
+          : Object.keys(EVENT_LABEL).filter((e) => e !== "checkin.completed"),
     ...extra,
   });
   shell(
@@ -407,6 +424,16 @@ const sent = (calls: { url: string; init?: RequestInit }[], part: string) =>
   calls.filter((c) => c.url.includes(part) && c.init?.method !== "GET" && c.init?.body).map((c) => JSON.parse(String(c.init!.body)));
 
 describe("the integration editor", () => {
+  it("offers the Check-in form only its own event, without PDF or ZIP links", async () => {
+    const u = userEvent.setup();
+    const checkin = { ...FORMS[1]!, id: 3, key: "checkin", type: "start", name: "Check-in" } as FormSummary;
+    editor("/integrations/new", { forms: () => [...FORMS, checkin] });
+    await u.selectOptions(await screen.findByRole("combobox", { name: "Form" }), "3");
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Send when" })).toHaveValue("checkin.completed"));
+    expect(within(screen.getByRole("combobox", { name: "Send when" })).getAllByRole("option")).toHaveLength(1);
+    expect(screen.queryByRole("checkbox", { name: /PDF link/ })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: /check-in answers/ })).toBeChecked();
+  });
   it("builds a request, shows the preview, and saves it cleaned", async () => {
     const u = userEvent.setup();
     const calls = editor("/integrations/new", {
@@ -456,11 +483,12 @@ describe("the integration editor", () => {
     await screen.findByRole("textbox", { name: "Name" });
     const when = screen.getByRole("combobox", { name: "Send when" });
     expect(screen.getByRole("combobox", { name: "Form" })).toHaveValue("2"); // an inspection form first: it offers the most values
-    expect(within(when).getAllByRole("option")).toHaveLength(9);
+    const options = (n: number) => waitFor(() => expect(within(when).getAllByRole("option")).toHaveLength(n));
+    await options(9); // every event but the Check-in form's own
     await u.selectOptions(screen.getByRole("combobox", { name: "Form" }), "Booking");
-    expect(within(when).getAllByRole("option")).toHaveLength(3);
+    await options(3);
     await u.selectOptions(screen.getByRole("combobox", { name: "Form" }), "PDI");
-    expect(within(when).getAllByRole("option")).toHaveLength(9);
+    await options(9);
     expect(screen.getByRole("group", { name: "Body type" })).toBeInTheDocument();
     await u.selectOptions(screen.getByRole("combobox", { name: "Method" }), "GET");
     expect(screen.getByText("No body is sent with GET.")).toBeInTheDocument();

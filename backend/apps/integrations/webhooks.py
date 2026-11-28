@@ -21,6 +21,7 @@ from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
 from apps.core import log
 from apps.core import tasks as core_tasks
+from apps.forms.models import FormType
 
 from . import values
 from .models import Delivery, Integration
@@ -28,13 +29,20 @@ from .models import Delivery, Integration
 logger = logging.getLogger(__name__)
 
 EVENTS = ["booking.created", "booking.updated", "booking.deleted", "inspection.started",
-          "inspection.submitted", "media.completed", "pdf.ready", "alert.conflict",
-          "alert.stuck_upload"]
+          "checkin.completed", "inspection.submitted", "media.completed", "pdf.ready",
+          "alert.conflict", "alert.stuck_upload"]
+CHECKIN = "checkin.completed"
+# the one table of which form may use which event (serializer, picker and the events list read
+# it): the Check-in form has only its own event, set up once for every inspection type
+EVENTS_FOR: dict[str, list[str]] = {
+    FormType.BOOKING: [e for e in EVENTS if e.startswith("booking.")],
+    FormType.CUSTOM: [e for e in EVENTS if e != CHECKIN],
+    FormType.START: [CHECKIN]}
 # internal event name -> the public event it becomes
 PUBLIC = {"booking.created": "booking.created", "booking.updated": "booking.updated",
           # booking.assigned is for the bell only: its booking.updated already went (F-207)
           "booking.deleted": "booking.deleted",
-          "inspection.started": "inspection.started",
+          "inspection.started": "inspection.started", CHECKIN: CHECKIN,
           "inspection.submitted": "inspection.submitted", "media.completed": "media.completed",
           "pdf.ready": "pdf.ready", "alert.conflict": "alert.conflict",
           "alert.type_change_rejected": "alert.conflict", "alert.late_work": "alert.conflict",
@@ -129,7 +137,7 @@ def _context(public: str, payload: dict[str, Any]) -> dict[str, Any]:
         ctx["changed_keys"] = sorted(changes)
         if "booking_id" in changes:
             ctx["booking_id_change"] = changes["booking_id"]
-    for key in ("inspection", "revision", "media", "reason"):
+    for key in ("inspection", "revision", "media", "reason", "missing", "number"):
         if payload.get(key) is not None:
             ctx[key] = payload[key]
     if public == "alert.conflict":
@@ -138,13 +146,14 @@ def _context(public: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def targets(booking: Any, public: str) -> list[Integration]:
-    """Integrations of the booking form (booking events) and of the inspection form that handles
-    this booking's type (every event) that subscribed to this event."""
+    """Integrations of the booking form (booking events), of the Check-in form (its event, for
+    every type) and of the inspection form that handles this booking's type (the rest) that
+    subscribed to this event."""
     from django.db.models import Q
 
-    from apps.forms.models import FormType
-
     rows = Integration.objects.filter(is_active=True, form__is_active=True).select_related("form")
+    if public == CHECKIN:
+        return list(rows.filter(form__type=FormType.START, event=public))
     q = Q(form__type=FormType.BOOKING) & Q(event=public) \
         if public.startswith("booking.") else Q(pk__in=[])
     if booking is not None:
@@ -203,6 +212,8 @@ def build_payload(d: Delivery, preview: bool = False) -> dict[str, Any]:
     if booking is None or d.event == "booking.deleted":     # nothing of a deleted booking leaves
         return body
     body["booking"]["booking_id"] = booking.booking_id
+    if integ.event == CHECKIN:                  # its own body (the Test button's too)
+        return _checkin_body(d, body, values.Resolver(d, "preview" if preview else "send"))
     insp = booking.counted_inspection()
     if integ.include_data:
         body["data"] = {"booking": _scoped(booking.answers, integ.fields),
@@ -222,9 +233,28 @@ def build_payload(d: Delivery, preview: bool = False) -> dict[str, Any]:
                 continue
             has = MediaAsset.objects.filter(booking=booking, status="verified",
                                            kind__in=zips.KIND_TYPES[kind]).exists()
-            z = zips.request_zip(booking, kind) if has else None
+            # integrations get hidden files too (owner, 2026-11-28)
+            z = zips.request_zip(booking, kind, for_customer=False) if has else None
             body[f"{kind}_zip_url"] = (f"{settings.PUBLIC_BASE_URL}/zip/"
                                        f"{zips.token_for(z.id)}" if z else None)
+    return body
+
+
+CHECKIN_KEYS = ("number", "expert", "time", "received_at", "late_minutes", "unverified_time",
+                "missing_files")
+
+
+def _checkin_body(d: Delivery, body: dict[str, Any], get: Any) -> dict[str, Any]:
+    """checkin.completed: the booking and check-in answers, the check-in's own facts and photo
+    links, and the type and form it was for. [get]: a Resolver (real or sample values)."""
+    integ = d.integration
+    if integ.include_data:
+        body["data"] = {"booking": _scoped(get.part("booking"), integ.fields),
+                        "start": _scoped(get.part("start"), integ.fields)}
+    body["checkin"] = {k: get.get(f"checkin.{k}") for k in CHECKIN_KEYS}
+    body["checkin"]["photos"] = {ref.split(".")[2]: get.get(ref) or []
+                                 for ref in get.photo_refs("start")}
+    body["job"] = {"type": get.get("job.type"), "form": get.get("job.form")}
     return body
 
 
@@ -235,6 +265,8 @@ def build_sample_payload(d: Delivery, types: dict[str, str]) -> dict[str, Any]:
                   "occurred_at": d.created_at.isoformat(),
                   "booking": {"id": "00000000-0000-0000-0000-000000000000",
                               "booking_id": values.sample("text", "job.booking_id")}}
+    if integ.event == CHECKIN:
+        return _checkin_body(d, body, values.Resolver(d, "sample", types))
     if integ.include_data:
         def part(name: str) -> dict[str, Any]:
             return {r.split(".", 1)[1]: values.sample(t, r) for r, t in types.items()

@@ -8,8 +8,8 @@ import {
   bodyText,
   cleanPairs,
   EVENT_LABEL,
-  eventsFor,
   hasBody,
+  integrationForms,
   METHODS,
   parseBody,
   pickerHint,
@@ -82,7 +82,7 @@ export function IntegrationEditor() {
   const { say } = useToast();
   const refresh = useRefresh();
   const forms = useList<FormSummary>(keys.forms(), "forms");
-  const eligible = (forms.data ?? []).filter((f) => f.type === "booking" || f.type === "custom");
+  const eligible = integrationForms(forms.data ?? []);
   const source = id && id !== "new" ? id : copy;
   const loaded = useQuery({
     queryKey: keys.integration(source),
@@ -104,10 +104,20 @@ export function IntegrationEditor() {
     }
   }, [d, source, loaded.data, eligible, id]);
   const form = eligible.find((f) => f.id === d?.form);
+  // the events this form can use (one table on the server)
+  const events = useQuery({
+    queryKey: keys.integrationEvents(d?.form),
+    queryFn: ({ signal }) => api<string[]>("integrations/events", { query: { form: d!.form }, signal }),
+    enabled: !!d?.form,
+  });
+  const eventOk = !!d && !!events.data?.includes(d.event);
+  useEffect(() => {
+    if (d && events.data?.length && !events.data.includes(d.event)) setD({ ...d, event: events.data[0]! });
+  }, [d, events.data]);
   const catalogue = useQuery({
     queryKey: keys.catalogue(d?.form, d?.event),
     queryFn: ({ signal }) => api<CatalogueEntry[]>("integrations/catalogue", { query: { form: d!.form, event: d!.event }, signal }),
-    enabled: !!d?.form && !!d?.event,
+    enabled: eventOk,
   });
   // every field of the form, whatever the event: the checklist of the standard body lists these
   const everything = useQuery({
@@ -141,10 +151,7 @@ export function IntegrationEditor() {
     const p = parseBody(text);
     set({ bodyText: text, ...(p.ok ? { body: p.body } : {}) });
   };
-  const setForm = (fid: number) => {
-    const f = eligible.find((x) => x.id === fid)!;
-    set({ form: fid, event: eventsFor(f.type).includes(d.event) ? d.event : eventsFor(f.type)[0]! });
-  };
+  const setForm = (fid: number) => set({ form: fid }); // the event follows the form's list
   return (
     <PickerHint.Provider value={pickerHint(form?.type ?? "custom", d.event)}>
       <PageHeader
@@ -168,7 +175,7 @@ export function IntegrationEditor() {
             </Field>
             <Field label="Send when" help="One event per integration. Make another integration for another event.">
               <select aria-label="Send when" value={d.event} onChange={(e) => set({ event: e.target.value })}>
-                {eventsFor(form?.type ?? "custom").map((e) => (
+                {(events.data ?? [d.event]).map((e) => (
                   <option key={e} value={e}>
                     {EVENT_LABEL[e]}
                   </option>
@@ -226,23 +233,40 @@ export function IntegrationEditor() {
                     <legend>What to include</legend>
                     <label className="check">
                       <input type="checkbox" checked={d.include_data} onChange={(e) => set({ include_data: e.target.checked })} /> Data
-                      (booking and inspection answers)
+                      (booking and {form?.type === "start" ? "check-in" : "inspection"} answers)
                     </label>
-                    <label className="check">
-                      <input type="checkbox" checked={d.include_pdf} onChange={(e) => set({ include_pdf: e.target.checked })} /> PDF link
-                      (valid 7 days)
-                    </label>
-                    <label className="check">
-                      <input type="checkbox" checked={d.include_image_zip} onChange={(e) => set({ include_image_zip: e.target.checked })} />{" "}
-                      Image ZIP link
-                    </label>
-                    <label className="check">
-                      <input type="checkbox" checked={d.include_video_zip} onChange={(e) => set({ include_video_zip: e.target.checked })} />{" "}
-                      Video ZIP link
-                    </label>
+                    {form?.type !== "start" && (
+                      <>
+                        <label className="check">
+                          <input type="checkbox" checked={d.include_pdf} onChange={(e) => set({ include_pdf: e.target.checked })} /> PDF
+                          link (valid 7 days)
+                        </label>
+                        <label className="check">
+                          <input
+                            type="checkbox"
+                            checked={d.include_image_zip}
+                            onChange={(e) => set({ include_image_zip: e.target.checked })}
+                          />{" "}
+                          Image ZIP link
+                        </label>
+                        <label className="check">
+                          <input
+                            type="checkbox"
+                            checked={d.include_video_zip}
+                            onChange={(e) => set({ include_video_zip: e.target.checked })}
+                          />{" "}
+                          Video ZIP link
+                        </label>
+                      </>
+                    )}
                   </fieldset>
                   {d.include_data && (
-                    <FieldChecklist fields={d.fields} catalogue={everything.data ?? []} onChange={(fields) => set({ fields })} />
+                    <FieldChecklist
+                      fields={d.fields}
+                      catalogue={everything.data ?? []}
+                      parts={form?.type === "start" ? ["booking", "start"] : undefined}
+                      onChange={(fields) => set({ fields })}
+                    />
                   )}
                 </>
               ) : (

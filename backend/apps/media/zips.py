@@ -110,21 +110,23 @@ def failed(z: MediaZip) -> bool:
 
 
 def request_zip(booking, kind: str, excluded: list[str] | None = None,
-                only: list[str] | None = None) -> MediaZip:
+                only: list[str] | None = None, for_customer: bool = True) -> MediaZip:
     """The cached ZIP if there is a fresh one with the same left-out fields and files, else start
     building. Fields the requester may not see never go into their ZIP; [only]: the files it may
-    hold (none given: every file)."""
+    hold (none given: every file). [for_customer]: False for integrations, which get "Hide from
+    customer" files too (owner, 2026-11-28)."""
     from apps.media.services import customer_hidden
 
-    # "Hide from customer" fields never go into any ZIP (owner, 2026-11-27); part of the cache
-    # key, so turning it on makes a fresh ZIP without them
-    excluded = sorted(set(excluded or []) | customer_hidden(booking))
+    # "Hide from customer" fields stay out of every other ZIP (owner, 2026-11-27); part of the
+    # cache key, so turning it on makes a fresh ZIP without them
+    excluded = sorted(set(excluded or []) | (customer_hidden(booking) if for_customer else set()))
     only = sorted(only or [])
-    z = MediaZip.objects.filter(booking=booking, kind=kind, excluded=excluded,
-                                only=only).order_by("-created_at").first()
+    z = MediaZip.objects.filter(booking=booking, kind=kind, excluded=excluded, only=only,
+                                with_hidden=not for_customer).order_by("-created_at").first()
     if z is not None and not failed(z) and fresh(z):
         return z
-    z = MediaZip.objects.create(booking=booking, kind=kind, excluded=excluded, only=only)
+    z = MediaZip.objects.create(booking=booking, kind=kind, excluded=excluded, only=only,
+                                with_hidden=not for_customer)
     build_zip.delay(str(z.id))
     return MediaZip.objects.filter(pk=z.pk).first() or z      # gone: its booking was deleted
 

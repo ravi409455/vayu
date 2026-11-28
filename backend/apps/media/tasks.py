@@ -87,6 +87,9 @@ def verify_asset(asset_id: str) -> str:
         if insp is not None and str(asset.id) in expected_media(insp):
             report_out_of_date(booking.id)
     check_completion(asset.booking_id)
+    from apps.bookings import checkin  # only queues: event work never runs in this task
+
+    checkin.queue_for_booking(asset.booking_id)
     return "verified"
 
 

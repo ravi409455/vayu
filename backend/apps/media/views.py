@@ -191,7 +191,7 @@ class ZipDownload(APIView):
         z = zips.zip_from_token(token)
         if z is None or not zips.fresh(z):
             raise fail("LINK_EXPIRED", "This download link is invalid or has expired.", 404)
-        if services.customer_hidden(z.booking) - set(z.excluded):
+        if not z.with_hidden and services.customer_hidden(z.booking) - set(z.excluded):
             # made before a field was set to "Hide from customer": never hand it out; the same
             # link now gives a ZIP without it (built fresh, or the cached one already without it)
             z = zips.request_zip(z.booking, z.kind, z.excluded, z.only)

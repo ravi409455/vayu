@@ -289,7 +289,7 @@ export function FieldEditor({
                 label="Hide from customer"
                 checked={cfg.hide_from_customer === true}
                 onChange={(e) => setCfg({ hide_from_customer: e.target.checked ? true : undefined })}
-                tip="For payment or other internal photos. Kept out of the report, its photo and video downloads, partner integrations and every ZIP. Ops still see it on the booking. Applies to older bookings too once published."
+                tip="For payment or other internal photos. Kept out of the report, its photo and video downloads and the Ops ZIP. Integrations still get it, so keep it out of any message that goes to a customer. Ops still see it on the booking. Applies to older bookings too once published."
               />
             )}
             {!locked && UPLOAD_TYPES.includes(field.type) && (

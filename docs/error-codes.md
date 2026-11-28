@@ -65,11 +65,11 @@ Regenerate: `uv run python -c "from apps.platform.error_codes import table; prin
 | `INVALID_COUNTS` | 400 | drafts and files must be whole numbers, 0 or more. |
 | `INVALID_CREDENTIALS` | 401 | Invalid username or password. |
 | `INVALID_DEFINITION` | 400 | A field definition needs key, label and type, and only these properties: …. |
-| `INVALID_EVENT` | 400 | A booking form integration can only use booking events. |
+| `INVALID_EVENT` | 400 | This form cannot use that event. |
 | `INVALID_EXPERT` | 400 | Choose an active expert. |
 | `INVALID_FIELDS` | 400 | fields must be a list of field keys. |
 | `INVALID_FLAG` | 400 | Say which flag: late or quick. |
-| `INVALID_FORM` | 400 | Choose a booking or inspection form. |
+| `INVALID_FORM` | 400 | Choose the booking form, an inspection form or the Check-in form. |
 | `INVALID_HEADERS` | 400 | Headers are a list of up to …. |
 | `INVALID_IDS` | 400 | Send the ids to mark read, or all: true. |
 | `INVALID_IMAGE` | 400 | Choose a picture to upload. |

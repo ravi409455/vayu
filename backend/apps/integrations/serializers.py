@@ -5,7 +5,7 @@ from typing import Any
 from rest_framework import serializers
 
 from apps.core.errors import fail
-from apps.forms.models import Form, FormType
+from apps.forms.models import Form
 
 from . import values, webhooks
 from .models import Integration
@@ -60,8 +60,9 @@ def clean_integration(data: dict[str, Any], current: Integration | None = None, 
     if "form" in data or current is None:
         form_id = data.get("form")
         chosen = Form.objects.filter(pk=form_id).first() if isinstance(form_id, int) else None
-        if chosen is None or chosen.type not in (FormType.BOOKING, FormType.CUSTOM):
-            raise fail("INVALID_FORM", "Choose a booking or inspection form.")
+        if chosen is None or chosen.type not in webhooks.EVENTS_FOR:
+            raise fail("INVALID_FORM", "Choose the booking form, an inspection form or the "
+                       "Check-in form.")
         out["form"] = chosen
     if "name" in data or current is None:
         name = data.get("name")
@@ -74,8 +75,9 @@ def clean_integration(data: dict[str, Any], current: Integration | None = None, 
         out["event"] = data["event"]
     form: Form = out["form"] if "form" in out else current.form        # type: ignore[union-attr]
     event = out.get("event") or (current.event if current else "")
-    if form.type == FormType.BOOKING and not event.startswith("booking."):
-        raise fail("INVALID_EVENT", "A booking form integration can only use booking events.")
+    if event not in webhooks.EVENTS_FOR[form.type]:
+        raise fail("INVALID_EVENT", "This form cannot use that event.",
+                   allowed=webhooks.EVENTS_FOR[form.type])
     if "method" in data or current is None:
         method = data.get("method", "POST")
         if method not in webhooks.METHODS:

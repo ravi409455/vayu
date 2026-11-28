@@ -90,11 +90,10 @@ def test_bad_integrations_are_refused(ienv, change, code):
     assert r.status_code == 400 and r.json()["code"] == code
 
 
-@pytest.mark.parametrize("ftype", ["start", "end"])
-def test_start_and_end_forms_cannot_have_integrations(ienv, ftype):
+def test_the_wrap_up_form_cannot_have_integrations(ienv):
     from apps.forms.models import Form
 
-    system_form = Form.objects.get(type=ftype)
+    system_form = Form.objects.get(type="end")
     r = ienv.admin.post("/api/v1/integrations", {"form": system_form.id, "name": "x", "url": HOOK,
                                                  "event": "booking.created"}, format="json")
     assert r.json()["code"] == "INVALID_FORM"
@@ -122,9 +121,10 @@ def test_plain_http_and_private_addresses_are_refused_in_production_mode(ienv, s
                            format="json").json()["reason"] == "host_not_found"
 
 
-def test_the_event_catalog_lists_the_nine_events(ienv):
+def test_the_event_catalog_lists_the_ten_events(ienv):
     got = ienv.admin.get("/api/v1/integrations/events").json()
-    assert len(got) == 9 and "alert.stuck_upload" in got and "pdf.ready" in got
+    assert len(got) == 10 and "alert.stuck_upload" in got and "checkin.completed" in got
+    assert ienv.admin.get("/api/v1/integrations/events?form=x").json()["code"] == "INVALID_FORM"
 
 
 # ---------------------------------------------------------------- which events go where
@@ -154,7 +154,7 @@ def test_booking_form_integrations_get_only_booking_events(ienv, http, booking):
 
 
 def test_inspection_form_integrations_get_every_event_for_their_type(ienv, http, booking):
-    for event in webhooks.EVENTS:
+    for event in webhooks.EVENTS_FOR["custom"]:
         make(ienv, ienv.form_id, name=event, event=event)
     assign(ienv, booking)
     start(ienv.expert, booking)
