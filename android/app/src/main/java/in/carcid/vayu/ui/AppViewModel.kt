@@ -73,7 +73,7 @@ class AppViewModel(val graph: Graph, private val deviceName: String,
     private fun expired() {
         if (screen.value !is Screen.Home && screen.value !is Screen.Profile) return
         bell.clear()
-        _screen.value = Screen.SignIn(error = "Your sign-in has ended. Sign in again; your unsent work stays on this phone.")
+        _screen.value = Screen.SignIn(error = "You were signed out on the server. Sign in again. Work not sent yet is still on this phone.")
     }
 
     private suspend fun resume() {

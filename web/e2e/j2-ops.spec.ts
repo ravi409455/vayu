@@ -99,6 +99,9 @@ test("the menu and pages: Ops see only their four, nothing of the admin side", a
     await page.goto(path);
     await expect(page).toHaveURL(/\/today$/);
   }
+  await page.goto("/bookings");
+  await page.getByRole("link", { name: "Vayu, go to the start page" }).click();
+  await expect(page).toHaveURL(/\/today$/);
 });
 
 test("delete rules: Ops may delete only a draft, Admin any booking", async ({ page }) => {
