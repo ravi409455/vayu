@@ -417,7 +417,7 @@ def test_the_preview_needs_no_dns_and_is_admin_only(ienv, booking, monkeypatch):
     assert preview(ienv.admin, booking_form_id(), event="pdf.ready").status_code == 400
 
 
-@pytest.mark.parametrize("event", webhooks.EVENTS)
+@pytest.mark.parametrize("event", webhooks.EVENTS_FOR["custom"])   # Check-in form: its own tests
 @pytest.mark.parametrize("mode", ["standard", "custom"])
 def test_the_preview_works_for_every_event_with_a_job_or_without(ienv, booking, event, mode):
     from apps.bookings.models import Booking

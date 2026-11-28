@@ -72,6 +72,8 @@ class MediaZip(models.Model):
     excluded = models.JSONField(default=list)          # field keys left out (hidden from them)
     # asset ids it may hold, empty = any (the customer's links: only the counted inspection's)
     only = models.JSONField(default=list, blank=True)
+    # made for an integration: "Hide from customer" files are in it on purpose (owner, 2026-11-28)
+    with_hidden = models.BooleanField(default=False)
     status = models.CharField(max_length=10, default="building")  # building | ready | failed
     progress = models.PositiveSmallIntegerField(default=0)
     key = models.CharField(max_length=200, blank=True)

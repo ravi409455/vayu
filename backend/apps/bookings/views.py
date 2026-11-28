@@ -260,10 +260,8 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Cr
             request.data.get("inspection_type"), app_version, request.data.get("start_answers"),
             {part: request.data.get(key) for part, key in (
                 ("inspection", "form_version"), ("start", "start_version"),
-                ("end", "end_version"))})
-        if request.data.get("unverified_time") is True:
-            submissions.mark_unverified_time(b, insp)
-            insp.refresh_from_db()
+                ("end", "end_version"))},
+            unverified_time=request.data.get("unverified_time") is True)
         ctx = self.get_serializer_context()
         return Response({
             "booking": BookingSerializer(Booking.objects.get(pk=b.pk), context=ctx).data,

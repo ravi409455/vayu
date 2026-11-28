@@ -17,14 +17,24 @@ TOKEN = re.compile(r"\{\{\s*([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_\-]+)+)(\s*\|\
 MAX_NODES, MAX_HEADERS, MAX_QUERY, MAX_DEPTH = 500, 20, 30, 8
 
 GROUPS = {"booking": "Booking form", "start": "Check-in (start)", "inspection": "Inspection",
-          "end": "Wrap-up (end)", "job": "Booking details", "result": "Results", "link": "Links",
-          "event": "Event"}
+          "end": "Wrap-up (end)", "job": "Booking details", "checkin": "Check-in details",
+          "result": "Results", "link": "Links", "event": "Event"}
 JOB = {"job.booking_id": ("Booking ID", "text"),
        "job.previous_booking_id": ("Previous Booking ID", "text"),
        "job.id": ("Internal id", "text"), "job.type": ("Inspection type", "text"),
        "job.stage": ("Stage", "text"), "job.city": ("City", "text"),
-       "job.expert": ("Expert", "text"), "job.created_at": ("Created at", "datetime"),
+       "job.expert": ("Expert", "text"), "job.form": ("Inspection form", "text"),
+       "job.created_at": ("Created at", "datetime"),
        "job.submitted_at": ("Submitted at", "datetime"), "job.revision": ("Revision", "number")}
+# checkin.completed: facts of that one check-in (docs/plan-checkin-event.md)
+CHECKIN = {"checkin.number": ("Check-in number (1st, 2nd …)", "number"),
+           "checkin.expert": ("Expert who checked in", "text"),
+           "checkin.expert_phone": ("Expert's phone", "text"),
+           "checkin.time": ("Check-in time (phone)", "datetime"),
+           "checkin.received_at": ("Reached Vayu at", "datetime"),
+           "checkin.late_minutes": ("Minutes late against the booked time", "number"),
+           "checkin.unverified_time": ("Phone clock not trusted", "boolean"),
+           "checkin.missing_files": ("Files still missing", "list")}
 # a field's picker type; photos, videos, files, signatures and pictures are links, not values
 HIDDEN = NOT_VALUES
 TYPES = {"number": "number", "currency": "number", "rating": "number", "yes_no": "boolean",
@@ -35,7 +45,8 @@ _START = _BASE | {"start"}
 _DONE = _START | {"inspection", "end", "result"}
 _ALL = _DONE | {"zip", "pdf"}
 AVAILABLE = {"booking.created": _BASE, "booking.updated": _ALL, "booking.deleted": {"event"},
-             "inspection.started": _START, "inspection.submitted": _DONE,
+             "inspection.started": _START, "checkin.completed": _START | {"checkin"},
+             "inspection.submitted": _DONE,
              "media.completed": _DONE | {"zip"}, "pdf.ready": _ALL,
              "alert.conflict": _BASE, "alert.stuck_upload": _BASE}
 
@@ -59,6 +70,8 @@ def versions(form: Any, override: dict[str, Any] | None = None) -> dict[str, Any
     override = override or {}
     booking = Form.objects.filter(type=FormType.BOOKING).first()
     out: dict[str, Any] = {"booking": _live(booking, override) if booking else None}
+    if form.type == FormType.START:
+        out["start"] = _live(form, override)
     if form.type == FormType.CUSTOM:
         out["inspection"] = _live(form, override)
         for part, ftype in (("start", FormType.START), ("end", FormType.END)):
@@ -91,6 +104,8 @@ def catalogue(form: Any, event: str | None = None,
         keep = AVAILABLE.get(event, _ALL)
     if form.type == FormType.BOOKING:
         keep = keep & (_BASE | {"event"})
+    if form.type == FormType.START:              # it has one event
+        keep = AVAILABLE["checkin.completed"]
     vers = versions(form, override)
     out: list[dict[str, Any]] = []
 
@@ -108,6 +123,9 @@ def catalogue(form: Any, event: str | None = None,
             add("job", ref, label, type_)
     else:                                     # a deleted booking: its ID only
         add("job", "job.booking_id", JOB["job.booking_id"][0], "text")
+    if "checkin" in keep:
+        for ref, (label, type_) in CHECKIN.items():
+            add("checkin", ref, label, type_)
     if "result" in keep and vers.get("inspection") is not None:
         add("result", "result.overall", "Overall rating", "text")
         add("result", "result.average", "Average rating", "number")
@@ -242,9 +260,14 @@ def broken_refs(integ: Any, override: dict[str, Any] | None = None,
     broken = {r for r in used_refs(integ) if r not in have}
     if integ.body_mode == "standard" and integ.include_data and integ.fields:
         if ("keys", integ.form_id) not in cache:
+            from apps.forms.models import FormType
+
+            # the parts the standard body's field list scopes (the Check-in form: its own)
+            parts = ("booking", "start") if integ.form.type == FormType.START \
+                else ("booking", "inspection")
             cache[("keys", integ.form_id)] = {
                 f.key for v in versions(integ.form, override).items()
-                if v[0] in ("booking", "inspection") for f in _fields(v[1])}
+                if v[0] in parts for f in _fields(v[1])}
         keys = cache[("keys", integ.form_id)]
         broken |= {f"field.{k}" for k in integ.fields if k not in keys}
     return sorted(broken)
@@ -307,6 +330,9 @@ class Resolver:
         self.limited = self.booking is None or d.event == "booking.deleted"
         self._cache: dict[str, Any] = {}
         self._insp: Any = False
+        # a check-in's delivery, or the Test button of a check-in integration
+        integ = getattr(d, "integration", None)
+        self.checkin = "checkin.completed" in (d.event, getattr(integ, "event", None))
 
     def get(self, ref: str) -> Any:
         if ref not in self._cache:
@@ -319,6 +345,13 @@ class Resolver:
         return self.booking
 
     def inspection(self) -> Any:
+        if self._insp is False and self.checkin and self.booking:
+            # that check-in's own inspection (a 2nd check-in sends its own answers and expert);
+            # a preview names none: the newest one with a check-in
+            named = self.d.context.get("inspection")
+            rows = self.booking.inspections.filter(start_version__isnull=False)
+            self._insp = (rows.filter(pk=named).first() if named
+                          else rows.order_by("-created_at").first())
         if self._insp is False:
             b = self.booking
             # before any submission, the running draft (inspection.started); never past a
@@ -344,6 +377,8 @@ class Resolver:
             return self._answer(head, rest)
         if head == "result":
             return self._result(rest)
+        if head == "checkin":
+            return self._checkin(rest)
         if head == "link":
             return self._link(rest)
         return None
@@ -368,8 +403,54 @@ class Resolver:
                 else None
         if name == "created_at":
             return b.created_at.isoformat()
+        if name == "form":
+            insp = self.inspection()
+            return f"{insp.form_version.form.name} v{insp.form_version.number}" if insp else None
         return {"booking_id": b.booking_id, "id": str(b.id), "type": b.inspection_type,
                 "stage": b.stage, "city": b.city}.get(name)
+
+    def _checkin(self, name: str) -> Any:
+        from apps.bookings import timing
+
+        insp, ctx = self.inspection(), self.d.context
+        if name == "number":
+            return ctx.get("number")
+        if name == "missing_files":
+            return ctx.get("missing", [])
+        if insp is None:
+            return None
+        if name == "late_minutes":
+            booked = timing.slot(self._booking())
+            # the phone's time, unless its clock is not trusted or it sent none (older app)
+            at = insp.client_started_at if insp.client_started_at and not insp.unverified_time \
+                else insp.created_at
+            return round((at - booked).total_seconds() / 60) if booked else None
+        return {"expert": insp.expert.shown_name, "expert_phone": insp.expert.phone or None,
+                "time": insp.client_started_at.isoformat() if insp.client_started_at else None,
+                "received_at": insp.created_at.isoformat(),
+                "unverified_time": insp.unverified_time}.get(name)
+
+    def part(self, name: str) -> dict[str, Any]:
+        """One part's answers as stored ("booking" or a form part), for the standard body."""
+        if self.mode == "sample":
+            return {r.split(".", 1)[1]: sample(t, r) for r, t in self.types.items()
+                    if r.startswith(name + ".")}
+        if name == "booking":         # only built while the booking exists (build_payload)
+            return dict(self._booking().answers)
+        insp = self.inspection()
+        return dict((insp.answers.get(name) or {}) if insp else {})
+
+    def photo_refs(self, part: str) -> list[str]:
+        """link.photos.<key> for each photo field of a part of this delivery's inspection."""
+        from apps.forms.models import Field
+
+        if self.mode == "sample":
+            return [r for r in self.types if r.startswith("link.photos.")]
+        insp = None if self.limited else self.inspection()
+        version = insp.pinned()[part] if insp else None
+        return [f"link.photos.{k}" for k in Field.objects.filter(
+            version=version, type="photo").order_by("id").values_list("key", flat=True)] \
+            if version else []
 
     def _answer(self, part: str, key: str) -> Any:
         from apps.forms.models import Field
@@ -444,13 +525,17 @@ class Resolver:
                 return f"{settings.PUBLIC_BASE_URL}/zip/example-{kind}-link"
             has = MediaAsset.objects.filter(booking=b, status="verified",
                                             kind__in=zips.KIND_TYPES[kind]).exists()
-            z = zips.request_zip(b, kind) if has else None
+            z = zips.request_zip(b, kind, for_customer=False) if has else None
             return f"{settings.PUBLIC_BASE_URL}/zip/{zips.token_for(z.id)}" if z else None
         if name.startswith("photos."):
-            from apps.media.services import customer_hidden
-            if name[7:] in customer_hidden(b):              # partners are outside the company
-                return []
-            return [media_storage.presign_get(a.key, None, ttl) for a in MediaAsset.objects.filter(
-                booking=b, status="verified", kind="photo",
-                field_key=name[7:]).order_by("created_at")]
+            # integrations get "Hide from customer" photos too (owner, 2026-11-28)
+            rows = MediaAsset.objects.filter(booking=b, status="verified", kind="photo",
+                                             field_key=name[7:])
+            if self.checkin:                             # only that check-in's own files
+                from apps.bookings import checkin
+
+                insp = self.inspection()
+                rows = rows.filter(pk__in=checkin.files(insp) if insp else [])
+            return [media_storage.presign_get(a.key, None, ttl)
+                    for a in rows.order_by("created_at")]
         return None

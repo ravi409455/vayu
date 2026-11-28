@@ -76,6 +76,12 @@ booking before you publish. Shared parts (a header used by several templates) ar
 
 - **Integrations** send a request to another system when something happens (a booking is created,
   a PDF is ready…). See [the webhook guide](../integrations/webhooks.md).
+- **Check-in completed** (a Slack message, "the expert has arrived" to the customer, a CRM row): make
+  **one** integration on the **Check-in** form. It covers every inspection type; put **Inspection
+  type** in the message to tell them apart. It waits up to 5 minutes for the check-in photos.
+- **Hide from customer** on a photo, video or document field keeps it out of the report, its
+  download links and the Ops ZIP. Integrations still get it: keep such fields out of any message
+  that reaches a customer.
 - **API keys** let another system create and change bookings. Give each key only the forms, fields
   and actions it needs; it is shown once. See [the REST API guide](../integrations/rest-api.md).
 

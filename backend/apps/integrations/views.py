@@ -94,10 +94,19 @@ class IntegrationDetail(APIView):
 
 
 class EventCatalog(APIView):
+    """Every event, or with ?form= the ones that form can use (webhooks.EVENTS_FOR)."""
+
     permission_classes = [perm("integrations.manage")]
 
     def get(self, request: Request) -> Response:
-        return Response(webhooks.EVENTS)
+        raw = request.query_params.get("form", "").strip()
+        if not raw:
+            return Response(webhooks.EVENTS)
+        form = Form.objects.filter(pk=raw).first() if raw.isdigit() else None
+        if form is None or form.type not in webhooks.EVENTS_FOR:
+            raise fail("INVALID_FORM", "Choose the booking form, an inspection form or the "
+                       "Check-in form.")
+        return Response(webhooks.EVENTS_FOR[form.type])
 
 
 def _booking_for(request: Request, form: Form, submitted: bool = False) -> Booking | None:
@@ -110,6 +119,8 @@ def _booking_for(request: Request, form: Form, submitted: bool = False) -> Booki
     qs = Booking.objects.all()
     if form.type == FormType.CUSTOM:
         qs = qs.filter(inspection_type=form.inspection_type)
+    if form.type == FormType.START:                      # one that has checked in
+        qs = qs.filter(inspections__start_version__isnull=False).distinct()
     qs = qs.order_by("-created_at")
     return (qs.filter(inspections__status="submitted").first() if submitted else None) \
         or qs.first()
@@ -143,10 +154,11 @@ class Catalogue(APIView):
     def get(self, request: Request) -> Response:
         form = Form.objects.filter(pk=request.query_params.get("form", "").strip() or 0).first()
         event = request.query_params.get("event")
-        if form is None or form.type not in (FormType.BOOKING, FormType.CUSTOM):
-            raise fail("INVALID_FORM", "Choose a booking or inspection form.")
-        if event is not None and event not in webhooks.EVENTS:
-            raise fail("INVALID_EVENT", "Pick one event.", allowed=webhooks.EVENTS)
+        if form is None or form.type not in webhooks.EVENTS_FOR:
+            raise fail("INVALID_FORM", "Choose the booking form, an inspection form or the "
+                       "Check-in form.")
+        if event is not None and event not in webhooks.EVENTS_FOR[form.type]:
+            raise fail("INVALID_EVENT", "Pick one event.", allowed=webhooks.EVENTS_FOR[form.type])
         return Response(values.catalogue(form, event))
 
 

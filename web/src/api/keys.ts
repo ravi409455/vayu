@@ -46,6 +46,7 @@ export const keys = {
   integration: (id?: Id) => with_("integration", id),
   deliveries: (...parts: unknown[]) => with_("deliveries", ...parts),
   catalogue: (...parts: unknown[]) => with_("catalogue", ...parts),
+  integrationEvents: (form?: Id) => with_("integration-events", form),
   apiKeys: () => ["api-keys"],
   pdfTemplates: () => ["pdf-templates"],
   pdfVersion: (id?: Id) => with_("pdf-version", id),

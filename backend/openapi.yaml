@@ -5818,6 +5818,7 @@ paths:
   /api/v1/integrations/events:
     get:
       operationId: integrations_events_retrieve
+      description: Every event, or with ?form= the ones that form can use (webhooks.EVENTS_FOR).
       tags:
       - integrations
       security:

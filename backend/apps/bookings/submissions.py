@@ -18,7 +18,7 @@ from apps.forms.rules import validate_answers
 from apps.forms.serializers import VersionTreeSerializer
 from apps.scoring import service as scoring
 
-from . import activity, timing
+from . import activity, checkin, timing
 from .changes import stamp
 from .models import Booking, Inspection
 from .services import (
@@ -212,11 +212,12 @@ def _late_work(b: Booking, code: str, detail: str) -> None:
 
 
 def start(actor, b: Booking, client_uuid, client_started_at, inspection_type, app_version,
-          start_answers=None, versions=None):
-    """[versions]: what the phone pinned when the expert started ({inspection, start, end} ids)."""
+          start_answers=None, versions=None, unverified_time: bool = False):
+    """[versions]: what the phone pinned when the expert started ({inspection, start, end} ids).
+    [unverified_time]: the phone's clock was not checked (set before anything is told of it)."""
     try:
         return _start(actor, b, client_uuid, client_started_at, inspection_type, app_version,
-                      start_answers, versions or {})
+                      start_answers, versions or {}, unverified_time)
     except _OldVersion:
         _refuse_old(b)
 
@@ -234,7 +235,7 @@ def _refuse_old(b: Booking) -> NoReturn:
 
 @transaction.atomic
 def _start(actor, b: Booking, client_uuid, client_started_at, inspection_type, app_version,
-           start_answers, versions: dict):
+           start_answers, versions: dict, unverified_time: bool = False):
     b = _lock(b)
     existing = Inspection.objects.filter(client_start_uuid=client_uuid).first()
     if existing is not None:
@@ -289,10 +290,22 @@ def _start(actor, b: Booking, client_uuid, client_started_at, inspection_type, a
                                      start_version=pinned["start"], end_version=pinned["end"],
                                      client_start_uuid=client_uuid,
                                      client_started_at=client_started_at,
+                                     unverified_time=unverified_time,
+                                     # checkin.completed waits for the check-in files until then
+                                     checkin_due_at=(b.started_at + checkin.WAIT
+                                                     if pinned["start"] is not None else None),
                                      # kept from now on: Ops see the arrival proof (F-241)
                                      answers={"start": checked_in} if checked_in else {})
     _changed(actor, b, changes)
+    if unverified_time:
+        mark_unverified_time(b, insp)
+        b.unverified_time = True
     events.emit("inspection.started", booking=str(b.id), inspection=str(insp.id))
+    if insp.checkin_due_at is not None:
+        from .tasks import checkin_check  # the worker decides; Start only queues it (~1 ms)
+
+        insp_id = str(insp.id)
+        core_tasks.after_commit(lambda: checkin_check.delay(insp_id, True))
     return b, insp
 
 

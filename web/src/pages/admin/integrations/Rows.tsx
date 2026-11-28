@@ -54,19 +54,22 @@ export function PairRows({
   );
 }
 
-/** The standard body's field filter: everything, or only the ticked fields of the booking and inspection forms. */
+/** The standard body's field filter: everything, or only the ticked fields of the booking form and
+ *  [parts] (the inspection form; the Check-in form's own answers on the Check-in form). */
 export function FieldChecklist({
   fields,
   onChange,
   catalogue,
+  parts = ["booking", "inspection"],
 }: {
   fields: string[];
   onChange: (f: string[]) => void;
   catalogue: CatalogueEntry[];
+  parts?: string[];
 }) {
   const [only, setOnly] = useState(fields.length > 0); // "only these", even before the first tick
   const [q, setQ] = useState("");
-  const options = catalogue.filter((e) => e.group === "booking" || e.group === "inspection");
+  const options = catalogue.filter((e) => parts.includes(e.group));
   const keys = [...new Map(options.map((e) => [e.ref.split(".")[1]!, e])).entries()].filter(
     ([k, e]) => fields.includes(k) || `${e.label} ${k}`.toLowerCase().includes(q.toLowerCase()),
   );

@@ -9,7 +9,8 @@ _subscribers: list[Callable[[str, dict[str, Any]], None]] = []
 # every event there is (F-044): an emit of anything else is a typo and raises
 NAMES = frozenset({
     "booking.created", "booking.updated", "booking.assigned", "booking.deleted",
-    "inspection.started", "inspection.submitted", "inspection.updated", "inspection.completed",
+    "inspection.started", "checkin.completed", "inspection.submitted", "inspection.updated",
+    "inspection.completed",
     "media.completed", "media.deleted", "pdf.ready",
     "alert.conflict", "alert.late_work", "alert.pdf_failed", "alert.stuck_upload",
     "alert.type_change_rejected",

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api, type Page } from "../../api/client";
 import { useList, useRefresh } from "../../api/hooks";
 import type { Delivery, FormSummary, Integration } from "../../api/types";
-import { eventWord } from "../../lib/integrationDef";
+import { eventWord, integrationForms } from "../../lib/integrationDef";
 import { Confirm, Empty, LoadError, Modal, PageHeader, Pill, useToast, when } from "../../ui/kit";
 import { MoreMenu } from "../../ui/Menu";
 import { keys } from "../../api/keys";
@@ -34,7 +34,7 @@ export function Integrations() {
   const forms = useList<FormSummary>(keys.forms(), "forms");
   const [log, setLog] = useState<Integration | null>(null);
   const [deleting, setDeleting] = useState<Integration | null>(null);
-  const eligible = (forms.data ?? []).filter((f) => f.type === "booking" || f.type === "custom");
+  const eligible = integrationForms(forms.data ?? []);
 
   const test = useMutation({
     mutationFn: (i: Integration) => api<Delivery>(`integrations/${i.id}/test`, { body: {} }),

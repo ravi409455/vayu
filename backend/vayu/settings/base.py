@@ -129,6 +129,7 @@ CELERY_TASK_ROUTES = {
     "apps.media.tasks.purge_expired": {"queue": "purge"},
     "apps.media.tasks.delete_files": {"queue": "purge"},
     "apps.integrations.tasks.*": {"queue": "notify"},
+    "apps.bookings.tasks.*": {"queue": "notify"},
     "apps.notify.tasks.*": {"queue": "notify"},
 }
 # no task runs for ever (F-210): a hung R2 stream is stopped; the PDF render has its own
@@ -152,6 +153,7 @@ WEBHOOK_ALLOW_PRIVATE = False      # never call private/loopback/link-local addr
 WEBHOOK_LINK_DAYS = 7
 CELERY_BEAT_SCHEDULE = {
     "retry-webhooks": {"task": "apps.integrations.tasks.retry_due", "schedule": 60.0},
+    "checkin-due": {"task": "apps.bookings.tasks.checkin_due", "schedule": 60.0},
     "sweep-reports": {"task": "apps.reports.tasks.sweep_reports", "schedule": 300.0},
     "purge-media": {"task": "apps.media.tasks.purge_expired", "schedule": 3600.0},
     "stuck-uploads": {"task": "apps.media.tasks.flag_stuck_uploads", "schedule": 3600.0},

@@ -41,6 +41,7 @@ export const GROUP_LABEL: Record<string, string> = {
   inspection: "Inspection",
   end: "Wrap-up (end)",
   job: "Booking details",
+  checkin: "Check-in details",
   result: "Results",
   link: "Links",
   event: "Event",
@@ -51,6 +52,7 @@ export const EVENT_LABEL: Record<string, string> = {
   "booking.updated": "Booking updated (incl. assignment and stage)",
   "booking.deleted": "Booking deleted",
   "inspection.started": "Inspection started",
+  "checkin.completed": "Check-in completed",
   "inspection.submitted": "Inspection submitted",
   "media.completed": "All media verified (Completed)",
   "pdf.ready": "PDF ready (each time it is made again)",
@@ -59,11 +61,13 @@ export const EVENT_LABEL: Record<string, string> = {
 };
 /** The event in a few words, for lists (the editor uses the longer labels). */
 export const eventWord = (e: string) => (EVENT_LABEL[e] ?? e).replace(/ \(.*\)$/, "");
-/** A booking form can use the booking events only; an inspection form all of them. */
-export const eventsFor = (formType: string): string[] =>
-  Object.keys(EVENT_LABEL).filter((e) => formType !== "booking" || e.startsWith("booking."));
+/** Forms an integration can be set up on (which events each can use, the server says). */
+export const integrationForms = <T extends { type: string }>(forms: T[]): T[] =>
+  forms.filter((f) => ["booking", "custom", "start"].includes(f.type));
 /** Why the value list holds what it holds: the form and the event decide which values exist. */
 export function pickerHint(formType: string, event: string): string {
+  if (formType === "start")
+    return "One integration here covers every inspection type: use “Inspection type” to tell them apart. It waits up to 5 minutes for the check-in photos; a phone that was offline sends it when it is back online, with the real check-in time.";
   if (formType === "booking")
     return "The booking form can use its own answers, booking details and event details. For inspection answers, results and PDF links, choose an inspection form.";
   const later =

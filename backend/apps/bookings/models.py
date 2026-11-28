@@ -125,12 +125,18 @@ class Inspection(models.Model):
     client_submission_uuid = models.UUIDField(null=True, blank=True, unique=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
+    # checkin.completed (checkin.py): when the wait for the check-in files ends (null: no
+    # check-in, or made before the event existed) and when it was sent
+    checkin_due_at = models.DateTimeField(null=True, blank=True)
+    checkin_sent_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["created_at"]
         constraints = [models.UniqueConstraint(fields=["booking", "expert"],
                                                condition=models.Q(status="draft"),
                                                name="one_open_draft_per_expert")]
+        indexes = [models.Index(fields=["checkin_due_at"], name="checkin_waiting",
+                                condition=models.Q(checkin_sent_at__isnull=True))]
 
     def pinned(self) -> dict:
         """part -> the form version this inspection was started on (None: part not used)."""

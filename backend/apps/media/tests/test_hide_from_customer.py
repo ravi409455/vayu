@@ -1,5 +1,6 @@
 """A file field marked "Hide from customer" (owner, 2026-11-27: payment and other internal photos)
-never leaves the app: not in the report, its download links, partner integrations or any ZIP.
+stays out of the report, its download links and the Ops ZIP. Integrations get it (owner,
+2026-11-28: apps.integrations.tests.test_hidden_from_customer).
 The newest published version of the form decides, so older bookings follow it too."""
 from unittest import mock
 
@@ -64,7 +65,7 @@ def test_hidden_files_stay_out_of_every_zip_and_are_tagged_for_ops(job, settings
         before = zips.request_zip(booking, "image")
         hide("photo_a")
         assert customer_hidden(booking) == {"photo_a"}
-        after = zips.request_zip(booking, "image")         # Ops, report links, partners alike
+        after = zips.request_zip(booking, "image")         # Ops and report links
     assert after.id != before.id and "photo_a" in after.excluded and "photo_a" not in before.excluded
     rows = {r["id"]: r for r in env.ops.get(f"/api/v1/bookings/{b['id']}/media").json()}
     assert rows[ids["photo_a"]]["hidden_from_customer"] is True

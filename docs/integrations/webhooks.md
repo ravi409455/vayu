@@ -10,13 +10,45 @@ several events, make several integrations (the **Duplicate** button copies one).
 |---|---|
 | `booking.created` / `booking.updated` / `booking.deleted` | bookings (updates include assignment and stage changes; an edited Booking ID carries `booking_id_change: {from, to}`) |
 | `inspection.started` / `inspection.submitted` | the expert's inspection |
+| `checkin.completed` | the expert's check-in reached Vayu with its photos (see below) |
 | `media.completed` | every file verified, booking is Completed |
 | `pdf.ready` | a PDF was made (also on every regenerate) |
 | `alert.conflict` / `alert.stuck_upload` | two experts, force-released draft, rejected type change; a file stuck uploading |
 
 An integration on the **booking form** can use the three `booking.*` events (for bookings of every
-inspection type). An integration on an **inspection form** can use all nine, for bookings of that
-inspection type.
+inspection type). An integration on the **Check-in form** can use `checkin.completed` only, for
+bookings of every inspection type. An integration on an **inspection form** can use the other nine,
+for bookings of that inspection type. `GET /api/v1/integrations/events?form=<id>` lists a form's
+events.
+
+### `checkin.completed`
+
+Set it up **once, on the Check-in form**: one integration covers PDI, Used car, EV and every other
+type; `{{job.type}}` and `{{job.form}}` say which one each check-in was for.
+
+- **When.** It waits for **every file the check-in names** (the selfie and any other file field),
+  up to **5 minutes** after the check-in reached Vayu. All checked sooner: it is sent then. Not all
+  there after 5 minutes: it is sent anyway (5 to 6 minutes after), and
+  `{{checkin.missing_files}}` names the fields still missing.
+- **Offline.** A phone that was offline sends the check-in when it is back online; the event comes
+  then, with the **real check-in time** in `{{checkin.time}}`.
+- **Every check-in.** A booking that is released and checked in again sends it again, with
+  `{{checkin.number}}` 2, that check-in's own expert, answers and photos.
+- **Which time is which.** `checkin.time`: when the expert pressed Start, by the phone's clock.
+  `checkin.received_at`: when it reached Vayu. `checkin.late_minutes`: minutes after the booked
+  slot (negative: early), from the phone's time, or from `received_at` when
+  `checkin.unverified_time` is true (the phone's clock was not checked) or the app sent no time; no
+  slot booked: `null`.
+- **Values.** Booking form answers, check-in answers (`start.*`; GPS as `lat,lng`),
+  `link.photos.<field>` (that check-in's photos, 7-day links), `job.*`, and `checkin.number`,
+  `checkin.expert`, `checkin.expert_phone`, `checkin.time`, `checkin.received_at`,
+  `checkin.late_minutes`, `checkin.unverified_time`, `checkin.missing_files`. No inspection
+  answers, results, PDF or ZIP links exist yet.
+- **Standard body.** `data: {booking, start}` (each limited to the ticked fields when set),
+  `inspection` (its id), `checkin: {number, expert, time, received_at, late_minutes,
+  unverified_time, missing_files, photos: {<field>: [links]}}` and `job: {type, form}`.
+- Fields marked **Hide from customer** (e.g. payment photos) are sent to integrations too. Keep them
+  out of any message that goes to a customer.
 
 **Request.** Method `POST` (default), `PUT`, `PATCH`, `GET` or `DELETE`; `GET` and `DELETE` send no
 body. The URL may hold values **in the path only** (`https://crm.example.com/leads/{{job.booking_id}}`):
@@ -31,7 +63,7 @@ send `X-Vayu-Event` and `X-Vayu-Delivery` (use it to ignore duplicates); the Tes
 picked from a searchable list in the editor (the list depends on the form and the event):
 `booking.<field>`, `start.<field>`, `inspection.<field>`, `end.<field>` (answers, from the latest
 published version), `job.*` (Booking ID, `job.previous_booking_id` after an ID edit, type, stage,
-city, expert, times), `result.*` (overall rating, ratings, Key Checks, final values after Ops
+city, expert, inspection form, times), `checkin.*` (`checkin.completed` only, see above), `result.*` (overall rating, ratings, Key Checks, final values after Ops
 changes), `link.pdf`, `link.image_zip`, `link.video_zip`, `link.photos.<photo field>` (signed, 7
 days; a ZIP link opens a "Preparing… x%" page, cached 7 days), `event.*` (name, delivery id, time,
 changed fields, alert code). A body value that is exactly one `{{ref}}` keeps its type (number,
